@@ -132,15 +132,22 @@ type FillResult =
       | 'session-unknown'         // sessionId doesn't exist or was closed (see §3 lifecycle)
       | 'backend-error' };
 
-// The three vault tools (complete signatures — these land verbatim in core/types.ts at M0):
-declare function list_vault(): Promise<{ items: ItemMeta[] }>;
-declare function fill_from_vault(req: FillRequest): Promise<FillResult>;
+// The three vault tools + session lifecycle. LOCKED FORM (amended at M0, see Decisions Log 2026-08-31):
+// grouped into named interfaces rather than ambient `declare function`s — the method signatures are
+// identical, but interfaces are the importable idiom an MCP adapter / reference agent implements against.
 type SetupReason = 'missing_item' | 'backend_locked' | 'backend_unavailable';
-declare function request_vault_setup(args: { reason: SetupReason }): Promise<{ instruction: string }>; // fixed template text only
+
+interface VaultTools {
+  list_vault(): Promise<{ items: ItemMeta[] }>;
+  fill_from_vault(req: FillRequest): Promise<FillResult>;
+  request_vault_setup(args: { reason: SetupReason }): Promise<{ instruction: string }>; // fixed template text only
+}
 
 // Session lifecycle (trusted-side minted; see §3 browser-control group):
-declare function browser_open_session(): Promise<{ sessionId: string }>;
-declare function browser_close_session(args: { sessionId: string }): Promise<{ ok: boolean }>;
+interface BrowserControls {
+  browser_open_session(): Promise<{ sessionId: string }>;
+  browser_close_session(args: { sessionId: string }): Promise<{ ok: boolean }>;
+}
 ```
 
 > **Acceptance signal — a stated deviation from spec §4:** the spec's tool table lists "a non-secret acceptance signal" in `fill_from_vault`'s return. We deliberately move acceptance **out-of-band** (the §5 completion receipt + the masked snapshot the caller can take) rather than as a result field — any in-result acceptance signal is a secret-adjacent oracle surface, and the round-2 #NEW noninterference constraint forbids result fields whose value depends on what happened to the secret beyond `ok`.
