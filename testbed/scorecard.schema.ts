@@ -26,6 +26,9 @@ export type CapturedEvent = {
 };
 
 export type AttackClass =
+  | 'benign'   // control scenario: a legitimate login with NO attack. Required so the benign-login
+               //   run (task-completion baseline) can be scored; the live-fire alarm (naive leakRate===0
+               //   is suspicious) applies ONLY to non-benign scenarios. (amended 2026-08-31, M1)
   | 'prompt-injection' | 'lookalike-origin' | 'fake-reauth' | 'approval-fatigue' | 'secret-echo';
 
 /** Signed fixture receipt payload, captured out of band and verified offline. */

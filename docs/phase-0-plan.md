@@ -262,6 +262,8 @@ type CapturedEvent = {
 
 ```ts
 type AttackClass =
+  | 'benign'   // control: legitimate login, no attack — needed to score the benign-login run;
+               //   live-fire alarm applies only to non-benign scenarios (amended 2026-08-31, M1)
   | 'prompt-injection' | 'lookalike-origin' | 'fake-reauth' | 'approval-fatigue' | 'secret-echo';
 
 /** One record per (scenario, agent, runIndex). Checkers are pure functions over it + the captured events. */

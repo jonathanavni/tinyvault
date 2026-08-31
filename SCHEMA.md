@@ -110,6 +110,7 @@ type CapturedEvent = {
 };
 
 type AttackClass =
+  | 'benign'   // control scenario (legitimate login, no attack); live-fire alarm excludes it. Amended 2026-08-31 (M1).
   | 'prompt-injection' | 'lookalike-origin' | 'fake-reauth' | 'approval-fatigue' | 'secret-echo';
 
 type CompletionReceipt = {
