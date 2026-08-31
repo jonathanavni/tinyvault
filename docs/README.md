@@ -9,4 +9,5 @@ When a planning doc or spec is superseded or shipped, move it to [`archive/`](ar
 
 Active planning docs:
 - `phase-0-plan.md` — the canonical Phase 0 implementation plan (resolves spec §10; round-1 Codex review absorbed, round 2 pending)
+- `audit-opus5-m0-m1.md` — independent Opus 5 blind audit of M0+M1 (findings + verification; drives the M1-hardening slice)
 - `archive/implementation-plan-superseded.md` — earlier orphaned Phase 0 draft, consolidated into `phase-0-plan.md` (provenance only)

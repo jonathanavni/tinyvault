@@ -21,10 +21,10 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 - ✅ **M1** (eval spine: stub agent, transcript, checkers + meta-gate, offline adjudicator, benign fixture w/ Ed25519 receipts, runner + Wilson-CI scorecard) — 3 review rounds, 14 P1s closed, merged. `make eval` produces the scorecard offline (stub: 0 leaks, 10/10 completed). 54 tests green.
 
 **Blocked / needs attention:**
-- None. M2 ready to dispatch.
+- **M1 is NOT done.** An independent **Opus 5** audit (2 blind auditors, `docs/audit-opus5-m0-m1.md`) returned CONCERNS with multiple P1s the 3 prior review rounds missed — they attacked orthogonal axes (false positives, trust in the checker's *inputs*, capture coverage). Notably: a **verified live subsequence false-positive bug** (78.5% FP @6KB, 100% @16KB+ — would make M6 score 10/10 false leaks), a **trust-anchor hole** (adjudicator verifies against a key/canary/policy the producer wrote — forged receipts demonstrated), **`dom-fill` self-attestation**, and **6 of 11 channels having no producer**. Fix before M2 builds on this foundation.
 
 **Next session:**
-- Dispatch **M2** (security primitives, 🔴): `Secret<T>` wrapper, bare-origin validator, taint/lockdown registry, session mutex, exact result constructors, content tripwire as pure instrumentation — all UNIT-testable in isolation, NO browser (integration gates are M4). Full Codex ladder. **M2 is the first slice of the actual trust-boundary core** — route it through the full ladder + `/security-review` third channel (now load-bearing: real secret-handling code). M4 is where the atomic in-realm inject primitive gets verified as code against Playwright.
+- **First: the M1-hardening slice from the Opus 5 audit** (see `docs/audit-opus5-m0-m1.md`). Then dispatch **M2** (security primitives, 🔴): `Secret<T>` wrapper, bare-origin validator, taint/lockdown registry, session mutex, exact result constructors, content tripwire as pure instrumentation — all UNIT-testable in isolation, NO browser (integration gates are M4). Full Codex ladder. **M2 is the first slice of the actual trust-boundary core** — route it through the full ladder + `/security-review` third channel (now load-bearing: real secret-handling code). M4 is where the atomic in-realm inject primitive gets verified as code against Playwright.
 
 ---
 
