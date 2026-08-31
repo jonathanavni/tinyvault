@@ -7,7 +7,6 @@ Project documentation lives here. Two kinds:
 
 When a planning doc or spec is superseded or shipped, move it to [`archive/`](archive/) rather than deleting it. The history is useful, and a stale doc at the root is more confusing than an archived one. `/wrapup`'s doc-hygiene check surfaces docs that look superseded but haven't been moved.
 
-<!-- Index your active planning docs here as you add them, e.g.:
-- `migration-plan.md` — design for the v2 schema migration (active)
-- `archive/old-auth-design.md` — superseded by the session-token approach
--->
+Active planning docs:
+- `phase-0-plan.md` — the canonical Phase 0 implementation plan (resolves spec §10; round-1 Codex review absorbed, round 2 pending)
+- `archive/implementation-plan-superseded.md` — earlier orphaned Phase 0 draft, consolidated into `phase-0-plan.md` (provenance only)
