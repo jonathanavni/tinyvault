@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# build output
+dist/
+build/
+*.tsbuildinfo
+
+# test / coverage
+coverage/
+.vitest/
+
+# env & secrets — NEVER commit real credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# logs
+*.log
+npm-debug.log*
+
+# uncomment to keep the backlog local (avoids drift across worktrees)
+# BACKLOG.md
