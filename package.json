@@ -6,7 +6,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "tsc --noEmit && vitest run",
-    "eval": "node -e \"console.error('not implemented until M1+'); process.exit(1)\"",
+    "eval": "TINYVAULT_EVAL=1 vitest run testbed/runner.eval.test.ts --reporter=verbose",
     "baseline": "node -e \"console.error('not implemented until M6'); process.exit(1)\"",
     "demo": "node -e \"console.error('not implemented until M10'); process.exit(1)\""
   },

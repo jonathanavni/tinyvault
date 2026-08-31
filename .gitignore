@@ -31,3 +31,6 @@ npm-debug.log*
 
 # uncomment to keep the backlog local (avoids drift across worktrees)
 # BACKLOG.md
+
+# generated eval output
+artifacts/
