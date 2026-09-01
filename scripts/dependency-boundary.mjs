@@ -1,16 +1,22 @@
 import fs from 'node:fs';
-import { builtinModules } from 'node:module';
+import { builtinModules, createRequire } from 'node:module';
 import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
+
+// The second argument to import.meta.resolve is honored only when Node is launched with
+// --experimental-import-meta-resolve. Both package.json gate invocations carry that flag.
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs'];
 const PROTECTED_DIRECTORIES = ['src/supervisor'];
 const BUILTIN_MODULES = new Set(builtinModules.map((specifier) => specifier.replace(/^node:/u, '')));
 const MAX_EXTERNAL_MODULES = 10_000;
+const GATE_MODULE = fs.realpathSync(fileURLToPath(import.meta.url));
 
 export function checkDependencyBoundary(root) {
-  const absoluteRoot = path.resolve(root);
+  const absoluteRoot = fs.realpathSync(path.resolve(root));
   const { files: configuredFiles, errors, options } = configuredProductionFiles(absoluteRoot);
+  const configuredFileSet = new Set(configuredFiles.map((file) => path.resolve(file)));
   const scriptFiles = walk(path.join(absoluteRoot, 'scripts')).filter(isProductionModule);
   const files = [...new Set([...configuredFiles, ...scriptFiles].map((file) => path.resolve(file)))];
   const fileSet = new Set(files);
@@ -20,9 +26,9 @@ export function checkDependencyBoundary(root) {
   for (const file of files) {
     const parsed = dependencies(file, fs.readFileSync(file, 'utf8'));
     const edges = parsed.edges.flatMap(({ specifier, syntax }) => {
-      const target = resolveSpecifier(file, specifier, fileSet, options);
+      if (isBuiltinSpecifier(specifier)) return [];
+      const target = resolveSpecifier(file, specifier, syntax, fileSet, options);
       if (target === undefined) {
-        if (isBuiltinSpecifier(specifier)) return [];
         return [{
           target: path.resolve(path.dirname(file), specifier),
           syntax,
@@ -31,14 +37,18 @@ export function checkDependencyBoundary(root) {
           unscanned: false,
         }];
       }
-      if (isNodeModulesFile(target)) {
+      if (!fileSet.has(target) && configuredFileSet.has(file)) {
         addExternalEntry(graph, target, fileSet, options, visitedExternalFiles);
       }
       return [{
         target,
         syntax,
         unresolved: false,
-        unscanned: !fileSet.has(target) && !isNodeModulesFile(target),
+        // Tooling scripts are checked for direct protected imports, but their own toolchain packages are
+        // not part of the production data-plane graph. External traversal begins only from tsconfig files.
+        unscanned: configuredFileSet.has(file)
+          && !fileSet.has(target)
+          && !visitedExternalFiles.has(target),
       }];
     });
     graph.set(file, { edges, unsupported: parsed.unsupported });
@@ -168,6 +178,7 @@ function dependencies(file, source) {
   const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const edges = [];
   const unsupported = [];
+  const isGateImplementation = realFilePath(file) === GATE_MODULE;
   const addLiteral = (node, syntax) => {
     if (node && ts.isStringLiteralLike(node)) {
       edges.push({ specifier: node.text, syntax });
@@ -178,7 +189,7 @@ function dependencies(file, source) {
   const visit = (node) => {
     if (ts.isImportDeclaration(node)) {
       addLiteral(node.moduleSpecifier, 'static import');
-      if (isCreateRequireImport(node)) unsupported.push('createRequire access');
+      if (isCreateRequireImport(node) && !isGateImplementation) unsupported.push('createRequire access');
     }
     if (ts.isExportDeclaration(node) && node.moduleSpecifier !== undefined) {
       addLiteral(node.moduleSpecifier, 're-export');
@@ -195,7 +206,7 @@ function dependencies(file, source) {
         addLiteral(node.arguments[0], 'dynamic import()');
       } else if (isRequireExpression(node.expression)) {
         addLiteral(node.arguments[0], 'require-style access');
-      } else if (isCreateRequireExpression(node.expression)) {
+      } else if (isCreateRequireExpression(node.expression) && !isGateImplementation) {
         unsupported.push('createRequire access');
       }
     }
@@ -230,7 +241,7 @@ function isCreateRequireExpression(expression) {
     || (ts.isPropertyAccessExpression(expression) && expression.name.text === 'createRequire');
 }
 
-function resolveSpecifier(importer, specifier, fileSet, compilerOptions) {
+function resolveSpecifier(importer, specifier, syntax, fileSet, compilerOptions) {
   const compilerResolved = ts.resolveModuleName(
     specifier,
     importer,
@@ -239,25 +250,32 @@ function resolveSpecifier(importer, specifier, fileSet, compilerOptions) {
   ).resolvedModule?.resolvedFileName;
   if (compilerResolved !== undefined) {
     const target = path.resolve(compilerResolved);
-    if (isRealFile(target)) return target;
+    if (!isDeclarationFile(target) && fileSet.has(target) && isRealFile(target)) return target;
   }
 
-  if (!specifier.startsWith('.')) return undefined;
-  const unresolved = path.resolve(path.dirname(importer), specifier);
-  const candidates = [unresolved];
-  for (const extension of SOURCE_EXTENSIONS) candidates.push(`${unresolved}${extension}`);
-  if (/\.(?:js|mjs|cjs)$/u.test(unresolved)) {
-    const stem = unresolved.replace(/\.(?:js|mjs|cjs)$/u, '');
-    candidates.push(`${stem}.ts`, `${stem}.mts`, `${stem}.cts`);
+  if (fileSet.has(path.resolve(importer)) && specifier.startsWith('.')) {
+    const unresolved = path.resolve(path.dirname(importer), specifier);
+    const candidates = [unresolved];
+    for (const extension of SOURCE_EXTENSIONS) candidates.push(`${unresolved}${extension}`);
+    if (/\.(?:js|mjs|cjs)$/u.test(unresolved)) {
+      const stem = unresolved.replace(/\.(?:js|mjs|cjs)$/u, '');
+      candidates.push(`${stem}.ts`, `${stem}.mts`, `${stem}.cts`);
+    }
+    for (const extension of SOURCE_EXTENSIONS) candidates.push(path.join(unresolved, `index${extension}`));
+    const inRepoTarget = candidates
+      .map((candidate) => path.resolve(candidate))
+      .find((candidate) => fileSet.has(candidate) && !isDeclarationFile(candidate));
+    if (inRepoTarget !== undefined) return inRepoTarget;
   }
-  for (const extension of SOURCE_EXTENSIONS) candidates.push(path.join(unresolved, `index${extension}`));
-  return candidates.map((candidate) => path.resolve(candidate)).find((candidate) => fileSet.has(candidate));
+
+  return resolveRuntimeSpecifier(importer, specifier, syntax);
 }
 
 function addExternalEntry(graph, file, fileSet, compilerOptions, visited) {
-  const pending = [path.resolve(file)];
+  const pending = [realFilePath(file)];
   while (pending.length > 0) {
     const current = pending.pop();
+    if (current === undefined) continue;
     if (visited.has(current)) continue;
     visited.add(current);
 
@@ -266,6 +284,11 @@ function addExternalEntry(graph, file, fileSet, compilerOptions, visited) {
         edges: [],
         unsupported: [`external package traversal exceeded ${MAX_EXTERNAL_MODULES} modules`],
       });
+      continue;
+    }
+
+    if (path.extname(current) === '.json') {
+      graph.set(current, { edges: [], unsupported: [] });
       continue;
     }
 
@@ -281,9 +304,9 @@ function addExternalEntry(graph, file, fileSet, compilerOptions, visited) {
     }
 
     const edges = parsed.edges.flatMap(({ specifier, syntax }) => {
-      const target = resolveSpecifier(current, specifier, fileSet, compilerOptions);
+      if (isBuiltinSpecifier(specifier)) return [];
+      const target = resolveSpecifier(current, specifier, syntax, fileSet, compilerOptions);
       if (target === undefined) {
-        if (isBuiltinSpecifier(specifier)) return [];
         return [{
           target: path.resolve(path.dirname(current), specifier),
           syntax: `external-package ${syntax}`,
@@ -293,13 +316,22 @@ function addExternalEntry(graph, file, fileSet, compilerOptions, visited) {
         }];
       }
 
-      const absoluteTarget = path.resolve(target);
-      if (isNodeModulesFile(absoluteTarget)) pending.push(absoluteTarget);
+      const absoluteTarget = realFilePath(target);
+      if (absoluteTarget === undefined) {
+        return [{
+          target: path.resolve(target),
+          syntax: `external-package ${syntax}`,
+          unresolvedSyntax: `external-package unresolved ${syntax}: ${specifier}`,
+          unresolved: true,
+          unscanned: false,
+        }];
+      }
+      if (!fileSet.has(absoluteTarget)) pending.push(absoluteTarget);
       return [{
         target: absoluteTarget,
         syntax: `external-package ${syntax}`,
         unresolved: false,
-        unscanned: !fileSet.has(absoluteTarget) && !isNodeModulesFile(absoluteTarget),
+        unscanned: false,
       }];
     });
     graph.set(current, {
@@ -313,16 +345,43 @@ function isBuiltinSpecifier(specifier) {
   return BUILTIN_MODULES.has(specifier.replace(/^node:/u, ''));
 }
 
+function resolveRuntimeSpecifier(importer, specifier, syntax) {
+  try {
+    const resolved = isRequireSyntax(syntax)
+      ? createRequire(importer).resolve(specifier)
+      : import.meta.resolve(specifier, pathToFileURL(importer).href);
+    if (resolved.startsWith('node:')) return undefined;
+    const target = resolved.startsWith('file:') ? fileURLToPath(resolved) : resolved;
+    if (isDeclarationFile(target)) return undefined;
+    return realFilePath(target);
+  } catch {
+    return undefined;
+  }
+}
+
+function isRequireSyntax(syntax) {
+  return syntax === 'require-style access' || syntax === 'import = require()';
+}
+
+function isDeclarationFile(file) {
+  return /\.d\.(?:ts|mts|cts)$/u.test(file);
+}
+
+function realFilePath(file) {
+  try {
+    const target = fs.realpathSync(path.resolve(file));
+    return fs.statSync(target).isFile() ? target : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function isRealFile(file) {
   try {
     return fs.statSync(file).isFile();
   } catch {
     return false;
   }
-}
-
-function isNodeModulesFile(file) {
-  return path.resolve(file).split(path.sep).includes('node_modules');
 }
 
 function configurationViolation(root, message) {

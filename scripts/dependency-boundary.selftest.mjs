@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 // Executed explicitly by make test; the non-.test name keeps Vitest from treating it as a suite.
+// This matrix regression-tests the gate's use of Node's resolvers; a finite fixture set does not prove
+// that a hand-written resolver would be Node-compatible. The script and every spawned gate CLI run with
+// --experimental-import-meta-resolve so import.meta.resolve honors its parent URL.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -108,9 +111,6 @@ withFixture(
       exports: './index.ts',
     }));
     write(root, 'node_modules/clean-package/index.ts', "export const safe = true;\n");
-    linkInstalledPackage(root, 'typescript');
-    write(root, 'src/core/real-package.ts',
-      "import ts from 'typescript'; export const syntaxKind = ts.SyntaxKind.SourceFile;\n");
     assertCliStatus(root, 0,
       'existing legitimate third-party control did not pass the real dependency-gate CLI');
   },
@@ -176,10 +176,207 @@ withTemporaryRoot((root) => {
   assertCliStatus(root, 1, 'missing protected directory silently disarmed the real CLI');
 });
 
+let runtimeMatrixOutcomes = 0;
+
+// Fixture 1 kills the declaration-file traversal mutant: runtime `main`, not `types`, reaches protected.
+for (const protectedBranch of [true, false]) {
+  withRuntimeFixture((root) => {
+    writeRuntimePackage(root, 'matrix-typed', {
+      types: './index.d.ts',
+      main: './index.js',
+    }, {
+      'index.d.ts': 'export declare const value: boolean;\n',
+      'index.js': protectedBranch ? protectedRequire() : cleanModule(),
+    });
+    assertEdgeOutcomes(root, 'matrix-typed', {
+      import: protectedBranch,
+      require: protectedBranch,
+    }, 'typed package with main');
+  });
+}
+
+// Fixture 2 kills resolving every conditional export with only one condition set.
+for (const importProtected of [true, false]) {
+  withRuntimeFixture((root) => {
+    writeRuntimePackage(root, 'matrix-conditional', {
+      exports: { import: './import.mjs', require: './require.cjs' },
+    }, {
+      'import.mjs': importProtected ? protectedImport() : cleanModule(),
+      'require.cjs': importProtected ? cleanModule() : protectedRequire(),
+    });
+    assertEdgeOutcomes(root, 'matrix-conditional', {
+      import: importProtected,
+      require: !importProtected,
+    }, 'conditional exports');
+  });
+}
+
+// Fixture 3 kills resolving only a package root while dropping exported subpaths.
+withRuntimeFixture((root) => {
+  writeRuntimePackage(root, 'matrix-subpath', {
+    exports: { '.': './clean.js', './sub': './protected.js' },
+  }, {
+    'clean.js': cleanModule(),
+    'protected.js': protectedRequire(),
+  });
+  assertEdgeOutcomes(root, 'matrix-subpath', { import: false, require: false }, 'subpath root control');
+  assertEdgeOutcomes(root, 'matrix-subpath/sub', { import: true, require: true }, 'subpath export');
+});
+
+// Fixture 4 kills stopping traversal after the first clean typed package.
+for (const protectedBranch of [true, false]) {
+  withRuntimeFixture((root) => {
+    writeRuntimePackage(root, 'matrix-transitive-a', {
+      types: './index.d.ts',
+      main: './index.js',
+    }, {
+      'index.d.ts': 'export declare const value: boolean;\n',
+      'index.js': "require('matrix-transitive-b');\n",
+    });
+    writeRuntimePackage(root, 'matrix-transitive-b', {
+      types: './index.d.ts',
+      main: './index.js',
+    }, {
+      'index.d.ts': 'export declare const value: boolean;\n',
+      'index.js': protectedBranch ? protectedRequire() : cleanModule(),
+    });
+    assertEdgeOutcomes(root, 'matrix-transitive-a', {
+      import: protectedBranch,
+      require: protectedBranch,
+    }, 'transitive typed package');
+  });
+}
+
+// Fixture 5 kills an entry-extension allowlist that omits .mjs or .cjs.
+for (const [extension, source] of [['mjs', protectedImport()], ['cjs', protectedRequire()]]) {
+  withRuntimeFixture((root) => {
+    writeRuntimePackage(root, `matrix-${extension}`, { main: `./index.${extension}` }, {
+      [`index.${extension}`]: source,
+    });
+    assertEdgeOutcomes(root, `matrix-${extension}`, { import: true, require: true }, `.${extension} entry`);
+  });
+  withRuntimeFixture((root) => {
+    writeRuntimePackage(root, `matrix-${extension}`, { main: `./index.${extension}` }, {
+      [`index.${extension}`]: cleanModule(),
+    });
+    assertEdgeOutcomes(root, `matrix-${extension}`, { import: false, require: false }, `.${extension} control`);
+  });
+}
+
+// Fixture 6 kills resolving a package self-reference relative to the gate script or caller.
+for (const protectedBranch of [true, false]) {
+  withRuntimeFixture((root) => {
+    writeRuntimePackage(root, 'matrix-self', {
+      type: 'module',
+      exports: { '.': './index.mjs', './x': './x.mjs' },
+    }, {
+      'index.mjs': "import 'matrix-self/x';\n",
+      'x.mjs': protectedBranch ? protectedImport() : cleanModule(),
+    });
+    assertEdgeOutcomes(root, 'matrix-self', {
+      import: protectedBranch,
+      require: protectedBranch,
+    }, 'package self-reference');
+  });
+}
+
+// Fixture 7 kills scanning a symlink path without following and deduplicating its real package path.
+for (const protectedBranch of [true, false]) {
+  withRuntimeFixture((root) => {
+    const sourceDirectory = path.join(root, 'packages/matrix-linked');
+    write(root, 'packages/matrix-linked/package.json', JSON.stringify({
+      name: 'matrix-linked', version: '1.0.0', main: './index.js',
+    }));
+    write(root, 'packages/matrix-linked/index.js', protectedBranch ? protectedRequire() : cleanModule());
+    const target = path.join(root, 'node_modules/matrix-linked');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.symlinkSync(sourceDirectory, target, 'dir');
+    assertEdgeOutcomes(root, 'matrix-linked', {
+      import: protectedBranch,
+      require: protectedBranch,
+    }, 'symlinked package');
+  });
+}
+
+// Fixture 8 kills consulting `main` when an exports string sugar target exists.
+for (const protectedExports of [true, false]) {
+  withRuntimeFixture((root) => {
+    writeRuntimePackage(root, 'matrix-sugar', {
+      main: protectedExports ? './clean.js' : './protected.js',
+      exports: protectedExports ? './protected.js' : './clean.js',
+    }, {
+      'clean.js': cleanModule(),
+      'protected.js': protectedRequire(),
+    });
+    assertEdgeOutcomes(root, 'matrix-sugar', {
+      import: protectedExports,
+      require: protectedExports,
+    }, 'exports string sugar');
+  });
+}
+
+// Fixture 9 kills treating a missing first file as fallback; only an invalid package target advances.
+for (const protectedFallback of [true, false]) {
+  withRuntimeFixture((root) => {
+    writeRuntimePackage(root, 'matrix-array', {
+      exports: ['../outside.js', protectedFallback ? './protected.js' : './clean.js'],
+    }, {
+      'clean.js': cleanModule(),
+      'protected.js': protectedRequire(),
+    });
+    assertEdgeOutcomes(root, 'matrix-array', {
+      import: protectedFallback,
+      require: protectedFallback,
+    }, 'exports array fallback');
+  });
+}
+
+// Fixture 10 kills ignoring wildcard subpath substitution.
+withRuntimeFixture((root) => {
+  writeRuntimePackage(root, 'matrix-wildcard', {
+    exports: { '.': './clean.js', './features/*': './src/features/*.js' },
+  }, {
+    'clean.js': cleanModule(),
+    'src/features/clean.js': cleanModule(),
+    'src/features/protected.js': "require('../../../../src/supervisor/marker.ts');\n",
+  });
+  assertEdgeOutcomes(root, 'matrix-wildcard/features/clean', {
+    import: false, require: false,
+  }, 'wildcard clean match');
+  assertEdgeOutcomes(root, 'matrix-wildcard/features/protected', {
+    import: true, require: true,
+  }, 'wildcard protected match');
+});
+
+// Fixture 11 kills condition-priority sorting; Node honors object insertion order.
+withRuntimeFixture((root) => {
+  writeRuntimePackage(root, 'matrix-order-default', {
+    exports: { default: './clean.js', import: './protected.mjs' },
+  }, {
+    'clean.js': cleanModule(),
+    'protected.mjs': protectedImport(),
+  });
+  assertEdgeOutcomes(root, 'matrix-order-default', {
+    import: false, require: false,
+  }, 'default-first condition order');
+});
+withRuntimeFixture((root) => {
+  writeRuntimePackage(root, 'matrix-order-import', {
+    exports: { import: './protected.mjs', default: './clean.js' },
+  }, {
+    'clean.js': cleanModule(),
+    'protected.mjs': protectedImport(),
+  });
+  assertEdgeOutcomes(root, 'matrix-order-import', {
+    import: true, require: false,
+  }, 'import-first condition order');
+});
+
 console.log(
   'dependency boundary mutation tests PASS '
   + '(real CLI exit 1 violations incl. data-plane secret-matcher import; '
-  + 'recursive external packages and unsupported loads; exit 0 clean and package cycle)',
+  + 'recursive external packages and unsupported loads; exit 0 clean and package cycle; '
+  + `runtime resolver matrix: 11 fixtures, ${runtimeMatrixOutcomes} import/require outcomes)`,
 );
 
 function assertViolation(root, name) {
@@ -188,12 +385,35 @@ function assertViolation(root, name) {
 }
 
 function assertCliStatus(root, expected, message) {
-  const result = spawnSync(process.execPath, [cli, '--root', root], {
+  const result = spawnSync(process.execPath, [
+    '--experimental-import-meta-resolve', cli, '--root', root,
+  ], {
     encoding: 'utf8',
     timeout: 10_000,
   });
   assert.equal(result.status, expected,
     `${message}\nerror: ${result.error?.message ?? 'none'}\nstdout: ${result.stdout}\nstderr: ${result.stderr}`);
+}
+
+function assertEdgeOutcomes(root, specifier, expectations, name) {
+  for (const syntax of ['import', 'require']) {
+    write(root, 'src/core/probe.ts', syntax === 'import'
+      ? `import '${specifier}';\n`
+      : `const loaded = require('${specifier}'); void loaded;\n`);
+    assertCliStatus(
+      root,
+      expectations[syntax] ? 1 : 0,
+      `${name} ${syntax} edge had the wrong protected/clean outcome`,
+    );
+    runtimeMatrixOutcomes += 1;
+  }
+}
+
+function withRuntimeFixture(assertion) {
+  withFixture('export const initial = true;', (root) => {
+    write(root, 'src/supervisor/marker.ts', "export const marker = 'protected';\n");
+    assertion(root);
+  });
 }
 
 function withFixture(probeSource, assertion, compilerOptions = {}) {
@@ -239,9 +459,25 @@ function writePackage(root, name, source) {
   write(root, `node_modules/${name}/index.ts`, source);
 }
 
-function linkInstalledPackage(root, name) {
-  const installed = path.join(scriptDirectory, '..', 'node_modules', name);
-  const target = path.join(root, 'node_modules', name);
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.symlinkSync(installed, target, 'dir');
+function writeRuntimePackage(root, name, manifest, files) {
+  write(root, `node_modules/${name}/package.json`, JSON.stringify({
+    name,
+    version: '1.0.0',
+    ...manifest,
+  }));
+  for (const [relative, contents] of Object.entries(files)) {
+    write(root, `node_modules/${name}/${relative}`, contents);
+  }
+}
+
+function protectedRequire() {
+  return "require('../../src/supervisor/marker.ts');\n";
+}
+
+function protectedImport() {
+  return "import '../../src/supervisor/marker.ts';\n";
+}
+
+function cleanModule() {
+  return 'export const clean = true;\n';
 }
