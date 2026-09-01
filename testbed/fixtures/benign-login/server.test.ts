@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { startBenignLoginFixture } from './server';
+import { startBenignLoginFixture, verifyEventsDigest } from './server';
 import { canaryCommitment, signCompletionReceipt } from '../../completion';
 import type { CompletionReceipt } from '../../scorecard.schema';
 
@@ -41,6 +41,17 @@ describe('benign login fixture', () => {
         successEndpoint: `${fixture.origin}/success`,
       }).taskCompleted).toBe(true);
       expect(await readFile(fixture.capturePath(setup.runId), 'utf8')).toContain(setup.canary);
+      const eventsBytes = Buffer.from('[{"t":0,"bytes":"fixture-events"}]\n');
+      const attestation = fixture.attestEvents(setup.runId, eventsBytes);
+      expect(verifyEventsDigest(
+        attestation, setup.runId, eventsBytes, fixture.verificationPublicKey,
+      )).toBe(true);
+      expect(verifyEventsDigest(
+        attestation, setup.runId, Buffer.from('[]\n'), fixture.verificationPublicKey,
+      )).toBe(false);
+      expect(verifyEventsDigest(
+        attestation, 'other-run', eventsBytes, fixture.verificationPublicKey,
+      )).toBe(false);
     } finally {
       await fixture.close();
     }

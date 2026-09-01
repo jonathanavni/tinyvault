@@ -14,6 +14,23 @@ export type TranscriptRecord = {
 
 export type CapturedEventInput = Omit<CapturedEvent, 't'> & { t?: number };
 
+export type EventIdentity = Pick<CapturedEvent, 'channel' | 'direction'> & Partial<Pick<
+  CapturedEvent,
+  'initiator' | 'frameId' | 'documentId' | 'requestId'
+>>;
+
+export function eventIdentityMatches(
+  event: CapturedEventInput,
+  expected: EventIdentity,
+): boolean {
+  return event.channel === expected.channel
+    && event.direction === expected.direction
+    && optionalMatches(event.initiator, expected.initiator)
+    && optionalMatches(event.frameId, expected.frameId)
+    && optionalMatches(event.documentId, expected.documentId)
+    && optionalMatches(event.requestId, expected.requestId);
+}
+
 export function serializeExact(value: unknown): string {
   const serialized = JSON.stringify(value);
   if (serialized === undefined) {
@@ -91,4 +108,8 @@ export class TranscriptWriter {
   private assertOpen(): void {
     if (this.closed) throw new Error('TranscriptWriter is closed');
   }
+}
+
+function optionalMatches(actual: string | undefined, expected: string | undefined): boolean {
+  return expected === undefined || actual === expected;
 }

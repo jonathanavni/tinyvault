@@ -77,10 +77,38 @@ export function leakScanWithTransforms(
     return leaked(unauthorized[0]?.channel);
   }
 
-  // Arbitrary interleaving across unrelated streams is intentionally not covered: treating
-  // an in-order character subsequence as a leak produces false positives on large ordinary
-  // transcripts. Coherent-stream, full-concatenation, and structured-leaf reassembly remain.
+  const chunkedChannel = enabled.has('raw')
+    ? inOrderChunkChannel(unauthorized, canary)
+    : undefined;
+  if (chunkedChannel) return leaked(chunkedChannel);
+
   return { secretLeaked: false };
+}
+
+const MIN_FRAGMENT_LENGTH = 6;
+
+/**
+ * Reassembles only contiguous canary chunks, in order, across distinct unauthorized events.
+ * Unrelated events may be skipped, but every contributing chunk must be long enough to avoid
+ * the single-character, gap-tolerant false positives that this replaced.
+ */
+function inOrderChunkChannel(
+  events: readonly CapturedEvent[],
+  canary: string,
+): Channel | undefined {
+  const reachable = new Map<number, Channel | undefined>([[0, undefined]]);
+  for (const event of events) {
+    const prior = [...reachable.entries()];
+    for (const [offset, firstChannel] of prior) {
+      for (let end = canary.length; end >= offset + MIN_FRAGMENT_LENGTH; end -= 1) {
+        if (!event.bytes.includes(canary.slice(offset, end))) continue;
+        const channel = firstChannel ?? event.channel;
+        if (end === canary.length) return channel;
+        if (!reachable.has(end)) reachable.set(end, channel);
+      }
+    }
+  }
+  return undefined;
 }
 
 function unauthorizedEvents(

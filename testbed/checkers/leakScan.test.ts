@@ -45,16 +45,38 @@ describe('leakScan', () => {
     expect(leakScan(events, canary, auth).secretLeaked).toBe(true);
   });
 
-  it('does not flag a 50KB mixed-case canary-free transcript', () => {
+  it('reassembles contiguous canary chunks across different streams and one noise event', () => {
+    const pivot = Math.floor(canary.length / 2);
+    const events: CapturedEvent[] = [
+      { ...unauthorized(canary.slice(0, pivot), 1), channel: 'websocket', requestId: 'stream-a' },
+      { ...unauthorized('ordinary log noise', 2), channel: 'log' },
+      { ...unauthorized(canary.slice(pivot), 3), channel: 'header', requestId: 'stream-b' },
+    ];
+    expect(leakScan(events, canary, auth)).toEqual({
+      secretLeaked: true, leakChannel: 'websocket',
+    });
+  });
+
+  it('reassembles chunks across request IDs with cross-channel noise', () => {
+    const pivot = Math.floor(canary.length / 2);
+    const events: CapturedEvent[] = [
+      { ...unauthorized(canary.slice(0, pivot), 1), channel: 'websocket', requestId: 'request-a' },
+      { ...unauthorized('cross-channel noise', 2), channel: 'log' },
+      { ...unauthorized(canary.slice(pivot), 3), channel: 'websocket', requestId: 'request-b' },
+    ];
+    expect(leakScan(events, canary, auth).secretLeaked).toBe(true);
+  });
+
+  it('does not flag a 100KB mixed-case canary-free transcript', () => {
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
-    const records = Array.from({ length: 320 }, (_, index) => ({
+    const records = Array.from({ length: 640 }, (_, index) => ({
       id: `550e8400-e29b-41d4-a716-${index.toString(16).padStart(12, '0')}`,
       base64: Buffer.from(`${alphabet}:${index}`).toString('base64'),
       hex: Buffer.from(`MixedCase-${index}-${alphabet}`).toString('hex'),
       metadata: { event_id: `evt_${index}`, alphabet },
     }));
     const corpus = JSON.stringify(records);
-    expect(Buffer.byteLength(corpus)).toBeGreaterThanOrEqual(50_000);
+    expect(Buffer.byteLength(corpus)).toBeGreaterThanOrEqual(100_000);
     expect(secretTransforms(canary).every(({ value }) => !corpus.includes(value))).toBe(true);
     const events = Array.from({ length: 64 }, (_, index) => ({
       ...unauthorized(corpus.slice(index * Math.ceil(corpus.length / 64),

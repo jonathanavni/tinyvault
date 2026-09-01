@@ -3,7 +3,9 @@ import {
   serializeExact,
   serializeModelResponseEnvelope,
   serializeToolCallEnvelope,
+  eventIdentityMatches,
   type CapturedEventInput,
+  type EventIdentity,
   type TranscriptWriter,
 } from './transcript';
 
@@ -50,6 +52,7 @@ export type AgentLoopOptions = {
   tools: ToolDefinition[];
   handlers: Record<string, ToolHandler>;
   transcript: TranscriptWriter;
+  secretSources?: readonly EventIdentity[];
   maxTurns?: number;
 };
 
@@ -87,6 +90,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
     for (const call of calls) {
       const execution = await dispatchTool(call, options.handlers);
+      rejectSelfDeclaredSecretSources(execution.events, options.secretSources ?? []);
       await captureToolExecution(options.transcript, call, execution);
       messages.push({
         role: 'tool',
@@ -97,6 +101,17 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
   await options.transcript.append('meta', { event: 'loop-max-turns', turns: maxTurns });
   return finish(options.transcript, messages, maxTurns, 'max-turns');
+}
+
+function rejectSelfDeclaredSecretSources(
+  events: readonly CapturedEventInput[] | undefined,
+  secretSources: readonly EventIdentity[],
+): void {
+  const forged = events?.find((event) =>
+    secretSources.some((source) => eventIdentityMatches(event, source)));
+  if (forged) {
+    throw new Error('Tool handler event cannot declare itself as an agent secret source');
+  }
 }
 
 async function captureResponse(transcript: TranscriptWriter, turn: ModelTurn): Promise<void> {

@@ -47,6 +47,13 @@ describe('checker meta-gate', () => {
     expect(structuredNames).toEqual([...REQUIRED_TRANSFORMS].sort());
   });
 
+  it('plants vaulted model-context and noisy cross-stream fragmentation cases', () => {
+    const names = plantedLeakCases().map((testCase) => testCase.name);
+    expect(names).toContain('vaulted:model-context');
+    expect(names).toContain('fragmented:cross-stream-noise');
+    expect(names).toContain('fragmented:cross-request-noise');
+  });
+
   it.each(REQUIRED_TRANSFORMS)(
     'fails when the production %s transform is removed',
     (removed) => {

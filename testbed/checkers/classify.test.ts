@@ -28,9 +28,9 @@ describe('classify', () => {
     }), auth)).toBe('unauthorized-sink');
   });
 
-  it('classifies every context re-serialization as internal source bookkeeping', () => {
+  it('classifies a live model response as egress and model context as the configured source', () => {
     expect(classify(event({
-      channel: 'model-text', direction: 'inbound', initiator: 'model-client-request',
+      channel: 'model-text', direction: 'outbound', initiator: 'model-client-response',
     }), auth)).toBe('unauthorized-sink');
     expect(classify(event({
       channel: 'model-text', direction: 'internal', initiator: 'model-context',

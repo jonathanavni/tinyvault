@@ -1,5 +1,5 @@
 import { randomBytes, type KeyObject } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { runAgentLoop, type ToolDefinition, type ToolHandler } from '../src/agents/loop';
@@ -28,14 +28,32 @@ import {
   type ScenarioRegistry,
 } from './scenarios';
 import type { Scenario } from './scenarios/types';
+import type { ScenarioAuth } from './checkers/classify';
 
 const DEFAULT_SAMPLE_SIZE = 10;
 const MODEL_ID = 'stub-scripted-v1';
 const AGENT_ID = 'stub-safe';
 const CHECKER_VERSION = 'm1-v1';
-const AGENT_CONFIGS = new Map([
-  [AGENT_ID, { id: AGENT_ID, expectedToLeak: false, requiredToPass: true }],
-] as const);
+
+export type AgentConfig = {
+  id: string;
+  expectedToLeak: boolean;
+  requiredToPass: boolean;
+  model: string;
+  sdkVersion: string;
+  secretSources: ScenarioAuth['secretSources'];
+};
+
+export const AGENT_CONFIGS: ReadonlyMap<string, AgentConfig> = new Map<string, AgentConfig>([
+  [AGENT_ID, {
+    id: AGENT_ID,
+    expectedToLeak: false,
+    requiredToPass: true,
+    model: MODEL_ID,
+    sdkVersion: 'none-offline-stub',
+    secretSources: [],
+  }],
+]);
 
 export type EvalOptions = {
   sampleSize?: number;
@@ -73,6 +91,7 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
     artifactDirectory,
     verificationKey: trust.verificationKey,
     scenarioRegistry: trust.scenarioRegistry,
+    agentConfigs: AGENT_CONFIGS,
   });
   return finalizeEvaluation(artifactDirectory, sampleSize, runs, options.generatedAt);
 }
@@ -115,13 +134,13 @@ export async function finalizeEvaluation(
 ): Promise<EvalResult> {
   assertRunInventory(runs, sampleSize);
   const scorecard = aggregateScorecard(runs, sampleSize, generatedAt);
-  enforceLiveFire(runs, scorecard);
-  assertEvalPass(scorecard);
   const scorecardPath = resolve(artifactDirectory, 'scorecard.json');
   await Promise.all([
     writeFile(scorecardPath, `${JSON.stringify(scorecard, null, 2)}\n`),
     writeFile(resolve(artifactDirectory, 'runs.json'), `${JSON.stringify(runs, null, 2)}\n`),
   ]);
+  enforceLiveFire(runs, scorecard);
+  assertEvalPass(scorecard);
   return { scorecard, runs, scorecardPath };
 }
 
@@ -136,14 +155,20 @@ type RunOnceInput = {
 type RunOnceResult = { record: RunRecord; evidence: OfflineRunEvidence };
 
 async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
+  const config = agentConfig(AGENT_ID);
+  const auth = authForAgent(input.scenario.auth, config);
   const prepared = await prepareRun(input);
-  const loopResult = await executeStubRun(input, prepared);
+  const loopResult = await executeStubRun(input, prepared, config);
   const completionReceipt = input.fixture.takeReceipt(prepared.runId);
+  const eventsAttestation = input.fixture.attestEvents(
+    prepared.runId,
+    await readFile(prepared.eventsPath),
+  );
   const completionBinding = createCompletionBinding(input.scenario, prepared);
   const completion = input.fixture.verifyCompletion(completionReceipt, completionBinding);
   const runEndedAt = new Date().toISOString();
-  const leak = leakScan(loopResult.events, prepared.canary, input.scenario.auth);
-  const wrong = wrongOrigin(loopResult.events, input.scenario.auth.canonicalOrigin);
+  const leak = leakScan(loopResult.events, prepared.canary, auth);
+  const wrong = wrongOrigin(loopResult.events, auth.canonicalOrigin);
   return {
     record: createRunRecord(
       input, prepared, completionReceipt, completion.taskCompleted, leak, wrong,
@@ -154,6 +179,7 @@ async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
       runIndex: input.runIndex,
       canary: prepared.canary,
       completionBinding: persistedCompletionBinding(completionBinding),
+      eventsAttestation,
       runStartedAt: prepared.runStartedAt,
       runEndedAt,
     },
@@ -223,7 +249,7 @@ async function prepareRun(input: RunOnceInput): Promise<PreparedRun> {
   };
 }
 
-async function executeStubRun(input: RunOnceInput, run: PreparedRun) {
+async function executeStubRun(input: RunOnceInput, run: PreparedRun, config: AgentConfig) {
   const transcript = await TranscriptWriter.create(run.transcriptPath, run.eventsPath);
   const client = StubClient.safeLogin({
     runId: run.runId, origin: input.scenario.auth.canonicalOrigin, selector: PASSWORD_SELECTOR,
@@ -238,6 +264,7 @@ async function executeStubRun(input: RunOnceInput, run: PreparedRun) {
     tools: [fillToolDefinition()],
     handlers: { fill_from_vault: handler },
     transcript,
+    secretSources: config.secretSources,
   });
 }
 
@@ -252,12 +279,13 @@ function createRunRecord(
     'wrongOriginFillAttempted' | 'wrongOriginFillBlocked'
   >,
 ): RunRecord {
+  const config = agentConfig(AGENT_ID);
   return {
     scenario: input.scenario.id,
     attackClass: input.scenario.attackClass,
     agent: AGENT_ID,
-    model: MODEL_ID,
-    sdkVersion: 'none-offline-stub',
+    model: config.model,
+    sdkVersion: config.sdkVersion,
     runIndex: input.runIndex,
     transcriptPath: run.transcriptPath,
     eventsPath: run.eventsPath,
@@ -389,18 +417,33 @@ export function aggregateScorecard(
 function enforceLiveFire(runs: RunRecord[], scorecard: Scorecard): void {
   for (const agent of scorecard.perAgent) {
     for (const scenario of agent.byScenario) {
-      const source = runs.find((run) => run.scenario === scenario.scenario && run.agent === agent.agent);
-      if (!source) continue;
-      const config = AGENT_CONFIGS.get(agent.agent as typeof AGENT_ID);
+      const cellRuns = runs.filter((run) =>
+        run.scenario === scenario.scenario && run.agent === agent.agent);
+      if (cellRuns.length === 0) continue;
+      const attackClasses = new Set(cellRuns.map((run) => run.attackClass));
+      if (attackClasses.size !== 1) {
+        throw new Error(`Inconsistent attackClass for ${scenario.scenario}/${agent.agent}`);
+      }
+      const config = AGENT_CONFIGS.get(agent.agent);
       if (!config) throw new Error(`Missing eval agent config: ${agent.agent}`);
       const alarm = checkLiveFire({
         expectedToLeak: config.expectedToLeak,
-        attackClass: source.attackClass,
+        attackClass: cellRuns[0].attackClass,
         leakRate: scenario.leaks / scenario.runs,
       });
       if (alarm.suspicious) throw new Error(`Live-fire alarm: ${alarm.reason}`);
     }
   }
+}
+
+function agentConfig(agentId: string): AgentConfig {
+  const config = AGENT_CONFIGS.get(agentId);
+  if (!config) throw new Error(`Missing eval agent config: ${agentId}`);
+  return config;
+}
+
+function authForAgent(auth: ScenarioAuth, config: AgentConfig): ScenarioAuth {
+  return { ...auth, secretSources: [...config.secretSources] };
 }
 
 /**

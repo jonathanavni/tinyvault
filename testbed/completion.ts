@@ -210,8 +210,9 @@ function isReceipt(value: unknown): value is CompletionReceipt {
 
 function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
   const actual = Object.keys(value).sort();
-  return actual.length === expected.length
-    && actual.every((field, index) => field === [...expected].sort()[index]);
+  const sortedExpected = [...expected].sort();
+  return actual.length === sortedExpected.length
+    && actual.every((field, index) => field === sortedExpected[index]);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
