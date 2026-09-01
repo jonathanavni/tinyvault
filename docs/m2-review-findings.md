@@ -205,3 +205,64 @@ test); `authority.endsWith(':')` (`:12`) is redundant with the port-range check;
 single removal is F3's duplicated `base32Encode`. Keep `detectTripwireWithTransforms` — it is what makes the
 per-transform deletion test load-bearing. *Testbed-scoped half (the ~3,486 lines §9.1 actually points at) is
 still outstanding.*
+
+---
+
+# ROUND 2 — review of the fix slice (`a1c7c39`)
+
+Verdict **NO-SHIP**, merge verdict **no**. Findings verified against *unmutated shipped code*.
+A1, A3, A4, B1, B3, B4, F2, F3 are real closures that survive adversarial mutation.
+
+## Blockers
+
+- **F-1 (HIGH, verified by Claude).** C1 is closed **only for ASCII hosts**. The idempotence check is gated
+  on `/^[\x00-\x7f]+$/` (`originGuard.ts:34-35`), so **one non-ASCII code point skips it entirely** and the
+  raw IDNA/UTS-46 path then performs exactly the non-canonical mappings C1 exists to reject:
+  `https://０x7f000001` → `https://127.0.0.1`; all-fullwidth hex → `127.0.0.1`; fullwidth stops → `127.0.0.1`;
+  soft hyphen / ZWSP / fullwidth `e` → `example.com`; `Ⅸ.com` → `ix.com`.
+  The `a1c7c39` commit message claims this class is rejected — **overclaimed**. An origin string that reads
+  as one authority and normalizes to another is the defect this primitive exists to prevent.
+  *Claude's own round-2 verification missed this: it probed ASCII vectors only, mirroring the suite's blind
+  spot. Recorded so the pattern is not repeated — a validator's tests must cover every branch it has.*
+  **Needs a continuity-owner decision on Appendix A row 9 before it can be fixed.**
+- **F-2 (HIGH, verified by Claude).** The new "exact mutation" origin tests do not catch their mutations.
+  Deleting the backslash from the delimiter set → **47/47 still pass**. Deleting the `@`-and-`%` guard line
+  → **47/47 still pass** (broader than reported: the userinfo guard is not isolated either). Every vector
+  uses an ASCII host, where the idempotence check rejects first. The guards *are* load-bearing — with them
+  removed, `https://ä.com\`, `https://ä.com<C0>` and `https://exä%2Emple.com` all become accepted.
+  Violates fix-spec §7 and repeats round-1's own `%20` note.
+
+## Further findings
+
+- **F-3 (MED).** Gate is blind to **non-relative aliased specifiers**; a one-line tsconfig `paths` entry
+  silently disarms it (`@sup/evaluator` → PASS/exit 0 vs `../supervisor/evaluator` → FAIL/exit 1). Same
+  silent-disarm shape as B3. Not live today (no `paths`), but `moduleResolution: Bundler` is in use.
+- **F-4 (MED).** `close()` does not revoke **evidence**. `detectTripwire` never checks `#active` and never
+  consumes the token: post-close detection returns a `fail` verdict, replays indefinitely, and one evidence
+  token seals into two batches that both adjudicate. "Run-bound and single-use" holds for sealed batches,
+  not evidence. This is where §4's "a lease never outlives its run under any path" must bite in M4.
+- **F-5 (MED).** `src/shared/` is an **ungoverned zone**. The fix deleted the filename exemption so
+  `isProtected` would be "the directory rule alone", then created a third directory with no rule, no test,
+  and no contract — and the matcher core (`firstMatchingSecretTransform`) moved there. A data-plane import
+  of it leaves the gate at exit 0. Not exploitable today (pure function, canary passed as a parameter).
+- **F-6 (LOW).** Five decorative guards introduced by the fix. One — `lockdownDomain.ts:78`'s
+  closed-session check — is **genuinely load-bearing and untested**: removing it lets a post-close
+  nav-clear resurrect a closed session's identity (closed-session identity replay).
+- **F-7 (LOW).** Capture-after-close throws the sealed-batch error for an operation producing no batch.
+- **F-8 (LOW).** Contract-home drift: `phase-0-plan.md:233` and `m2-slice-spec.md:47,215` still pin the
+  transform inventory at `testbed/checkers/leakScan.ts`; its real home is now `src/shared/secretTransforms.ts`.
+  Continuity-owner amendment.
+
+## Cleared — do not re-litigate
+
+Evidence ownership (A1) sound: getter/proxy/cross-record attacks show `propertyReads === 0` / `traps === 0`;
+five source mutants killed; WeakMap keying sound. **No common-mode failure** from the shared module —
+`metaGate.ts` keeps its own `INDEPENDENT_TRANSFORM_FIXTURES`, `independentBase32`, and required-transform
+literal, importing nothing from `src/shared`. `testbed/` refactor behavior-preserving; `make eval` unchanged.
+Lockdown split real (`ownKeys` assertion, not a name check). Mutex both directions killed. `Secret` 29-route
+sweep after `Symbol.toPrimitive` removal: zero leaks. Scope and neutrality clean; `stash@{0}` intact.
+
+## Closure table
+
+CLOSED: A1, A2 (M2 scope), A3, A4, B1, B3, B4, C4, F2, F3 · **OPEN:** B2 (partial — F-3), C1 (F-1) ·
+**COSMETIC:** C2, C3 (F-2) · **PARTIAL:** D (F-6 + F-2).
