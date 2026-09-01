@@ -117,3 +117,70 @@ stub agent against the `benign-login` fixture and emitting a Wilson-CI scorecard
   (4) Audit gates are timed precisely: *after the milestone's implementation and normal diff ladder, but
   before the milestone is marked complete and work advances.*
 
+- **2026-09-01** — **B1 split across M2/M3/M4, and the M2 pre-impl review round 1 returned NO-SHIP: 9
+  findings, ALL ACCEPTED, and for the first time the findings amended the LOCKED plan itself.**
+  - **B1 could not fold wholly into M2.** The locked M2 row forbids real-fill/DOM assertions (round-2 #6
+    removed M2's forward dependency on M4's browser) and B1's headline test needs `fillService`. Split:
+    **M2 (1/3)** `Secret` no-plaintext-retention lifecycle; **M3 (2/3)** backend never-cache contract with
+    `dispose?()` dropping **auth-session material only** — the split that keeps the invariant from being
+    either false or forcing pointless re-authentication; **M4 (3/3)** end-to-end re-resolution. Written into
+    all three milestone rows as `[B1 slice n/3]` markers, the pattern used for deferred audit items.
+  - **The simplification question was re-scoped at the existing M1 testbed, not M2's pending diff.** M2 is
+    greenfield primitives, so a reviewer pointed only at its diff returns "nothing to simplify" and the
+    concern quietly expires. Measured: `testbed/` is **3,486 lines against `src/`'s 597**, concentrated in
+    `runner.ts` (524), `metaGate.ts` (447), `offline.ts` (352) — and "evidence-binding layer" in the
+    question's own wording names M1's code specifically.
+  - **Round-1 verdict NO-SHIP (2 crit, 6 high, 1 med).** Three findings were drift the packet introduced
+    (generic `scheme://` where SCHEMA.md says bare HTTP(S); a generic `unlock` contradicting layer 2's
+    "taint persists until trusted top-level navigation"; the entire §4 transform matrix dropped from
+    acceptance, so a raw-only tripwire would have satisfied the handoff). **Two exposed real contradictions
+    in the locked plan** and were amended rather than left to the implementer — the locked text itself
+    routes contract conflicts back to the continuity owner, so this is that path working, not an erosion of
+    the lock.
+  - **(crit #1) The tripwire contract was internally contradictory.** §4 layer 3 promised both "fails the
+    eval/CI run" and "never alters process lifetime"; in one process a failing runner *does* exit nonzero.
+    Resolved as an **architecture gap, not a fatal design flaw**, by splitting planes: a **data plane**
+    returning identical bytes/errors/session/mutex behavior regardless of a match, and an
+    **evaluator-owned control plane** that adjudicates *sealed* evidence afterward. The absolute
+    process-lifetime claim is **withdrawn** for a scoped one. A callback-style sink injected into the caller
+    path is **forbidden** (TypeScript cannot stop a callback throwing, blocking, or mutating caller state —
+    that re-opens the oracle). "Trusted-originated" is now defined by **provenance**, and mixed
+    caller/host strings are refused rather than scanned, since scanning them indirectly scans caller input
+    and recreates the membership oracle. Ownership: M2 detector+types+seam → **M4 first wiring** → M8 MCP
+    seam. Decision: wiring assigned explicitly to M4 rather than deferred to an unnamed later milestone.
+  - **(crit #2) `Secret<T>` overclaimed what JavaScript can deliver.** Strings are immutable and cannot be
+    zeroized, V8 may retain copies, and a plaintext alias already returned by `expose()` cannot be revoked.
+    Narrowed to **`Secret<string>`** (generic `T` has no definable ownership semantics) and the guarantee
+    restated honestly: *no reachable plaintext or secret-derived material in TinyVault-owned **data-plane**
+    state after clear* — an accidental-disclosure guardrail, **not** secure-memory machinery. Also corrected
+    a drafting error: "`property-enumeration` yields `[REDACTED]`" is impossible, since `Object.keys` cannot
+    return a scalar — replaced with exact **value-producing vs structure-producing** route shapes.
+  - **(#3) The M2 noninterference differential was structurally vacuous — moved to M4.** If constructors
+    cannot accept secrets, then "construct results with differing secrets" is incoherent: with no fill
+    service the test builds two unused `Secret`s and calls the constructor twice with identical public
+    args, so virtually anything passes, and it cannot catch the real failure (a future fill service
+    selecting `reason` or truncating `filled` by secret length). M2 now proves **structural confinement**
+    (exact signatures, key sets, serialized bytes, closed error sets, compile-time negative cases); the real
+    differing-value/length differential moves to **M4**, where the existing short-vs-long timing gate now
+    explicitly **inherits** the caller-result-bytes and error-path equality assertions instead of standing
+    alone. This amends a locked M2 *verification gate* — a heavier change than the `AttackClass` or §2
+    interface amendments, so it is recorded as a deliberate continuity-owner decision, approved before
+    application.
+  - **(#6) B1 and the tripwire collided inside M2.** The taboo set must *retain* secret-derived material to
+    match it, contradicting "no derived material survives use." Resolved with an explicit **two-lifetime
+    lease**: a data-plane lease dropped in `finally` before mutex release (what B1's claim governs), and an
+    evaluator control-plane lease surviving until the sealed-evidence end marker is adjudicated — the latter
+    **explicitly excluded** from B1's retention claim. Deregistering at mutex release alone is insufficient,
+    since the supervisor may not have finished adjudicating.
+  - **(#5) B1's M4 test was weak and got stronger.** "Backend called twice" proves re-resolution was
+    *attempted*, not that cached A was not reused. Upgraded to **rotation**: resolve A → fixture receives A
+    → rotate handle to B → second fill's fixture receives **B, not A** → call count two → second-fill
+    evidence contains no A outside authorized first-fill evidence. Stated limit: this still does not prove
+    V8 retained no unreachable heap copy, and must not claim to.
+  - **(#4) Mutex semantics were delegated, not specified** — §9.1 named reentrancy as a review surface
+    without choosing a behavior. Chosen: **non-reentrant `runExclusive`**, fail-fast on same-session nested
+    acquisition, `OPEN→CLOSING→CLOSED`, close rejects new+queued work and lets the current holder finish
+    cleanly before state deletion, idempotent close/release, late release cannot resurrect state.
+  - **Process note:** the first poll loop reported the review complete when it was not (a shell `case`
+    pattern matched text inside the echoed prompt summary rather than a status field). Corrected within the
+    session; poll on a parsed status field, not a substring of the whole status blob.

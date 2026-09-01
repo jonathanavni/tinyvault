@@ -1,8 +1,12 @@
 # M2 Slice Spec — Security Primitives (Codex implementation handoff)
 
-> **Status:** draft for Codex **pre-implementation adversarial review** (ladder step 2), then implementation.
+> **Status:** revision 2, for Codex **pre-implementation adversarial review round 2** (ladder step 2; cap is
+> round 3). Revision 1 returned **NO-SHIP** — 9 findings (2 crit, 6 high, 1 med), **all accepted**. Three
+> were drift this packet introduced; two exposed genuine contradictions in the *locked plan*, which has been
+> amended (see **Amendments** below).
 > Governed by [`phase-0-plan.md`](phase-0-plan.md) §8 (M2 row), §9.1 (review gate), §4 (redaction layers),
-> §2 (contracts). Those are LOCKED — this packet **implements** them and may not reinterpret them.
+> §2 (contracts), `SCHEMA.md`. Those are authoritative — this packet **implements** them and may not
+> reinterpret them.
 
 ## Task
 
@@ -12,106 +16,137 @@ of the never-cache-the-secret invariant (B1 slice 1/3).
 ## Branch / Worktree
 
 Work in: `codex/m2-primitives`
-Base from: current `main` head (`9f216b0` or later — verify with `git rev-parse main` at branch time)
+Base from: current `main` head (verify with `git rev-parse main` at branch time)
 Do not modify unrelated files.
+
+## Amendments made in response to round 1 (read these first)
+
+Round 1 was correct that the slice was not implementable without inventing security-relevant semantics. The
+**locked plan has been amended** rather than leaving the implementer to guess — the locked text itself says a
+contract conflict is kicked back to the continuity owner, and this is that path working as designed:
+
+1. **§4 layer 3 — tripwire plane split.** The old text promised both "fails the eval/CI run" and "never
+   alters process lifetime," which cannot both hold in one process. Now: a **data plane** returning identical
+   bytes/errors/session/mutex behavior regardless of a match, and an **evaluator-owned control plane** that
+   examines *sealed* evidence and produces the verdict afterward. The absolute process-lifetime claim is
+   **withdrawn** and replaced with a scoped one. Ownership is M2 (detector + types + seam) → M4 (wiring) →
+   M8 (MCP seam).
+2. **§4 layer 1 — `Secret<T>` narrowed to `Secret<string>`, guarantee restated honestly.** Not memory
+   zeroization; `expose()` aliases are unrevocable; the claim is non-reachability from TinyVault-owned
+   data-plane state. Per-operation shapes are now exact (value-producing vs structure-producing routes).
+3. **§8 M2 row — the noninterference differential moved to M4.** With no fill service it was structurally
+   vacuous. M2 now gets **structural confinement** instead.
+4. **§4 — B1 live-secret lease carve-out.** The taboo set must retain secret material to match it, which
+   contradicted B1. Data-plane lease (dropped in `finally` before mutex release) vs evaluator control-plane
+   lease (until sealed evidence is adjudicated), with the latter explicitly excluded from B1's claim.
+5. **§4 layer 2 — no generic `unlock`.** It contradicted "taint persists until trusted top-level navigation."
+6. **§8 M4 row — B1 slice 3/3 upgraded to a rotation test**; **§8 M8 row** — MCP capture seam proved.
+7. **§9.1 — mutex non-reentrancy chosen** (it named reentrancy as a review surface without picking a
+   behavior).
 
 ## Required Reading
 
 - `CLAUDE.md`
 - `PLAN.md` — **Current State only** (do not read or edit the Decisions Log)
-- `docs/phase-0-plan.md` — **§2** (contracts + fill gate), **§4** (redaction layers 1–3), **§5** (canary +
-  `Channel` enum), **§8** (M2 row), **§9.1** (the review gate you will be reviewed against)
+- `docs/phase-0-plan.md` — **§2**, **§4** (layers 1–3 + the lease carve-out + transform coverage), **§5**,
+  **§8** (M2/M3/M4 rows), **§9.1**
 - `src/core/types.ts` — the locked model-visible contract
-- `SCHEMA.md` — only if you believe a contract change is needed (see *Contract conflicts* below)
+- `SCHEMA.md` — the `Origin` contract (bare HTTP(S)); also read before proposing any contract change
 - `.claude/memory/conventions.md`
 
 Do **not** bulk-load `.claude/memory/`.
 
 ## Context
 
-- TinyVault's thesis is *measure, don't assert*: plaintext never enters the model's context, proven by a
-  leak-rate testbed rather than by claims.
-- **M0** (contracts) and **M1** (eval spine) are done and on `main`. `make eval` runs fully offline and
-  deterministically, emitting a Wilson-CI scorecard. 81 tests green.
-- **There is no fill service yet.** M2 is the first slice that handles real secrets, but it handles them
-  *only in isolated primitives* — no browser, no DOM, no Playwright.
-- The plan was locked after a 3-round Codex adversarial ladder plus an independent Opus 5 audit. Round-2
-  finding #6 specifically caught M2 having a forward dependency on M4's browser and split them. **Do not
-  re-merge them.**
-- Several primitives here exist because a reviewer demonstrated an oracle. `Secret<T>` (layer 1), the
-  provenance-based taint registry (layer 2), and the tripwire-as-instrumentation (layer 3) are each the
-  *fix* for a specific attack. Weakening one to simplify re-opens a closed finding.
+- TinyVault's thesis is *measure, don't assert*. Claims the language cannot support are worse than no claim.
+- **M0** (contracts) and **M1** (eval spine) are on `main`; `make eval` runs offline; 81 tests green.
+  **There is no fill service yet.**
+- Several primitives exist because a reviewer demonstrated an oracle. Weakening one to simplify re-opens a
+  closed finding.
+- **Vacuous tests are a named project failure mode.** The M0 review caught `make test` running `vitest run`
+  without type-checking; round 1 caught a noninterference test that any constructor would pass. A test that
+  cannot fail is worse than an absent one, because it reads as coverage.
 
 ## Scope
 
 Implement in `src/core/`:
 
-1. **`redaction.ts` — `Secret<T>`.** `toString`/`toJSON`/`inspect`/`util.inspect.custom`/template coercion/
-   property enumeration all yield `"[REDACTED]"`. Exactly one accessor, `expose()`, whose single production
-   call site is M4's in-realm inject primitive (which does not exist yet — M2 ships the wrapper and its
-   tests only). **[B1 slice 1/3]** an explicit clear/consume lifecycle: after clear, no plaintext or derived
-   material remains reachable through any accessor, property, serialization, or error path.
-2. **`originGuard.ts` — bare-origin string validator.** `scheme://host[:port]`, no path/query/fragment/
-   trailing slash. Pure string-level accept/reject and normalization. **It does not read live browser
-   state** — comparing against a live top-level origin is M4's job.
-3. **`lockdown.ts` — taint/lockdown registry.** Provenance-keyed, not value-keyed (§4 layer 2): records that
-   a given (session, frame, element) identity is locked/tainted and must be masked *because of where it is*,
-   never because its content matches a secret. In M2 identities are opaque keys supplied by the caller —
-   no DOM.
-4. **`sessionMutex.ts` — per-session mutex** serializing page ops. Correct release on the exceptional path,
-   defined reentrancy behavior, defined behavior on session close while held, and no stale state after
-   release.
-5. **`results.ts` — exact result constructors.** Every `FillResult` is built by a constructor taking only
-   **non-secret provenance**. No enum, boolean, count, or string may be derived from a secret's value or
-   length (round-2 #NEW).
-6. **`tripwire.ts` — content tripwire as pure instrumentation** (§4 layer 3). Registers the live secret
-   (canary in tests) in a taboo set; scans **trusted-originated** outbound strings; on match writes to a
-   protected host-side sink and fails the eval/CI run. It **never** inspects caller input and **never**
-   alters caller-visible control flow, return values, process lifetime, or observable timing.
+1. **`redaction.ts` — `Secret<string>`** (narrowed; not generic). Value-producing routes — `String()`,
+   template coercion, `toString`, `toJSON`/`JSON.stringify`, `util.inspect`/`inspect.custom`, `console.log` —
+   yield `"[REDACTED]"`. Structure-producing routes — `Object.keys`/`entries`, spread,
+   `getOwnPropertyNames`, `Reflect.ownKeys`, descriptors — expose **no secret-bearing state**. One accessor,
+   `expose()`. **[B1 slice 1/3]** idempotent `clear()` and one-shot `consume()`; afterward the wrapper holds
+   no reference and further exposure fails with **one fixed, secret-independent error**. Document in code
+   that this is a guardrail, not secure memory: previously-exposed aliases cannot be revoked and heap copies
+   cannot be proven absent.
+2. **`originGuard.ts` — bare-origin validator.** **`http:`/`https:` only** (`SCHEMA.md`). Reject userinfo,
+   any path/query/fragment/trailing slash **including empty `?` and `#` delimiters**, and surrounding or
+   internal whitespace *before* parsing. Pin WHATWG normalization for lowercasing, IDN/punycode, IPv6
+   serialization, and removal of explicit default ports. **Deliver a normative input→output/rejection
+   table** — do not leave edge cases to inference. No live browser state; comparison against a live
+   top-level origin is M4's.
+3. **`lockdown.ts` — taint/lockdown registry.** Provenance-keyed, never content-keyed. Identities are
+   **trusted-host-minted opaque capability tokens** with explicit session/document/frame/element components
+   and stated equality rules — *not* model-supplied strings. The registry API **never accepts content**.
+   **No generic `unlock`**: clearing happens only via trusted lifecycle operations
+   (clear-on-trusted-top-level-navigation, clear-on-session-close), per §4 layer 2.
+4. **`sessionMutex.ts` — per-session mutex.** Non-reentrant `runExclusive(session, fn)`; same-session nested
+   acquisition **fails fast** with a fixed internal error. States `OPEN → CLOSING → CLOSED`. Close rejects
+   new and queued work with a fixed outcome, lets the **current holder finish cleanly**, then deletes state.
+   Close and release are idempotent; a late release cannot resurrect or corrupt state.
+5. **`results.ts` — exact result constructors, proved by STRUCTURAL CONFINEMENT.** Exact signatures
+   accepting only named public provenance; `filled` copied solely from caller-requested roles with pinned
+   ordering/dedup semantics; closed reason/error sets with fixed text; no context/error/secret parameters.
+   *(The differing-value/length differential is **M4's** — see Do-not-implement.)*
+6. **`tripwire.ts` — detector + diagnostic types + supervisor-facing seam ONLY.** A pure, transform-aware
+   detector over the **full §4 matrix**: raw, base64, base32, hex, percent, JSON-escape, reversed,
+   whitespace-split. Fixed-shape, non-secret diagnostic types. **Do not inject a callback sink into the
+   caller path** — TypeScript cannot guarantee a callback won't throw, block, or mutate caller state, which
+   re-opens the oracle. Detector and sink execution belong to the supervisor plane. "Trusted-originated" is
+   defined **by provenance**; mixed caller/host strings are **refused, not scanned**.
 
 ### Do not implement
 
-- Anything touching a browser, DOM, Playwright, CDP, or a live origin. **No test in this slice may assert a
-  real-fill or DOM property** (locked, §8 M2 row).
-- `fillService`, the in-realm inject primitive, verified credential destination, TOCTOU recheck — all **M4**.
+- Anything touching a browser, DOM, Playwright, CDP, or a live origin. **No test may assert a real-fill or
+  DOM property.**
+- **Tripwire wiring into `make eval`** — M4 owns first wiring, sealed-evidence lifecycle, and the "same
+  caller result, different post-run verdict" test. M2 ships the seam, not the connection.
+- **The results noninterference differential** — M4, where a real fill path exists.
+- `fillService`, the in-realm inject primitive, verified credential destination, TOCTOU recheck — **M4**.
 - The backend interface or `resolveSecret` — **M3**.
-- B1's *other* two slices: the backend never-cache contract (**M3**) and "a second fill re-resolves" (**M4**).
-  They are already written into those milestone rows. Do not pull them forward; the second needs
-  `fillService`, which does not exist.
-- Any change to `testbed/`, the scorecard schema, or the checkers.
-- Refactors of M1 code. (The simplification question is asked separately at merge review — see below.)
+- B1's other slices: backend never-cache (**M3**), rotation A→B (**M4**).
+- Fragment reassembly — checker-only, stays in `testbed/`.
+- Any change to `testbed/`, the scorecard schema, or the checkers. Refactors of M1 code.
 
 ## File Ownership
 
-Codex owns: `src/core/redaction.ts`, `src/core/originGuard.ts`, `src/core/lockdown.ts`,
-`src/core/sessionMutex.ts`, `src/core/results.ts`, `src/core/tripwire.ts`, and their colocated `*.test.ts`.
+Codex owns: `src/core/redaction.ts`, `originGuard.ts`, `lockdown.ts`, `sessionMutex.ts`, `results.ts`,
+`tripwire.ts`, and their colocated `*.test.ts`.
 
 Codex must avoid: `PLAN.md`, `.claude/memory/*`, `docs/*`, `testbed/*`, `src/agents/*`, `README.md`,
-and `src/core/types.ts` (locked contract — see below).
+`SCHEMA.md`, and `src/core/types.ts`.
 
-## Acceptance Criteria
+## Acceptance Criteria — happy path *and* rejection path (handoff §12)
 
-**Behavior:** as scoped above; every primitive usable and tested standalone.
+- **`Secret` lifecycle matrix:** repeated exposure; `consume` vs `clear`; double-clear; exposure after clear
+  (fixed error bytes); **every** coercion and enumeration route before *and* after clear; symbol/prototype/
+  descriptor inspection; thrown-error paths (a `Secret` in a message or stack must not print plaintext).
+  A test must state the external-alias limitation rather than assert a guarantee that doesn't hold.
+- **Origin:** the full normative table, accept and reject, including every case named in scope item 2.
+- **`results.ts`:** exact own-key sets and serialized bytes for every success and failure constructor, plus
+  **compile-time negative cases** (`@ts-expect-error`) for secret arguments, secret-bearing fields, and extra
+  properties — the M0 pattern that makes contract drift fail the build.
+- **Mutex:** ordering with an active owner; multiple queued ops; rejection and throw; nested acquisition;
+  close while active; close with queued waiters; repeated close; late release.
+- **Lockdown:** session/document isolation; distinct-but-similar identities; stale-token rejection;
+  navigation and session-close bulk clearing. Assert **registry-state semantics only** — do not simulate
+  masking and present it as the DOM guarantee (M4 owns that).
+- **Tripwire detector:** the full transform matrix, each transform failing independently if deleted; plus
+  false-positive controls and mixed-provenance strings it must **refuse to inspect**. Assert
+  **supervisor-verdict semantics only** — M2 must not claim `make eval` fails.
 
-**Tests — happy path *and* rejection path (handoff §12):**
-
-- `Secret` masking across **every** coercion route: `String()`, template literal, `JSON.stringify`,
-  `console.log`/`util.inspect`, spread, `Object.keys`/`entries`/`getOwnPropertyNames`, and **thrown-error
-  paths** (a `Secret` in an error message or stack must not print plaintext).
-- **[B1 slice 1/3]** post-clear: no accessor, property, serialization, or error path yields the value.
-- Origin validator: accept/reject table including trailing slash, path, query, fragment, default vs explicit
-  port, uppercase scheme/host, IDN/punycode, IPv6 literals, userinfo, whitespace, and empty.
-- **Noninterference differential** (`results.ts`): under identical public state, construct results with
-  secrets of **differing value and differing length**; assert caller-visible result bytes and error paths are
-  **byte-identical**.
-- Tripwire: fires (protected sink written, run failed) **and** caller-visible behavior is provably unchanged
-  vs the non-leaking path — same return value, same control flow, no teardown branch.
-- Mutex: mutual exclusion under concurrency, release on throw, release on rejection, behavior on
-  close-while-held, no stale lock after release.
-- Lockdown registry: lock/unlock, masking keyed on **provenance not value** (an entry whose content happens
-  to equal a secret is masked because of its identity; an untainted entry with identical content is not).
-
-**Safety:** the rejection and race paths above are the point of the slice, not extras.
+**Absence-detection:** for each primitive, include at least one test that **fails if the protection is
+removed**. A green suite that stays green after you delete the protection is the failure mode here.
 
 ## Verification Commands
 
@@ -119,46 +154,42 @@ and `src/core/types.ts` (locked contract — see below).
 make test
 ```
 
-Must pass `tsc --noEmit && vitest run` (the M0 finding: `vitest run` alone strips types without checking).
-`make eval` must remain green and unchanged.
+Must pass `tsc --noEmit && vitest run`. `make eval` must remain green and unchanged.
 
 ## Contract conflicts — STOP, do not guess
 
-`src/core/types.ts` is a **locked** contract. If implementing M2 requires changing it, **stop and report the
-conflict** rather than resolving it. This is not hypothetical: mid-M1, Codex correctly stopped on exactly this
-(the `AttackClass` enum had no value for the benign control run), and kicking it back produced a clean
-amendment instead of a corrupted leak-rate table. Same rule here.
+`src/core/types.ts` and `SCHEMA.md` are locked. If M2 requires changing either, **stop and report** rather
+than resolving it. Mid-M1 Codex correctly stopped on exactly this (`AttackClass` had no value for the benign
+control run) and the kickback produced a clean amendment instead of a corrupted leak-rate table. Round 1 of
+*this* slice did the same thing at plan level, and the plan was amended. The path works — use it.
 
 ## Review sequence you will be reviewed under (§9.1)
 
-After implementation, on the pending branch while the diff exists:
+On the pending branch while the diff exists: **1.** Claude `/review` · **2.** Claude `/security-review` ·
+**3.** Codex adversarial post-implementation diff review.
 
-1. Claude `/review` (fresh-context QA)
-2. Claude `/security-review` (security-specialized third channel)
-3. Codex adversarial post-implementation diff review
+**Independence is relative to the author.** Because **Codex implements M2**, Claude's `/review` and
+`/security-review` are the **different-family** channels; the Codex post-impl pass is fresh-context and
+adversarial but **same-family** as the implementer — valuable for contract drift and locked-gate
+reinterpretation, *not* a source of different-family coverage. None certifies M2; each is additive
+(`handoff-pattern.md` §7.1). Where a review and a test disagree, **the locked invariant is authoritative,
+not either mechanism.**
 
-**Family terminology, stated correctly — independence is relative to the author.** Because **Codex implements
-M2**, Claude's `/review` and `/security-review` are the **different-family** channels here; the Codex
-post-implementation pass is fresh-context and adversarial but **same-family** as the implementer — valuable
-for contract drift and locked-gate reinterpretation, *not* a source of different-family coverage. None of the
-three certifies M2; each is additive (`handoff-pattern.md` §7.1). Where a review and a test disagree, **the
-locked invariant is authoritative, not either mechanism.**
+Security-review focus surfaces are §9.1's, as amended.
 
-The security review will be directed at these surfaces specifically (§9.1): `Secret<T>` exposure via coercion/
-serialization/inspection/enumeration/error paths/logging; bare-origin parsing edge cases; result-constructor
-noninterference across differing secret values *and lengths*; mutex cleanup, exceptional release, reentrancy,
-session-close races, stale taint state; and the tripwire never altering caller-visible behavior or timing.
+## Honest-claims rule
 
-**M2 must not claim real-fill or DOM guarantees** — reserved for M4's integration gates.
+Do not write a claim the language cannot support. Specifically: no assertion that plaintext was zeroized or
+erased from memory; no assertion that timing is *identical* (repeated trials **bound** detectable
+differences, they do not prove noninterference); no assertion that M2 proves snapshot masking or eval
+failure. Where a guarantee is structural rather than absolute, say which.
 
 ## Note on the simplification question
 
-The standing merge-review question — *"which state, abstraction, duplicated validation, or evidence-binding
-layer can be removed without weakening a locked invariant or test?"* — is **scoped at the existing M1 testbed,
-not at this diff** (§9.1). `testbed/` is 3,486 lines against `src/`'s 597. It is not a criticism of this slice
-and needs no pre-emptive action from you.
+The standing merge-review question is **scoped at the existing M1 testbed, not at this diff** (§9.1):
+`testbed/` is 3,486 lines against `src/`'s 597. No pre-emptive action needed from you.
 
 ## Reporting
 
-Use the implementation report format in `handoff-pattern.md` §13: Summary / Files Changed / Verification /
-Risks & Follow-ups / **Deviations From Handoff**.
+Implementation-report format, `handoff-pattern.md` §13: Summary / Files Changed / Verification / Risks &
+Follow-ups / **Deviations From Handoff**.
