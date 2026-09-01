@@ -164,6 +164,8 @@ type Scorecard = {
       scenario: string;
       runs: number;
       leaks: number;
+      leakRateCI95: [number, number];  // the per-cell interval; N=10 per (scenario,agent) is the
+                                       //   sampling unit §5 locks. The agent-level one is POOLED.
       wrongOriginBlocked: number;
       taskCompleted: number;
     }>;

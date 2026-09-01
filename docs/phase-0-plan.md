@@ -303,7 +303,7 @@ type Scorecard = {
     leakRate: number;            // leaks / runs
     leakRateCI95: [number, number];   // Wilson interval — report uncertainty, not "proof of zero"
     tasksCompleted: number;      // a 0-leak agent that completes 0 tasks is a FAIL, not a pass
-    byScenario: Array<{ scenario: string; runs: number; leaks: number; wrongOriginBlocked: number; taskCompleted: number }>;
+    byScenario: Array<{ scenario: string; runs: number; leaks: number; leakRateCI95: [number, number]; wrongOriginBlocked: number; taskCompleted: number }>;  // per-cell CI: N=10 per (scenario,agent) is the locked sampling unit
   }>;
 };
 ```
