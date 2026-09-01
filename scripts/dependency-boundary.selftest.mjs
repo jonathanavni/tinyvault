@@ -62,6 +62,42 @@ withFixture("import { match } from 'probe-relay'; void match;", (root) => {
     'node_modules relay silently disarmed the real dependency-gate CLI');
 });
 
+withFixture("import { match } from 'relay-a'; void match;", (root) => {
+  writePackage(root, 'relay-a', "export { match } from 'relay-b';\n");
+  writePackage(root, 'relay-b',
+    "export { match } from '../../src/supervisor/secretMatcher';\n");
+  assertCliStatus(root, 1,
+    'package-chain bypass did not fail the real dependency-gate CLI');
+});
+
+withFixture("import { go } from 'relay-a'; void go;", (root) => {
+  writePackage(root, 'relay-a',
+    "const target = '../../src/supervisor/secretMatcher'; export const go = () => import(target);\n");
+  assertCliStatus(root, 1,
+    'computed import inside external package did not fail the real dependency-gate CLI');
+});
+
+withFixture("import { go } from 'relay-a'; void go;", (root) => {
+  writePackage(root, 'relay-a',
+    "const load = require; export const go = () => load('../../src/supervisor/secretMatcher');\n");
+  assertCliStatus(root, 1,
+    'aliased require inside external package did not fail the real dependency-gate CLI');
+});
+
+withFixture("import { go } from 'relay-a'; void go;", (root) => {
+  writePackage(root, 'relay-a',
+    "import { createRequire } from 'node:module'; export const go = createRequire(import.meta.url);\n");
+  assertCliStatus(root, 1,
+    'createRequire inside external package did not fail the real dependency-gate CLI');
+});
+
+withFixture("import { a } from 'relay-a'; void a;", (root) => {
+  writePackage(root, 'relay-a', "export { b as a } from 'relay-b';\n");
+  writePackage(root, 'relay-b', "export { a as b } from 'relay-a';\n");
+  assertCliStatus(root, 0,
+    'external package cycle did not terminate cleanly in the real dependency-gate CLI');
+});
+
 withFixture(
   "import { readFile } from 'node:fs'; import { safe } from 'clean-package'; void readFile; void safe;",
   (root) => {
@@ -72,8 +108,11 @@ withFixture(
       exports: './index.ts',
     }));
     write(root, 'node_modules/clean-package/index.ts', "export const safe = true;\n");
+    linkInstalledPackage(root, 'typescript');
+    write(root, 'src/core/real-package.ts',
+      "import ts from 'typescript'; export const syntaxKind = ts.SyntaxKind.SourceFile;\n");
     assertCliStatus(root, 0,
-      'node builtin and genuine third-party package did not pass the real dependency-gate CLI');
+      'existing legitimate third-party control did not pass the real dependency-gate CLI');
   },
 );
 
@@ -115,6 +154,10 @@ withFixture("import './missing-relative-module';", (root) => {
   assertCliStatus(root, 1, 'unresolved relative import did not fail the real CLI');
 });
 
+withFixture("import 'missing-external-package';", (root) => {
+  assertCliStatus(root, 1, 'unresolved external package did not fail the real CLI');
+});
+
 withFixture("export const safe = 'data-plane only';", (root) => {
   const result = checkDependencyBoundary(root);
   assert.equal(result.files > 0, true, 'clean fixture scanned zero files');
@@ -136,7 +179,7 @@ withTemporaryRoot((root) => {
 console.log(
   'dependency boundary mutation tests PASS '
   + '(real CLI exit 1 violations incl. data-plane secret-matcher import; '
-  + 'exit 0 clean; protected arm, outside-src, unresolved, computed, aliases)',
+  + 'recursive external packages and unsupported loads; exit 0 clean and package cycle)',
 );
 
 function assertViolation(root, name) {
@@ -145,9 +188,12 @@ function assertViolation(root, name) {
 }
 
 function assertCliStatus(root, expected, message) {
-  const result = spawnSync(process.execPath, [cli, '--root', root], { encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [cli, '--root', root], {
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
   assert.equal(result.status, expected,
-    `${message}\nstdout: ${result.stdout}\nstderr: ${result.stderr}`);
+    `${message}\nerror: ${result.error?.message ?? 'none'}\nstdout: ${result.stdout}\nstderr: ${result.stderr}`);
 }
 
 function withFixture(probeSource, assertion, compilerOptions = {}) {
@@ -181,4 +227,21 @@ function write(root, relative, contents) {
   const target = path.join(root, relative);
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, contents);
+}
+
+function writePackage(root, name, source) {
+  write(root, `node_modules/${name}/package.json`, JSON.stringify({
+    name,
+    version: '1.0.0',
+    type: 'module',
+    exports: './index.ts',
+  }));
+  write(root, `node_modules/${name}/index.ts`, source);
+}
+
+function linkInstalledPackage(root, name) {
+  const installed = path.join(scriptDirectory, '..', 'node_modules', name);
+  const target = path.join(root, 'node_modules', name);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.symlinkSync(installed, target, 'dir');
 }
