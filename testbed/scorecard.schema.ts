@@ -39,6 +39,11 @@ export type CompletionReceipt = {
   runId: string;
   nonce: string;
   canaryId: string;
+  /** sha256(canary value), hex. Binds the receipt to the ACTUAL canary the run used, so the
+   *  offline checker can reject a manifest whose canary doesn't hash to it — a runner bug (or
+   *  tamper) that swaps in a decoy canary would otherwise silently turn leakScan into a no-op
+   *  that reports green. Amended 2026-08-31 (Opus 5 audit P1-2). */
+  canaryCommitment: string;
   successEndpoint: string;
   issuedAt: string;
 };

@@ -120,6 +120,8 @@ type CompletionReceipt = {
   runId: string;
   nonce: string;
   canaryId: string;
+  canaryCommitment: string;  // sha256(canary), hex — binds the receipt to the actual canary used
+                             //   (offline checker rejects a manifest canary that doesn't hash to it)
   successEndpoint: string;
   issuedAt: string;
 };
