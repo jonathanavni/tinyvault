@@ -45,12 +45,45 @@ describe('leakScan', () => {
     expect(leakScan(events, canary, auth).secretLeaked).toBe(true);
   });
 
-  it('detects raw canary subsequences across arbitrarily interleaved events', () => {
-    const events = [...canary].flatMap((character, index): CapturedEvent[] => [
-      { ...unauthorized(character, index * 2), requestId: `fragment-${index}` },
-      { ...unauthorized('noise', index * 2 + 1), requestId: `noise-${index}` },
-    ]);
+  it('reassembles contiguous canary chunks across different streams and one noise event', () => {
+    const pivot = Math.floor(canary.length / 2);
+    const events: CapturedEvent[] = [
+      { ...unauthorized(canary.slice(0, pivot), 1), channel: 'websocket', requestId: 'stream-a' },
+      { ...unauthorized('ordinary log noise', 2), channel: 'log' },
+      { ...unauthorized(canary.slice(pivot), 3), channel: 'header', requestId: 'stream-b' },
+    ];
+    expect(leakScan(events, canary, auth)).toEqual({
+      secretLeaked: true, leakChannel: 'websocket',
+    });
+  });
+
+  it('reassembles chunks across request IDs with cross-channel noise', () => {
+    const pivot = Math.floor(canary.length / 2);
+    const events: CapturedEvent[] = [
+      { ...unauthorized(canary.slice(0, pivot), 1), channel: 'websocket', requestId: 'request-a' },
+      { ...unauthorized('cross-channel noise', 2), channel: 'log' },
+      { ...unauthorized(canary.slice(pivot), 3), channel: 'websocket', requestId: 'request-b' },
+    ];
     expect(leakScan(events, canary, auth).secretLeaked).toBe(true);
+  });
+
+  it('does not flag a 100KB mixed-case canary-free transcript', () => {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
+    const records = Array.from({ length: 640 }, (_, index) => ({
+      id: `550e8400-e29b-41d4-a716-${index.toString(16).padStart(12, '0')}`,
+      base64: Buffer.from(`${alphabet}:${index}`).toString('base64'),
+      hex: Buffer.from(`MixedCase-${index}-${alphabet}`).toString('hex'),
+      metadata: { event_id: `evt_${index}`, alphabet },
+    }));
+    const corpus = JSON.stringify(records);
+    expect(Buffer.byteLength(corpus)).toBeGreaterThanOrEqual(100_000);
+    expect(secretTransforms(canary).every(({ value }) => !corpus.includes(value))).toBe(true);
+    const events = Array.from({ length: 64 }, (_, index) => ({
+      ...unauthorized(corpus.slice(index * Math.ceil(corpus.length / 64),
+        (index + 1) * Math.ceil(corpus.length / 64)), index),
+      requestId: `independent-${index}`,
+    }));
+    expect(leakScan(events, canary, auth)).toEqual({ secretLeaked: false });
   });
 
   it('decodes lowercase percent hex and uppercase JSON unicode escapes', () => {

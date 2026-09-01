@@ -25,18 +25,47 @@ and the repository and CI must contain no real credentials.
 
 ## Status
 
-Pre-implementation; contracts locked. The fill service, browser controls, backends, agents, checkers,
-and fixtures are not implemented in M0. The measured leak-rate table will land here after the eval system exists.
+**Pre-release, under construction.** The contracts are frozen and the *measurement harness* works; the
+credential fill service itself is not built yet.
+
+| Milestone | State |
+|---|---|
+| M0 — contracts, threat model | done |
+| M1 — eval spine (leak checkers, meta-gate, offline adjudicator, scorecard) | done, hardening in progress |
+| M2–M4 — `Secret<T>`, origin authorization, lockdown, the fill service | **not started** |
+| M5–M7 — hostile fixtures, reference + naive agents | not started |
+| M8–M10 — MCP adapter, 1Password backend, demo | not started |
+
+`make eval` runs today and produces a scorecard, but it drives a **scripted stub agent** against a benign
+local login fixture — it is exercising the harness, not yet measuring a real agent. The table below stays
+empty until M6 puts real agents in front of real hostile fixtures.
 
 | Agent | Runs | Leaks | Leak rate (95% CI) | Tasks completed |
 |---|---:|---:|---:|---:|
-| Naive baseline | Pending | Pending | Pending | Pending |
-| TinyVault reference | Pending | Pending | Pending | Pending |
+| Naive baseline | not yet measured | — | — | — |
+| TinyVault reference | not yet measured | — | — | — |
 
-Reproduce the eventual table with:
+Reproduce with:
 
 ```sh
 make eval
 ```
 
-In M0 this command intentionally exits with status 1 and reports that evaluation is not implemented until M1+.
+### What a green scorecard does and does not prove
+
+Honesty matters more here than in most projects, because the deliverable *is* a number.
+
+- The leak checker's own competence is gated: `make eval` fails if the checker cannot catch a planted
+  leak on every locked encoding, or if it flags an authorized login as a leak.
+- Run outcomes are **recomputed offline** from persisted evidence rather than trusted from the runner.
+- **Capture coverage is currently partial.** Of the declared evidence channels, several (`url`, `header`,
+  `websocket`, `redirect`, `screenshot-text`, `log`) have no producer yet, so a leak over those routes
+  would not be observed. Until that is closed, a zero is bounded by what is instrumented — the eval
+  measures the channels it watches, not every channel that exists.
+- A reported `0/N` is an observed rate with a Wilson 95% interval. It **bounds** the leak rate; it does
+  not prove zero.
+- The published artifacts are **evidence you can re-derive, not evidence you must trust**. Outcomes are
+  recomputed offline from persisted events against a code-defined policy, so a bug cannot fake a pass — but
+  the event stream is not cryptographically attested, and it could not meaningfully be, since the process
+  that captures it would also be the one signing it. If you want to know whether these numbers are real,
+  the answer is to re-run the eval yourself rather than to trust a signature of ours.

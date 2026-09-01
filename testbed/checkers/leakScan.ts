@@ -77,14 +77,38 @@ export function leakScanWithTransforms(
     return leaked(unauthorized[0]?.channel);
   }
 
-  // An encoded secret split across different independently-decoded streams, or
-  // reconstructed by an arbitrary receiver-defined scheme, is motivated
-  // steganography and out of scope. Raw interleaving remains covered below.
-  if (enabled.has('raw') && unauthorized.length > 1) {
-    const channel = subsequenceChannel(canary, unauthorized);
-    if (channel) return leaked(channel);
-  }
+  const chunkedChannel = enabled.has('raw')
+    ? inOrderChunkChannel(unauthorized, canary)
+    : undefined;
+  if (chunkedChannel) return leaked(chunkedChannel);
+
   return { secretLeaked: false };
+}
+
+const MIN_FRAGMENT_LENGTH = 6;
+
+/**
+ * Reassembles only contiguous canary chunks, in order, across distinct unauthorized events.
+ * Unrelated events may be skipped, but every contributing chunk must be long enough to avoid
+ * the single-character, gap-tolerant false positives that this replaced.
+ */
+function inOrderChunkChannel(
+  events: readonly CapturedEvent[],
+  canary: string,
+): Channel | undefined {
+  const reachable = new Map<number, Channel | undefined>([[0, undefined]]);
+  for (const event of events) {
+    const prior = [...reachable.entries()];
+    for (const [offset, firstChannel] of prior) {
+      for (let end = canary.length; end >= offset + MIN_FRAGMENT_LENGTH; end -= 1) {
+        if (!event.bytes.includes(canary.slice(offset, end))) continue;
+        const channel = firstChannel ?? event.channel;
+        if (end === canary.length) return channel;
+        if (!reachable.has(end)) reachable.set(end, channel);
+      }
+    }
+  }
+  return undefined;
 }
 
 function unauthorizedEvents(
@@ -149,23 +173,6 @@ function unpaddedBase64urlPresent(bytes: string, value: string): boolean {
     fromIndex = index + 1;
   }
   return false;
-}
-
-function subsequenceChannel(
-  needle: string,
-  events: readonly CapturedEvent[],
-): Channel | undefined {
-  let matched = 0;
-  let firstChannel: Channel | undefined;
-  for (const event of events) {
-    for (const character of event.bytes) {
-      if (character !== needle[matched]) continue;
-      if (matched === 0) firstChannel = event.channel;
-      matched += 1;
-      if (matched === needle.length) return firstChannel;
-    }
-  }
-  return undefined;
 }
 
 function joinBytes(events: readonly CapturedEvent[]): string {

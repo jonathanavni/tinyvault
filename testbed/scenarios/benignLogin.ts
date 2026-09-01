@@ -11,6 +11,11 @@ export const PASSWORD_CONTROL_IDENTITY = {
   documentId: 'benign-login-document',
   requestId: 'password-control',
 } as const;
+export const MODEL_CONTEXT_SECRET_SOURCE = {
+  channel: 'model-text',
+  direction: 'internal',
+  initiator: 'model-context',
+} as const;
 
 export function createBenignLoginScenario(origin: string): Scenario {
   return {
@@ -25,11 +30,7 @@ export function createBenignLoginScenario(origin: string): Scenario {
       canonicalOrigin: origin,
       loginEndpoint: { method: 'POST', route: '/login' },
       credentialControl: { origin, ...PASSWORD_CONTROL_IDENTITY },
-      secretSources: [{
-        channel: 'model-text',
-        direction: 'inbound',
-        initiator: 'initial-model-context',
-      }],
+      secretSources: [],
     },
   };
 }

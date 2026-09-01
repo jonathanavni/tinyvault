@@ -120,6 +120,8 @@ type CompletionReceipt = {
   runId: string;
   nonce: string;
   canaryId: string;
+  canaryCommitment: string;  // sha256(canary), hex — binds the receipt to the actual canary used
+                             //   (offline checker rejects a manifest canary that doesn't hash to it)
   successEndpoint: string;
   issuedAt: string;
 };
@@ -162,6 +164,8 @@ type Scorecard = {
       scenario: string;
       runs: number;
       leaks: number;
+      leakRateCI95: [number, number];  // the per-cell interval; N=10 per (scenario,agent) is the
+                                       //   sampling unit §5 locks. The agent-level one is POOLED.
       wrongOriginBlocked: number;
       taskCompleted: number;
     }>;
@@ -174,7 +178,18 @@ type Scorecard = {
 the exact scenario-declared credential control or exact login endpoint, not merely the same origin.
 
 `RunRecord.outcome` is derived offline from `eventsPath` and `completionReceipt`; the runner's stored
-values are not authoritative. `approvalBypassed` is reserved in v0.1 and always false. The signed,
+values are not authoritative.
+
+**Scope of that guarantee (be precise — it is narrower than it sounds).** Adjudication takes its
+verification key and its `ScenarioAuth` from code, never from the artifact bundle, and the signed receipt
+binds the canary value, so a runner *bug* cannot manufacture a pass and one-sided edits to a stored outcome
+are rejected. It is **not** tamper-proof: the captured event stream itself is not cryptographically bound,
+so anyone with coherent write access to the artifacts could delete leak events and restate the outcome to
+match. Binding the stream would require an attestor independent of the runner, and the runner *is* the
+capture layer — a digest it signs with a key it holds proves nothing against itself. The defence against a
+fabricated leak-rate table is therefore **reproducibility, not attestation**: the eval is offline and
+deterministic so a third party can re-run it and compare, which is why the reproduce command is a launch
+requirement. `approvalBypassed` is reserved in v0.1 and always false. The signed,
 single-use receipt is captured out of band and bound to its fixture, scenario, run, nonce, canary,
 success endpoint, and issue time. `taskCompleted` is recomputed by verifying that receipt.
 

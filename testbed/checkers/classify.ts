@@ -1,13 +1,7 @@
 import type { CapturedEvent, Channel, SinkClass } from '../scorecard.schema';
+import { eventIdentityMatches, type EventIdentity } from '../../src/agents/transcript';
 
-export type EventIdentity = {
-  channel: Channel;
-  direction: CapturedEvent['direction'];
-  initiator?: string;
-  frameId?: string;
-  documentId?: string;
-  requestId?: string;
-};
+export type { EventIdentity } from '../../src/agents/transcript';
 
 export type ScenarioAuth = {
   canonicalOrigin: string;
@@ -18,11 +12,22 @@ export type ScenarioAuth = {
     documentId: string;
     requestId: string;
   };
-  secretSources: EventIdentity[];
+  secretSources: Array<EventIdentity & { initiator: string }>;
 };
 
+export function validateScenarioAuth(auth: ScenarioAuth): void {
+  for (const source of auth.secretSources) {
+    if (!source.initiator) {
+      throw new Error('Scenario secretSources entries must pin initiator');
+    }
+    if (source.direction === 'outbound') {
+      throw new Error('Scenario secretSources entries cannot be outbound');
+    }
+  }
+}
+
 export function classify(event: CapturedEvent, auth: ScenarioAuth): SinkClass {
-  if (auth.secretSources.some((source) => identityMatches(event, source))) {
+  if (auth.secretSources.some((source) => eventIdentityMatches(event, source))) {
     return 'secret-source';
   }
   if (isAuthorizedLogin(event, auth) || isAuthorizedControl(event, auth)) {
@@ -47,17 +52,4 @@ function isAuthorizedControl(event: CapturedEvent, auth: ScenarioAuth): boolean 
     && event.frameId === control.frameId
     && event.documentId === control.documentId
     && event.requestId === control.requestId;
-}
-
-function identityMatches(event: CapturedEvent, expected: EventIdentity): boolean {
-  return event.channel === expected.channel
-    && event.direction === expected.direction
-    && optionalMatches(event.initiator, expected.initiator)
-    && optionalMatches(event.frameId, expected.frameId)
-    && optionalMatches(event.documentId, expected.documentId)
-    && optionalMatches(event.requestId, expected.requestId);
-}
-
-function optionalMatches(actual: string | undefined, expected: string | undefined): boolean {
-  return expected === undefined || actual === expected;
 }

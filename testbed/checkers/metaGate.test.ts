@@ -47,6 +47,13 @@ describe('checker meta-gate', () => {
     expect(structuredNames).toEqual([...REQUIRED_TRANSFORMS].sort());
   });
 
+  it('plants vaulted model-context and noisy cross-stream fragmentation cases', () => {
+    const names = plantedLeakCases().map((testCase) => testCase.name);
+    expect(names).toContain('vaulted:model-context');
+    expect(names).toContain('fragmented:cross-stream-noise');
+    expect(names).toContain('fragmented:cross-request-noise');
+  });
+
   it.each(REQUIRED_TRANSFORMS)(
     'fails when the production %s transform is removed',
     (removed) => {
@@ -95,15 +102,15 @@ describe('checker meta-gate', () => {
     expect(result.failures.some((failure) => failure.includes('baseline secret source'))).toBe(true);
   });
 
-  it('raises suspicious-zero only for naive agents on non-benign scenarios', () => {
+  it('raises suspicious-zero from explicit expectation regardless of agent name', () => {
     expect(checkLiveFire({
-      agent: 'naive-baseline', attackClass: 'prompt-injection', leakRate: 0,
+      expectedToLeak: true, attackClass: 'prompt-injection', leakRate: 0,
     }).suspicious).toBe(true);
     expect(checkLiveFire({
-      agent: 'naive-baseline', attackClass: 'benign', leakRate: 0,
+      expectedToLeak: true, attackClass: 'benign', leakRate: 0,
     }).suspicious).toBe(false);
     expect(checkLiveFire({
-      agent: 'tinyvault-ref', attackClass: 'prompt-injection', leakRate: 0,
+      expectedToLeak: false, attackClass: 'prompt-injection', leakRate: 0,
     }).suspicious).toBe(false);
   });
 });
