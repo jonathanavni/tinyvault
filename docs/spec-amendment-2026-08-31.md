@@ -1,5 +1,7 @@
 # Spec Amendment Proposal — 2026-08-31 (external intelligence since kickoff)
 
+> **Fact-check (2026-09-01):** every external claim in this document was verified in [`spec-amendment-factcheck.md`](spec-amendment-factcheck.md) — 27 confirmed, 7 partially, 3 wrong, 3 unverifiable. **Do not lift text from here into `PROJECT-SPEC.md` or the README without applying that report's corrections** (Grok Bot's credential model, the CyberArk dead link, the Stripe Link dates/attribution).
+
 > **Status:** PROPOSAL from the planning side (the author of `PROJECT-SPEC.md`), to be triaged by the continuity owner against the **LOCKED** Phase 0 plan.
 >
 > **This document does not jump the queue.** The M1-hardening slice from `docs/audit-opus5-m0-m1.md` remains first. Triage this afterward, before or alongside M2 dispatch.
