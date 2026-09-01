@@ -323,3 +323,32 @@ stub agent against the `benign-login` fixture and emitting a Wilson-CI scorecard
   - **Merge status: M2 is merge-ready.** Blockers F-1/F-2/F-3 closed and independently verified; F-4/F-5/F-6
     (+F-7, +finding 5) deferred and recorded; contract docs agree with the tree; `stash@{0}` intact
     throughout.
+
+- **2026-09-01** — **M2 merge-ready at `b88e0db`. Correcting the premature claim above.**
+  The entry earlier today stating *"Merge status: M2 is merge-ready"* was **premature** — it was written
+  when F-1/F-2/F-3 closed, and **three further blocker rounds followed**: F-5 (the matcher sitting in an
+  unprotected zone), the C3 control-character guard with no test, and two more dependency-gate bypasses.
+  Left in place as history; this entry supersedes it.
+  - **The gate took four rounds**, each the same shape — *"if the gate cannot resolve or follow an edge,
+    assume it is safe"*: a hardcoded protected path (B3), tsconfig `paths` aliases (F-3), non-relative
+    specifiers resolving outside the scanned set, and finally external-package traversal stopping at the
+    first package. `b88e0db` inverts the default to **fail closed on anything unfollowable**, with
+    recursive traversal, cycle protection, and unsupported-load propagation. That structural inversion —
+    not a judgement that returns had flattened — is why review stopped.
+  - **Two verification lessons worth keeping.** (1) *A validator's verification must cover every branch the
+    validator has, not every branch its tests have* — my ASCII-only C1 probe mirrored the suite's blind
+    spot and missed F-1. (2) *A fix must address the class, not the instance* — the C3 gap was the F-2
+    finding recurring, and the fix slice had already written the right test shape for the backslash guard
+    three lines away without extending it.
+  - **My own artifacts were not exempt.** The sweep script I wrote to retire an unverifiable prose claim
+    shipped with a structurally unreachable collision oracle — the project's own *"runs green but cannot
+    detect"* anti-pattern. Now repaired and proven falsifiable (COLLAPSES 48 / COLLISIONS 1002 on an F-1
+    mutant). The unbounded sweep finally ran: 5,560,160 inputs, 608,612 accepted, 0 collapses, 0
+    collisions.
+  - **Final state:** 206 tests passing, gate 31 modules / 27 data-plane roots with its mutation suite,
+    `make eval` 10/10 with zero leaks, `tsc` clean, worktree clean, `stash@{0}` intact, and
+    `src/core/types.ts` / `SCHEMA.md` / `BACKLOG.md` / `PROJECT-SPEC.md` untouched across the branch.
+    `main` is an ancestor, so the merge fast-forwards. Deferred and accurately recorded: Cherokee
+    fail-closed false-reject, F-7 error classification, the redundant F-1 guards, the sweep's two-target
+    template scope, and `src/shared` exporting `secretTransforms` (plane split is organizational, not a
+    capability boundary).

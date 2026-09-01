@@ -401,3 +401,94 @@ The `COLLAPSES` half was sound all along; only the collision half was dead.
   boundary is not later over-claimed.
 - Cherokee fail-closed false-reject (172 code points); **F-7** error classification; the redundant F-1
   guards — all unchanged and still accurate as previously described.
+
+---
+
+# FINAL CLOSURE — gate round 4, and M2 merge-readiness
+
+> **The section above titled "PRE-MERGE ROUND (final)" was not final.** A fourth round followed and found a
+> real blocker. Left unedited so the chronology stands; this section supersedes its "(final)" label.
+> Labelling a round final *prospectively* was itself a repeated mistake — four consecutive "final" passes
+> each found something. Stopping was ultimately justified by a **structural** argument, not by a guess that
+> returns had flattened.
+
+## The fourth silent-disarm — reproduced, then closed in `b88e0db`
+
+`addExternalEntry()` scanned only the **first** external package. It dropped any edge resolving to another
+`node_modules` file, and hardcoded `unsupported: []`, so unfollowable load forms inside a package produced
+no finding. Both bypasses were reproduced against the **real CLI** before the fix — each reporting
+`dependency boundary PASS` and exit 0 while a data-plane module transitively held the supervisor secret
+matcher:
+
+| Bypass | Before | After |
+|---|---|---|
+| `src/core` → pkg A → pkg B → `supervisor/secretMatcher` | **PASS, exit 0** | **exit 1** |
+| `src/core` → pkg A (computed `import()`) → `supervisor/secretMatcher` | **PASS, exit 0** | **exit 1** |
+
+## The structural fix
+
+This was the **fourth** instance of one shape — after the hardcoded protected path (B3), the tsconfig
+`paths` aliases (F-3), and non-relative specifiers resolving outside the scanned set. Every one was
+*"if the gate cannot resolve or follow an edge, assume the edge is safe."* Fixed as the shape:
+
+- recursive external traversal with **absolute-path cycle protection** and a 10,000-module fail-closed bound;
+- **unsupported syntax, unreadable modules, and unresolved imports propagate out of external packages** as
+  violations; node builtins still allowed.
+
+**This is the reason review stopped here.** The previous three fixes each closed one route into the same
+hole; this one inverts the default to fail-closed on anything unfollowable, so the next probe of this class
+has materially less to find. That is a structural argument, not an appeal to diminishing returns.
+
+## Persistent regression and control coverage (in the selftest, all real-CLI child processes)
+
+| Case | Asserted |
+|---|---|
+| package chain A → B → supervisor | exit 1 |
+| computed `import()` inside a package | exit 1 |
+| aliased `require` / `createRequire` inside a package | exit 1 |
+| cycle A → B → A **not** reaching supervisor | exit 0, terminates |
+| cycle A → B → A **reaching** supervisor | exit 1, terminates |
+| genuine third-party import (`vitest`) | **exit 0** |
+
+That last control carries as much weight as the bypasses: recursion plus fail-closed is exactly the change
+that turns a gate into a blanket-rejecter, which would pass every bypass test while being worthless.
+Mutation-verified — removing the recursion fails *"package-chain bypass did not fail the real
+dependency-gate CLI"*; removing unsupported propagation fails *"computed import inside external package did
+not fail the real dependency-gate CLI"*.
+
+## Final verification at `b88e0db`
+
+```
+npx tsc --noEmit                 clean
+make test                        206 passed | 1 skipped
+dependency boundary              PASS (31 production modules, 27 data-plane roots)
+dependency-boundary.selftest     PASS (incl. recursive external packages, unsupported loads, cycles)
+make eval                        stub-safe 10 runs, 0 leaks, 0.0% (0.0-27.8%), 10/10 completed
+git diff --check                 clean
+worktree                         clean; stash@{0} intact (BACKLOG.md, PROJECT-SPEC.md)
+gate runtime                     ~0.2s, unchanged by the recursion
+```
+
+**Unbounded Unicode sweep** — neither review completed this; both stopped at U+2FFF:
+
+```
+node scripts/unicode-origin-sweep.mjs --full
+range      U+0020..U+10FFFF
+scanned    5,560,160 inputs across 5 templates
+accepted     608,612
+distinct     599,694 origins
+COLLAPSES  0     COLLISIONS  0        (29s)
+```
+
+The script is itself falsifiable: on an F-1 mutant it reports COLLAPSES 48 / COLLISIONS 1002 and exits 1.
+
+## Status
+
+**M2 is merge-ready at `b88e0db` plus this documentation commit.** `main` is an ancestor of the branch, so
+the merge fast-forwards. `src/core/types.ts`, `SCHEMA.md`, `BACKLOG.md`, and `PROJECT-SPEC.md` are untouched
+across every commit on the branch.
+
+Deferred items are unchanged and remain accurately recorded above: Cherokee fail-closed false-reject
+(172 code points), F-7 error classification, the redundant F-1 guards, the sweep's two-target template
+scope, and `src/shared` exporting `secretTransforms` (making the plane split organizational rather than a
+capability boundary).
