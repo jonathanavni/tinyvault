@@ -34,9 +34,9 @@ stub agent against the `benign-login` fixture and emitting a Wilson-CI scorecard
      in a repo whose security story is "read the code." Ask at M2 review whether it simplifies.
 
 **Next session:**
-- Dispatch **M2** (security primitives, 🔴): `Secret<T>`, bare-origin validator, taint/lockdown registry,
-  session mutex, exact result constructors, tripwire as pure instrumentation. Unit-testable in isolation,
-  **no browser** (integration gates are M4). **Review gate, focus surfaces, and the standing simplification
+- Dispatch **M2** (security primitives, 🔴): `Secret<string>`, bare-origin validator, taint/lockdown registry,
+  session mutex, exact result constructors, and the tripwire **detector + attestation seam** (wiring is M4).
+  Unit-testable in isolation, **no browser** (integration gates are M4). Slice packet: `docs/m2-slice-spec.md`. **Review gate, focus surfaces, and the standing simplification
   question: `docs/phase-0-plan.md` §9.1** (canonical — do not restate here).
 - Fold in **B1** from the amendment triage (never-cache-the-secret invariant + test), splitting it from
   legitimate backend auth-session caching.
@@ -184,3 +184,72 @@ stub agent against the `benign-login` fixture and emitting a Wilson-CI scorecard
   - **Process note:** the first poll loop reported the review complete when it was not (a shell `case`
     pattern matched text inside the echoed prompt summary rather than a status field). Corrected within the
     session; poll on a parsed status field, not a substring of the whole status blob.
+
+- **2026-09-01** — **M2 pre-impl ladder CLOSED at the round-3 cap: 3 rounds, 22 findings, all absorbed; the
+  seam mechanism REDESIGNED rather than patched; implementation dispatched.** Verdicts ran NO-SHIP →
+  NEEDS-ATTENTION → NO-SHIP. Round 3 blocked the packet and, per `handoff-pattern.md` §5, a forming round 4
+  is the signal that *the design primitive is wrong* — so the mechanism changed and validation moved to code
+  rather than spinning another paper round.
+  - **Why no round 4.** Round 3's #1, #3 and #6 all reduced to one statement: *TypeScript cannot enforce
+    this.* A seam cannot be made uncallable-from-the-data-plane by parameter shape; a branded token launders
+    through `as unknown as` / `any` / `JSON.parse` / spread; `Secret` API tests cannot see a retained private
+    field. Three rounds circled the tripwire seam because each fix was a **wording** fix. The disaggregated
+    round-3 count also overstated divergence: 4/5/7 were "deliver the normative table you promised"
+    (authoring work, no review can substitute), #8 was drift, #9 an M4 assignment. One genuinely new design
+    hole, #2.
+  - **(#2, the sharpest catch of the entire ladder — plan + slice, 4 review rounds, 2 model families)**
+    **B1 was product-breaking.** TinyVault owns the browser context, so "no reachable plaintext in
+    TinyVault-owned state" plus the M4 cleanup I had written spanning "`Secret` → inject argument → **page
+    realm**" forced the implementer to either wipe the password field before the caller could submit —
+    breaking the product outright — or silently violate the invariant. Fixed by splitting B1 into **three
+    lifetimes**: transient host state (`finally` before mutex release — the *only* thing B1's claim now
+    governs); authorized destination state (plaintext intentionally remains in the verified password field,
+    taint-masked, lifetime ending at trusted top-level navigation or session close, explicitly carved OUT of
+    B1); and the evaluator canary lease. Refusal or pre-assignment failure places no plaintext in the DOM.
+    We do not claim to erase copies the authorized origin keeps — the standing authorized-origin residual.
+    M4's row was corrected so it no longer demands a post-fill page-realm wipe.
+  - **(#1/#3) Seam and identity enforcement redesigned from types to architecture + runtime.** Three
+    controls, none a type annotation: a **build-time dependency rule** (data-plane modules have no path to
+    the supervisor/evaluator or mint authority; covers static imports, re-exports, dynamic `import()`, and
+    `require`; fails the build); **physically separated module zones**; and **runtime attestation via a
+    module-private `WeakMap`** (not a `WeakSet`, not a brand) holding sealed payloads privately, keyed by
+    mint-authority-only token objects that are **run-bound and single-use**, rejecting unattested, cloned,
+    serialized, stale, cross-run, and replayed batches. The claim is narrowed to exactly what that buys:
+    *under the checked production module graph, caller-facing data-plane modules have no dependency path to
+    the supervisor evaluator or batch-mint authority; unattested/cloned/serialized/stale/cross-run/replayed
+    batches are rejected at runtime.* We do **not** claim TypeScript makes the seam universally uncallable;
+    hostile code already running in the trusted host is out of threat model. M2 proves the mechanism; **M4**
+    proves the real fill/browser graph obeys it (those modules do not exist yet).
+  - **(#5) Probe P defined, because a bounded claim with an unspecified probe is not a claim.** 200 paired
+    interleaved trials, 20 warm-up discards, median + p95 wall-clock plus mutex occupancy, failing at
+    Mann-Whitney p < 0.01 or a median delta above 2 ms, effect size always reported. Every absolute
+    ("indistinguishable", "not length-proportional", "cannot estimate length", "proves no timing channel")
+    replaced with "no detectable difference under probe P."
+  - **(#4) The transform inventory now defers to code.** `SECRET_TRANSFORM_NAMES` in
+    `testbed/checkers/leakScan.ts` is the single home; the prose corpus had omitted **`base64url-unpadded`**,
+    which the checker and meta-gate have always required — an M2 built to the prose would have shipped one
+    transform short. A fourth prose copy would only drift again. Expected vectors must be authored
+    independently of the detector, and a disagreement with the checker is a STOP-and-report conflict.
+  - **(#6) B1's M2 acceptance was honest-ified.** The tests prove **post-clear API inaccessibility**, not
+    non-retention — an implementation can set `cleared = true` and keep the string in a private field. The
+    packet now requires either a mutation test that fails on retention, or a plain statement that
+    non-retention rests on structural review. B1 must not be reported as proved by API tests alone.
+  - **PROCESS FAILURE, recorded so it does not repeat: I skipped `handoff-pattern.md` §5.1, which is a
+    mandatory gate, not a reminder.** After amending `Secret<T>` → `Secret<string>` and rewriting two timing
+    claims, I dispatched rounds 2 and 3 **without** the absorption-completion sweep (extract changed token →
+    grep full doc → grep sibling locked docs). Round 3's #8 and half of #5 are exactly the drift that gate
+    exists to catch — a reviewer spent a round finding what a grep would have. Sweep now run properly across
+    `phase-0-plan.md`, the packet, `PLAN.md`, `SCHEMA.md`, `PROJECT-SPEC.md`, `README.md`, and
+    `handoff-pattern.md` over 10 tokens; it caught four further live sites the reviews had not flagged,
+    including a **public `README.md` roadmap row** still advertising `Secret<T>` and a round-3 synthesis line
+    whose receipt payload had dropped `canaryCommitment`, contradicting both canonical §5 and `SCHEMA.md`.
+    Three `Secret<T>` occurrences are intentionally retained (one explains the narrowing; two are historical
+    Decisions Log entries) — stated per §5.1 step 4, since silence reads as "missed it."
+  - **Infra note:** round 2 ran on `gpt-5.5` because `gpt-5.6-sol` was at capacity, so its "all 9 round-1
+    findings CLOSED" is fresh-eyes confirmation rather than the original finder checking its own work;
+    round 3 returned to sol, which then reopened three of round 2's four as OPEN. Worth weighting: a
+    different-model absorption check is weaker evidence of closure than it looks.
+  - **Decision: implementation is dispatched; the post-impl ladder (`/review` → `/security-review` → Codex
+    adversarial diff) verifies the dependency boundary, runtime attestation, cleanup behavior, and
+    absence-detection tests against real code.** This mirrors the plan ladder's own cap decision — *"a plan
+    cannot prove implementability, the impl review does."*

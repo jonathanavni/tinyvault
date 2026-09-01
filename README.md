@@ -32,7 +32,7 @@ credential fill service itself is not built yet.
 |---|---|
 | M0 — contracts, threat model | done |
 | M1 — eval spine (leak checkers, meta-gate, offline adjudicator, scorecard) | done, hardening in progress |
-| M2–M4 — `Secret<T>`, origin authorization, lockdown, the fill service | **not started** |
+| M2–M4 — `Secret<string>`, origin authorization, lockdown, the fill service | **not started** |
 | M5–M7 — hostile fixtures, reference + naive agents | not started |
 | M8–M10 — MCP adapter, 1Password backend, demo | not started |
 
