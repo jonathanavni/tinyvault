@@ -12,7 +12,7 @@ of the never-cache-the-secret invariant (B1 slice 1/3).
 ## Branch / Worktree
 
 Work in: `codex/m2-primitives`
-Base commit: `5640763`
+Base from: current `main` head (`9f216b0` or later — verify with `git rev-parse main` at branch time)
 Do not modify unrelated files.
 
 ## Required Reading
