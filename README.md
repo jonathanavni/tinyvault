@@ -64,3 +64,8 @@ Honesty matters more here than in most projects, because the deliverable *is* a 
   measures the channels it watches, not every channel that exists.
 - A reported `0/N` is an observed rate with a Wilson 95% interval. It **bounds** the leak rate; it does
   not prove zero.
+- The published artifacts are **evidence you can re-derive, not evidence you must trust**. Outcomes are
+  recomputed offline from persisted events against a code-defined policy, so a bug cannot fake a pass — but
+  the event stream is not cryptographically attested, and it could not meaningfully be, since the process
+  that captures it would also be the one signing it. If you want to know whether these numbers are real,
+  the answer is to re-run the eval yourself rather than to trust a signature of ours.

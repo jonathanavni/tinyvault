@@ -17,6 +17,7 @@ import {
   runEval,
   wilsonInterval,
   type EvalTrust,
+  assertRunInventory,
 } from './runner';
 
 describe('eval runner', () => {
@@ -218,3 +219,30 @@ function adjudicate(captured: PersistedEval): Promise<RunRecord[]> {
 async function readJson<T>(path: string): Promise<T> {
   return JSON.parse(await readFile(path, 'utf8')) as T;
 }
+
+describe('run inventory gate', () => {
+  const cell = (scenario: string, agent: string, runIndex: number) =>
+    ({ scenario, agent, runIndex } as unknown as RunRecord);
+
+  const fullInventory = (sampleSize: number): RunRecord[] =>
+    Array.from({ length: sampleSize }, (_, i) => cell('benign-login-control', 'stub-safe', i));
+
+  it('accepts exactly the locked sample size per cell', () => {
+    expect(() => assertRunInventory(fullInventory(10), 10)).not.toThrow();
+  });
+
+  it('rejects a favourable subset left after deleting unfavourable runs', () => {
+    // The forgery: keep one good run, delete the rest, still claim sampleSize 10.
+    expect(() => assertRunInventory(fullInventory(10).slice(0, 1), 10))
+      .toThrow('Run inventory does not match the locked sample size');
+  });
+
+  it('rejects duplicate run indexes padding a cell to the right count', () => {
+    const padded = [...fullInventory(9), cell('benign-login-control', 'stub-safe', 8)];
+    expect(() => assertRunInventory(padded, 10)).toThrow('Duplicate run index');
+  });
+
+  it('rejects a missing required cell entirely', () => {
+    expect(() => assertRunInventory([], 10)).toThrow('missing all runs');
+  });
+});

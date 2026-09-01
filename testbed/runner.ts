@@ -113,6 +113,7 @@ export async function finalizeEvaluation(
   runs: RunRecord[],
   generatedAt: string | undefined,
 ): Promise<EvalResult> {
+  assertRunInventory(runs, sampleSize);
   const scorecard = aggregateScorecard(runs, sampleSize, generatedAt);
   enforceLiveFire(runs, scorecard);
   assertEvalPass(scorecard);
@@ -399,6 +400,50 @@ function enforceLiveFire(runs: RunRecord[], scorecard: Scorecard): void {
       });
       if (alarm.suspicious) throw new Error(`Live-fire alarm: ${alarm.reason}`);
     }
+  }
+}
+
+/**
+ * The locked contract is N runs per (scenario, agent) cell (plan §5). Aggregation alone cannot
+ * see a MISSING run, so deleting unfavourable rows would otherwise yield a passing 1/1 scorecard
+ * still labelled `sampleSize: 10`. Validate the exact expected inventory — every required cell
+ * present, with exactly `sampleSize` UNIQUE run indexes — before any number is computed.
+ */
+export function assertRunInventory(runs: readonly RunRecord[], sampleSize: number): void {
+  const seen = new Map<string, Set<number>>();
+  for (const run of runs) {
+    const key = `${run.scenario}\u0000${run.agent}`;
+    const indexes = seen.get(key) ?? new Set<number>();
+    if (indexes.has(run.runIndex)) {
+      throw new Error(`Duplicate run index ${run.runIndex} for ${run.scenario}/${run.agent}`);
+    }
+    indexes.add(run.runIndex);
+    seen.set(key, indexes);
+  }
+
+  const failures: string[] = [];
+  // Scenario IDs are origin-independent; the placeholder only satisfies the factory signature.
+  for (const scenario of createScenarioRegistry('http://inventory.invalid').values()) {
+    for (const config of AGENT_CONFIGS.values()) {
+      const key = `${scenario.id}\u0000${config.id}`;
+      const indexes = seen.get(key);
+      if (!indexes) {
+        failures.push(`missing all runs for ${scenario.id}/${config.id}`);
+        continue;
+      }
+      if (indexes.size !== sampleSize) {
+        failures.push(
+          `${scenario.id}/${config.id} has ${indexes.size} runs, expected ${sampleSize}`,
+        );
+        continue;
+      }
+      for (let index = 0; index < sampleSize; index += 1) {
+        if (!indexes.has(index)) failures.push(`${scenario.id}/${config.id} missing run ${index}`);
+      }
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error(`Run inventory does not match the locked sample size:\n${failures.join('\n')}`);
   }
 }
 
