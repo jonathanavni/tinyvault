@@ -27,3 +27,21 @@ Example:
   both had missed. For security-core work run more than one, and withhold prior findings so catches stay
   independent.
 
+
+## Review-ladder conventions confirmed in M2 (2026-09-01)
+
+- **`handoff-pattern.md` §5.1 (absorption-completion sweep) is a mandatory gate, not a reminder.** Skipping
+  it after amending a token cost a review round: a reviewer spent a pass finding stale `Secret<T>` text and
+  a public README row that a grep would have caught in seconds.
+- **The paper ladder's cap has a real stopping signal.** When several findings all reduce to *"the language
+  cannot enforce this"*, that is §5's "the design primitive is wrong" — redesign the mechanism and move
+  validation to code, rather than spending another paper round on wording.
+- **Stop reviewing on a structural argument, not on a feeling that returns have flattened.** Four
+  consecutive rounds labelled "final" each found something real. The defensible stop came when a fix
+  inverted a recurring failure shape (fail closed on anything unfollowable) rather than closing one more
+  route into it.
+- **Every gate needs a legitimate-traffic control alongside its bypass tests.** A gate that blanket-rejects
+  passes every bypass test and is worthless. Assert the allowed case explicitly.
+- **Registers are append-only.** When a closure claim turns out to be wrong, append the correction and name
+  the over-claim; do not quietly edit the earlier row. A register that rewrites its own history is worth
+  less than one that shows the sequence.

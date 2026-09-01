@@ -31,8 +31,9 @@ credential fill service itself is not built yet.
 | Milestone | State |
 |---|---|
 | M0 — contracts, threat model | done |
-| M1 — eval spine (leak checkers, meta-gate, offline adjudicator, scorecard) | done, hardening in progress |
-| M2–M4 — `Secret<string>`, origin authorization, lockdown, the fill service | **not started** |
+| M1 — eval spine (leak checkers, meta-gate, offline adjudicator, scorecard) | done |
+| M2 — security primitives (`Secret<string>`, origin validator, lockdown, mutex, results, tripwire detector + dependency boundary) | done (`6a6b67c`) |
+| M3–M4 — backend interface, then the fill service and its integration gates | **not started** |
 | M5–M7 — hostile fixtures, reference + naive agents | not started |
 | M8–M10 — MCP adapter, 1Password backend, demo | not started |
 

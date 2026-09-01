@@ -26,3 +26,29 @@ Example:
   was a gap in my packet, not its error. It can also run out of turn mid-slice: verify completion by running
   the tests, not by reading its report. (2026-08-31)
 
+
+## Verification blind spots (learned the hard way in M2, 2026-09-01)
+
+- **A validator's verification must cover every branch the validator has, not every branch its tests
+  have.** I verified an origin-guard fix with ASCII-only probes — mirroring the test suite's own blind spot
+  — and reported it closed. A reviewer probing the IDN branch found `０x7f000001` (fullwidth zero) still
+  normalizing to `127.0.0.1`. Probing the same inputs the tests use confirms nothing.
+- **Fix the class, not the instance.** The C3 control-character guard shipped with no test that could kill
+  it, because every control vector used an ASCII host where an earlier check rejects first — *verbatim the
+  finding from the previous round*. The fix slice had already worked out that the IPv6 authority is the
+  right region for trailing junk and wrote exactly that test for the backslash guard three lines away,
+  without extending the reasoning.
+- **A fix can move a hole instead of closing it.** Deleting the gate's filename exemption so `isProtected`
+  would be "the directory rule alone" created a third directory with no rule — and the secret matcher
+  ended up in it. Ask what the fix *creates*, not just what it removes.
+- **"Not exploitable today" is the wrong test for a stated boundary.** It either holds or it does not.
+- **My own tooling is not exempt.** A sweep script written to retire an unverifiable prose claim shipped
+  with a structurally unreachable collision oracle — a permanently green metric. Every checker needs its
+  own absence-detection signal: mutate the thing it watches and confirm it goes red.
+- **`timeout` does not exist on macOS by default** — a `timeout`-wrapped check returns 127, which is easy
+  to misread as a test result. Use `gtimeout`, or run directly and time it.
+- **Authoring hazard: literal control characters and mojibake.** Twice in one session, content I authored
+  carried corrupt bytes — UTF-8 `ä` read as MacRoman (`√§`) in a normative test vector, and literal C0
+  controls in the findings register that made `file(1)` report `data` and hid the file from default
+  `grep`. Write control characters as `U+XXXX` notation in docs, and annotate non-ASCII test vectors with
+  their code point.

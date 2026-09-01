@@ -11,39 +11,45 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-01-m2` — focus: dispatch M2 (security primitives) through the full 🔴 red-tier ladder, with B1’s M2 slice
-folded in, after splitting B1 across M2/M3/M4 and re-scoping the simplification question at the M1 testbed.
-
-`2026-08-31-build` — focus: lock Phase 0, build M0+M1 through the Codex ladder, absorb an independent
-Opus 5 audit. **Outcome: all three done; M2 is next.**
+`2026-09-01-m2` — focus: dispatch M2 through the full 🔴 ladder, with B1's M2 slice folded in.
+**Outcome: M2 built, reviewed across 8 rounds, and merged to `main` (`6a6b67c`, fast-forward).**
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
-**M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 next.**
+**M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) ·
+**M3 next.**
 
-**Where the code actually is:** `make eval` runs fully offline and deterministically, driving a scripted
-stub agent against the `benign-login` fixture and emitting a Wilson-CI scorecard (`stub-safe: 10 runs,
-0 leaks, 10/10 completed`). 81 tests green. The measurement harness works; **no fill service exists yet**
-— that is M2–M4.
+**Where the code actually is:** the six security primitives exist and are unit-tested with no browser —
+`Secret<string>`, bare-origin validator, provenance-keyed lockdown registry with a separated lifecycle
+capability, non-reentrant session mutex, runtime-validated result constructors, and the tripwire detector
+plus attestation seam in a protected supervisor zone. A build-time dependency gate enforces the
+data/control-plane boundary and **fails closed on anything it cannot follow**. `make test` 206 passing;
+`make eval` unchanged at 10/10 completion, 0 leaks. **Still no fill service — that is M4.**
 
 **Blocked / needs attention:**
-- Nothing blocking. Two open threads to carry forward:
+- Nothing blocking. Threads to carry forward:
   1. **Unverified external claims** in `docs/spec-amendment-2026-08-31.md` (funding figures, product
-     details, URLs). Triage is recorded, but A1/A2/A3 must be fact-checked before they enter
-     `PROJECT-SPEC.md` or the public README.
-  2. **LOC budget.** M1 + hardening added ~+419 implementation lines; the testbed is now the largest thing
-     in a repo whose security story is "read the code." Ask at M2 review whether it simplifies.
+     details, URLs) — must be fact-checked before entering `PROJECT-SPEC.md` or the public README. Now the
+     oldest open thread; it has survived two sessions untouched.
+  2. **Deferred M2 residuals**, all recorded in the Decisions Log and `docs/m2-review-findings.md`:
+     Cherokee fail-closed false-reject (172 code points, cosmetic); **F-7** error classification;
+     the two redundant F-1 guards (the fix spec says remove rather than ceremonially test); the sweep's
+     two-target template scope; and **`src/shared` exporting `secretTransforms`**, which makes the plane
+     split organizational rather than a capability boundary — state it, don't over-claim it.
+  3. **LOC budget.** M2 added ~1,300 lines net of the fix rounds. `testbed/` is no longer the only large
+     thing. The §9.1 simplification question is still scoped at the M1 testbed and was never answered — the
+     testbed-scoped pass was launched but its results never landed.
 
-**Next session:**
-- Dispatch **M2** (security primitives, 🔴): `Secret<string>`, bare-origin validator, taint/lockdown registry,
-  session mutex, exact result constructors, and the tripwire **detector + attestation seam** (wiring is M4).
-  Unit-testable in isolation, **no browser** (integration gates are M4). Slice packet: `docs/m2-slice-spec.md`. **Review gate, focus surfaces, and the standing simplification
-  question: `docs/phase-0-plan.md` §9.1** (canonical — do not restate here).
-- Fold in **B1** from the amendment triage (never-cache-the-secret invariant + test), splitting it from
-  legitimate backend auth-session caching.
-- Deferred audit items are already written into their milestones: **M4** (dom-fill live-DOM identity,
-  trusted-side `wrongOrigin`), **M5** (capture-coverage gate), **M7+** (`revocation` fixture, needs B1).
+**Next session — M3 (backend interface + libsodium local-file, 🔴):**
+- Full ladder per `docs/handoff-pattern.md` §4; review gate and focus surfaces in `phase-0-plan.md` §9.1.
+- **Carries B1 slice 2/3**: `resolveSecret` never caches the secret, while `dispose?()` drops backend
+  **auth-session material only** — the split that keeps the invariant from being either false or forcing
+  pointless re-authentication.
+- **Run `handoff-pattern.md` §5.1 (the absorption-completion sweep) after every absorbed finding.** It is a
+  mandatory gate and skipping it cost a review round in M2.
+- Deferred audit items already written into their milestones: **M4** (dom-fill live-DOM identity,
+  trusted-side `wrongOrigin`, B1 slice 3/3 rotation, probe P timing, tripwire wiring), **M5**
+  (capture-coverage gate), **M7+** (`revocation` fixture, needs B1).
 
----
 
 ## Decisions Log
 

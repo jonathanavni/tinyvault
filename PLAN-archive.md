@@ -19,3 +19,14 @@ consolidated in and archived to `docs/archive/implementation-plan-superseded.md`
 remains in the `PLAN.md` Decisions Log (never archived); the locked plan is `docs/phase-0-plan.md`.
 Commits `7f60152` (lock) through `f0c889e`.
 
+## 2026-09-01-m2 — M2 security primitives (merged `6a6b67c`)
+
+Built through the full 🔴 ladder and merged fast-forward to `main`. Three paper-review rounds
+(NO-SHIP / NEEDS-ATTENTION / NO-SHIP, 22 findings) closed at the §5 cap when three findings all reduced to
+*"TypeScript cannot enforce this"* — the mechanism was redesigned from type enforcement to a build-time
+dependency boundary plus runtime attestation, and validation moved to code. Then five code-review rounds
+across `/review`, `/security-review`, and Codex adversarial, each finding something real: a provenance
+TOCTOU letting caller-controlled evidence reach the scanner, a taint clear with no capability, four
+successive dependency-gate silent-disarms, and a load-bearing guard with no test. ~30 code findings
+absorbed. Full trail in `docs/m2-review-findings.md`; decisions in the `PLAN.md` Decisions Log.
+

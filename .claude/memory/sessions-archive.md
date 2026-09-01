@@ -15,3 +15,9 @@ and integrated; independent Opus 5 blind audit found a class the prior rounds mi
 in checker inputs, capture coverage) → M1-hardening closed 15 findings across 3 channels; spec amendment
 triaged. `make eval` produces a Wilson-CI scorecard offline. (commits `7f60152`..`06705f3`)
 
+## 2026-09-01-m2
+M2 security primitives built, reviewed across 3 paper + 5 code rounds, and merged to `main`. The paper
+ladder hit its cap when the seam could not be settled on paper; the mechanism was redesigned (types →
+build-time dependency boundary + runtime attestation) and every subsequent blocker was found only by
+running code. (commits `9f216b0`..`6a6b67c`)
+

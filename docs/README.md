@@ -16,5 +16,11 @@ Active planning docs:
   claims are unverified and must be fact-checked before they reach `PROJECT-SPEC.md` or the README.
 - `audit-opus5-m0-m1.md` — independent Opus 5 blind audit of M0+M1. **Resolved** (`07996a2`);
   deferred items live in the M4/M5 gate lists.
+- `m2-slice-spec.md` — the M2 implementation contract (revision 4). **Shipped** (`6a6b67c`); carries
+  Appendix A (normative origin table) and Appendix B (transform corpus), both still load-bearing for M4.
+- `m2-fix-slice-spec.md` — the M2 repair contract written against the three-channel findings register.
+  **Shipped** (`6a6b67c`).
+- `m2-review-findings.md` — the authoritative M2 review register: three paper rounds, five code rounds,
+  and the appended closure sections. **Append-only** — historical sections are never rewritten.
 - `archive/implementation-plan-superseded.md` — earlier orphaned Phase 0 draft, consolidated into
   `phase-0-plan.md` (provenance only)
