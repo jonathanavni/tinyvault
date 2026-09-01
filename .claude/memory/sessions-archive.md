@@ -8,3 +8,10 @@ This is the chronological table of contents; `PLAN-archive.md` holds the detaile
 ## <YYYY-MM-DD-thread>
 <one-line outcome> (commit `<sha>` / PR #<n>)
 -->
+
+## 2026-08-31-build
+Phase 0 plan LOCKED (3-round Codex ladder + alignment review); M0 contracts and M1 eval spine built by Codex
+and integrated; independent Opus 5 blind audit found a class the prior rounds missed (false positives, trust
+in checker inputs, capture coverage) → M1-hardening closed 15 findings across 3 channels; spec amendment
+triaged. `make eval` produces a Wilson-CI scorecard offline. (commits `7f60152`..`06705f3`)
+

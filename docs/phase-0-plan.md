@@ -373,6 +373,11 @@ tinyvault/
 
 ## 8. Milestone sequence (executable; eval spine before security core — finding #6)
 
+> **Build status (updated 2026-08-31):** **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅**
+> (`07996a2`, closing the Opus 5 audit) · **M2 next.** M4 and M5 carry deferred audit items — see their
+> Verify columns. Post-lock contract amendments (`'benign'` AttackClass, `canaryCommitment`, per-scenario
+> `leakRateCI95`) are recorded in the `PLAN.md` Decisions Log.
+
 **Risk tier** drives the Codex ladder (handoff-pattern §4): 🔴 = full ladder, Codex implements; 🟡 = plan + post-impl Codex pass; 🟢 = Claude-only. Re-ordered so nothing depends on a later milestone.
 
 | M | Deliverable | Key files | Verify | Tier |

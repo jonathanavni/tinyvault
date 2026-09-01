@@ -12,3 +12,17 @@ Pin the **working Codex dispatch invocation for this machine** here (companion-s
 Example:
 - **Rate limit is per-IP, not per-token** — using app auth, the upstream API rate-limits by IP, so parallel workers on one host share a budget. Detect: 429s that don't track token count. Fix: shard workers across hosts. (2026-02-03)
 -->
+- **A leak checker's own test fixtures must not come from the code under test.** The meta-gate originally
+  generated its planted encodings by calling production `secretTransforms` — so deleting an encoding deleted
+  its own test and the gate stayed green. Fixtures are now independently constructed with per-transform
+  mutation tests. Detect: ask "would this test fail if I broke the thing it tests?" (2026-08-31)
+- **Gap-tolerant substring matching is unusable on real transcripts.** An in-order character-subsequence scan
+  for a leaked secret hits ~78% false positives at 6KB and 100% at 16KB+ of ordinary mixed-case agent
+  chatter. Use contiguous-chunk reassembly with a minimum chunk length instead. (2026-08-31)
+- **`git add -A` in a worktree shared with a delegated agent stages work you have not reviewed.** A
+  planning-side doc was swept into an unrelated Codex commit this way. Stage explicit paths. (2026-08-31)
+- **Codex stops rather than amending a frozen contract — pre-authorize expected amendments in the handoff.**
+  It halted twice on genuine contract gaps (`AttackClass: 'benign'`, per-scenario `leakRateCI95`); the second
+  was a gap in my packet, not its error. It can also run out of turn mid-slice: verify completion by running
+  the tests, not by reading its report. (2026-08-31)
+

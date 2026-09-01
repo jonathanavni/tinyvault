@@ -11,28 +11,34 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-08-31-build` — focus: executing the §8 milestone ladder. **M0 + M1 + M1-hardening done & integrated.** M2 (security primitives) next.
+`2026-08-31-build` — focus: lock Phase 0, build M0+M1 through the Codex ladder, absorb an independent
+Opus 5 audit. **Outcome: all three done; M2 is next.**
 
-**Milestone:** v0.1 build — plan `docs/phase-0-plan.md` §8 ladder. **M0 ✅ (`8007aea`) · M1 ✅ (`8faedde`) · M1-hardening ✅ (`07996a2`).**
+**Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
+**M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 next.**
 
-**In progress:**
-- ✅ Phase 0 plan **LOCKED + committed** (`7f60152`). 3-round Codex ladder + alignment review absorbed.
-- ✅ **M0** (scaffold + contracts + threat-model README) — dual-channel reviewed, merged.
-- ✅ **M1** (eval spine: stub agent, transcript, checkers + meta-gate, offline adjudicator, benign fixture w/ Ed25519 receipts, runner + Wilson-CI scorecard) — 3 review rounds, 14 P1s closed, merged. `make eval` produces the scorecard offline (stub: 0 leaks, 10/10 completed). 54 tests green.
+**Where the code actually is:** `make eval` runs fully offline and deterministically, driving a scripted
+stub agent against the `benign-login` fixture and emitting a Wilson-CI scorecard (`stub-safe: 10 runs,
+0 leaks, 10/10 completed`). 81 tests green. The measurement harness works; **no fill service exists yet**
+— that is M2–M4.
 
 **Blocked / needs attention:**
-- None. M2 ready to dispatch.
+- Nothing blocking. Two open threads to carry forward:
+  1. **Unverified external claims** in `docs/spec-amendment-2026-08-31.md` (funding figures, product
+     details, URLs). Triage is recorded, but A1/A2/A3 must be fact-checked before they enter
+     `PROJECT-SPEC.md` or the public README.
+  2. **LOC budget.** M1 + hardening added ~+419 implementation lines; the testbed is now the largest thing
+     in a repo whose security story is "read the code." Ask at M2 review whether it simplifies.
 
 **Next session:**
-- Dispatch **M2** (security primitives, 🔴): `Secret<T>` wrapper, bare-origin validator, taint/lockdown
-  registry, session mutex, exact result constructors, content tripwire as pure instrumentation — all
-  UNIT-testable in isolation, NO browser (integration gates are M4). Full Codex ladder **plus
-  `/security-review`** (now load-bearing: first real secret-handling code).
-- **Watch the LOC budget.** The hardening added ~+419 implementation lines; the testbed is now the largest
-  thing in a repo whose security story is "read the code". Ask at M2 review whether any of it can be
-  simplified before the core lands on top.
-- M4 carries the deferred audit items (dom-fill live-DOM identity, trusted-side wrongOrigin); M5 carries
-  the capture-coverage gate.
+- Dispatch **M2** (security primitives, 🔴): `Secret<T>`, bare-origin validator, taint/lockdown registry,
+  session mutex, exact result constructors, tripwire as pure instrumentation. Unit-testable in isolation,
+  **no browser** (integration gates are M4). Full Codex ladder **plus `/security-review`** — M2 is the first
+  code that actually handles secrets.
+- Fold in **B1** from the amendment triage (never-cache-the-secret invariant + test), splitting it from
+  legitimate backend auth-session caching.
+- Deferred audit items are already written into their milestones: **M4** (dom-fill live-DOM identity,
+  trusted-side `wrongOrigin`), **M5** (capture-coverage gate), **M7+** (`revocation` fixture, needs B1).
 
 ---
 
