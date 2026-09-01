@@ -253,3 +253,49 @@ stub agent against the `benign-login` fixture and emitting a Wilson-CI scorecard
     adversarial diff) verifies the dependency boundary, runtime attestation, cleanup behavior, and
     absence-detection tests against real code.** This mirrors the plan ladder's own cap decision — *"a plan
     cannot prove implementability, the impl review does."*
+
+- **2026-09-01** — **M2 round-2 fix-slice review: NO-SHIP, merge verdict NO. F-1/F-2/F-3 are merge
+  blockers; F-4/F-5/F-6 are recorded here as a deferred follow-up slice rather than silently expanded
+  into the blocker fix.**
+  - **F-1 (HIGH, blocker).** C1 was closed **only for ASCII hosts** — the idempotence check is gated on
+    `/^[\x00-\x7f]+$/`, so one non-ASCII code point skips it and the UTS-46 path performs exactly the
+    non-canonical mappings C1 exists to reject: `０x7f000001` → `127.0.0.1`, soft hyphen / ZWSP →
+    `example.com`, `Ⅸ.com` → `ix.com`. Fix keeps **two explicit branches** — ASCII keeps the strict
+    idempotence check; non-ASCII requires
+    `domainToUnicode(domainToASCII(raw)) === raw.normalize('NFC').toLowerCase()`, failing closed on
+    conversion error. The Unicode comparison must **not** be applied universally, or legitimate ASCII
+    `xn--` input is rejected because `domainToUnicode()` expands it. **Locked Appendix A row 9
+    (`https://exämple.com` → accept) is preserved.**
+  - **F-2 (HIGH, blocker).** The new "exact mutation" origin tests do not catch their mutations: deleting
+    the backslash delimiter, or the `@`/`%` guard line, leaves **47/47 passing**, because every vector uses
+    an ASCII host where the idempotence check rejects first. The guards are load-bearing; the test *names*
+    were false claims.
+  - **F-3 (MED, blocker).** The dependency gate is blind to **non-relative aliased specifiers** — a
+    one-line tsconfig `paths` entry silently disarms it. Same silent-disarm shape as B3.
+  - **Deferred to a follow-up slice (recorded, not fixed here):**
+    - **F-4** — `close()` does not revoke **evidence**. `detectTripwire` never checks `#active` and never
+      consumes the token, so post-close detection returns a verdict, replays indefinitely, and one evidence
+      token seals into two batches that both adjudicate. "Run-bound and single-use" holds for sealed
+      batches, not evidence. **This is where §4's "a lease never outlives its run under any path" has to
+      bite in M4** — so it must close before or with M4, not drift.
+    - **F-5** — `src/shared/` is an **ungoverned zone**. The fix deleted the filename exemption so
+      `isProtected` would be the directory rule alone, then created a third directory with no rule, no
+      test, and no contract — and the matcher core moved there. Not exploitable today (pure function,
+      canary passed as a parameter), but anything stateful or canary-holding added later is un-gated.
+      Fix: a gate rule that `src/shared/**` may import only node builtins and other `src/shared` modules.
+    - **F-6** — five decorative guards introduced by the fix. One is **genuinely load-bearing and
+      untested**: `lockdownDomain.ts:78`'s closed-session check, whose removal lets a post-close
+      nav-clear resurrect a closed session's identity (closed-session identity replay). Pair its test with
+      F-4 — both are lifecycle-revocation gaps.
+  - **F-8** — contract-home drift (`phase-0-plan.md` and the slice spec still pin the transform inventory
+    at `testbed/checkers/leakScan.ts`; its real home is now `src/shared/secretTransforms.ts`) is a separate
+    continuity-owner commit, not implementer work.
+  - **Process note (my error).** My own round-2 verification of C1 reported "every vector correct" after
+    probing **ASCII vectors only** — mirroring the test suite's blind spot rather than testing independently
+    of it. The reviewer probing the IDN branch found the bypass. Lesson recorded: *a validator's
+    verification must cover every branch the validator has, not every branch its tests have.*
+  - **Cleared and not to be re-litigated:** A1 evidence ownership (getter/proxy/cross-record attacks show
+    `propertyReads === 0`, five source mutants killed), the lockdown capability split (`ownKeys` assertion,
+    not a name check), mutex both directions, results behavior, relative-path gate coverage, and — checked
+    explicitly — **no common-mode failure** from the shared module, since `metaGate.ts` keeps its own
+    `INDEPENDENT_TRANSFORM_FIXTURES`, `independentBase32`, and required-transform literal.
