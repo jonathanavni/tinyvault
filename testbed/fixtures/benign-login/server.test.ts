@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { startBenignLoginFixture } from './server';
-import { signCompletionReceipt } from '../../completion';
+import { canaryCommitment, signCompletionReceipt } from '../../completion';
 import type { CompletionReceipt } from '../../scorecard.schema';
 
 describe('benign login fixture', () => {
@@ -37,6 +37,7 @@ describe('benign login fixture', () => {
         runId: setup.runId,
         nonce: setup.nonce,
         canaryId: setup.canaryId,
+        canaryCommitment: canaryCommitment(setup.canary),
         successEndpoint: `${fixture.origin}/success`,
       }).taskCompleted).toBe(true);
       expect(await readFile(fixture.capturePath(setup.runId), 'utf8')).toContain(setup.canary);
@@ -49,12 +50,13 @@ describe('benign login fixture', () => {
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-fixture-boundary-'));
     const fixture = await startBenignLoginFixture(directory);
     try {
-      expect(fixture.verificationPublicKeyPem).toContain('BEGIN PUBLIC KEY');
+      expect(fixture.verificationPublicKey.type).toBe('public');
       expect(Object.getOwnPropertyNames(fixture).some((name) => /private|signing/i.test(name)))
         .toBe(false);
       const payload: CompletionReceipt = {
         fixtureId: 'benign-login', fixtureVersion: '1', scenarioId: 'benign-login-control',
         runId: 'forged-run', nonce: 'forged-nonce', canaryId: 'forged-canary',
+        canaryCommitment: canaryCommitment('TVC_forged_forged-run_A234567BCDEF'),
         successEndpoint: `${fixture.origin}/success`, issuedAt: new Date().toISOString(),
       };
       const attacker = generateKeyPairSync('ed25519');
@@ -69,6 +71,7 @@ describe('benign login fixture', () => {
         runId: payload.runId,
         nonce: payload.nonce,
         canaryId: payload.canaryId,
+        canaryCommitment: payload.canaryCommitment,
         successEndpoint: payload.successEndpoint,
       }).taskCompleted).toBe(false);
     } finally {

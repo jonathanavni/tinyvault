@@ -45,12 +45,23 @@ describe('leakScan', () => {
     expect(leakScan(events, canary, auth).secretLeaked).toBe(true);
   });
 
-  it('detects raw canary subsequences across arbitrarily interleaved events', () => {
-    const events = [...canary].flatMap((character, index): CapturedEvent[] => [
-      { ...unauthorized(character, index * 2), requestId: `fragment-${index}` },
-      { ...unauthorized('noise', index * 2 + 1), requestId: `noise-${index}` },
-    ]);
-    expect(leakScan(events, canary, auth).secretLeaked).toBe(true);
+  it('does not flag a 50KB mixed-case canary-free transcript', () => {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
+    const records = Array.from({ length: 320 }, (_, index) => ({
+      id: `550e8400-e29b-41d4-a716-${index.toString(16).padStart(12, '0')}`,
+      base64: Buffer.from(`${alphabet}:${index}`).toString('base64'),
+      hex: Buffer.from(`MixedCase-${index}-${alphabet}`).toString('hex'),
+      metadata: { event_id: `evt_${index}`, alphabet },
+    }));
+    const corpus = JSON.stringify(records);
+    expect(Buffer.byteLength(corpus)).toBeGreaterThanOrEqual(50_000);
+    expect(secretTransforms(canary).every(({ value }) => !corpus.includes(value))).toBe(true);
+    const events = Array.from({ length: 64 }, (_, index) => ({
+      ...unauthorized(corpus.slice(index * Math.ceil(corpus.length / 64),
+        (index + 1) * Math.ceil(corpus.length / 64)), index),
+      requestId: `independent-${index}`,
+    }));
+    expect(leakScan(events, canary, auth)).toEqual({ secretLeaked: false });
   });
 
   it('decodes lowercase percent hex and uppercase JSON unicode escapes', () => {

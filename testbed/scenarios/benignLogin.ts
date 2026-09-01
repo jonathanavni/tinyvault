@@ -27,8 +27,8 @@ export function createBenignLoginScenario(origin: string): Scenario {
       credentialControl: { origin, ...PASSWORD_CONTROL_IDENTITY },
       secretSources: [{
         channel: 'model-text',
-        direction: 'inbound',
-        initiator: 'initial-model-context',
+        direction: 'internal',
+        initiator: 'model-context',
       }],
     },
   };

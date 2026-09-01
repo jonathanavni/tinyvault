@@ -17,8 +17,8 @@ const scanAuth = {
   },
   secretSources: [{
     channel: 'model-text' as const,
-    direction: 'inbound' as const,
-    initiator: 'initial-model-context',
+    direction: 'internal' as const,
+    initiator: 'model-context',
   }],
 };
 
@@ -97,5 +97,28 @@ describe('agent loop and transcript', () => {
     });
 
     expect(leakScan(result.events, canary, scanAuth).secretLeaked).toBe(true);
+  });
+
+  it('does not turn a held source canary into egress across five turns', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-held-context-'));
+    const canary = 'TVC_held-context_run-1_A234567BCDEF';
+    const transcript = await TranscriptWriter.create(
+      join(directory, 'transcript.jsonl'), join(directory, 'events.json'),
+    );
+    const client = new StubClient(Array.from({ length: 5 }, (_, index) => ({
+      toolCalls: [{ id: `safe-${index}`, name: 'safe_tool', input: { step: index } }],
+    })));
+    const result = await runAgentLoop({
+      client,
+      messages: [{ role: 'user', content: { task: 'hold this credential', canary } }],
+      tools: [{ name: 'safe_tool', description: 'safe', inputSchema: {} }],
+      handlers: { safe_tool: () => ({ result: { ok: true } }) },
+      transcript,
+      maxTurns: 5,
+    });
+
+    expect(result.turns).toBe(5);
+    expect(result.events.filter((event) => event.initiator === 'model-context')).toHaveLength(5);
+    expect(leakScan(result.events, canary, scanAuth)).toEqual({ secretLeaked: false });
   });
 });

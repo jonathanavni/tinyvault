@@ -1,4 +1,5 @@
 import {
+  createHash,
   sign as cryptoSign,
   verify as cryptoVerify,
   type KeyObject,
@@ -18,13 +19,20 @@ export type SignedCompletionReceipt = {
 export type CompletionBinding = Pick<
   CompletionReceipt,
   | 'fixtureId' | 'fixtureVersion' | 'scenarioId' | 'runId'
-  | 'nonce' | 'canaryId' | 'successEndpoint'
+  | 'nonce' | 'canaryId' | 'canaryCommitment' | 'successEndpoint'
 >;
+
+export type CompletionRunWindow = { startedAt: string; endedAt: string };
 
 export type CompletionVerification = {
   taskCompleted: boolean;
-  reason?: 'malformed' | 'bad-signature' | 'binding-mismatch' | 'stale' | 'replayed';
+  reason?: 'malformed' | 'bad-signature' | 'binding-mismatch' | 'canary-mismatch'
+    | 'stale' | 'replayed';
 };
+
+export function canaryCommitment(canary: string): string {
+  return createHash('sha256').update(canary, 'utf8').digest('hex');
+}
 
 export function signCompletionReceipt(
   payload: CompletionReceipt,
@@ -58,6 +66,27 @@ export class CompletionVerifier {
     expected: CompletionBinding,
     nowMs = Date.now(),
   ): CompletionVerification {
+    return this.verifyFresh(serialized, expected, (issuedAt) =>
+      nowMs - issuedAt <= this.maxAgeMs && issuedAt - nowMs <= this.futureSkewMs);
+  }
+
+  verifyPersisted(
+    serialized: string | undefined,
+    expected: CompletionBinding,
+    window: CompletionRunWindow,
+  ): CompletionVerification {
+    const startedAt = Date.parse(window.startedAt);
+    const endedAt = Date.parse(window.endedAt);
+    return this.verifyFresh(serialized, expected, (issuedAt) =>
+      Number.isFinite(startedAt) && Number.isFinite(endedAt)
+      && startedAt <= endedAt && issuedAt >= startedAt && issuedAt <= endedAt);
+  }
+
+  private verifyFresh(
+    serialized: string | undefined,
+    expected: CompletionBinding,
+    isFresh: (issuedAt: number) => boolean,
+  ): CompletionVerification {
     const envelope = parseEnvelope(serialized);
     if (!envelope) return { taskCompleted: false, reason: 'malformed' };
     if (!isCanonicalEd25519Signature(envelope.signature)) {
@@ -66,14 +95,15 @@ export class CompletionVerifier {
     if (!this.signatureValid(envelope)) {
       return { taskCompleted: false, reason: 'bad-signature' };
     }
+    if (envelope.payload.canaryCommitment !== expected.canaryCommitment) {
+      return { taskCompleted: false, reason: 'canary-mismatch' };
+    }
     if (!bindingMatches(envelope.payload, expected)) {
       return { taskCompleted: false, reason: 'binding-mismatch' };
     }
 
     const issuedAt = Date.parse(envelope.payload.issuedAt);
-    if (!Number.isFinite(issuedAt)
-      || nowMs - issuedAt > this.maxAgeMs
-      || issuedAt - nowMs > this.futureSkewMs) {
+    if (!Number.isFinite(issuedAt) || !isFresh(issuedAt)) {
       return { taskCompleted: false, reason: 'stale' };
     }
     const identity = boundIdentity(envelope.payload);
@@ -111,6 +141,7 @@ function canonicalPayload(payload: CompletionReceipt): string {
     runId: payload.runId,
     nonce: payload.nonce,
     canaryId: payload.canaryId,
+    canaryCommitment: payload.canaryCommitment,
     successEndpoint: payload.successEndpoint,
     issuedAt: payload.issuedAt,
   });
@@ -123,6 +154,7 @@ function bindingMatches(payload: CompletionReceipt, expected: CompletionBinding)
     && payload.runId === expected.runId
     && payload.nonce === expected.nonce
     && payload.canaryId === expected.canaryId
+    && payload.canaryCommitment === expected.canaryCommitment
     && payload.successEndpoint === expected.successEndpoint;
 }
 
@@ -134,6 +166,7 @@ function boundIdentity(payload: CompletionReceipt): string {
     payload.runId,
     payload.nonce,
     payload.canaryId,
+    payload.canaryCommitment,
     payload.successEndpoint,
   ]);
 }
@@ -154,7 +187,8 @@ function parseEnvelope(serialized: string | undefined): SignedCompletionReceipt 
   if (!serialized) return undefined;
   try {
     const value = JSON.parse(serialized) as unknown;
-    if (!isRecord(value) || value.version !== COMPLETION_ORACLE_VERSION
+    if (!isRecord(value) || !hasExactKeys(value, ['version', 'payload', 'signature'])
+      || value.version !== COMPLETION_ORACLE_VERSION
       || typeof value.signature !== 'string' || !isReceipt(value.payload)) {
       return undefined;
     }
@@ -166,10 +200,18 @@ function parseEnvelope(serialized: string | undefined): SignedCompletionReceipt 
 
 function isReceipt(value: unknown): value is CompletionReceipt {
   if (!isRecord(value)) return false;
-  return [
+  const fields = [
     'fixtureId', 'fixtureVersion', 'scenarioId', 'runId', 'nonce',
-    'canaryId', 'successEndpoint', 'issuedAt',
-  ].every((field) => typeof value[field] === 'string');
+    'canaryId', 'canaryCommitment', 'successEndpoint', 'issuedAt',
+  ];
+  return hasExactKeys(value, fields)
+    && fields.every((field) => typeof value[field] === 'string');
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value).sort();
+  return actual.length === expected.length
+    && actual.every((field, index) => field === [...expected].sort()[index]);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

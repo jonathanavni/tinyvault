@@ -3,10 +3,11 @@ import { generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import type { CompletionReceipt } from './scorecard.schema';
-import { CompletionVerifier, signCompletionReceipt } from './completion';
+import { CompletionVerifier, canaryCommitment, signCompletionReceipt } from './completion';
 
 const now = Date.parse('2026-08-31T12:00:00.000Z');
 const keyPair = generateKeyPairSync('ed25519');
+const canary = 'TVC_completion_run-1_A234567BCDEF';
 
 function receipt(overrides: Partial<CompletionReceipt> = {}): CompletionReceipt {
   return {
@@ -16,6 +17,7 @@ function receipt(overrides: Partial<CompletionReceipt> = {}): CompletionReceipt 
     runId: 'run-1',
     nonce: 'nonce-1',
     canaryId: 'canary-run-1',
+    canaryCommitment: canaryCommitment(canary),
     successEndpoint: 'http://127.0.0.1/success',
     issuedAt: new Date(now).toISOString(),
     ...overrides,
@@ -30,6 +32,7 @@ function binding(payload = receipt()) {
     runId: payload.runId,
     nonce: payload.nonce,
     canaryId: payload.canaryId,
+    canaryCommitment: payload.canaryCommitment,
     successEndpoint: payload.successEndpoint,
   };
 }
@@ -86,5 +89,42 @@ describe('CompletionVerifier', () => {
     expect(new CompletionVerifier(keyPair.publicKey).verify(
       signCompletionReceipt(stale, keyPair.privateKey), binding(stale), now,
     ).reason).toBe('stale');
+  });
+
+  it('rejects a canary that does not match the signed commitment', () => {
+    const payload = receipt();
+    const signed = signCompletionReceipt(payload, keyPair.privateKey);
+    expect(new CompletionVerifier(keyPair.publicKey).verify(signed, {
+      ...binding(payload), canaryCommitment: canaryCommitment('TVC_decoy_run-1_A234567BCDEF'),
+    }, now)).toEqual({ taskCompleted: false, reason: 'canary-mismatch' });
+  });
+
+  it('rejects unknown receipt payload fields', () => {
+    const payload = receipt();
+    const envelope = JSON.parse(signCompletionReceipt(payload, keyPair.privateKey)) as {
+      payload: CompletionReceipt & { attackerControlled?: string };
+    };
+    envelope.payload.attackerControlled = 'unsigned-extension';
+    expect(new CompletionVerifier(keyPair.publicKey).verify(
+      JSON.stringify(envelope), binding(payload), now,
+    )).toEqual({ taskCompleted: false, reason: 'malformed' });
+  });
+
+  it('uses the persisted run window instead of adjudication wall-clock time', () => {
+    const payload = receipt();
+    const signed = signCompletionReceipt(payload, keyPair.privateKey);
+    const verifier = new CompletionVerifier(keyPair.publicKey);
+    expect(verifier.verifyPersisted(signed, binding(payload), {
+      startedAt: new Date(now - 1_000).toISOString(),
+      endedAt: new Date(now + 1_000).toISOString(),
+    })).toEqual({ taskCompleted: true });
+
+    const outside = receipt({ issuedAt: new Date(now - 2_000).toISOString() });
+    expect(new CompletionVerifier(keyPair.publicKey).verifyPersisted(
+      signCompletionReceipt(outside, keyPair.privateKey), binding(outside), {
+        startedAt: new Date(now - 1_000).toISOString(),
+        endedAt: new Date(now + 1_000).toISOString(),
+      },
+    )).toEqual({ taskCompleted: false, reason: 'stale' });
   });
 });

@@ -18,8 +18,19 @@ export type ScenarioAuth = {
     documentId: string;
     requestId: string;
   };
-  secretSources: EventIdentity[];
+  secretSources: Array<EventIdentity & { initiator: string }>;
 };
+
+export function validateScenarioAuth(auth: ScenarioAuth): void {
+  for (const source of auth.secretSources) {
+    if (!source.initiator) {
+      throw new Error('Scenario secretSources entries must pin initiator');
+    }
+    if (source.direction === 'outbound') {
+      throw new Error('Scenario secretSources entries cannot be outbound');
+    }
+  }
+}
 
 export function classify(event: CapturedEvent, auth: ScenarioAuth): SinkClass {
   if (auth.secretSources.some((source) => identityMatches(event, source))) {

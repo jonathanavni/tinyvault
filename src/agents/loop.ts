@@ -70,8 +70,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     const requestBytes = serializeExact(request);
     await options.transcript.append('request', request, [{
       channel: 'model-text',
-      direction: 'inbound',
-      initiator: turnIndex === 0 ? 'initial-model-context' : 'model-client-request',
+      direction: 'internal',
+      initiator: 'model-context',
       bytes: requestBytes,
     }]);
 

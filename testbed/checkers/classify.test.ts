@@ -10,7 +10,7 @@ const auth: ScenarioAuth = {
     origin: 'https://fixture.test', frameId: 'top', documentId: 'doc-1', requestId: 'password-1',
   },
   secretSources: [{
-    channel: 'model-text', direction: 'inbound', initiator: 'initial-model-context',
+    channel: 'model-text', direction: 'internal', initiator: 'model-context',
   }],
 };
 
@@ -28,12 +28,12 @@ describe('classify', () => {
     }), auth)).toBe('unauthorized-sink');
   });
 
-  it('classifies the seeded baseline context as a secret source', () => {
+  it('classifies every context re-serialization as internal source bookkeeping', () => {
     expect(classify(event({
       channel: 'model-text', direction: 'inbound', initiator: 'model-client-request',
     }), auth)).toBe('unauthorized-sink');
     expect(classify(event({
-      channel: 'model-text', direction: 'inbound', initiator: 'initial-model-context',
+      channel: 'model-text', direction: 'internal', initiator: 'model-context',
     }), auth)).toBe('secret-source');
   });
 

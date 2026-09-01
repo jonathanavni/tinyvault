@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  canaryCommitment,
   CompletionVerifier,
   signCompletionReceipt,
   type CompletionBinding,
@@ -29,8 +30,8 @@ export type FixtureRunSetup = {
 export type BenignLoginFixture = {
   origin: string;
   transport: 'http' | 'in-process';
-  /** Public verification material only; the private signing key never leaves this fixture. */
-  verificationPublicKeyPem: string;
+  /** Trusted in-process verification anchor; the private signing key never leaves this fixture. */
+  verificationPublicKey: KeyObject;
   registerRun(setup: FixtureRunSetup): Promise<void>;
   getLoginPage(runId: string): Promise<string>;
   submitLogin(body: string): Promise<number>;
@@ -47,10 +48,6 @@ export type BenignLoginFixture = {
 export async function startBenignLoginFixture(captureDirectory: string): Promise<BenignLoginFixture> {
   const { privateKey, publicKey } = generateKeyPairSync('ed25519');
   const completionVerifier = new CompletionVerifier(publicKey);
-  const verificationPublicKeyPem = publicKey.export({
-    type: 'spki',
-    format: 'pem',
-  }).toString();
   const runs = new Map<string, FixtureRunSetup>();
   const receipts = new Map<string, string>();
   const issued = new Set<string>();
@@ -88,7 +85,7 @@ export async function startBenignLoginFixture(captureDirectory: string): Promise
   return {
     origin,
     transport,
-    verificationPublicKeyPem,
+    verificationPublicKey: publicKey,
     async registerRun(setup) {
       assertRunId(setup.runId);
       if (runs.has(setup.runId)) throw new Error(`Duplicate fixture run: ${setup.runId}`);
@@ -180,6 +177,7 @@ async function processLoginBody(body: string, state: RequestState): Promise<numb
     runId,
     nonce: setup.nonce,
     canaryId: setup.canaryId,
+    canaryCommitment: canaryCommitment(setup.canary),
     successEndpoint: `${state.origin}/success`,
     issuedAt: new Date().toISOString(),
   };
