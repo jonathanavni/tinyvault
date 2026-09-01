@@ -60,3 +60,9 @@ Meta-gate transform independence + mutation tests ("strongest code in the repo")
 canonical projection, malleability rejection, verify-before-binding so no early-exit oracle, eval-wide ledger);
 `@ts-expect-error` compile-time contract guards; whole-response-envelope backstop; pure-function checkers over
 raw events ("every finding is fixable without changing this architecture").
+
+---
+
+## Resolution (2026-08-31)
+
+All findings closed or explicitly scoped; integrated in `07996a2`. Final cross-model review: **PASS, no material findings**. Deferred by design: capture-coverage gate (M5), `dom-fill` live-DOM identity and trusted-side `wrongOrigin` (M4). Accepted residual: no independent authenticity for events the fixture never observed — see `SCHEMA.md`.
