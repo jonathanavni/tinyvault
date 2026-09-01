@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { INVALID_ORIGIN_MESSAGE, validateBareOrigin } from './originGuard';
 
@@ -15,6 +15,9 @@ const accepted: ReadonlyArray<readonly [string, string]> = [
   // Spec Appendix A originally carried a mojibake form of this host (UTF-8 read as
   // MacRoman), which IDNA-encodes to a DIFFERENT name. Keep the literal below correct.
   ['https://ex\u00e4mple.com', 'https://xn--exmple-cua.com'],
+  ['https://EX\u00c4MPLE.COM', 'https://xn--exmple-cua.com'],
+  ['https://exa\u0308mple.com', 'https://xn--exmple-cua.com'],
+  ['https://xn--exmple-cua.com', 'https://xn--exmple-cua.com'],
   ['https://[2001:db8::1]:8443', 'https://[2001:db8::1]:8443'],
 ];
 
@@ -62,8 +65,35 @@ describe('bare-origin validator normative table', () => {
     expect(() => validateBareOrigin(input)).toThrow(INVALID_ORIGIN_MESSAGE);
   });
 
-  it('catches exact trailing-backslash delimiter mutation', () => {
-    expect(() => validateBareOrigin('https://example.com\\')).toThrow(INVALID_ORIGIN_MESSAGE);
+  it.each([
+    ['fullwidth zero mapped into an IPv4 address', 'https://\uff10x7f000001'],
+    ['all-fullwidth hexadecimal mapped into an IPv4 address', 'https://\uff10\uff58\uff17\uff46\uff10\uff10\uff10\uff10\uff10\uff11'],
+    ['fullwidth letter mapped to ASCII', 'https://\uff45xample.com'],
+    ['soft hyphen removed from a hostname', 'https://ex\u00adample.com'],
+    ['zero-width space removed from a hostname', 'https://ex\u200bample.com'],
+    ['Roman-numeral compatibility mapping', 'https://\u2168.com'],
+    ['ideographic dot mapped to an ASCII dot', 'https://example\u3002com'],
+    ['fullwidth dot mapped to an ASCII dot', 'https://example\uff0ecom'],
+    ['halfwidth dot mapped to an ASCII dot', 'https://example\uff61com'],
+  ])('rejects non-canonical Unicode host: %s', (_behavior, input) => {
+    expect(() => validateBareOrigin(input)).toThrow(INVALID_ORIGIN_MESSAGE);
+  });
+
+  it('rejects a trailing backslash on an IPv6 authority as a delimiter', () => {
+    expect(() => validateBareOrigin('https://[2001:db8::1]\\')).toThrow(INVALID_ORIGIN_MESSAGE);
+  });
+
+  it.each([
+    ['raw @ userinfo marker', 'https://@example.com'],
+    ['raw percent escape', 'https://exa%2Emple.com'],
+  ])('rejects %s before consulting the URL parser', (_behavior, input) => {
+    const urlParser = vi.spyOn(globalThis, 'URL');
+    try {
+      expect(() => validateBareOrigin(input)).toThrow(INVALID_ORIGIN_MESSAGE);
+      expect(urlParser).not.toHaveBeenCalled();
+    } finally {
+      urlParser.mockRestore();
+    }
   });
 
   it.each([
@@ -82,9 +112,5 @@ describe('bare-origin validator normative table', () => {
     'https://example.com:00',
   ])('catches exact canonical-decimal-port mutation for %s', (input) => {
     expect(() => validateBareOrigin(input)).toThrow(INVALID_ORIGIN_MESSAGE);
-  });
-
-  it('catches exact encoded-host percent-guard mutation independently of URL parse rejection', () => {
-    expect(() => validateBareOrigin('https://exa%2Emple.com')).toThrow(INVALID_ORIGIN_MESSAGE);
   });
 });

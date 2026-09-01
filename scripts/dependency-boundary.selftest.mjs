@@ -29,6 +29,15 @@ for (const [name, source] of directCases) {
   });
 }
 
+withFixture("import '@sup/evaluator';", (root) => {
+  assertCliStatus(root, 1,
+    'non-relative tsconfig paths alias silently disarmed the real dependency-gate CLI');
+  assertViolation(root, 'non-relative tsconfig paths alias');
+}, {
+  baseUrl: '.',
+  paths: { '@sup/*': ['src/supervisor/*'] },
+});
+
 const unsupportedCases = [
   ['computed dynamic import', "const target = '../supervisor/evaluator'; void import(target);"],
   ['aliased require', "const load = require; void load('../supervisor/evaluator');"],
@@ -101,9 +110,9 @@ function assertCliStatus(root, expected, message) {
     `${message}\nstdout: ${result.stdout}\nstderr: ${result.stderr}`);
 }
 
-function withFixture(probeSource, assertion) {
+function withFixture(probeSource, assertion, compilerOptions = {}) {
   withTemporaryRoot((root) => {
-    writeConfig(root);
+    writeConfig(root, compilerOptions);
     write(root, 'src/core/probe.ts', `${probeSource}\n`);
     write(root, 'src/supervisor/evaluator.ts', "export const evaluate = () => 'protected';\n");
     write(root, 'src/supervisor/tripwire.ts', "export const detect = () => 'protected';\n");
@@ -120,9 +129,9 @@ function withTemporaryRoot(assertion) {
   }
 }
 
-function writeConfig(root) {
+function writeConfig(root, compilerOptions = {}) {
   write(root, 'tsconfig.json', JSON.stringify({
-    compilerOptions: { module: 'ESNext' },
+    compilerOptions: { module: 'ESNext', moduleResolution: 'Bundler', ...compilerOptions },
     include: ['src/**/*.ts', 'testbed/**/*.ts'],
   }));
 }

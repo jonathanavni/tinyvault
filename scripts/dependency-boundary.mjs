@@ -7,7 +7,7 @@ const PROTECTED_DIRECTORIES = ['src/supervisor'];
 
 export function checkDependencyBoundary(root) {
   const absoluteRoot = path.resolve(root);
-  const { files: configuredFiles, errors } = configuredProductionFiles(absoluteRoot);
+  const { files: configuredFiles, errors, options } = configuredProductionFiles(absoluteRoot);
   const scriptFiles = walk(path.join(absoluteRoot, 'scripts')).filter(isProductionModule);
   const files = [...new Set([...configuredFiles, ...scriptFiles].map((file) => path.resolve(file)))];
   const fileSet = new Set(files);
@@ -16,7 +16,7 @@ export function checkDependencyBoundary(root) {
   for (const file of files) {
     const parsed = dependencies(file, fs.readFileSync(file, 'utf8'));
     const edges = parsed.edges.map(({ specifier, syntax }) => {
-      const target = resolveSpecifier(file, specifier, fileSet);
+      const target = resolveSpecifier(file, specifier, fileSet, options);
       return target === undefined && specifier.startsWith('.')
         ? { target: path.resolve(path.dirname(file), specifier), syntax, unresolved: true }
         : { target, syntax, unresolved: false };
@@ -93,15 +93,18 @@ export function formatViolations(root, violations) {
 
 function configuredProductionFiles(root) {
   const configPath = path.join(root, 'tsconfig.json');
-  if (!fs.existsSync(configPath)) return { files: [], errors: ['tsconfig.json was not found'] };
+  if (!fs.existsSync(configPath)) {
+    return { files: [], errors: ['tsconfig.json was not found'], options: {} };
+  }
   const read = ts.readConfigFile(configPath, ts.sys.readFile);
   if (read.error !== undefined) {
-    return { files: [], errors: [formatDiagnostic(read.error)] };
+    return { files: [], errors: [formatDiagnostic(read.error)], options: {} };
   }
   const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, root, undefined, configPath);
   return {
     files: parsed.fileNames.filter(isProductionModule),
     errors: parsed.errors.map(formatDiagnostic),
+    options: parsed.options,
   };
 }
 
@@ -198,7 +201,18 @@ function isCreateRequireExpression(expression) {
     || (ts.isPropertyAccessExpression(expression) && expression.name.text === 'createRequire');
 }
 
-function resolveSpecifier(importer, specifier, fileSet) {
+function resolveSpecifier(importer, specifier, fileSet, compilerOptions) {
+  const compilerResolved = ts.resolveModuleName(
+    specifier,
+    importer,
+    compilerOptions,
+    ts.sys,
+  ).resolvedModule?.resolvedFileName;
+  if (compilerResolved !== undefined) {
+    const target = path.resolve(compilerResolved);
+    if (fileSet.has(target)) return target;
+  }
+
   if (!specifier.startsWith('.')) return undefined;
   const unresolved = path.resolve(path.dirname(importer), specifier);
   const candidates = [unresolved];

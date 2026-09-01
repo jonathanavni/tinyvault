@@ -1,3 +1,5 @@
+import { domainToASCII, domainToUnicode } from 'node:url';
+
 import type { Origin } from './types';
 
 export const INVALID_ORIGIN_MESSAGE = 'Invalid bare HTTP(S) origin';
@@ -31,8 +33,21 @@ export function validateBareOrigin(input: string): Origin {
   if (parsed.hostname === '' || parsed.hostname.endsWith('.')) return invalid();
 
   const rawHostname = hostnameFromAuthority(authority);
-  if (/^[\x00-\x7f]+$/u.test(rawHostname)
-    && rawHostname.toLowerCase() !== parsed.hostname) return invalid();
+  if (/^[\x00-\x7f]+$/u.test(rawHostname)) {
+    if (rawHostname.toLowerCase() !== parsed.hostname) return invalid();
+  } else {
+    let asciiHostname: string;
+    let unicodeHostname: string;
+    try {
+      asciiHostname = domainToASCII(rawHostname);
+      unicodeHostname = domainToUnicode(asciiHostname);
+    } catch {
+      return invalid();
+    }
+    if (asciiHostname === ''
+      || unicodeHostname === ''
+      || unicodeHostname !== rawHostname.normalize('NFC').toLowerCase()) return invalid();
+  }
 
   return parsed.origin;
 }
