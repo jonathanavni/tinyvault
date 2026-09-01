@@ -193,7 +193,7 @@ make test
 | `https://example.com:443` | accept → `https://example.com` (default port removed) |
 | `http://example.com:80` | accept → `http://example.com` (default port removed) |
 | `https://EXAMPLE.com` / `HTTPS://example.com` | accept → `https://example.com` (lowercased) |
-| `https://ex√§mple.com` | accept → `https://xn--exmple-cua.com` (IDN → punycode) |
+| `https://exämple.com` (host is `ex` + U+00E4 + `mple.com`) | accept → `https://xn--exmple-cua.com` (IDN → punycode) |
 | `https://[2001:db8::1]:8443` | accept → `https://[2001:db8::1]:8443` (compressed, lowercase) |
 | `https://example.com/` | **reject** — trailing slash |
 | `https://example.com/path` · `?q` · `#f` | **reject** — path / query / fragment |
