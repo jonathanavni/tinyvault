@@ -75,8 +75,10 @@ stub agent against the `benign-login` fixture and emitting a Wilson-CI scorecard
 - **2026-09-01** — **Security-review policy codified; canonical homes assigned.** Generic methodology →
   `docs/handoff-pattern.md` **§7.1** (security review is *additive, never certification*; it does not replace
   cross-model review, deterministic tests, noninterference tests, or the eval harness; a generalist pass is
-  weak on project-specific invariants, so if it disagrees with a purpose-built test **the test wins and the
-  disagreement is a finding**) and new **§7.2** (audit tooling + hygiene: read-only, reports stored outside
+  weak on project-specific invariants, and that when a review and a test disagree **the locked invariant is
+  authoritative, not either mechanism** — a failing test blocks release regardless of a clean review, a
+  passing test does not dismiss a concrete finding, and the disagreement is investigated until the finding is
+  disproved with evidence or the test is corrected/expanded) and new **§7.2** (audit tooling + hygiene: read-only, reports stored outside
   the worktree, auditor supplied the threat model/invariants/exclusions/accepted residuals, one baseline
   auditor first, imported skills inspected and pinned to a reviewed commit/version). Project-specific gates →
   `docs/phase-0-plan.md` **§9.1** (M2 post-impl review order: `/review` → `/security-review` → Codex
@@ -95,4 +97,20 @@ stub agent against the `benign-login` fixture and emitting a Wilson-CI scorecard
   Claude–Codex cross-family workflow; adding another hosted platform fragments the process without a named
   coverage gap it closes. Standing rule ("add a channel only against a named gap") in `handoff-pattern.md`
   §7.2. Revisit only if a specific gap is identified that the current two families demonstrably miss.
+- **2026-09-01** — **Correction to the security-review policy codified earlier today (Codex feedback; docs
+  only).** Four narrow fixes, no contract/sequencing impact. (1) **"The test wins" was wrong as an absolute.**
+  The *locked invariant* is authoritative, not either mechanism: a failing purpose-built test blocks release
+  regardless of a clean security review; a passing test does **not** dismiss a concrete reviewer finding; a
+  disagreement is investigated until the finding is disproved with evidence or the test is corrected/expanded.
+  My original phrasing could have been used to wave off a real finding. (2) **Model-family terminology was
+  inverted.** Independence is relative to the *author* of the change. Because **Codex implements the 🔴
+  slices**, Claude `/review` and `/security-review` are the **different-family** channels for M2, and the
+  Codex post-impl pass is fresh-context and adversarial but **same-family** as the implementer. The old
+  `handoff-pattern.md` §7 text hardcoded "Claude = same family as the implementer," which was true only when
+  Claude writes the code — it silently overstated cross-family coverage on every Codex-implemented slice. All
+  three channels and the ladder are unchanged; only the rationale is corrected. (3) The "no heavyweight
+  baseline audit before M4" rule schedules **routine whole-codebase sweeps only** — it does not prohibit a
+  **targeted** audit prompted by concrete evidence, a new threat-model question, or a named review gap.
+  (4) Audit gates are timed precisely: *after the milestone's implementation and normal diff ladder, but
+  before the milestone is marked complete and work advances.*
 

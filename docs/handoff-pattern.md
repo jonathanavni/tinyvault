@@ -186,19 +186,28 @@ After `NEEDS-ATTENTION`:
 
 `/review` and Codex are two review channels, not one fallback for the other. They catch different bug classes:
 
+**Family independence is relative to the AUTHOR of the change, not to a fixed role.** Whichever family wrote
+the diff, a reviewer from that same family shares its blind spots — so "cross-family" must be evaluated per
+slice, by asking *who implemented this?* Getting this backwards is easy and it silently overstates coverage:
+
+- When **Claude** implements, `/review` is same-family and the Codex pass supplies the different-family look.
+- When **Codex** implements (the default for 🔴 slices here, see [`phase-0-plan.md` §9](../docs/phase-0-plan.md)),
+  the relationship inverts: Claude `/review` and `/security-review` are the **different-family** channels, and
+  the Codex post-implementation pass is **fresh-context and adversarial but same-family** as the implementer.
+
+Independent of family, the two channels differ in context and in what they are good at:
+
 **Claude `/review`** (fresh-context QA)
-- Same model family as the implementer
 - Full project context — `CLAUDE.md` + memory + repo conventions loaded
 - Defaults to rejection
 - Strong on: convention violations, "does this match how the rest of the codebase does X," subtle correctness inside domain logic, doc/spec drift
 
 **Codex adversarial review**
-- Different model family
 - Less project context (only what is in the handoff packet)
 - Defaults to rejection
-- Strong on: deeper-merge semantics, cross-system races, contract drift across files, silent reinterpretation of locked gates, blind spots the orchestrator's family shares
+- Strong on: deeper-merge semantics, cross-system races, contract drift across files, silent reinterpretation of locked gates
 
-Empirically across many sessions, each catches issues the other misses, and the two finding-sets are largely disjoint. For gating / correctness / security / payment code, **run both on the same diff** — not one or the other. Same-model review (only `/review`, or only Codex) shares blind spots within its own family. Cross-model is the high-leverage move.
+Empirically across many sessions, each catches issues the other misses, and the two finding-sets are largely disjoint. For gating / correctness / security / payment code, **run both on the same diff** — not one or the other. Running only channels from the implementer's own family shares blind spots within it; ensuring at least one different-family reviewer sees the diff is the high-leverage move.
 
 ### 7.1 A security-specialized third channel
 
@@ -210,7 +219,7 @@ If your toolchain ships a security-specialized reviewer (Claude Code's built-in 
 - Secret and credential handling
 - Database migrations and the queries they expose
 
-Skip it on refactors, pure docs, and non-security features. It is typically same-model (Claude) and diff-aware (blind to pre-existing code), so keep the Codex pass for cross-model coverage, and run a baseline sweep separately for the code that already exists.
+Skip it on refactors, pure docs, and non-security features. It is diff-aware (blind to pre-existing code), so run a baseline sweep separately for code that already merged. Note its family is *Claude* — whether that makes it same- or different-family coverage depends on who wrote the diff (§7 above): it is different-family review of a Codex-implemented slice, and same-family review of a Claude-implemented one. Keep whichever channel supplies the different-family look for that slice.
 
 **It is additive, never certification.** A clean security-review is one more input, not a verdict that a change is safe. It does **not** replace, and must never be recorded as having replaced:
 
@@ -219,7 +228,13 @@ Skip it on refactors, pure docs, and non-security features. It is typically same
 - noninterference / side-channel tests,
 - or the project's own evaluation harness, where one exists.
 
-A generalist security reviewer is typically strongest on conventional classes (injection, secrets in logs, auth bypass) and weakest on project-specific invariants — "does this boolean leak an equality bit about the secret" is not a class it is tuned for. Those invariants stay the job of purpose-built tests. If a security-review pass and a purpose-built test disagree, the test wins and the disagreement is a finding.
+A generalist security reviewer is typically strongest on conventional classes (injection, secrets in logs, auth bypass) and weakest on project-specific invariants — "does this boolean leak an equality bit about the secret" is not a class it is tuned for. Those invariants stay the job of purpose-built tests.
+
+**When a review and a test disagree, the locked invariant is authoritative — not either mechanism.** Neither a green test nor a clean review is a verdict about the other:
+
+- A **failing purpose-built test blocks release**, regardless of a clean security review.
+- A **passing test does not dismiss a concrete reviewer finding** — the test may simply not cover the case.
+- **Investigate the disagreement** until either the finding is disproved *with evidence*, or the test is corrected/expanded to cover what the reviewer saw. "One of them said it was fine" is not a resolution.
 
 **Diff-aware review cannot audit what already merged.** A change reviewed while pending is covered; code that landed earlier is not. That is the gap a periodic whole-codebase audit fills — see below.
 
@@ -227,7 +242,9 @@ A generalist security reviewer is typically strongest on conventional classes (i
 
 Distinct from per-diff review: an audit sweeps existing code, including everything a diff-aware pass never saw.
 
-**Timing.** Do not run a heavyweight baseline audit before the system's core security path actually exists — auditing scaffolding produces noise and false confidence. Schedule audits against milestones where a real trust boundary has landed; the concrete schedule for this project is in [`phase-0-plan.md` §9.2](phase-0-plan.md).
+**Timing.** Do not run a heavyweight *routine* baseline audit before the system's core security path actually exists — auditing scaffolding produces noise and false confidence. Schedule routine sweeps against milestones where a real trust boundary has landed; the concrete schedule for this project is in [`phase-0-plan.md` §9.2](phase-0-plan.md).
+
+This schedules **routine whole-codebase sweeps only. It does not prohibit a targeted audit** at any time when there is a reason for one: concrete evidence of a defect, a new threat-model question, or a named gap a review channel has left open. A targeted audit is scoped to that question and needs no milestone permission.
 
 **Tooling.** Prefer a first-party security scanner where scan access is available; otherwise an open, inspectable audit skill. **Start with one baseline auditor** rather than running several automatically — a second is worth adding only once the first's findings are understood and its blind spots named.
 

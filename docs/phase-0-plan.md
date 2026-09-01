@@ -413,9 +413,18 @@ order, on the pending branch while the diff still exists**:
 
 1. Claude `/review` (fresh-context QA)
 2. Claude `/security-review` (security-specialized third channel)
-3. Codex adversarial post-implementation diff review (cross-family)
+3. Codex adversarial post-implementation diff review
 
-None of the three certifies M2; each is additive (see [`handoff-pattern.md` §7.1](handoff-pattern.md)).
+**Family terminology, stated correctly for M2 — independence is relative to the author.** Codex implements
+M2, so:
+
+- Claude `/review` and `/security-review` are the **different-family** channels here (the implementer is Codex).
+- The Codex post-implementation pass is **fresh-context and adversarial, but same-family** as the implementer —
+  valuable for contract drift and locked-gate reinterpretation, and *not* a source of different-family coverage.
+
+All three channels and the ladder are unchanged; only the rationale for what each buys is corrected. See
+[`handoff-pattern.md` §7](handoff-pattern.md) for the author-relative rule. None of the three certifies M2;
+each is additive (§7.1).
 
 **Direct the security review at these surfaces** — they are M2-specific and a generalist pass will not
 find them unprompted:
@@ -435,9 +444,16 @@ evidence-binding layer can be removed without weakening a locked invariant or te
 
 Per [`handoff-pattern.md` §7.2](handoff-pattern.md) (which carries the tooling and hygiene rules):
 
-- **No heavyweight baseline audit before the real fill path exists** — auditing scaffolding produces noise.
+- **No heavyweight *routine* baseline audit before the real fill path exists** — auditing scaffolding
+  produces noise. This bounds *routine sweeps only*; a **targeted** audit is always permitted when
+  prompted by concrete evidence, a new threat-model question, or a named review gap (§7.2).
 - **First full-codebase audit: after M4**, once `fillService` + browser controls make the trust boundary real.
 - **Second: before v0.1, after M9 integrates** (the security-sensitive 1Password backend), i.e. between M9 and M10.
+
+**When each audit runs, precisely:** *after the milestone's implementation and its normal diff ladder, but
+before the milestone is marked complete and work advances.* So the diff-level review channels run first and
+their findings are absorbed; the audit then sweeps the whole codebase — including code no diff-aware pass
+ever saw — and its findings gate advancement.
 
 Neither audit changes milestone sequencing; both are gates on their milestone's completion, not new milestones.
 

@@ -19,7 +19,11 @@ Example:
 - **Verify delegated work by running it, never by reading the report** — and verify a review's headline claim
   independently before acting on it (one claim this session failed to reproduce until the corpus was
   realistic; another was worse than reported).
-- **Review channels catch disjoint bug classes.** Codex (cross-family) and Claude (same-family, full project
-  context) disagree usefully; a *different* Claude generation run blind in audit mode found a whole class both
-  had missed. For security-core work run more than one, and withhold prior findings so catches stay independent.
+- **Review channels catch disjoint bug classes — and family independence is relative to WHO WROTE THE DIFF.**
+  On 🔴 slices **Codex implements**, so Claude `/review` + `/security-review` are the *different-family*
+  channels and the Codex post-impl pass is fresh-context and adversarial but *same-family*. (Stating it the
+  other way round overstates coverage — corrected 2026-09-01; canonical rule in `handoff-pattern.md` §7.)
+  Channels disagree usefully: a *different Claude generation*, run blind in audit mode, found a whole class
+  both had missed. For security-core work run more than one, and withhold prior findings so catches stay
+  independent.
 
