@@ -27,15 +27,14 @@ export class SessionMutex {
 
     const state = this.#states.get(sessionId) ?? this.#newState(sessionId);
     if (state.phase !== 'OPEN') return Promise.reject(new Error(MUTEX_CLOSED_MESSAGE));
+    const owned = new Set(this.#owners.getStore() ?? []);
+    owned.add(sessionId);
 
     return new Promise<T>((resolve, reject) => {
       const entry: QueueEntry = {
         reject,
         start: () => {
           state.active = true;
-          const inherited = this.#owners.getStore() ?? new Set<string>();
-          const owned = new Set(inherited);
-          owned.add(sessionId);
           void this.#owners.run(owned, async () => operation())
             .then(resolve, reject)
             .finally(() => this.#release(sessionId, state));

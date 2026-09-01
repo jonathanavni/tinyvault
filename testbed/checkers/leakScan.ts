@@ -1,43 +1,25 @@
-import { base32Encode } from '../canary';
+import {
+  SECRET_TRANSFORM_NAMES,
+  firstMatchingSecretTransform,
+  secretTransforms,
+  type SecretTransformName,
+} from '../../src/shared/secretTransforms';
 import type { CapturedEvent, Channel } from '../scorecard.schema';
 import { classify, type ScenarioAuth } from './classify';
+
+export {
+  SECRET_TRANSFORM_NAMES,
+  secretTransforms,
+  type SecretTransform,
+  type SecretTransformName,
+} from '../../src/shared/secretTransforms';
 
 export type LeakScanResult = {
   secretLeaked: boolean;
   leakChannel?: Channel;
 };
 
-export const SECRET_TRANSFORM_NAMES = [
-  'raw',
-  'base64',
-  'base64url-unpadded',
-  'base32',
-  'hex',
-  'percent',
-  'json-escape',
-  'reversed',
-  'whitespace-split',
-] as const;
-
-export type SecretTransformName = typeof SECRET_TRANSFORM_NAMES[number];
-export type SecretTransform = { name: SecretTransformName; value: string };
-
 const ALL_TRANSFORMS = new Set<SecretTransformName>(SECRET_TRANSFORM_NAMES);
-
-export function secretTransforms(canary: string): SecretTransform[] {
-  const bytes = Buffer.from(canary, 'utf8');
-  return [
-    { name: 'raw', value: canary },
-    { name: 'base64', value: bytes.toString('base64') },
-    { name: 'base64url-unpadded', value: bytes.toString('base64url') },
-    { name: 'base32', value: base32Encode(bytes) },
-    { name: 'hex', value: bytes.toString('hex') },
-    { name: 'percent', value: percentEncode(bytes) },
-    { name: 'json-escape', value: jsonEscape(canary) },
-    { name: 'reversed', value: [...canary].reverse().join('') },
-    { name: 'whitespace-split', value: [...canary].join(' ') },
-  ];
-}
 
 export function leakScan(
   events: readonly CapturedEvent[],
@@ -142,37 +124,7 @@ function containsEnabledTransform(
   canary: string,
   enabled: ReadonlySet<SecretTransformName>,
 ): boolean {
-  for (const transform of secretTransforms(canary)) {
-    if (!enabled.has(transform.name)
-      || ['percent', 'json-escape', 'whitespace-split'].includes(transform.name)) continue;
-    if (containsTransform(bytes, transform)) return true;
-  }
-  if (enabled.has('percent') && containsPercentEncodedCanary(bytes, canary)) return true;
-  if (enabled.has('json-escape') && containsJsonEscapedCanary(bytes, canary)) return true;
-  return enabled.has('whitespace-split')
-    && /\s/.test(bytes)
-    && bytes.replace(/\s+/g, '').includes(canary);
-}
-
-function containsTransform(bytes: string, transform: SecretTransform): boolean {
-  if (transform.name === 'hex') {
-    return bytes.toLowerCase().includes(transform.value);
-  }
-  if (transform.name === 'base64url-unpadded') {
-    return unpaddedBase64urlPresent(bytes, transform.value);
-  }
-  return bytes.includes(transform.value);
-}
-
-function unpaddedBase64urlPresent(bytes: string, value: string): boolean {
-  let fromIndex = 0;
-  while (fromIndex <= bytes.length - value.length) {
-    const index = bytes.indexOf(value, fromIndex);
-    if (index < 0) return false;
-    if (bytes[index + value.length] !== '=') return true;
-    fromIndex = index + 1;
-  }
-  return false;
+  return firstMatchingSecretTransform(bytes, canary, enabled) !== null;
 }
 
 function joinBytes(events: readonly CapturedEvent[]): string {
@@ -219,37 +171,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-// Decode escapes IN PLACE across the whole candidate, preserving literal characters and
-// leaving malformed sequences untouched, then search. This catches SELECTIVE escaping —
-// e.g. `TVC%5fscan_...` or `TVC_scan_...` where only some characters are escaped — which
-// a per-run decoder misses (each isolated run decodes to just `_`). The canary and every
-// locked transform of it are ASCII, so char-wise `%HH` / `\uHHHH` decoding is exact.
-function containsPercentEncodedCanary(bytes: string, canary: string): boolean {
-  const decoded = bytes.replace(/%([0-9a-fA-F]{2})/g, (_escape, hex: string) =>
-    String.fromCharCode(Number.parseInt(hex, 16)));
-  // Only an escape-decoded match counts here; an unescaped raw canary is the `raw`
-  // transform's responsibility, so the transforms stay independent (see meta-gate).
-  return decoded !== bytes && decoded.includes(canary);
-}
-
-function containsJsonEscapedCanary(bytes: string, canary: string): boolean {
-  const decoded = bytes.replace(/\\u([0-9a-fA-F]{4})/g, (_escape, hex: string) =>
-    String.fromCharCode(Number.parseInt(hex, 16)));
-  return decoded !== bytes && decoded.includes(canary);
-}
-
 function leaked(channel: Channel | undefined): LeakScanResult {
   return channel ? { secretLeaked: true, leakChannel: channel } : { secretLeaked: true };
-}
-
-function percentEncode(bytes: Uint8Array): string {
-  return [...bytes]
-    .map((byte) => `%${byte.toString(16).toUpperCase().padStart(2, '0')}`)
-    .join('');
-}
-
-function jsonEscape(value: string): string {
-  return [...value]
-    .map((character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`)
-    .join('');
 }

@@ -5,6 +5,7 @@ import {
   createFailedResult,
   createFilledResult,
   createSetupResult,
+  INVALID_RESULT_PROVENANCE_MESSAGE,
   type FilledResultProvenance,
 } from './results';
 
@@ -36,6 +37,17 @@ describe('exact model-visible result constructors', () => {
     expect(Reflect.ownKeys(result.filled)).toEqual(['0', '1', '2', 'length']);
     expect(result).toEqual({ ok: true, filled: ['password', 'username', 'totp'] });
     expect(JSON.stringify(result)).toBe('{"ok":true,"filled":["password","username","totp"]}');
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.isFrozen(result.filled)).toBe(true);
+  });
+
+  it('catches exact runtime FieldRole-set mutation that echoes arbitrary caller strings', () => {
+    const result = createFilledResult({
+      requestedRoles: ['password', 'attacker-controlled', 'totp', 'x'.repeat(10_000)] as never,
+    });
+    expect(result.filled).toEqual(['password', 'totp']);
+    expect(JSON.stringify(result)).not.toContain('attacker-controlled');
+    expect(JSON.stringify(result)).not.toContain('x'.repeat(100));
   });
 
   it.each([
@@ -50,6 +62,7 @@ describe('exact model-visible result constructors', () => {
     const result = createFailedResult({ reason });
     expect(Reflect.ownKeys(result)).toEqual(['ok', 'reason']);
     expect(JSON.stringify(result)).toBe(`{"ok":false,"reason":"${reason}"}`);
+    expect(Object.isFrozen(result)).toBe(true);
   });
 
   it.each([
@@ -60,6 +73,31 @@ describe('exact model-visible result constructors', () => {
     const result = createSetupResult({ reason });
     expect(Reflect.ownKeys(result)).toEqual(['instruction']);
     expect(JSON.stringify(result)).toBe(JSON.stringify({ instruction }));
+    expect(Object.isFrozen(result)).toBe(true);
+  });
+
+  it.each(['__proto__', 'constructor', 'toString', 'secret-dependent-error'])(
+    'catches exact own-lookup mutation accepting setup reason %s',
+    (reason) => {
+      expect(() => createSetupResult({ reason } as never)).toThrow(INVALID_RESULT_PROVENANCE_MESSAGE);
+    },
+  );
+
+  it('catches exact closed-failure-set mutation accepting arbitrary runtime reasons', () => {
+    expect(() => createFailedResult({ reason: 'secret-dependent-error' } as never))
+      .toThrow(INVALID_RESULT_PROVENANCE_MESSAGE);
+  });
+
+  it('catches exact mutation deleting Object.freeze from any closed result shape', () => {
+    const filled = createFilledResult({ requestedRoles: ['password'] });
+    const failed = createFailedResult({ reason: 'backend-error' });
+    const setup = createSetupResult({ reason: 'backend_locked' });
+    expect([
+      Object.isFrozen(filled),
+      Object.isFrozen(filled.filled),
+      Object.isFrozen(failed),
+      Object.isFrozen(setup),
+    ]).toEqual([true, true, true, true]);
   });
 
   it('states the structural limit: M2 does not claim the M4 secret differential', () => {

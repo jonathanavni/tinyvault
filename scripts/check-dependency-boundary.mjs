@@ -16,5 +16,7 @@ if (result.violations.length > 0) {
   for (const violation of formatViolations(root, result.violations)) console.error(`- ${violation}`);
   process.exitCode = 1;
 } else {
-  console.log(`dependency boundary PASS (${result.files} production modules checked)`);
+  console.log(
+    `dependency boundary PASS (${result.files} production modules, ${result.roots} data-plane roots checked)`,
+  );
 }

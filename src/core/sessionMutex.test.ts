@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MUTEX_CLOSED_MESSAGE, MUTEX_REENTRANT_MESSAGE, SessionMutex } from './sessionMutex';
 
@@ -9,6 +9,8 @@ function deferred(): { promise: Promise<void>; resolve(): void } {
 }
 
 describe('per-session non-reentrant mutex', () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it('catches mutation that overlaps the active owner or reorders multiple queued operations', async () => {
     const mutex = new SessionMutex();
     const gate = deferred();
@@ -42,6 +44,49 @@ describe('per-session non-reentrant mutex', () => {
       await expect(mutex.runExclusive('session', () => undefined)).rejects
         .toThrow(MUTEX_REENTRANT_MESSAGE);
     });
+  });
+
+  it('catches exact queued-owner mutation that loses the acquirer context before dispatch', async () => {
+    const mutex = new SessionMutex();
+    const releaseB = deferred();
+    const holderB = mutex.runExclusive('session-b', async () => releaseB.promise);
+
+    const outerA = mutex.runExclusive('session-a', async () => {
+      const queuedB = mutex.runExclusive('session-b', async () => {
+        await expect(mutex.runExclusive('session-a', () => undefined)).rejects
+          .toThrow(MUTEX_REENTRANT_MESSAGE);
+      });
+      releaseB.resolve();
+      await queuedB;
+    });
+
+    await Promise.all([holderB, outerA]);
+  });
+
+  it('catches exact fresh-owner-set mutation that deadlocks the A to B to A path', async () => {
+    const mutex = new SessionMutex();
+    await mutex.runExclusive('session-a', async () => {
+      await mutex.runExclusive('session-b', async () => {
+        await expect(mutex.runExclusive('session-a', () => undefined)).rejects
+          .toThrow(MUTEX_REENTRANT_MESSAGE);
+      });
+    });
+  });
+
+  it('catches exact dispatch-context mutation that over-inherits another caller owner set', async () => {
+    const mutex = new SessionMutex();
+    const releaseB = deferred();
+    let inheritedHolder!: Promise<void>;
+
+    await mutex.runExclusive('session-a', () => {
+      inheritedHolder = mutex.runExclusive('session-b', async () => releaseB.promise);
+    });
+
+    const unrelated = mutex.runExclusive('session-b', async () =>
+      mutex.runExclusive('session-a', () => 'unrelated-owner'));
+    releaseB.resolve();
+    await inheritedHolder;
+    await expect(unrelated).resolves.toBe('unrelated-owner');
   });
 
   it('catches mutation that fails to release after rejection or throw', async () => {
@@ -86,5 +131,14 @@ describe('per-session non-reentrant mutex', () => {
     await Promise.all([closeA, closeB, mutex.close('session')]);
     await expect(mutex.runExclusive('session', () => 'resurrected')).rejects
       .toThrow(MUTEX_CLOSED_MESSAGE);
+  });
+
+  it('catches exact mutation deleting the state-map removal at final close', async () => {
+    const deleteCall = vi.spyOn(Map.prototype, 'delete');
+    const mutex = new SessionMutex();
+    const sessionId = 'state-delete-probe-7f75c4c4';
+    await mutex.runExclusive(sessionId, () => undefined);
+    await mutex.close(sessionId);
+    expect(deleteCall).toHaveBeenCalledWith(sessionId);
   });
 });

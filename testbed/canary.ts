@@ -1,30 +1,13 @@
 import { randomBytes } from 'node:crypto';
 
-export const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+import { base32Encode } from '../src/shared/secretTransforms';
+
+export { BASE32_ALPHABET, base32Encode } from '../src/shared/secretTransforms';
 
 function assertIdentifier(value: string, label: string): void {
   if (!/^[A-Za-z0-9-]+$/.test(value)) {
     throw new Error(`${label} must contain only letters, digits, or hyphens`);
   }
-}
-
-export function base32Encode(bytes: Uint8Array): string {
-  let bits = 0;
-  let buffer = 0;
-  let encoded = '';
-
-  for (const byte of bytes) {
-    buffer = (buffer << 8) | byte;
-    bits += 8;
-    while (bits >= 5) {
-      bits -= 5;
-      encoded += BASE32_ALPHABET[(buffer >>> bits) & 31];
-    }
-  }
-  if (bits > 0) {
-    encoded += BASE32_ALPHABET[(buffer << (5 - bits)) & 31];
-  }
-  return encoded;
 }
 
 export class CanaryGenerator {

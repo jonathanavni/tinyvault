@@ -41,10 +41,6 @@ export class Secret {
     return REDACTED;
   }
 
-  [Symbol.toPrimitive](): string {
-    return REDACTED;
-  }
-
   [inspect.custom](): string {
     return REDACTED;
   }

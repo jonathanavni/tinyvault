@@ -2,19 +2,21 @@ import { describe, expect, it } from 'vitest';
 
 import {
   INVALID_CONTROL_IDENTITY_MESSAGE,
-  createLockdownDomain,
   type ControlIdentity,
 } from './lockdown';
+import { createLockdownDomain } from '../supervisor/lockdownDomain';
 
 const first = { sessionId: 'session-a', documentId: 'doc-1', frameId: 'top', elementId: 'password' };
 
 describe('provenance-keyed lockdown registry', () => {
   it('catches mutation from attested identity to forgeable structural objects', () => {
-    const { registry } = createLockdownDomain();
+    const { registry, authority } = createLockdownDomain();
+    const real = authority.mint(first);
     const forgeries: unknown[] = [
       {},
       first,
       { ...first },
+      structuredClone(real),
       JSON.parse(JSON.stringify(first)),
     ];
     for (const forgery of forgeries) {
@@ -52,30 +54,49 @@ describe('provenance-keyed lockdown registry', () => {
     expect(registry.isLocked(otherElement)).toBe(false);
   });
 
-  it('catches mutation that lets cross-domain, stale-navigation, or closed-session tokens replay', () => {
+  it('catches exact mutation deleting domain attestation with both domains at the same generation', () => {
     const domainA = createLockdownDomain();
     const domainB = createLockdownDomain();
     const crossDomain = domainA.authority.mint(first);
+    domainB.authority.mint(first);
     expect(() => domainB.registry.lock(crossDomain)).toThrow(INVALID_CONTROL_IDENTITY_MESSAGE);
+  });
+
+  it('catches mutation that lets stale-navigation or closed-session tokens replay', () => {
+    const domainA = createLockdownDomain();
 
     const stale = domainA.authority.mint(first);
     domainA.registry.lock(stale);
-    domainA.registry.clearOnTrustedTopLevelNavigation(first.sessionId);
+    domainA.lifecycle.clearOnTrustedTopLevelNavigation(first.sessionId);
     expect(() => domainA.registry.isLocked(stale)).toThrow(INVALID_CONTROL_IDENTITY_MESSAGE);
     const nextGeneration = domainA.authority.mint(first);
     expect(domainA.registry.isLocked(nextGeneration)).toBe(false);
 
-    domainA.registry.clearOnSessionClose(first.sessionId);
-    domainA.registry.clearOnSessionClose(first.sessionId);
+    domainA.lifecycle.clearOnSessionClose(first.sessionId);
+    domainA.lifecycle.clearOnSessionClose(first.sessionId);
     expect(() => domainA.registry.lock(nextGeneration)).toThrow(INVALID_CONTROL_IDENTITY_MESSAGE);
     expect(() => domainA.authority.mint(first)).toThrow(INVALID_CONTROL_IDENTITY_MESSAGE);
   });
 
-  it('exposes only the two trusted lifecycle clear operations and no generic unlock', () => {
-    const { registry } = createLockdownDomain();
-    expect('unlock' in registry).toBe(false);
-    expect('clear' in registry).toBe(false);
-    expect(typeof registry.clearOnTrustedTopLevelNavigation).toBe('function');
-    expect(typeof registry.clearOnSessionClose).toBe('function');
+  it('catches exact capability mutation adding any taint-clear operation to the registry surface', () => {
+    const { registry, lifecycle } = createLockdownDomain();
+    expect(Reflect.ownKeys(registry)).toEqual(['lock', 'isLocked', 'isSameIdentity']);
+    expect(Reflect.ownKeys(lifecycle))
+      .toEqual(['clearOnTrustedTopLevelNavigation', 'clearOnSessionClose']);
+    expect(Object.isFrozen(registry)).toBe(true);
+    expect(Object.isFrozen(lifecycle)).toBe(true);
+  });
+
+  it('catches exact navigation-clear mutation that wipes locks belonging to other sessions', () => {
+    const { registry, authority, lifecycle } = createLockdownDomain();
+    const sessionA = authority.mint(first);
+    const sessionB = authority.mint({ ...first, sessionId: 'session-b' });
+    registry.lock(sessionA);
+    registry.lock(sessionB);
+
+    lifecycle.clearOnTrustedTopLevelNavigation(first.sessionId);
+
+    expect(() => registry.isLocked(sessionA)).toThrow(INVALID_CONTROL_IDENTITY_MESSAGE);
+    expect(registry.isLocked(sessionB)).toBe(true);
   });
 });

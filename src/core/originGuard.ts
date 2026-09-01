@@ -4,16 +4,18 @@ export const INVALID_ORIGIN_MESSAGE = 'Invalid bare HTTP(S) origin';
 
 /** Validates and normalizes an exact bare HTTP(S) origin without trimming input. */
 export function validateBareOrigin(input: string): Origin {
-  if (input.length === 0 || input.trim() !== input || /\s/u.test(input)) return invalid();
+  if (input.length === 0 || /[\u0000-\u0020\u007f]/u.test(input)) return invalid();
   if (!/^https?:\/\//iu.test(input)) return invalid();
 
   const authority = input.slice(input.indexOf('://') + 3);
-  if (authority.length === 0 || /[/?#]/u.test(authority)) return invalid();
-  if (authority.includes('@') || authority.includes('%') || authority.endsWith(':')) return invalid();
+  if (authority.length === 0 || /[/\\?#]/u.test(authority)) return invalid();
+  if (authority.includes('@') || authority.includes('%')) return invalid();
   const rawPort = portFromAuthority(authority);
   if (rawPort !== undefined) {
     const port = Number(rawPort);
-    if (!Number.isInteger(port) || port < 1 || port > 65_535) return invalid();
+    if (!/^(?:0|[1-9][0-9]*)$/u.test(rawPort)
+      || !Number.isInteger(port)
+      || port > 65_535) return invalid();
   }
 
   let parsed: URL;
@@ -29,13 +31,10 @@ export function validateBareOrigin(input: string): Origin {
   if (parsed.hostname === '' || parsed.hostname.endsWith('.')) return invalid();
 
   const rawHostname = hostnameFromAuthority(authority);
-  if (/^[0-9.]+$/u.test(rawHostname) && rawHostname !== parsed.hostname) return invalid();
+  if (/^[\x00-\x7f]+$/u.test(rawHostname)
+    && rawHostname.toLowerCase() !== parsed.hostname) return invalid();
 
   return parsed.origin;
-}
-
-export function sameOrigin(left: Origin, right: Origin): boolean {
-  return left === right;
 }
 
 function hostnameFromAuthority(authority: string): string {
