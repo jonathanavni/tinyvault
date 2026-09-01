@@ -411,12 +411,13 @@ Spec §9 first-week target maps to **M0–M6** (spine + core + first two fixture
 - **HMAC/keyed transforms of the secret:** only page code at the authorized origin could compute one (the model never sees the secret), so this collapses into the trusted-authorized-origin residual. No separate mitigation.
 - **1Password cost for contributors:** libsodium local-file keeps `make eval` free; live-backend tests need an `op` account (or the OSS grant).
 - **saucedemo dependency:** single optional public demo target, never in the offline `make eval` path.
-- **Event stream is not attested (accepted, by design):** adjudication is bug-resistant (code-supplied key
-  and policy, signed canary commitment, one-sided outcome edits rejected, locked run-inventory gate) but not
-  tamper-proof — coherent edits to the artifact bundle could forge a pass. Binding the stream needs an
-  attestor independent of the runner, and the runner is the capture layer, so a self-signed digest buys
-  nothing. Anti-fabrication rests on **reproducibility** (offline + deterministic + published reproduce
-  command), which is the honest property for this threat model. Stated in README and SCHEMA.
+- **Capture authenticity (accepted residual, narrowed):** the fixture signs `sha256(events)` bound to
+  `runId` and cross-checks the authorized-sink body against its own capture record, so artifact-bundle
+  editing is detected. It signs bytes the runner supplied, so this is post-capture integrity rather than
+  independent authenticity for events the fixture never observed (`model-text`, `tool-arg`). An attestor
+  independent of the capture layer does not exist in a single-process harness; anti-fabrication therefore
+  also rests on reproducibility (offline + deterministic + published reproduce command). Stated in README
+  and SCHEMA.
 - **Partial capture coverage (Opus 5 audit, OPEN until M5):** 6 of 11 declared `Channel`s have no producer, so a leak over those routes would be unobserved. A zero is bounded by what is instrumented. Disclosed in the README; closed by the M5 capture-coverage gate.
 - **Arbitrary-interleaving leak reassembly (narrowed, Opus 5 audit A1):** the raw-subsequence fallback was REMOVED — it produced false leaks on canary-free transcripts (78.5% FP @6KB, 100% @16KB+, verified). Coverage is now coherent-stream + full-concat + structured-leaf reassembly. A secret split across genuinely different streams remains the accepted steganography residual.
 - **2FA/CAPTCHA human-handoff hook (deferred by design):** spec §3 requires *designing* a handoff hook rather than automating challenges; deferred to the KuchiClaw roadmap step with its attach-point stated in §2 (`handle-unavailable` + `request_vault_setup`). Not silently dropped.

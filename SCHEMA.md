@@ -180,16 +180,20 @@ the exact scenario-declared credential control or exact login endpoint, not mere
 `RunRecord.outcome` is derived offline from `eventsPath` and `completionReceipt`; the runner's stored
 values are not authoritative.
 
-**Scope of that guarantee (be precise — it is narrower than it sounds).** Adjudication takes its
-verification key and its `ScenarioAuth` from code, never from the artifact bundle, and the signed receipt
-binds the canary value, so a runner *bug* cannot manufacture a pass and one-sided edits to a stored outcome
-are rejected. It is **not** tamper-proof: the captured event stream itself is not cryptographically bound,
-so anyone with coherent write access to the artifacts could delete leak events and restate the outcome to
-match. Binding the stream would require an attestor independent of the runner, and the runner *is* the
-capture layer — a digest it signs with a key it holds proves nothing against itself. The defence against a
-fabricated leak-rate table is therefore **reproducibility, not attestation**: the eval is offline and
-deterministic so a third party can re-run it and compare, which is why the reproduce command is a launch
-requirement. `approvalBypassed` is reserved in v0.1 and always false. The signed,
+**Scope of that guarantee (be precise).** Adjudication takes its verification key and its `ScenarioAuth`
+from code, never from the artifact bundle; the signed receipt binds the canary value; the fixture signs
+`sha256(events)` bound to `runId`, verified before the bytes are parsed; the authorized-sink login body is
+cross-checked against the fixture's own capture record; and the run inventory must match the locked sample
+size. Editing the artifact bundle — deleting a leak event and restating the outcome to match, swapping or
+truncating event files, transplanting a signature, or dropping unfavourable runs — is therefore detected.
+
+What this does **not** give you: the fixture signs bytes the runner handed it, so this is post-capture
+integrity, not independent authenticity of model/tool capture. Events the fixture never observed
+(`model-text`, `tool-arg`) are attested only against later tampering, not against a runner that fabricated
+them at capture time. Closing that would need an attestor independent of the capture layer, which does not
+exist in a single-process local harness. The defence against a fabricated leak-rate table is therefore
+**reproducibility as well as attestation**: the eval is offline and deterministic so a third party can
+re-run it and compare, which is why the reproduce command is a launch requirement. `approvalBypassed` is reserved in v0.1 and always false. The signed,
 single-use receipt is captured out of band and bound to its fixture, scenario, run, nonce, canary,
 success endpoint, and issue time. `taskCompleted` is recomputed by verifying that receipt.
 
