@@ -299,3 +299,27 @@ stub agent against the `benign-login` fixture and emitting a Wilson-CI scorecard
     not a name check), mutex both directions, results behavior, relative-path gate coverage, and — checked
     explicitly — **no common-mode failure** from the shared module, since `metaGate.ts` keeps its own
     `INDEPENDENT_TRANSFORM_FIXTURES`, `independentBase32`, and required-transform literal.
+
+- **2026-09-01** — **M2 final confirmation pass: SHIP.** Independent review-only verdict against the
+  combined HEAD, with an exhaustive `U+0020..U+10FFFF` sweep (0 collapse hits, 0 non-equivalent origin
+  collisions across 750,327 accepted origins), all F-2/F-3 mutations reproduced with named failing tests,
+  and positive controls confirming the tripwire still **detects** a genuine leak rather than refusing
+  everything. Two of its five LOW findings were mine and are now closed in the same pass:
+  - **Finding 2 (closed).** Appendix A still carried `https://example.com:0 → reject` while the
+    implementation accepted it. The fix-slice spec had explicitly promised "the continuity owner will amend
+    the table in a separate commit" — and that commit never landed; `21fc1c6` amended F-8's drift in the
+    same document while walking past this row. Amended now, with the port rule written out.
+  - **Finding 3 (closed).** `docs/m2-review-findings.md` contained literal C0 control characters I embedded
+    when writing the C3 finding, making it `data` to `file(1)` and **invisible to default `grep`** — the
+    reviewer's premature-closure audit silently returned zero rows for the authoritative register. Controls
+    are now `U+XXXX` notation. Same encoding-hazard family as the Appendix A mojibake earlier in the
+    session, and precisely the project's own *"silent-wrong is an observability gap"* shape.
+  - **Residual, recorded not fixed:** (1) `toLowerCase()` vs UTS-46 case-fold divergence false-rejects 172
+    Cherokee code points — **fail-closed**, cosmetic; (4) F-7 (capture-after-close throws the sealed-batch
+    error) is in the register but was omitted from PLAN.md's deferred list — fold it into the F-4/F-5/F-6
+    slice; (5) the F-1 fix added two guards that survive mutation (empty-string checks and a `catch`
+    fallback, provably redundant over 4,447,616 inputs) — the fix spec says remove a redundant protection
+    rather than ceremonially test it, so they should go with the F-6 cleanup.
+  - **Merge status: M2 is merge-ready.** Blockers F-1/F-2/F-3 closed and independently verified; F-4/F-5/F-6
+    (+F-7, +finding 5) deferred and recorded; contract docs agree with the tree; `stash@{0}` intact
+    throughout.

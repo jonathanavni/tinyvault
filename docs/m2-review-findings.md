@@ -1,5 +1,11 @@
 # M2 Post-Implementation Review — Consolidated Findings Register
 
+> **Encoding note (final-pass finding 3).** This file originally embedded literal C0 control
+> characters in the C3 finding text. That made it `data` to `file(1)` and **invisible to default
+> `grep`** — a premature-closure audit during the final review silently returned zero rows for it.
+> Controls are now written as `U+XXXX`. This is the project's own "silent-wrong is an
+> observability gap" shape, in the register that documents that principle.
+
 Branch `codex/m2-primitives` @ `a3eab0c`. All three §9.1 channels ran on the identical diff.
 
 | Channel | Family (relative to implementer) | Verdict |
@@ -125,7 +131,7 @@ the rule the table encodes.
 - **C2 — trailing backslash accepted.** `https://example.com\` → accepted. Backslash is a path separator
   for special schemes, so this is the "trailing slash → reject" row in disguise. One-char fix:
   `/[/\\?#]/`.
-- **C3 — trailing C0 controls accepted.** ` `, ``, `` → accepted; the WHATWG parser strips
+- **C3 — trailing C0 controls accepted.** ``U+0000``, ``U+0001``, ``U+001F`` → accepted; the WHATWG parser strips
   them, defeating the table's "reject *before* parsing, do not trim" discipline. **Fix:** reject any code
   point ≤ U+0020 or == U+007F anywhere in the input, up front.
 - **C4 — strictness is row-driven, not rule-driven.** `:0443`, `:00080` accepted. Pick and state the rule.

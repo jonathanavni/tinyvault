@@ -201,7 +201,8 @@ make test
 | `https://user:pw@example.com` | **reject** — userinfo |
 | `https://example.com.` | **reject** — trailing dot host |
 | `ftp://example.com` · `file://…` · `data:…` · custom scheme | **reject** — HTTP(S) only |
-| `https://example.com:0` · `:99999` · `:` (empty port) | **reject** |
+| `https://example.com:0` | accept → `https://example.com:0` (port rule adopted in the fix slice; this row was **amended** from its original *reject* — see note below) |
+| `https://example.com:99999` · `:` (empty port) · `:0443` · `:00080` (leading zeros) | **reject** |
 | `" https://example.com "` (surrounding whitespace) | **reject** — reject *before* parsing, do not trim |
 | `https://exa mple.com` (internal whitespace) | **reject** |
 | `https://exa%20mple.com` (encoded host char) | **reject** |
@@ -209,6 +210,13 @@ make test
 | `example.com` (no scheme) · `""` · `"   "` | **reject** |
 
 Two inputs normalizing to the same output are the **same** origin; equality is on normalized form.
+
+> **Port rule (the amendment this table promised).** Accept `0`, or a canonical non-zero
+> decimal port **without leading zeros**; reject leading-zero forms (`:0443`, `:00080`), an
+> empty port, and out-of-range values; explicit canonical defaults (`:443` on https, `:80` on
+> http) are accepted and normalized away. The fix-slice spec stated this rule amends Appendix A
+> and that the continuity owner would amend the table separately — **this is that amendment**,
+> landed late and caught by the final confirmation pass (finding 2).
 
 ## Appendix B — transform corpus
 
