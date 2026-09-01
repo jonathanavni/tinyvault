@@ -492,3 +492,18 @@ Deferred items are unchanged and remain accurately recorded above: Cherokee fail
 (172 code points), F-7 error classification, the redundant F-1 guards, the sweep's two-target template
 scope, and `src/shared` exporting `secretTransforms` (making the plane split organizational rather than a
 capability boundary).
+
+## Post-merge addendum (2026-09-01, appended — earlier rows unchanged)
+
+**G-1 — the gate never scans a typed package's runtime JavaScript.** Found by Claude while probing
+whether the M3 libsodium dependency would traverse. `resolveSpecifier` resolves bare specifiers with
+`ts.resolveModuleName`, which for a package that ships types resolves to its `.d.ts`; `addExternalEntry`
+then walks a declaration file with no runtime edges. Reproduced in a scratch tree: a fake package with
+`"types": "index.d.ts"` whose `index.js` does `require("../../src/supervisor/marker.ts")` **PASSES** the
+gate; delete the `types` field and the same package **FAILS** correctly (`external-package require-style
+access: src/backends/fake.ts -> node_modules/fakepkg/index.js -> src/supervisor/marker.ts`). The
+round-4 closure claim *"recursively traverse external packages, fail closed on unfollowable loads"* holds
+for untyped packages only — with zero runtime dependencies on `main`, nothing exercised the typed path.
+**Disposition:** folded into the M3 slice (`docs/m3-slice-spec.md` §7) as a fix of the class — resolve
+external packages to their runtime entry, never to types — with a selftest fixture and a legitimate-traffic
+control. Not a rewrite of the round-4 row above; the over-claim is named here instead.
