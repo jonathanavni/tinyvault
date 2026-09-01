@@ -1,8 +1,10 @@
 # M3 Slice Spec — Backend Interface + libsodium Local-File Backend (Codex implementation handoff)
 
-> **Status: revision 2 — for Codex adversarial pre-implementation review round 2** (`handoff-pattern.md`
-> §4 step 3, build mode / verifier framing; cap at round 3). Round 1 returned **NO-SHIP, 8 findings (6 P1,
-> 2 P2), all absorbed** — see "What changed from revision 1" below. Governed by
+> **Status: revision 3 — for Codex adversarial pre-implementation review round 3 (the cap)**
+> (`handoff-pattern.md` §4 step 3, build mode / verifier framing). Round 1: **NO-SHIP, 8 findings, all
+> absorbed** (r2). Round 2: **NO-SHIP, 4 findings (3 P1, 1 P2), 5 of 8 round-1 items CLOSED, 1 OPEN, 2
+> MOVED — all four absorbed here**; see "What changed from revision 2". Findings are narrowing each round
+> (8 → 4, none spanning the same primitive twice), so per §5 this is convergence, not a stuck design. Governed by
 > [`phase-0-plan.md`](phase-0-plan.md) §2, §4 (layer 1, the three lifetimes), §6, §8 (M3 row), §9.1;
 > `SCHEMA.md`; and the standing decision *"never cache the secret; backend auth sessions may be cached"*
 > (`.claude/memory/decisions_product.md`).
@@ -15,7 +17,36 @@ verified gap in the M2 build-time dependency gate that M3 is the first slice to 
 
 No browser, no DOM, no fill service (M4). No 1Password (M9).
 
-## What changed from revision 1, and why (read first)
+## What changed from revision 2, and why (read first)
+
+1. **AD from the argument did not authenticate the record's *current* cleartext policy (P1, reopened
+   round-1 #1).** AEAD verifies the ciphertext under the AD you supply; it says nothing about the metadata
+   sitting beside it. Seal under A, edit only the metadata to B, call `resolveSecret(h, A)` → AD(A) matches
+   → success. My r2 tamper tests demanded `integrity` there, which was internally impossible. **Fix (D2,
+   D5, D-tests):** an **exact pre-open comparison** of the validated current record policy against
+   `authorizedPolicy` (normalized origin, ordered recipe) — mismatch → `integrity` **without calling
+   `open()`**; only then `open()` with the (now equal) policy's AD. The r2 sentence "no separate comparison
+   path" is withdrawn; the compare is the mechanism and the AD is the cryptographic backstop.
+2. **Zeroization tests missed the throw paths most likely to retain the key (P1).** **Fix (D4, D6, C, G):**
+   the reader's `try/finally` must begin before the key-length check and cover `open()`; tests retain
+   references through the seam and assert zeroing on success, `open()` failure (wrong key, corrupt
+   ciphertext), and wrong-length key. The **writer** must zero its key and plaintext buffers around every
+   seal, including an nth-record seal failure.
+3. **Gate matrix admitted a non-Node-compatible `exports` resolver (P1).** **Fix (§7):** fixtures for
+   `exports` string sugar, array fallback, wildcard subpath patterns, and a clean `main` that must be
+   ignored when `exports` exists; both conditions asserted per fixture. Preference stated for Node's own
+   resolver over a hand-written one.
+4. **Atomic replacement was vacuously tested and contradicted the mode rule (P2).** **Fix (D6, G):**
+   replacement is **always mode `0600`** (the renamed temp inode's mode; "fresh files only" withdrawn);
+   test overwriting a `0640` vault yields `0600`; the fs operations go through an injectable seam so the
+   test verifies the trace (exclusive same-dir temp → write → fsync → close → rename) and injects failures at
+   write, fsync, close, and rename.
+
+Also from round 2's test-gap list: the same-file cache test reuses **one** policy object and asserts **two**
+`open()` calls. The 1 MiB file cap is **cut** as v0.1 scope creep; file-size DoS by a host-disk writer is
+recorded as residual risk.
+
+## What changed from revision 1, and why
 
 Round 1's findings, and how each was absorbed:
 
@@ -24,7 +55,9 @@ Round 1's findings, and how each was absorbed:
    secret B under authorization A. **Fix:** `resolveSecret(handle, authorizedPolicy)` — the caller passes
    back the exact policy it authorized, and the backend **computes the AEAD additional data from that
    argument, not from the file**. A re-pointed record fails authentication. The second call is bound to the
-   first cryptographically, with no separate comparison path to get wrong (D2, D5).
+   first cryptographically, with no separate comparison path to get wrong (D2, D5). *(Superseded by r3 #1:
+   AD alone does not authenticate the current cleartext metadata; an exact pre-open compare is now the
+   mechanism and the AD is the backstop. Kept here as history.)*
 2. **Nonce reuse untestable (P1).** A constant-nonce writer passed every test. **Fix:** the libsodium
    surface is injected through one seam; tests assert one `randombytes_buf(NPUBBYTES)` per sealed record,
    persisted verbatim, and a constant-nonce mutant fails (G).
@@ -42,6 +75,7 @@ Round 1's findings, and how each was absorbed:
    with a protected and a clean branch (§7).
 6. **Writer could destroy the only key / tear the vault (P1).** **Fix:** exclusive key creation (`wx`),
    same-directory temp + fsync + atomic rename for the vault, mode-on-fresh-file only, with tests (D6, G).
+   *(Mode rule superseded by r3 #4: replacement is always `0600`.)*
 7. **AD canonicalization / rollback (P2).** **Fix:** writer stores `originGuard`'s *normalized* return,
    one `encodeAdditionalData` shared by read and write, golden byte vectors incl. non-canonical accepted
    inputs. **Rollback of an old authentic file by a filesystem writer is explicitly out of scope** (D2).
@@ -133,9 +167,14 @@ type LocalVaultRecord = {
   normalized and the recipe in stored order. Golden byte vectors pin the encoding (D-tests). Consequence:
   editing a record's origin, handle, or recipe in the file **breaks authentication of that secret** — a
   secret cannot be re-pointed at another origin by editing cleartext metadata.
-- **The reader computes AD from the caller's `authorizedPolicy`, not from the file (r2 #1).** So the AD
-  check simultaneously authenticates the record *and* proves the record still carries the policy the fill
-  gate authorized. There is no separate "compare policies" branch.
+- **The reader compares before it opens (r3 #1).** `resolveSecret(handle, authorizedPolicy)` validates the
+  file, finds the record, and **compares the record's current policy to `authorizedPolicy` exactly**
+  (normalized origin string equality; recipe equality element-by-element in stored order). Mismatch →
+  `integrity`, and `open()` is **never called**. Only on equality does it `open()` with
+  `encodeAdditionalData(handle, policy)` — at that point the argument and the file agree, so which one
+  feeds the encoder is immaterial; use the validated record's. Two layers, stated plainly: the comparison
+  proves the file *still says* what the fill gate authorized (closing the TOCTOU); the AD proves the
+  ciphertext was *sealed for* that policy (closing re-pointing by metadata edit).
 - **Why per-record, not whole-file:** with a whole-file seal, `listItems`/`resolvePolicy` would decrypt every
   secret to read metadata. Per-record sealing makes the policy/secret split **structural**: metadata calls
   never invoke `open()` (A-tests count calls), and `resolveSecret` opens exactly one record.
@@ -164,9 +203,12 @@ type LocalVaultRecord = {
 
 **One decrypt path, no module-level or instance-level data state.** The backend instance owns exactly the
 two paths and the injected primitives — nothing else. Each `resolveSecret(handle, authorizedPolicy)`:
-read vault → validate (E) → find record → read key → `open(ciphertext, encodeAdditionalData(handle,
-authorizedPolicy), nonce, key)` → decode UTF-8 → `new Secret(string)` → **`memzero` key and plaintext
-buffers in a `finally`** → return. Nothing secret-derived (length, hash, buffer, string) is assigned to any
+read vault → validate (E) → find record → **compare record policy to `authorizedPolicy`** (r3 #1) →
+**enter `try`** → read key → check key length → `open(ciphertext, encodeAdditionalData(handle,
+recordPolicy), nonce, key)` → decode UTF-8 → `new Secret(string)` → **`finally`: `memzero` the key buffer
+and the plaintext buffer (whichever exist)** → return. The `try` begins **before** the key-length check and
+covers `open()`, so a wrong key, a corrupt ciphertext, or a wrong-length key all pass through the same
+`finally` (r3 #2). Nothing secret-derived (length, hash, buffer, string) is assigned to any
 field, outer-scope variable, log line, or error. The decoded `string` is passed to `Secret` and the local
 binding is not reused.
 
@@ -212,10 +254,10 @@ export interface CredentialBackend {
   (missing) or `error` (present but invalid); key file missing/unreadable/wrong length → `locked`; both fine
   → `{available: true}`. It never opens a record. It **never rejects**.
 - `resolvePolicy`/`resolveSecret`: unknown or malformed handle → `not-found`; key problems → `locked`;
-  vault missing/invalid → `unavailable`; AEAD failure (wrong key, tampered record, policy mismatch) →
-  `integrity`. The order of checks is: vault validity → handle lookup → key → open. A missing key with an
-  unknown handle reports `not-found` (handle lookup precedes the key read; the key is never read for a handle
-  that does not exist).
+  vault missing/invalid → `unavailable`; policy mismatch (pre-open compare) or AEAD failure (wrong key,
+  tampered record) → `integrity`. **Order of checks: vault validity → handle lookup → policy compare → key
+  → open.** A missing key with an unknown handle reports `not-found`, and a missing key with a mismatched
+  policy reports `integrity` — the key is never read unless the record is the one that was authorized.
 
 ### D6 — a writer exists, as library code, for tests and fixtures
 
@@ -226,10 +268,15 @@ export interface CredentialBackend {
   (writer-side failures are not `BackendError`s; that class is reserved for the read path).
 - `writeLocalVault(vaultPath, keyPath, entries)` — validates every entry **before** touching disk (origin via
   `originGuard`, stored in normalized form; recipe non-empty, no duplicates; `kind === 'password'`), mints
-  handles, seals each entry with a fresh nonce, and writes **atomically**: same-directory temp file (mode
-  `0600`) → write → `fsync` → close → `rename` over `vaultPath`. On any failure the previous vault is
-  untouched and the temp file is removed. Returns the minted `ItemMeta[]`.
-- Mode is set on fresh files only; the writer does not tighten a pre-existing file's mode (stated).
+  handles, seals each entry with a fresh nonce, and writes **atomically** through an injectable fs seam
+  (default `node:fs/promises`): exclusive same-directory temp file (`wx`, mode `0600`) → write → `fsync` →
+  close → `rename` over `vaultPath`. On any failure at any step the previous vault is byte-identical and the
+  temp file is removed. Returns the minted `ItemMeta[]`.
+- **The replaced vault is always mode `0600`** — it is the renamed temp inode (r3 #4). A pre-existing vault
+  with a looser mode is therefore tightened by replacement; the key file's mode is never changed by the
+  writer.
+- **Writer buffer hygiene (r3 #2):** the key buffer and each entry's UTF-8 plaintext buffer are `memzero`'d
+  in a `finally` around every seal, including when the nth seal throws.
 
 ## Scope
 
@@ -294,14 +341,17 @@ outside it. Canary secrets are distinctive strings; expected encodings are **aut
 
 - **Backend-level rotation:** vault `h → A`; resolve → `A`; rewrite `h → B` (same handle/policy/key, fresh
   nonce); resolve → `B`. *Kills:* a record/secret/file cache.
-- **Same-file repeated resolution with an injected decryptor (r2 #3):** file unchanged; the injected
-  `open()` returns different plaintext on each call; two resolves return the two different values.
-  *Kills:* an mtime- or content-keyed cache that the rotation test cannot see.
+- **Same-file repeated resolution with an injected decryptor (r2 #3):** file unchanged; **the same policy
+  object** is passed both times; the injected `open()` returns different plaintext on each call; two
+  resolves return the two different values **and the seam counted exactly two `open()` calls**.
+  *Kills:* an mtime-, content-, or policy-identity-keyed cache that the rotation test cannot see.
 - **Revocation:** rewrite without `h`; resolve → `not-found`; `listItems` no longer lists it. *Kills:* an
   in-memory ghost.
-- **Buffers zeroed:** through the seam, retain references to the key buffer passed to `open()` and the
-  plaintext buffer it returned; after `resolveSecret` returns **and** on the throw path (inject a decoder
-  failure after `open`), both are all-zero. *Kills:* a missing `finally`. State verbatim in the test file:
+- **Buffers zeroed on every path (r3 #2):** through the seam (and an injected fs seam for the key read),
+  retain references to the key buffer and the plaintext buffer; assert all-zero after (i) success, (ii)
+  `open()` throwing for a wrong key, (iii) `open()` throwing for corrupt ciphertext, (iv) a wrong-length key
+  (the buffer that was read is zeroed even though `open()` never ran), and (v) a decoder failure after
+  `open()`. *Kills:* a `try` that begins after the key read or after `open()`. State verbatim in the test file:
   *"This proves the byte buffers TinyVault owns are zeroed. It does not and cannot prove the `string`
   inside `Secret`, or the libsodium WASM heap, has no other copies."*
 - **Key is read per call:** delete the key file after a successful resolve; the next resolve → `locked`;
@@ -319,14 +369,16 @@ outside it. Canary secrets are distinctive strings; expected encodings are **aut
   arrays, including one whose origin was supplied in a non-canonical accepted spelling to the writer
   (e.g. uppercase host, explicit `:443`) and is therefore encoded in normalized form. *Kills:* writer/reader
   encoder divergence and normalize-on-read-only.
-- **Policy-swap between calls:** `p = resolvePolicy(h)`; rewrite `h` with a different origin **and** a
-  different secret (valid, keyed); `resolveSecret(h, p)` → `integrity`, and the seam observed **no plaintext
-  returned** from `open()`. *Kills:* computing AD from the file, and any implementation that compares
-  policies after decrypting.
-- Tamper `canonicalOrigin` alone → `resolvePolicy` returns the tampered origin (cleartext, expected), and
-  `resolveSecret(h, originalPolicy)` → `integrity`; `resolveSecret(h, tamperedPolicy)` → `integrity` too
-  (the AD in the ciphertext still names the original). Same for swapped `sealed` blobs between two records
-  and a tampered `fieldRecipe`.
+- **Policy-swap between calls (the TOCTOU, r3 #1):** `p = resolvePolicy(h)`; rewrite `h` with a different
+  origin **and** a different secret (valid, keyed — a legitimate re-seal); `resolveSecret(h, p)` →
+  `integrity` and the seam counted **zero** `open()` calls. *Kills:* opening before comparing, and any
+  implementation that releases a secret for a policy the file no longer carries.
+- **Metadata-only edit (r3 #1):** seal under A; edit only the cleartext `canonicalOrigin` to B.
+  `resolvePolicy(h)` returns B (cleartext, expected). `resolveSecret(h, A)` → `integrity` with **zero**
+  `open()` calls (compare fails). `resolveSecret(h, B)` → `integrity` with **one** `open()` call (compare
+  passes, AEAD fails — the ciphertext was sealed for A). *Kills:* skipping the compare, and sealing without
+  policy-bound AD. Same shape for a tampered `fieldRecipe` and for swapped `sealed` blobs between two
+  records.
 - Wrong key → `integrity`. Truncated or bit-flipped ciphertext → `integrity`. Wrong-length key → `locked`.
 - Rollback (restore an older authentic file) is **not** tested and is stated out of scope in the module header.
 
@@ -335,9 +387,9 @@ outside it. Canary secrets are distinctive strings; expected encodings are **aut
 - Reject: unknown `version`; non-array `records`; extra keys at top level, on a record, or inside `sealed`;
   missing/non-string `label`; non-string `account`; `kind !== 'password'`; empty or duplicate-role
   `fieldRecipe`; unknown role; duplicate handles; handle not matching `/^vh_[0-9a-f]{32}$/`; non-base64 or
-  wrong-length nonce; ciphertext shorter than the AEAD tag; **file larger than 1 MiB** (read with a size
-  check first; a resource limit, not a format rule). Each → `probeAvailability` reports `error` and
-  `resolvePolicy`/`resolveSecret` throw `unavailable`. *Kills:* trusting the file shape.
+  wrong-length nonce; ciphertext shorter than the AEAD tag. Each → `probeAvailability` reports `error`
+  and `resolvePolicy`/`resolveSecret` throw `unavailable`. *Kills:* trusting the file shape. (No file-size
+  cap in v0.1 — cut as scope creep, r3; oversized-file DoS by a host-disk writer is residual risk.)
 - **Legitimate-traffic control:** a fully valid file passes every check.
 
 ### F. Typed errors, foreign exceptions, and probe
@@ -397,10 +449,14 @@ dependency to expose it. Recorded as G-1 in `docs/m2-review-findings.md`.
   through `fs.realpathSync` so a symlinked workspace is scanned at its real path and not double-counted).
 - **`.d.ts`/`.d.mts`/`.d.cts` are never traversal targets.** Keep TypeScript resolution only for in-repo
   `.ts` sources. Unresolvable runtime entry → **fail closed** as `unresolved`, never fall back to types.
-- **Implementation latitude:** you may implement the `exports` algorithm directly, or use `createRequire(
-  importer).resolve()` for the `require` branch and a minimal `exports` walker for the `import` branch.
-  Do not add a runtime dependency to the gate; a tiny, pinned **dev**Dependency (e.g. `resolve.exports`) is
-  acceptable if you justify it in the report. The gate must still resolve in-repo TS as today.
+- **Implementation preference (r3 #3): use Node's own resolver rather than re-implementing `exports`.**
+  `createRequire(importer).resolve(specifier)` gives the `require` branch exactly as Node would; for the
+  `import` branch use `import.meta.resolve(specifier, parentURL)` (Node 24 supports the parent argument
+  under `--experimental-import-meta-resolve`; the gate is invoked from `package.json`, so adding the flag
+  there is acceptable and must be documented in the script header) **or** the pinned, tiny
+  **dev**Dependency `resolve.exports` for the `import` condition walk. A hand-written `exports` walker is
+  the last resort and, if chosen, must pass the full matrix below. No runtime dependency for the gate. The
+  gate must still resolve in-repo TS as today.
 - **Selftest matrix** — each fixture in a temp `node_modules`, each with a **protected branch** (runtime JS
   reaches `src/supervisor`) that must FAIL and a **clean branch** that must PASS:
   1. typed package, `main` only (the original repro);
@@ -410,7 +466,13 @@ dependency to expose it. Recorded as G-1 in `docs/m2-review-findings.md`.
   4. transitive: clean typed package depending on a typed package that reaches protected;
   5. `.mjs` entry and `.cjs` entry;
   6. package self-reference (`import "pkg/x"` from inside `pkg`);
-  7. symlinked package directory.
+  7. symlinked package directory;
+  8. `exports` **string sugar** (`"exports": "./runtime.js"`) with a **clean `main`** that must be ignored;
+  9. `exports` **array fallback** (`["./missing.js", "./runtime.js"]`) where the first entry is absent and
+     the second reaches protected; mirror with a clean second entry;
+  10. **wildcard subpath pattern** (`"./features/*": "./src/features/*.js"`) where the matched target
+      reaches protected while the root is clean.
+  Every fixture asserts **both** the `import` and the `require` outcome (r3 #3).
 - If the real `libsodium-wrappers` runtime traversal then fails closed on a construct the gate cannot follow
   (a non-literal `require` in the emscripten bundle is plausible), **stop and report with the exact
   violation output** — exempting a vetted crypto dependency is a planning decision (handoff §8).
