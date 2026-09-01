@@ -20,6 +20,7 @@ const directCases = [
   ['module.require-style access', "const evaluator = module.require('../supervisor/evaluator'); void evaluator;"],
   ['import = require()', "import evaluator = require('../supervisor/evaluator'); void evaluator;"],
   ['detector protected-directory arm', "import '../supervisor/tripwire';"],
+  ['data-plane secret matcher import', "import '../supervisor/secretMatcher';"],
 ];
 
 for (const [name, source] of directCases) {
@@ -96,7 +97,8 @@ withTemporaryRoot((root) => {
 
 console.log(
   'dependency boundary mutation tests PASS '
-  + '(real CLI exit 1 violations, exit 0 clean, protected arm, outside-src, unresolved, computed, aliases)',
+  + '(real CLI exit 1 violations incl. data-plane secret-matcher import; '
+  + 'exit 0 clean; protected arm, outside-src, unresolved, computed, aliases)',
 );
 
 function assertViolation(root, name) {
@@ -116,6 +118,7 @@ function withFixture(probeSource, assertion, compilerOptions = {}) {
     write(root, 'src/core/probe.ts', `${probeSource}\n`);
     write(root, 'src/supervisor/evaluator.ts', "export const evaluate = () => 'protected';\n");
     write(root, 'src/supervisor/tripwire.ts', "export const detect = () => 'protected';\n");
+    write(root, 'src/supervisor/secretMatcher.ts', "export const match = () => 'protected';\n");
     assertion(root);
   });
 }

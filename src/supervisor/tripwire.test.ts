@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { secretTransforms } from '../shared/secretTransforms';
 import {
   TripwireRun,
+  INVALID_SEALED_BATCH_MESSAGE,
   SECRET_TRANSFORM_NAMES,
   TRIPWIRE_INSPECTION_REFUSED_MESSAGE,
   detectTripwire,
@@ -51,7 +52,12 @@ describe('supervisor transform-aware tripwire detector', () => {
         SECRET_TRANSFORM_NAMES.filter((candidate) => candidate !== name),
       );
       expect(detectTripwire(run, evidence, canary).verdict).toBe('fail');
-      expect(detectTripwireWithTransforms(run, evidence, canary, enabled).verdict).toBe('pass');
+      expect(detectTripwireWithTransforms(
+        run,
+        [trusted(run, expectedVectors[name])],
+        canary,
+        enabled,
+      ).verdict).toBe('pass');
     },
   );
 
@@ -173,6 +179,34 @@ describe('module-private sealed-batch attestation', () => {
     runA.close();
     expect(() => runA.adjudicate(stale)).toThrow('Invalid, stale, or already-used sealed batch');
     expect(() => runA.mint([trusted(runB, 'safe')])).toThrow('Invalid, stale, or already-used sealed batch');
+  });
+
+  it('consumes evidence on direct detection and sealing so evidence cannot replay', () => {
+    const run = new TripwireRun(canary);
+    const directlyDetected = trusted(run, canary);
+    expect(detectTripwire(run, [directlyDetected], canary).verdict).toBe('fail');
+    expect(() => detectTripwire(run, [directlyDetected], canary))
+      .toThrow(TRIPWIRE_INSPECTION_REFUSED_MESSAGE);
+
+    const sealed = trusted(run, 'safe');
+    const batch = run.mint([sealed]);
+    expect(() => run.mint([sealed])).toThrow(TRIPWIRE_INSPECTION_REFUSED_MESSAGE);
+    expect(run.adjudicate(batch).verdict).toBe('pass');
+  });
+
+  it('revokes evidence and sealed batches when close finalizes the run', () => {
+    const run = new TripwireRun(canary);
+    const evidence = trusted(run, canary);
+    const staleBatch = run.mint([trusted(run, 'safe')]);
+
+    run.close();
+    run.close();
+
+    expect(() => detectTripwire(run, [evidence], canary))
+      .toThrow(TRIPWIRE_INSPECTION_REFUSED_MESSAGE);
+    expect(() => run.adjudicate(staleBatch)).toThrow(INVALID_SEALED_BATCH_MESSAGE);
+    expect(() => run.captureTrusted('late')).toThrow(INVALID_SEALED_BATCH_MESSAGE);
+    expect(() => run.captureMixed('late')).toThrow(INVALID_SEALED_BATCH_MESSAGE);
   });
 
   it('states the structural seam claim without claiming universal TypeScript uncallability', () => {

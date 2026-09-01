@@ -1,8 +1,8 @@
 import {
   SECRET_TRANSFORM_NAMES,
-  firstMatchingSecretTransform,
   type SecretTransformName,
 } from '../shared/secretTransforms';
+import { firstMatchingSecretTransform } from './secretMatcher';
 
 export { SECRET_TRANSFORM_NAMES };
 export type { SecretTransformName };
@@ -42,6 +42,7 @@ type SealedPayload = Readonly<{
 }>;
 
 const evidenceRecords = new WeakMap<object, EvidenceRecord>();
+const evidenceTokensByOwner = new WeakMap<object, Set<TripwireEvidence>>();
 const sealedPayloads = new WeakMap<object, SealedPayload>();
 const ALL_TRANSFORMS = new Set<SecretTransformName>(SECRET_TRANSFORM_NAMES);
 
@@ -50,8 +51,11 @@ function mintTripwireEvidence(
   provenance: EvidenceProvenance,
   bytes: string,
 ): TripwireEvidence {
+  const tokens = evidenceTokensByOwner.get(owner);
+  if (tokens === undefined) return refused();
   const token = Object.freeze({}) as TripwireEvidence;
   evidenceRecords.set(token, Object.freeze({ owner, provenance, bytes }));
+  tokens.add(token);
   return token;
 }
 
@@ -59,12 +63,24 @@ function snapshotTripwireEvidence(
   owner: object,
   evidence: readonly TripwireEvidence[],
 ): readonly OwnedTripwireEvidence[] {
-  const snapshot = Array.from(evidence, (token) => {
+  const tokens = evidenceTokensByOwner.get(owner);
+  if (tokens === undefined) return refused();
+  const seen = new Set<TripwireEvidence>();
+  const records = Array.from(evidence, (token) => {
     if (typeof token !== 'object' || token === null) return refused();
     const record = evidenceRecords.get(token);
-    if (record === undefined || record.owner !== owner) return refused();
-    return Object.freeze({ provenance: record.provenance, bytes: record.bytes });
+    if (record === undefined || record.owner !== owner || !tokens.has(token) || seen.has(token)) {
+      return refused();
+    }
+    seen.add(token);
+    return record;
   });
+  const snapshot = records.map((record) =>
+    Object.freeze({ provenance: record.provenance, bytes: record.bytes }));
+  for (const token of seen) {
+    evidenceRecords.delete(token);
+    tokens.delete(token);
+  }
   return Object.freeze(snapshot);
 }
 
@@ -87,13 +103,14 @@ export function detectTripwireWithTransforms(
 }
 
 export class TripwireRun {
-  readonly #canary: string;
+  #canary: string | null;
   readonly #tokens = new Set<SealedTripwireBatch>();
   #active = true;
 
   constructor(canary: string) {
     if (canary.length === 0) refused();
     this.#canary = canary;
+    evidenceTokensByOwner.set(this, new Set());
   }
 
   captureTrusted(bytes: string): TripwireEvidence {
@@ -117,17 +134,27 @@ export class TripwireRun {
   }
 
   adjudicate(batch: SealedTripwireBatch): TripwireVerdict {
-    if (!this.#active || typeof batch !== 'object' || batch === null) return invalidBatch();
+    const canary = this.#canary;
+    if (!this.#active || canary === null || typeof batch !== 'object' || batch === null) {
+      return invalidBatch();
+    }
     const payload = sealedPayloads.get(batch);
     if (payload === undefined || payload.owner !== this) return invalidBatch();
     sealedPayloads.delete(batch);
     this.#tokens.delete(batch);
-    return detectOwnedTripwire(payload.evidence, this.#canary, ALL_TRANSFORMS);
+    return detectOwnedTripwire(payload.evidence, canary, ALL_TRANSFORMS);
   }
 
   close(): void {
     if (!this.#active) return;
     this.#active = false;
+    this.#canary = null;
+    const evidenceTokens = evidenceTokensByOwner.get(this);
+    if (evidenceTokens !== undefined) {
+      for (const token of evidenceTokens) evidenceRecords.delete(token);
+      evidenceTokens.clear();
+      evidenceTokensByOwner.delete(this);
+    }
     for (const token of this.#tokens) sealedPayloads.delete(token);
     this.#tokens.clear();
   }

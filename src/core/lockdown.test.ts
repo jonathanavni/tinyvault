@@ -78,6 +78,19 @@ describe('provenance-keyed lockdown registry', () => {
     expect(() => domainA.authority.mint(first)).toThrow(INVALID_CONTROL_IDENTITY_MESSAGE);
   });
 
+  it('keeps an advanced-generation identity invalid after post-close trusted navigation', () => {
+    const { registry, authority, lifecycle } = createLockdownDomain();
+    lifecycle.clearOnTrustedTopLevelNavigation(first.sessionId);
+    const advancedGeneration = authority.mint(first);
+    registry.lock(advancedGeneration);
+
+    lifecycle.clearOnSessionClose(first.sessionId);
+    lifecycle.clearOnTrustedTopLevelNavigation(first.sessionId);
+
+    expect(() => registry.isLocked(advancedGeneration)).toThrow(INVALID_CONTROL_IDENTITY_MESSAGE);
+    expect(() => authority.mint(first)).toThrow(INVALID_CONTROL_IDENTITY_MESSAGE);
+  });
+
   it('catches exact capability mutation adding any taint-clear operation to the registry surface', () => {
     const { registry, lifecycle } = createLockdownDomain();
     expect(Reflect.ownKeys(registry)).toEqual(['lock', 'isLocked', 'isSameIdentity']);

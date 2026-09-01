@@ -272,3 +272,62 @@ sweep after `Symbol.toPrimitive` removal: zero leaks. Scope and neutrality clean
 
 CLOSED: A1, A2 (M2 scope), A3, A4, B1, B3, B4, C4, F2, F3 · **OPEN:** B2 (partial — F-3), C1 (F-1) ·
 **COSMETIC:** C2, C3 (F-2) · **PARTIAL:** D (F-6 + F-2).
+
+---
+
+# FINAL CLOSURE STATUS (appended — the round-2 table above is historical, not rewritten)
+
+The round-2 closure table records status **as of round 2**. It is deliberately left intact so the
+chronology stays honest. This section records the later disposition. Where the two disagree, this
+section is current.
+
+## Round-2 blockers — CLOSED
+
+| ID | Status now | Evidence |
+|---|---|---|
+| **C1 / F-1** | **CLOSED** (was OPEN) | Two explicit branches: ASCII keeps strict idempotence; non-ASCII requires `domainToUnicode(domainToASCII(raw)) === raw.normalize('NFC').toLowerCase()`, failing closed. Locked Appendix A row 9 preserved — `exämple.com`, its uppercase and canonically **decomposed** forms, and ASCII `xn--` all still accept. All mapping classes reject: fullwidth→ASCII, U+00AD, U+200B, U+2168, U+3002/U+FF0E/U+FF61. Reproducible proof: `scripts/unicode-origin-sweep.mjs`. |
+| **C2 / C3 / F-2** | **CLOSED** (was COSMETIC) | Each guard now killed by its own test. Verified by separate mutations: backslash → *"rejects a trailing backslash on an IPv6 authority as a delimiter"*; `@` alone and `%` alone → their two respective *"…before consulting the URL parser"* tests. The `@` test fails on `expected "URL" to not be called`, proving the pre-parse claim rather than mere rejection. |
+| **B2 / F-3** | **CLOSED** (was OPEN partial) | Resolution goes through parsed TypeScript compiler options. Real child-process CLI asserts exit 1; 8 independent alias vectors absent from the selftest all caught, control exits 0. |
+
+## Post-SHIP pre-merge items — the reviewer's SHIP was not the end
+
+An independent reviewer rejected merge-readiness *after* the confirmation pass returned SHIP, on four
+items. Three were code; all are now closed and independently verified.
+
+- **F-5 — CLOSED, and it should never have been deferred.** `firstMatchingSecretTransform` — the actual
+  secret-matching core — sat in **unprotected** `src/shared`, so a data-plane module could import the
+  matcher without ever touching `src/supervisor` and the gate would pass. That contradicted the
+  architecture's claim that matching executes only in the supervisor plane. *Exploitability-today was the
+  wrong test; a stated boundary either holds or it does not.* Note the shape: F-5 was **introduced by the
+  fix that deleted the filename exemption** so `isProtected` would be "the directory rule alone" — and then
+  created a third directory with no rule. The fix moved the hole rather than closing it.
+  **Now:** matching lives in protected `src/supervisor/secretMatcher.ts`; `src/shared` holds only the
+  canonical inventory and neutral encoders; the offline checker keeps its **own independent** matcher
+  (`firstMatchingCheckerTransform`) guarded by `metaGate`'s independent vectors. Verified: a data-plane
+  import of the matcher → CLI **exit 1**; a data-plane import of neutral encoding → **exit 0** (correctly
+  still allowed).
+- **F-4 — CLOSED.** `TripwireRun` closure semantics resolved rather than left in the ambiguous middle.
+  Evidence is single-use (direct detection *or* sealing consumes it); `close()` revokes unused evidence,
+  refuses later capture and mint, and drops the owned canary. Verified: replay → refused, re-seal →
+  refused, post-close detect/capture/mint → refused, closed run serializes with **no canary and zero own
+  properties** — while a genuine leak on first use still returns `fail`, so this is not a
+  refuse-everything detector.
+- **F-6 — CLOSED.** The known load-bearing survivor now has its test:
+  *"keeps an advanced-generation identity invalid after post-close trusted navigation"*. Verified by
+  deleting `lockdownDomain.ts`'s closed-session guard — that exact test fails, and passes on restore.
+
+## Reproducible evidence
+
+`scripts/unicode-origin-sweep.mjs` replaces the prose claim "750,327 accepted origins, 0 collisions".
+It groups every accepted input by returned origin using an oracle **independent of the validator's own
+rule**, and is itself falsifiable: neutralising the F-1 branch makes it report collapses (U+2063, U+2064,
+U+206A–C), and it returns clean on restore.
+
+## Genuinely deferred (recorded, accurate)
+
+- **Cherokee case-fold divergence** — `toLowerCase()` vs UTS-46 false-rejects 172 code points
+  (U+13A0–13F5, U+13F8–13FD, U+AB70–ABBF). **Fail-closed**; cosmetic, not a security gap.
+- **F-7** — capture-after-close throws the sealed-batch error for an operation producing no batch.
+  Error-classification only; confirmed still present.
+- **Redundant guards from the F-1 fix** — the empty-string checks and `catch` fallback, provably
+  behaviour-preserving. The fix spec says remove a redundant protection rather than ceremonially test it.
