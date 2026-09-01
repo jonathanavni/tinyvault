@@ -11,6 +11,9 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
+`2026-09-01-m2` — focus: dispatch M2 (security primitives) through the full 🔴 red-tier ladder, with B1’s M2 slice
+folded in, after splitting B1 across M2/M3/M4 and re-scoping the simplification question at the M1 testbed.
+
 `2026-08-31-build` — focus: lock Phase 0, build M0+M1 through the Codex ladder, absorb an independent
 Opus 5 audit. **Outcome: all three done; M2 is next.**
 
