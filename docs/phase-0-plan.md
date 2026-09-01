@@ -401,9 +401,45 @@ Spec §9 first-week target maps to **M0–M6** (spine + core + first two fixture
 ## 9. Codex ladder plan for this project
 
 - **This plan doc** → the full 3-round ladder is COMPLETE (§0.5/§0.6/§0.7) plus a fresh-context alignment review; LOCKED. Future amendments to locked contracts re-enter review as part of the implementing milestone's slice review, not a new plan round.
-- **🔴 milestones (M0-contracts, M1-checker, M2, M3, M4, M8, M9):** full ladder — Claude drafts the slice spec, Codex adversarial pre-impl review, **Codex implements** on a `codex/<task>` branch, Claude `/review`, Codex adversarial post-impl review, + `/security-review` third channel. Claude integrates; does not implement 🔴 slices in parallel.
+- **🔴 milestones (M0-contracts, M1-checker, M2, M3, M4, M8, M9):** full ladder — Claude drafts the slice spec, Codex adversarial pre-impl review, **Codex implements** on a `codex/<task>` branch, then the post-implementation review channels (`/review`, `/security-review`, Codex adversarial — ordering and per-milestone focus in §9.1). Claude integrates; does not implement 🔴 slices in parallel.
 - **🟡 milestones (M5, M6, M7):** Claude drafts, Codex post-impl adversarial pass. Fixture/injection-payload authoring is also the project's **safeguards-mitigation Codex trigger** (spec §11) if Fable 5 flags it.
 - **🟢 milestones (M10):** Claude-only (docs/table), light Codex pass optional.
+
+### 9.1 M2 review gate (the first slice that handles real secrets)
+
+The 🔴 ladder above is unchanged — Claude drafts the slice spec, Codex pre-impl review, **Codex implements**
+on `codex/m2-*`, Claude integrates. Within it, M2's **post-implementation review sequence runs in this
+order, on the pending branch while the diff still exists**:
+
+1. Claude `/review` (fresh-context QA)
+2. Claude `/security-review` (security-specialized third channel)
+3. Codex adversarial post-implementation diff review (cross-family)
+
+None of the three certifies M2; each is additive (see [`handoff-pattern.md` §7.1](handoff-pattern.md)).
+
+**Direct the security review at these surfaces** — they are M2-specific and a generalist pass will not
+find them unprompted:
+
+- `Secret<T>` exposure via coercion, JSON serialization, inspection, property enumeration, error paths, or logging.
+- Bare-origin parsing and normalization edge cases.
+- Exact result-constructor **noninterference** across differing secret values *and lengths*.
+- Mutex cleanup, exceptional release, reentrancy, session-close races, and stale lockdown/taint state.
+- The tripwire never altering caller-visible behavior or timing (§4 layer 3).
+- **M2 must not claim real-fill or DOM guarantees** — those are reserved for M4's integration gates (§8).
+
+**Simplification question, asked separately at the M2 merge review** (this is the standing answer to the
+implementation-LOC concern, not a one-off): *"Which state, abstraction, duplicated validation, or
+evidence-binding layer can be removed without weakening a locked invariant or test?"*
+
+### 9.2 Whole-codebase audit schedule
+
+Per [`handoff-pattern.md` §7.2](handoff-pattern.md) (which carries the tooling and hygiene rules):
+
+- **No heavyweight baseline audit before the real fill path exists** — auditing scaffolding produces noise.
+- **First full-codebase audit: after M4**, once `fillService` + browser controls make the trust boundary real.
+- **Second: before v0.1, after M9 integrates** (the security-sensitive 1Password backend), i.e. between M9 and M10.
+
+Neither audit changes milestone sequencing; both are gates on their milestone's completion, not new milestones.
 
 ---
 

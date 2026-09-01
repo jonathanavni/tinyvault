@@ -33,8 +33,8 @@ stub agent against the `benign-login` fixture and emitting a Wilson-CI scorecard
 **Next session:**
 - Dispatch **M2** (security primitives, 🔴): `Secret<T>`, bare-origin validator, taint/lockdown registry,
   session mutex, exact result constructors, tripwire as pure instrumentation. Unit-testable in isolation,
-  **no browser** (integration gates are M4). Full Codex ladder **plus `/security-review`** — M2 is the first
-  code that actually handles secrets.
+  **no browser** (integration gates are M4). **Review gate, focus surfaces, and the standing simplification
+  question: `docs/phase-0-plan.md` §9.1** (canonical — do not restate here).
 - Fold in **B1** from the amendment triage (never-cache-the-secret invariant + test), splitting it from
   legitimate backend auth-session caching.
 - Deferred audit items are already written into their milestones: **M4** (dom-fill live-DOM identity,
@@ -72,4 +72,27 @@ stub agent against the `benign-login` fixture and emitting a Wilson-CI scorecard
   - **D1 per-caller entitlements + audit log — DEFER-TO-MILESTONE (roadmap step 5), seam noted only.** Agreed as scoped, including "do not build a policy engine now." Note the seam is the **MCP adapter boundary (M8)**, not `CapturedEvent.initiator` — the latter is testbed evidence, not a caller-identity channel. Round-1 finding #1 already delivered the origin half trusted-side; the caller half is near-meaningless with one reference agent and becomes load-bearing only when multiple KuchiClaw groups share one fill service.
   - **E non-changes — ACKNOWLEDGED.** No reopening of origin authorization, the atomic in-realm inject primitive, the tripwire contract, or timing normalization; no payments work; rotation stays permanently the backend's job; no fixtures beyond C1; pinned model, N/Wilson methodology, and ladder ordering unchanged.
   - **Process note (my error, recorded so it does not repeat):** this proposal file was swept into the unrelated Codex commit `955905e` by a `git add -A`. Planning input should land in its own commit, and staging should use explicit paths — `git add -A` in a worktree shared with a delegated agent stages work I have not reviewed. No content was lost or altered; the attribution in history is simply wrong.
+- **2026-09-01** — **Security-review policy codified; canonical homes assigned.** Generic methodology →
+  `docs/handoff-pattern.md` **§7.1** (security review is *additive, never certification*; it does not replace
+  cross-model review, deterministic tests, noninterference tests, or the eval harness; a generalist pass is
+  weak on project-specific invariants, so if it disagrees with a purpose-built test **the test wins and the
+  disagreement is a finding**) and new **§7.2** (audit tooling + hygiene: read-only, reports stored outside
+  the worktree, auditor supplied the threat model/invariants/exclusions/accepted residuals, one baseline
+  auditor first, imported skills inspected and pinned to a reviewed commit/version). Project-specific gates →
+  `docs/phase-0-plan.md` **§9.1** (M2 post-impl review order: `/review` → `/security-review` → Codex
+  adversarial, run on the pending branch while the diff exists; the six M2 focus surfaces; the standing
+  simplification question at merge review) and **§9.2** (audit schedule: none before the real fill path
+  exists; first after **M4**; second before v0.1 after **M9** integrates). `PLAN.md` "Next session" trimmed to
+  a pointer so the gate is stated once. No source, tests, milestone sequencing, locked invariants, thresholds,
+  or accepted residual risks were changed.
+- **2026-09-01** — **Trail of Bits differential-review: DECLINED for the M2 gate; reconsider at M4/M8/M9.**
+  M2 is predominantly greenfield, and history-aware differential review substantially overlaps the Codex
+  adversarial diff pass already in the ladder — paying twice for one coverage class. It earns its place only
+  where a large or history-sensitive diff makes git-history provenance and blast radius the actual question,
+  which is plausible at M4 (fill service + browser), M8 (MCP adapter), or M9 (1Password backend). Generic form
+  of the rule recorded in `handoff-pattern.md` §7.2.
+- **2026-09-01** — **Cursor and Vercel: DECLINED as review platforms.** TinyVault already runs a working
+  Claude–Codex cross-family workflow; adding another hosted platform fragments the process without a named
+  coverage gap it closes. Standing rule ("add a channel only against a named gap") in `handoff-pattern.md`
+  §7.2. Revisit only if a specific gap is identified that the current two families demonstrably miss.
 

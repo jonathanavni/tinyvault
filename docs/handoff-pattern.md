@@ -212,6 +212,36 @@ If your toolchain ships a security-specialized reviewer (Claude Code's built-in 
 
 Skip it on refactors, pure docs, and non-security features. It is typically same-model (Claude) and diff-aware (blind to pre-existing code), so keep the Codex pass for cross-model coverage, and run a baseline sweep separately for the code that already exists.
 
+**It is additive, never certification.** A clean security-review is one more input, not a verdict that a change is safe. It does **not** replace, and must never be recorded as having replaced:
+
+- cross-model (different-family) adversarial review,
+- the deterministic test suite,
+- noninterference / side-channel tests,
+- or the project's own evaluation harness, where one exists.
+
+A generalist security reviewer is typically strongest on conventional classes (injection, secrets in logs, auth bypass) and weakest on project-specific invariants — "does this boolean leak an equality bit about the secret" is not a class it is tuned for. Those invariants stay the job of purpose-built tests. If a security-review pass and a purpose-built test disagree, the test wins and the disagreement is a finding.
+
+**Diff-aware review cannot audit what already merged.** A change reviewed while pending is covered; code that landed earlier is not. That is the gap a periodic whole-codebase audit fills — see below.
+
+### 7.2 Whole-codebase security audits
+
+Distinct from per-diff review: an audit sweeps existing code, including everything a diff-aware pass never saw.
+
+**Timing.** Do not run a heavyweight baseline audit before the system's core security path actually exists — auditing scaffolding produces noise and false confidence. Schedule audits against milestones where a real trust boundary has landed; the concrete schedule for this project is in [`phase-0-plan.md` §9.2](phase-0-plan.md).
+
+**Tooling.** Prefer a first-party security scanner where scan access is available; otherwise an open, inspectable audit skill. **Start with one baseline auditor** rather than running several automatically — a second is worth adding only once the first's findings are understood and its blind spots named.
+
+**Hygiene, non-negotiable:**
+
+- Run audits **read-only**. An auditor must not mutate the worktree.
+- Store reports **outside the source worktree**, so findings never land in a commit unreviewed.
+- Supply the auditor the project's **threat model, enforced invariants, explicit exclusions, and accepted residual risks** — an auditor without them re-reports known, deliberate tradeoffs as findings and buries the real ones.
+- **Inspect and pin any imported skill or plugin** to a reviewed commit or version. An unpinned auditor is arbitrary third-party code with repository read access.
+
+**Differential / history-aware review skills** (git-history and blast-radius analysis) substantially overlap an adversarial diff pass and add little on predominantly greenfield code. Reserve them for large or history-sensitive diffs where provenance and blast radius are the actual question.
+
+**Do not multiply platforms.** Where a working cross-family review workflow already exists, adding another hosted platform fragments the workflow without a defined coverage gain. Add a channel only against a named gap it closes.
+
 ---
 
 ## 8. Codex Must-Not-Do List
