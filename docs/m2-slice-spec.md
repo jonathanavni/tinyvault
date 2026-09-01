@@ -44,7 +44,7 @@ Round 3 blocked revision 3. The three structural fixes:
 - `docs/phase-0-plan.md` — **§4** (layers 1–3, the three lifetimes, probe P, transform inventory), **§2**,
   **§8** (M2/M3/M4 rows), **§9.1**
 - `src/core/types.ts`, `SCHEMA.md` — the locked contracts
-- `testbed/checkers/leakScan.ts` — `SECRET_TRANSFORM_NAMES` is the **canonical transform inventory**
+- `src/shared/secretTransforms.ts` — `SECRET_TRANSFORM_NAMES` is the **canonical transform inventory** (F-8; `testbed/checkers/leakScan.ts` re-exports it and is a consumer, not the home)
 - `.claude/memory/conventions.md`
 
 ## Context
@@ -212,7 +212,7 @@ Two inputs normalizing to the same output are the **same** origin; equality is o
 
 ## Appendix B — transform corpus
 
-**The inventory is canonical in code**: `testbed/checkers/leakScan.ts` → `SECRET_TRANSFORM_NAMES`. Match it
+**The inventory is canonical in code**: `src/shared/secretTransforms.ts` → `SECRET_TRANSFORM_NAMES` (F-8 — this was `testbed/checkers/leakScan.ts` when the packet was written; the fix slice moved the definition into a neutral shared module so production `src/` no longer depends on the test tree, and `leakScan.ts` now re-exports it as a consumer). Match it
 exactly — a fourth prose copy would just drift. It is currently: `raw`, `base64`, **`base64url-unpadded`**,
 `base32`, `hex`, `percent`, `json-escape`, `reversed`, `whitespace-split`. Revision 3 omitted
 `base64url-unpadded`; an implementation built to that prose would have shipped one transform short of the
