@@ -507,3 +507,12 @@ for untyped packages only — with zero runtime dependencies on `main`, nothing 
 **Disposition:** folded into the M3 slice (`docs/m3-slice-spec.md` §7) as a fix of the class — resolve
 external packages to their runtime entry, never to types — with a selftest fixture and a legitimate-traffic
 control. Not a rewrite of the round-4 row above; the over-claim is named here instead.
+
+**G-2 — the `createRequire` ban is heuristic (2026-09-01, found by the M3 QA channel; pre-existing on
+`main`).** `scripts/dependency-boundary.mjs` recognises `createRequire` by identifier and property-name
+patterns; `m['createRequire']` (element access) and `import('node:module').then(({ createRequire: cr }) =>
+…)` (destructured dynamic import) are not recognised and pass. Not introduced by M3; recorded here so the
+round-4 closure row is read with this limit. Disposition: the gate's threat model is accidental
+data-plane→supervisor reachability, not hostile in-repo code (spec §4 — "arbitrary hostile code already
+executing inside the trusted host is outside the threat model"); left open, revisit if the gate's scope ever
+widens to untrusted contributions.

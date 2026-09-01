@@ -108,7 +108,8 @@ Round 1's findings, and how each was absorbed:
 5. **Gate fix underspecified (P1).** A main/index-only resolver passes the one proposed fixture while
    missing conditional/subpath/transitive edges. **Fix:** parent-aware, Node-compatible resolution per edge
    syntax, union of the `import` and `require` condition branches, and an enumerated fixture matrix each
-   with a protected and a clean branch (§7).
+   with a protected and a clean branch (§7). *(The "union" wording was amended post-implementation to
+   per-syntax resolution — register C1.)*
 6. **Writer could destroy the only key / tear the vault (P1).** **Fix:** exclusive key creation (`wx`),
    same-directory temp + fsync + atomic rename for the vault, mode-on-fresh-file only, with tests (D6, G).
    *(Mode rule superseded by r3 #4: replacement is always `0600`.)*
@@ -502,8 +503,11 @@ dependency to expose it. Recorded as G-1 in `docs/m2-review-findings.md`.
 
 - Resolve external specifiers with **Node-compatible, parent-aware resolution chosen by edge syntax**:
   `require`-style edges through the `require` condition set, `import`/re-export/dynamic-`import()` edges
-  through the `import` condition set (`node`, `default` in both). **Scan the union** of the two resolved
-  targets whenever they differ — the gate is an over-approximation by design, never an under-approximation.
+  through the `import` condition set (`node`, `default` in both). **Each edge is resolved by its own syntax
+  only** — *amended post-implementation (register C1)*: r4 said "scan the union of the two resolved
+  targets"; the implementation resolves per syntax, which is the Node-accurate model (an `import` edge can
+  never load the `require` branch), and fixtures 2/11 assert it. The over-approximation rule below still
+  holds: anything the resolver cannot follow fails closed.
 - Honor `exports` (conditional and subpath, including `exports` sugar strings and arrays), `main`, and the
   `index.js` fallback; `.mjs`/`.cjs`/`.js` entries; package self-references; symlinked packages (resolve
   through `fs.realpathSync` so a symlinked workspace is scanned at its real path and not double-counted).
@@ -514,8 +518,8 @@ dependency to expose it. Recorded as G-1 in `docs/m2-review-findings.md`.
   `import.meta.resolve(specifier, pathToFileURL(importerPath).href)` for `import`/re-export/dynamic-`import()`
   edges. The parent argument is honored **only** under `--experimental-import-meta-resolve` — without the
   flag it is silently ignored and resolution happens relative to the gate script — so **both** the gate
-  invocation and the selftest invocation in `package.json` carry the flag, and the script header documents
-  why. Catch resolution errors and treat them as `unresolved` (fail closed). No `resolve.exports`, no
+  invocation and the selftest invocation in `package.json` carry the flag, the script header documents
+  why, **and the gate refuses to run unflagged** (post-impl register B2). Catch resolution errors and treat them as `unresolved` (fail closed). No `resolve.exports`, no
   hand-written `exports` walker, no new dependency of any kind for the gate. In-repo `.ts` sources keep
   TypeScript resolution as today.
 - **Selftest matrix** — each fixture in a temp `node_modules`, each with a **protected branch** (runtime JS
