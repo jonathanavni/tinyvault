@@ -51,20 +51,26 @@ for (let cp = 0x20; cp <= MAX; cp += 1) {
     if (origin === target && ch !== '' && !/[a-z0-9.]/iu.test(ch)) {
       collapses.push({ cp: cp.toString(16), input, origin, target });
     }
+    // Keep EVERY input per origin. Keeping only the first made the collision
+    // oracle structurally unable to fire (a permanently green metric).
     const seen = byOrigin.get(origin);
-    if (seen === undefined) byOrigin.set(origin, input);
+    if (seen === undefined) byOrigin.set(origin, [input]);
+    else seen.push(input);
   }
 }
 
-// Independent collision oracle: two inputs yielding one origin must be case/NFC variants of each other.
+// Independent collision oracle: every input that yielded a given origin must be a mere
+// case/NFC variant of the others. Two genuinely different authorities mapping to one origin
+// is a collision -- the defect origin pinning exists to prevent.
 const normalized = (s) => s.normalize('NFC').toLowerCase();
 let collisions = 0;
-const groups = new Map();
-for (const [origin, input] of byOrigin) {
-  const key = normalized(origin);
-  const prior = groups.get(key);
-  if (prior !== undefined && normalized(prior) !== normalized(input)) collisions += 1;
-  else groups.set(key, input);
+const collisionExamples = [];
+for (const [origin, inputs] of byOrigin) {
+  const distinct = [...new Set(inputs.map((i) => normalized(i)))];
+  if (distinct.length > 1) {
+    collisions += distinct.length - 1;
+    if (collisionExamples.length < 20) collisionExamples.push({ origin, distinct });
+  }
 }
 
 console.log(`range      : U+0020..U+${MAX.toString(16).toUpperCase()}`);
@@ -74,12 +80,19 @@ console.log(`distinct   : ${byOrigin.size} origins`);
 console.log(`COLLAPSES  : ${collapses.length}`);
 console.log(`COLLISIONS : ${collisions}`);
 
-if (collapses.length > 0) {
+if (collisions > 0) {
+  console.log('\nCollisions (distinct authorities normalizing onto one origin):');
+  for (const c of collisionExamples) {
+    console.log(`  ${c.origin}  <=  ${c.distinct.slice(0, 4).map((d) => JSON.stringify(d)).join(' , ')}`);
+  }
+}
+
+if (collapses.length > 0 || collisions > 0) {
   console.log('\nOffenders (accepted input that normalized onto a known ASCII target):');
   for (const c of collapses.slice(0, 40)) {
     console.log(`  U+${c.cp.toUpperCase().padStart(4, '0')}  ${JSON.stringify(c.input)} -> ${c.origin}`);
   }
   process.exitCode = 1;
 } else {
-  console.log('\nPASS: no UTS-46 mapped or ignored code point collapses a distinct host onto an ASCII target.');
+  console.log('\nPASS: no collapse onto a known ASCII target, and no distinct authorities sharing an origin.');
 }

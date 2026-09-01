@@ -17,9 +17,24 @@ export function checkDependencyBoundary(root) {
     const parsed = dependencies(file, fs.readFileSync(file, 'utf8'));
     const edges = parsed.edges.map(({ specifier, syntax }) => {
       const target = resolveSpecifier(file, specifier, fileSet, options);
+      if (target !== undefined && isNodeModulesFile(target)) {
+        addExternalEntry(graph, target, fileSet, options);
+      }
       return target === undefined && specifier.startsWith('.')
-        ? { target: path.resolve(path.dirname(file), specifier), syntax, unresolved: true }
-        : { target, syntax, unresolved: false };
+        ? {
+            target: path.resolve(path.dirname(file), specifier),
+            syntax,
+            unresolved: true,
+            unscanned: false,
+          }
+        : {
+            target,
+            syntax,
+            unresolved: false,
+            unscanned: target !== undefined
+              && !fileSet.has(target)
+              && !isNodeModulesFile(target),
+          };
     }).filter(({ target }) => target !== undefined);
     graph.set(file, { edges, unsupported: parsed.unsupported });
   }
@@ -65,6 +80,15 @@ export function checkDependencyBoundary(root) {
             entry,
             target: edge.target,
             syntax: `unresolved relative ${edge.syntax}`,
+            path: dependencyPath,
+          });
+          continue;
+        }
+        if (edge.unscanned) {
+          violations.push({
+            entry,
+            target: edge.target,
+            syntax: `unscanned ${edge.syntax}`,
             path: dependencyPath,
           });
           continue;
@@ -210,7 +234,7 @@ function resolveSpecifier(importer, specifier, fileSet, compilerOptions) {
   ).resolvedModule?.resolvedFileName;
   if (compilerResolved !== undefined) {
     const target = path.resolve(compilerResolved);
-    if (fileSet.has(target)) return target;
+    if (isRealFile(target)) return target;
   }
 
   if (!specifier.startsWith('.')) return undefined;
@@ -223,6 +247,34 @@ function resolveSpecifier(importer, specifier, fileSet, compilerOptions) {
   }
   for (const extension of SOURCE_EXTENSIONS) candidates.push(path.join(unresolved, `index${extension}`));
   return candidates.map((candidate) => path.resolve(candidate)).find((candidate) => fileSet.has(candidate));
+}
+
+function addExternalEntry(graph, file, fileSet, compilerOptions) {
+  if (graph.has(file)) return;
+  const parsed = dependencies(file, fs.readFileSync(file, 'utf8'));
+  const edges = parsed.edges.flatMap(({ specifier, syntax }) => {
+    const target = resolveSpecifier(file, specifier, fileSet, compilerOptions);
+    if (target === undefined || isNodeModulesFile(target)) return [];
+    return [{
+      target,
+      syntax: `external-package ${syntax}`,
+      unresolved: false,
+      unscanned: !fileSet.has(target),
+    }];
+  });
+  graph.set(file, { edges, unsupported: [] });
+}
+
+function isRealFile(file) {
+  try {
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isNodeModulesFile(file) {
+  return path.resolve(file).split(path.sep).includes('node_modules');
 }
 
 function configurationViolation(root, message) {

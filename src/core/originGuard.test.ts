@@ -106,6 +106,18 @@ describe('bare-origin validator normative table', () => {
     expect(() => validateBareOrigin(input)).toThrow(INVALID_ORIGIN_MESSAGE);
   });
 
+  it('pins the pre-parse C0-or-DEL guard after an IPv6 closing bracket', () => {
+    const controls = [
+      ...Array.from({ length: 0x21 }, (_unused, codePoint) => String.fromCodePoint(codePoint)),
+      String.fromCodePoint(0x7f),
+    ];
+    for (const control of controls) {
+      expect(() => validateBareOrigin(`https://[2001:db8::1]${control}`)).toThrow(
+        INVALID_ORIGIN_MESSAGE,
+      );
+    }
+  });
+
   it.each([
     'https://example.com:0443',
     'http://example.com:00080',

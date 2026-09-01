@@ -286,7 +286,7 @@ section is current.
 | ID | Status now | Evidence |
 |---|---|---|
 | **C1 / F-1** | **CLOSED** (was OPEN) | Two explicit branches: ASCII keeps strict idempotence; non-ASCII requires `domainToUnicode(domainToASCII(raw)) === raw.normalize('NFC').toLowerCase()`, failing closed. Locked Appendix A row 9 preserved — `exämple.com`, its uppercase and canonically **decomposed** forms, and ASCII `xn--` all still accept. All mapping classes reject: fullwidth→ASCII, U+00AD, U+200B, U+2168, U+3002/U+FF0E/U+FF61. Reproducible proof: `scripts/unicode-origin-sweep.mjs`. |
-| **C2 / C3 / F-2** | **CLOSED** (was COSMETIC) | Each guard now killed by its own test. Verified by separate mutations: backslash → *"rejects a trailing backslash on an IPv6 authority as a delimiter"*; `@` alone and `%` alone → their two respective *"…before consulting the URL parser"* tests. The `@` test fails on `expected "URL" to not be called`, proving the pre-parse claim rather than mere rejection. |
+| **C2 / F-2** | **CLOSED** (was COSMETIC) | The **delimiter and userinfo** guards are killed by their own tests. (**C3's control-character guard was NOT** — see the pre-merge round below; this row originally over-claimed it.) Verified by separate mutations: backslash → *"rejects a trailing backslash on an IPv6 authority as a delimiter"*; `@` alone and `%` alone → their two respective *"…before consulting the URL parser"* tests. The `@` test fails on `expected "URL" to not be called`, proving the pre-parse claim rather than mere rejection. |
 | **B2 / F-3** | **CLOSED** (was OPEN partial) | Resolution goes through parsed TypeScript compiler options. Real child-process CLI asserts exit 1; 8 independent alias vectors absent from the selftest all caught, control exits 0. |
 
 ## Post-SHIP pre-merge items — the reviewer's SHIP was not the end
@@ -331,3 +331,73 @@ U+206A–C), and it returns clean on restore.
   Error-classification only; confirmed still present.
 - **Redundant guards from the F-1 fix** — the empty-string checks and `catch` fallback, provably
   behaviour-preserving. The fix spec says remove a redundant protection rather than ceremonially test it.
+
+---
+
+# PRE-MERGE ROUND (final) — one blocker found and closed, plus two of my own defects
+
+A final pre-merge confirmation returned **NO-SHIP**. The shipped code was correct throughout; the defects
+were in *verification*. Recorded because the pattern repeated.
+
+## Blocker — the C3 control-character guard had no test. CLOSED.
+
+`src/core/originGuard.ts` line 9 (reject any code point `U+0000..U+0020` or `U+007F`, pre-parse) could be
+**deleted with the entire suite staying green**. Verified consequence on the mutant:
+
+```
+BASELINE   ipv6 + U+0000 -> reject      ipv6 + U+0020 -> reject
+MUTANT     ipv6 + U+0000 -> ACCEPT https://[2001:db8::1]
+           ipv6 + U+0020 -> ACCEPT https://[2001:db8::1]      full suite: GREEN
+```
+
+**Root cause:** `hostnameFromAuthority` returns `authority.slice(0, closingBracket + 1)` — discarding every
+byte after an IPv6 closing bracket — and `portFromAuthority` returns `undefined` unless the next character
+is a colon. So neither the ASCII idempotence check nor the port rule ever sees post-bracket bytes. Line 9
+is the sole defense for that class.
+
+**Why it survived, which is the part worth keeping:** every control-character vector in the suite used the
+plain ASCII host `https://example.com`, where the idempotence check rejects first. That is **verbatim the
+F-2 finding from the previous round**. The fix slice had already identified the IPv6 authority as the right
+region for trailing junk — it wrote exactly that test for the backslash guard — and did not extend the
+reasoning to the control vectors three lines away. *The earlier fix addressed the instance, not the class.*
+
+**Now:** full `U+0000..U+0020` + `U+007F` coverage after an IPv6 closing bracket. Verified — deleting the
+guard fails exactly *"pins the pre-parse C0-or-DEL guard after an IPv6 closing bracket"*.
+
+## Gate: non-relative specifiers resolving outside the scanned set. CLOSED.
+
+Unresolved **relative** specifiers became violations in an earlier fix; unresolved **non-relative** ones
+were still dropped silently. Two demonstrated bypasses put the matcher in a data-plane module at exit 0:
+a tsconfig `paths` alias through an out-of-`include` directory, and a `node_modules` relay. Third instance
+of the silent-disarm shape (after B3 and F-3). Now both exit 1, verified independently, while a genuine
+third-party import still exits 0 — the gate discriminates rather than blanket-rejecting.
+
+## My own defect: the sweep script had the disease it was written to cure. CLOSED.
+
+`scripts/unicode-origin-sweep.mjs` kept only the **first** input per origin
+(`if (seen === undefined) byOrigin.set(...)`), so the collision loop iterated already-unique keys and its
+detection branch was **unreachable**. `COLLISIONS: 0` was a permanently green light — in the script written
+to retire an unverifiable prose claim. This is exactly the project's own *"a leak checker that runs green
+but doesn't actually detect a leak is two bugs."*
+
+Repaired to retain every input per origin, and proven falsifiable on a real F-1 mutant:
+
+```
+mutant    COLLAPSES 48   COLLISIONS 1002   exit 1
+          https://exa(mple.com  <=  "exa(mple.com" , "exa<U+207D>mple.com" , "exa<U+208D>mple.com"
+restored  COLLAPSES  0   COLLISIONS    0   PASS
+```
+
+The `COLLAPSES` half was sound all along; only the collision half was dead.
+
+## Deferred, recorded accurately
+
+- **Sweep template coverage.** `COLLAPSES` only detects collapse onto its two hard-coded ASCII targets, so
+  e.g. `exaKmple.com` (U+212A KELVIN) → `exakmple.com` does not fire. Benign here (canonical equivalence,
+  same destination), but the oracle is narrower than "no collapse anywhere".
+- **`src/shared` exports `secretTransforms(canary)`**, so the plane split is **organizational, not a
+  capability boundary** — a data-plane module can rebuild a serviceable matcher from the encoders. Per
+  spec (the checker needs them), and a module holding a canary already holds the plaintext. Recorded so the
+  boundary is not later over-claimed.
+- Cherokee fail-closed false-reject (172 code points); **F-7** error classification; the redundant F-1
+  guards — all unchanged and still accurate as previously described.

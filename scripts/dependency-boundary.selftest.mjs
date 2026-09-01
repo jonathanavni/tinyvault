@@ -39,6 +39,44 @@ withFixture("import '@sup/evaluator';", (root) => {
   paths: { '@sup/*': ['src/supervisor/*'] },
 });
 
+withFixture("import { match } from '@relay/relay'; void match;", (root) => {
+  write(root, 'lib/relay.ts',
+    "export { match } from '../src/supervisor/secretMatcher';\n");
+  assertCliStatus(root, 1,
+    'unscanned tsconfig paths relay silently disarmed the real dependency-gate CLI');
+}, {
+  baseUrl: '.',
+  paths: { '@relay/*': ['lib/*'] },
+});
+
+withFixture("import { match } from 'probe-relay'; void match;", (root) => {
+  write(root, 'node_modules/probe-relay/package.json', JSON.stringify({
+    name: 'probe-relay',
+    version: '1.0.0',
+    type: 'module',
+    exports: './index.ts',
+  }));
+  write(root, 'node_modules/probe-relay/index.ts',
+    "export { match } from '../../src/supervisor/secretMatcher';\n");
+  assertCliStatus(root, 1,
+    'node_modules relay silently disarmed the real dependency-gate CLI');
+});
+
+withFixture(
+  "import { readFile } from 'node:fs'; import { safe } from 'clean-package'; void readFile; void safe;",
+  (root) => {
+    write(root, 'node_modules/clean-package/package.json', JSON.stringify({
+      name: 'clean-package',
+      version: '1.0.0',
+      type: 'module',
+      exports: './index.ts',
+    }));
+    write(root, 'node_modules/clean-package/index.ts', "export const safe = true;\n");
+    assertCliStatus(root, 0,
+      'node builtin and genuine third-party package did not pass the real dependency-gate CLI');
+  },
+);
+
 const unsupportedCases = [
   ['computed dynamic import', "const target = '../supervisor/evaluator'; void import(target);"],
   ['aliased require', "const load = require; void load('../supervisor/evaluator');"],
