@@ -1,9 +1,11 @@
 # M2 Slice Spec — Security Primitives (Codex implementation handoff)
 
-> **Status:** revision 2, for Codex **pre-implementation adversarial review round 2** (ladder step 2; cap is
-> round 3). Revision 1 returned **NO-SHIP** — 9 findings (2 crit, 6 high, 1 med), **all accepted**. Three
-> were drift this packet introduced; two exposed genuine contradictions in the *locked plan*, which has been
-> amended (see **Amendments** below).
+> **Status:** revision 3, for Codex **pre-implementation adversarial review round 3** (the cap).
+> Revision 1: **NO-SHIP**, 9 findings, all accepted — three were packet drift, two exposed genuine
+> contradictions in the *locked plan*, which was amended. Revision 2: **NEEDS-ATTENTION**, 4 findings
+> (1 high, 2 med, 1 low), all accepted, with **all 9 round-1 findings confirmed CLOSED and none
+> cosmetic**. Round 2 also ran on a different reviewer model than round 1 (`gpt-5.6-sol` was at
+> capacity), so its absorption check is fresh-eyes rather than the original finder re-checking itself.
 > Governed by [`phase-0-plan.md`](phase-0-plan.md) §8 (M2 row), §9.1 (review gate), §4 (redaction layers),
 > §2 (contracts), `SCHEMA.md`. Those are authoritative — this packet **implements** them and may not
 > reinterpret them.
@@ -43,6 +45,29 @@ contract conflict is kicked back to the continuity owner, and this is that path 
 6. **§8 M4 row — B1 slice 3/3 upgraded to a rotation test**; **§8 M8 row** — MCP capture seam proved.
 7. **§9.1 — mutex non-reentrancy chosen** (it named reentrancy as a review surface without picking a
    behavior).
+
+Round 2 then found four more, all absorbed:
+
+8. **§4 layer 3 — the "supervisor-facing seam" is now an exact API, not a label** (R2 #1, high). An
+   unpinned seam could later be satisfied by an `onMatch(callback)` or `scanAndReport()` reachable from
+   the data plane — re-opening the banned callback oracle. Pinned: **sealed batch in → verdict +
+   fixed-shape diagnostics out**, control-plane only, refusing caller-originated/mixed-provenance bytes
+   at the type level.
+9. **§4 — lease finalization is run-bound** (R2 #2). The old text never said what happens if the
+   end marker never arrives. Missing marker or capture error now marks the run invalid/red and drops
+   the lease in a supervisor `finally`; a lease never outlives its run.
+10. **§4 — two honest-claims violations in the plan itself** (R2 #3). It still said the tripwire "never
+   changes caller-visible behavior or timing" and that the differential "proves no timing channel."
+   Both replaced with bounded claims. *This packet asserted the honest-claims rule while the plan
+   still broke it — a self-consistency failure worth naming, not quietly patching.*
+11. **§4 — the transform corpus is normative** (R2 #4), with exact expected strings pinned
+   independently of the detector, including base32 padding/case, hex case, percent-encoding case,
+   JSON escape forms, and whitespace-split shape.
+12. **Continuity-owner addition (not from either review): lockdown identities are branded capability
+   types**, constructor private to the trusted side, so forging one is a compile error. Round 1's
+   reviewer had flagged the risk that registry tests "prove capability provenance rather than merely
+   exercise a map" before its run died on a capacity error; round 2 did not re-raise it. Same
+   "executable contract, not a label" class as R2 #1.
 
 ## Required Reading
 
@@ -86,8 +111,10 @@ Implement in `src/core/`:
    table** — do not leave edge cases to inference. No live browser state; comparison against a live
    top-level origin is M4's.
 3. **`lockdown.ts` — taint/lockdown registry.** Provenance-keyed, never content-keyed. Identities are
-   **trusted-host-minted opaque capability tokens** with explicit session/document/frame/element components
-   and stated equality rules — *not* model-supplied strings. The registry API **never accepts content**.
+   **trusted-host-minted BRANDED capability types** — a nominal/branded type whose constructor is
+   private to the trusted side, so **forging one is a compile error, not a convention violation**.
+   Typed as a bare `string` the registry tests degrade into exercising a `Map` and prove nothing about
+   provenance. Explicit session/document/frame/element components with stated equality rules. The registry API **never accepts content**.
    **No generic `unlock`**: clearing happens only via trusted lifecycle operations
    (clear-on-trusted-top-level-navigation, clear-on-session-close), per §4 layer 2.
 4. **`sessionMutex.ts` — per-session mutex.** Non-reentrant `runExclusive(session, fn)`; same-session nested
@@ -100,7 +127,11 @@ Implement in `src/core/`:
    *(The differing-value/length differential is **M4's** — see Do-not-implement.)*
 6. **`tripwire.ts` — detector + diagnostic types + supervisor-facing seam ONLY.** A pure, transform-aware
    detector over the **full §4 matrix**: raw, base64, base32, hex, percent, JSON-escape, reversed,
-   whitespace-split. Fixed-shape, non-secret diagnostic types. **Do not inject a callback sink into the
+   whitespace-split — against the **normative corpus** (§4), whose expected
+   strings are pinned independently of your detector so it cannot pass against its own narrow
+   examples. **The seam has a pinned shape: sealed batch in → verdict + fixed-shape diagnostics out.**
+   Control-plane only: no callbacks, no mutation of caller state, no per-event data-plane hook, and it
+   refuses caller-originated/mixed-provenance bytes at the type level. Fixed-shape, non-secret diagnostic types. **Do not inject a callback sink into the
    caller path** — TypeScript cannot guarantee a callback won't throw, block, or mutate caller state, which
    re-opens the oracle. Detector and sink execution belong to the supervisor plane. "Trusted-originated" is
    defined **by provenance**; mixed caller/host strings are **refused, not scanned**.
@@ -141,9 +172,13 @@ Codex must avoid: `PLAN.md`, `.claude/memory/*`, `docs/*`, `testbed/*`, `src/age
 - **Lockdown:** session/document isolation; distinct-but-similar identities; stale-token rejection;
   navigation and session-close bulk clearing. Assert **registry-state semantics only** — do not simulate
   masking and present it as the DOM guarantee (M4 owns that).
-- **Tripwire detector:** the full transform matrix, each transform failing independently if deleted; plus
-  false-positive controls and mixed-provenance strings it must **refuse to inspect**. Assert
-  **supervisor-verdict semantics only** — M2 must not claim `make eval` fails.
+- **Tripwire detector:** the full transform matrix against the normative corpus, each transform failing
+  independently if deleted; plus false-positive controls and mixed-provenance strings it must **refuse
+  to inspect**. Assert **supervisor-verdict semantics only** — M2 must not claim `make eval` fails.
+- **Tripwire seam (R2 #1):** a test *or type-check* proving the seam **cannot be used as a callback
+  sink in the caller path**. A comment saying so is not the deliverable; make it unrepresentable.
+- **Lockdown tokens (amendment 12):** a compile-time negative case proving a forged/plain-string token
+  is rejected. Without this the registry tests only prove `Map` semantics.
 
 **Absence-detection:** for each primitive, include at least one test that **fails if the protection is
 removed**. A green suite that stays green after you delete the protection is the failure mode here.
