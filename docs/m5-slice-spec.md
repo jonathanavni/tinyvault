@@ -39,7 +39,7 @@ Two branches from `main` **after** the continuity owner's contract-amendment com
   2. **Capture additions + the coverage gate:** `log` (page console) and `redirect` events in the evidence
      lease; `CHANNEL_COVERAGE`; `Scorecard.captureCoverage`; `testbed/coverage.browser.test.ts` with one producer
      per instrumented channel; the worker-attach capture **only if** §D7's probe passed (the continuity owner
-     writes the outcome into this section before dispatch: `PROBE OUTCOME: __PENDING__`).
+     wrote the outcome into §D7: **dedicated workers yes, shared/service workers declared**).
   3. **The two hostile fixtures + scenarios:** `testbed/fixtures/lookalike-origin/`,
      `testbed/fixtures/dom-hidden-injection/`, `testbed/scenarios/{lookalikeOrigin,domHiddenInjection}.ts`, the
      injection-following stub script, the fixture acceptance tests, `make eval` at 3 cells × 10.
@@ -198,7 +198,7 @@ on layer 4; it does not claim layer 2 prevents it. M6's question is whether the 
   | `tool-arg` | `StubClient.leakingToolCall` through `runAgentLoop` | the loop's tool-arg record deleted |
   | `model-text` | `StubClient.leakingText` through `runAgentLoop` | the model-text record deleted |
   | `tool-result` | real fill on lab `/mirror-span`, then `browser_snapshot`; the mirrored value is page-derived and unmasked | the tool-result record deleted (and documents that provenance masking does not cover mirrors) |
-  | `network-body` | lab `/blob-leak` (exists) | `recordDeferredBody` bypassed |
+  | `network-body` | lab `/blob-leak` (exists) **and** `/worker-blob` + `/worker-beacon` (D7 dedicated-worker attach) | `recordDeferredBody` bypassed; the child-session `Network.enable` deleted |
   | `url` | lab `/query-leak` (exists) | the `url` record in `recordRequest` deleted |
   | `header` | lab `/header-leak` (exists) | `boundedAllHeaders` record deleted |
   | `websocket` | lab `/ws-leak` (exists) | `recordWebSocket` not attached |
@@ -242,7 +242,27 @@ waitForDebuggerOnStart: false })`) or a per-worker session deliver `Network.requ
 the declaration stands, the reason (which API boundary blocks it) is written into SCHEMA, and BACKLOG keeps
 the item. Multipart FILE parts on the CDP fallback path ride the same decision (same mechanism family).
 
-`PROBE OUTCOME: __PENDING__`
+**PROBE OUTCOME (2026-09-02, Playwright 1.62.1, real Chromium; scratch scripts `probe-worker.mjs` /
+`probe-shared.mjs`): YES for dedicated workers, NO for shared and service workers.**
+
+- On the existing per-page CDP session, `Target.setAutoAttach({ autoAttach: true, waitForDebuggerOnStart: true,
+  flatten: false })` raises `Target.attachedToTarget` for the page's dedicated workers (type `worker`, paused);
+  `Target.sendMessageToTarget` carries `Network.enable` and then `Runtime.runIfWaitingForDebugger` to the child, and
+  `Target.receivedMessageFromTarget` delivers the worker's `Network.requestWillBeSent` (`hasPostData: true`, no
+  inline `postData`); `Network.getRequestPostData` through the same path returns the Blob body verbatim. Playwright
+  keeps tracking the worker (`page.workers()` = 1) and the page session stays usable after a navigation.
+- Shared workers (and service workers) are browser-level targets: the page session never attaches them, and the
+  browser-level session (`browser.newBrowserCDPSession()`) rejects non-flattened auto-attach ("Only flatten protocol
+  is supported with browser level auto-attach") while Playwright's client `CDPSession` cannot route flattened child
+  sessions; `context.newCDPSession(worker)` is rejected ("expected Page or Frame").
+- **Decision:** commit 2 adds dedicated-worker capture inside `attachDeferredBodyCapture` (≤ 80 LOC): the
+  non-flattened auto-attach; per child, `Network.enable` then **an unconditional resume in `finally`** (a worker left
+  paused is a denial-of-measurement lever a page could pull by spawning workers); child `requestWillBeSent` with
+  deferred post data → `getRequestPostData` → `recordDeferredBody` (same shape as the page path); a child protocol
+  error → `markCaptureFailed` (a harness fault, not a page-controlled shape). Producers: the lab's existing
+  `/worker-blob` and `/worker-beacon` routes, asserted in `coverage.browser.test.ts` under the `network-body` row.
+  Shared/service-worker Blob bodies stay declared in SCHEMA with the API boundary named above; multipart FILE parts
+  on the CDP fallback stay declared (K-X4 is a `getRequestPostData` limit, not an attach limit).
 
 ### D8 — The M4 residual fold-in, item by item (task 2)
 
