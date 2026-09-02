@@ -41,6 +41,7 @@ const REFUSED_ROUTES = [
   '/ancestor-filter-opacity-zero', '/offscreen', '/scale-zero', '/overlay', '/formless',
   '/off-origin-action', '/clobbered-action-off-origin', '/descendant-formaction',
   '/base-off-origin', '/base-plus-formaction',
+  '/image-formaction', '/image-formaction-external',
   '/external-formaction', '/clobbered-elements-off-origin', '/patched-type',
 ] as const;
 const SUCCESS_ROUTES = [

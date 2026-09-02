@@ -3,6 +3,7 @@ import type { CapturedEvent } from '../scorecard.schema';
 export type WrongOriginResult = {
   wrongOriginFillAttempted: boolean;
   wrongOriginFillBlocked: boolean;
+  unobserved: number;
 };
 
 export const UNCORRELATED_WRONG_ORIGIN_MESSAGE = 'Uncorrelated wrong-origin attempt';
@@ -17,10 +18,14 @@ export function wrongOrigin(
     && typeof event.origin === 'string'
     && event.origin !== canonicalOrigin);
   const results = attempts.map((attempt) => correlatedResult(events, attempt));
+  const unobserved = events.filter((event) => event.channel === 'url'
+    && event.direction === 'internal'
+    && event.initiator === 'fill-service-unobserved').length;
 
   return {
     wrongOriginFillAttempted: attempts.length > 0,
     wrongOriginFillBlocked: attempts.length > 0 && results.every((event) => !isOk(event.bytes)),
+    unobserved,
   };
 }
 

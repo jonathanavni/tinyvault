@@ -20,8 +20,10 @@ import { EvidenceLease, composeSupervisedHost, type SupervisedHost } from './hos
 import * as secretMatcher from './secretMatcher';
 import { TripwireRun } from './tripwireSeam';
 
-const CANARY = 'TVC_timing_probe_7B32';
-const NONMATCH = rotateFinalCharacter(CANARY);
+// Both payloads pass through one constructor so V8 holds them in the same string representation
+// (C-F1 evidence: the literal-vs-concatenated pair produced a consistent ~1 ns bias on this ~2 µs op).
+const CANARY = flatCopy('TVC_timing_probe_7B32');
+const NONMATCH = flatCopy(rotateFinalCharacter(CANARY));
 const TIMING_PREFIX = 'timing-prefix:';
 const TIMING_SUFFIX = ':timing-suffix';
 const PROBE_NAMES = [
@@ -294,6 +296,10 @@ describe.sequential('H Probe P timing bounds', () => {
 function timingLabel(payload: string): string {
   const shaped = `${TIMING_PREFIX}${payload}${TIMING_SUFFIX}`;
   return JSON.parse(JSON.stringify(shaped)) as string;
+}
+
+function flatCopy(value: string): string {
+  return String.fromCharCode(...Array.from(value, (character) => character.charCodeAt(0)));
 }
 
 function rotateFinalCharacter(value: string): string {

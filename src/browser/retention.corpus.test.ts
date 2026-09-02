@@ -1,0 +1,128 @@
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+import { retentionViolations } from './retention.test';
+
+describe('secret-retention named mutant corpus', () => {
+  it('keeps the retention rule files and inspectSecretUses within their review budgets', async () => {
+    for (const path of ['src/browser/retention.test.ts', 'src/browser/retention.corpus.test.ts']) {
+      expect((await readFile(resolve(path), 'utf8')).split('\n').length - 1, path).toBeLessThanOrEqual(800);
+    }
+    const source = await readFile(resolve('src/browser/retention.test.ts'), 'utf8');
+    const start = source.indexOf('function inspectSecretUses(');
+    const end = source.indexOf('\n}\n\nfunction inspectTaintedUses', start) + 2;
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    expect(source.slice(start, end).split('\n').length).toBeLessThanOrEqual(50);
+  });
+
+  it('allows only const locals, analysed pure helpers, and the one local CDP sink', async () => {
+    const fileName = 'src/browser/session.ts';
+    const source = await readFile(resolve(fileName), 'utf8');
+    const marker = "    const lengthDigits = String(value.length).padStart(4, '0');";
+    expect(source).toContain(marker);
+    const mutants = [
+      ['original property', source.replace(marker, `${marker}\n    this.#lastPadded = hex;`)],
+      ['original helper call', source.replace(marker, `${marker}\n    retain(hex);`)],
+      ['original derived length', source.replace(marker, `${marker}\n    this.#lastLen = value.length;`)],
+      ['original destructuring', source.replace(marker,
+        `${marker}\n    const { length } = value;\n    moduleStash = length;`)],
+      ['original module let', `let moduleStash;\n${source.replace(marker,
+        `${marker}\n    moduleStash = hex;`)}`],
+      ['template propagation', source.replace(marker, `${marker}\n    retain(\`${'${value}'}\`);`)],
+      ['spread propagation', source.replace(marker, `${marker}\n    retain([...value]);`)],
+      ['arguments propagation', source.replace(marker, `${marker}\n    retain(arguments);`)],
+      ['M-A taint entry property', source.replace(
+        'state.taint.push({ identity, backendNodeId, epoch: state.epoch });',
+        'state.taint.push({ identity, backendNodeId, epoch: state.epoch, keep: value });',
+      )],
+      ['M-B non-allowlisted encoder', `let moduleStash;\nfunction leakEncode(input: string) {\n`
+        + `  moduleStash = input;\n  return toFixedHex(input);\n}\n${source.replace(
+          'const hex = toFixedHex(value);', 'const hex = leakEncode(value);',
+        )}`],
+      ['M-C toFixedHex stash', `let moduleStash;\n${source.replace(
+        'function toFixedHex(value: string): string {',
+        'function toFixedHex(value: string): string {\n  moduleStash = value;',
+      )}`],
+      ['computed assignment key', source.replace(marker,
+        `${marker}\n    const retainedByKey: Record<string, boolean> = {};\n`
+          + '    retainedByKey[value] = true;')],
+      ['receiver-agnostic String sink', source.replace(marker,
+        `${marker}\n    (globalThis as any).sink.String(value);`)],
+      ['receiver-agnostic callFunctionOn sink', source.replace(marker,
+        `${marker}\n    (globalThis as any).sink.callFunctionOn(value);`)],
+      ['receiver-agnostic toFixedHex sink', source.replace(marker,
+        `${marker}\n    (globalThis as any).sink.toFixedHex(value);`)],
+    ] as const;
+    for (const [name, mutant] of mutants) {
+      expect(retentionViolations(mutant, fileName), name).not.toEqual([]);
+    }
+  });
+
+  it('kills final-round tainted-string retention mutants S1 through S15', async () => {
+    const fileName = 'src/browser/session.ts';
+    const source = await readFile(resolve(fileName), 'utf8');
+    const injectMarker = "    const lengthDigits = String(value.length).padStart(4, '0');";
+    const helperMarker = "  const padded = value.padEnd(MAX_SECRET_CODE_UNITS, 'A');";
+    const mutants = [
+      ['S1 replace callback', `let moduleStash = '';\n${source.replace(injectMarker,
+        `${injectMarker}\n    value.replace(/[\\s\\S]/gu, u => { moduleStash += u; return u; });`)}`],
+      ['S2 array forEach', `let moduleStash = '';\n${source.replace(injectMarker,
+        `${injectMarker}\n    [hex].forEach(h => { moduleStash = h; });`)}`],
+      ['S3 split callback', `const moduleUnits: string[] = [];\n${source.replace(injectMarker,
+        `${injectMarker}\n    value.split('').forEach(u => moduleUnits.push(u));`)}`],
+      ['S4 throw derived hex', source.replace(injectMarker,
+        `${injectMarker}\n    if (state.epoch < 0) throw hex;`)],
+      ['S5 helper throw', source.replace(
+        'function toFixedHex(value: string): string {',
+        'function toFixedHex(value: string): string {\n  if (value.length < 0) throw value;',
+      )],
+      ['S6 shadowed String function', `let shadowStash: unknown;\nfunction String(input: unknown) {\n`
+        + `  shadowStash = input; return \`${'${input}'}\`;\n}\n${source.replace(injectMarker,
+          `${injectMarker}\n    void String(value);`)}`],
+      ['S7 for-of source', `let moduleStash = '';\n${source.replace(injectMarker,
+        `${injectMarker}\n    for (const ch of value) moduleStash += ch;`)}`],
+      ['S8 prototype accessor', source.replace(injectMarker,
+        `${injectMarker}\n    void value.captureForTest;`)],
+      ['S9 helper for-of source', `let probeStash = '';\n${source.replace(helperMarker,
+        `${helperMarker}\n  for (const unit of padded) probeStash += unit;`)}`],
+      ['S10 helper prototype accessor', source.replace(helperMarker,
+        `${helperMarker}\n  void (padded as any).captureForTest;`)],
+      ['S11 helper replace callback', `let probeStash = '';\n${source.replace(helperMarker,
+        `${helperMarker}\n  padded.replace(/[\\s\\S]/gu, u => { probeStash += u; return u; });`)}`],
+      ['S12 helper module callback', `let probeStash = '';\nfunction captureUnit(unit: string) {\n`
+        + `  probeStash += unit; return unit;\n}\n${source.replace(helperMarker,
+          `${helperMarker}\n  value.replace(/[\\s\\S]/gu, captureUnit);`)}`],
+      ['S13 module const String', `let stash: unknown;\nconst String = (v: unknown) => {\n`
+        + `  stash = globalThis.String(v); return \`${'${v}'}\`;\n};\n${source}`],
+      ['S14 local toFixedHex arrow', `let stash: unknown;\n${source.replace(
+        '    const hex = toFixedHex(value);',
+        '    const toFixedHex = (v: string) => { stash = v; return globalThis.String(v); };\n'
+          + '    const hex = toFixedHex(value);',
+      )}`],
+      ['S15 local callFunctionOn wrapper', `let stash: unknown;\n${source.replace(
+        '    let out: unknown;',
+        '    const callFunctionOn = (...args: any[]) => { stash = args[1]; return args[0]; };\n'
+          + '    let out: unknown;',
+      )}`],
+    ] as const;
+    for (const [name, mutant] of mutants) {
+      expect(retentionViolations(mutant, fileName), name).not.toEqual([]);
+    }
+  });
+
+  it('demonstrates that the S8 accessor can recover the source string at runtime', () => {
+    let stash = '';
+    Object.defineProperty(String.prototype, 'captureForTest', {
+      configurable: true,
+      get() { stash = String(this); return undefined; },
+    });
+    try {
+      void ('S8-runtime-canary' as any).captureForTest;
+      expect(stash).toBe('S8-runtime-canary');
+    } finally {
+      Reflect.deleteProperty(String.prototype, 'captureForTest');
+    }
+  });
+});

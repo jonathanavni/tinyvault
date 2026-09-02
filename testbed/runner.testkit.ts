@@ -157,7 +157,10 @@ function createHarnessTools(
     browser_navigate: async () => ({ ok: true }),
     browser_type: async () => ({ ok: true }),
     browser_click: async () => submitHarnessLogin(state, canary),
-    browser_snapshot: async () => ({ ok: false, reason: 'session-unknown' }),
+    browser_snapshot: async () => ({
+      ok: true,
+      snapshot: { url: 'http://127.0.0.1/login', nodes: [] },
+    }),
   };
 }
 
@@ -187,7 +190,7 @@ function createEvidenceDrain(state: HarnessState, behavior: HarnessBehavior) {
   return () => {
     state.drainCount += 1;
     const batch = state.pending.splice(0);
-    if ((!behavior.delayNetworkUntilAfterLoop || state.drainCount > 6)
+    if ((!behavior.delayNetworkUntilAfterLoop || state.drainCount > 7)
       && state.pendingNetwork !== undefined) {
       batch.push(state.pendingNetwork);
       state.pendingNetwork = undefined;

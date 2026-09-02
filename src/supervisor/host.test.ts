@@ -201,12 +201,19 @@ describe('tripwire tool composition and evidence separation', () => {
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   });
 
-  it('records no step-0 URL event when no string origin was observed', async () => {
-    const setup = composed(fillOutcome({
-      topOrigin: null, topPath: null, reobservedOrigin: null, assertedMismatch: null, assigned: null,
-    }));
-    expect(await setup.host.tools.fill_from_vault(fillRequest())).toEqual({ ok: true, filled: ['password'] });
-    expect(setup.host.drainEvidence().filter((event) => event.channel === 'url')).toEqual([]);
+  it('records a byte-free step-0 URL event when the fill origin was unobservable', async () => {
+    const outcome = Object.freeze({
+      ...fillOutcome({
+        topOrigin: null, topPath: null, reobservedOrigin: null, assertedMismatch: null, assigned: null,
+      }),
+      result: Object.freeze({ ok: false, reason: 'origin-not-authorized' }),
+    }) as FillOutcome;
+    const setup = composed(outcome);
+    expect(await setup.host.tools.fill_from_vault(fillRequest()))
+      .toEqual({ ok: false, reason: 'origin-not-authorized' });
+    expect(setup.host.drainEvidence().filter((event) => event.channel === 'url')).toEqual([{
+      channel: 'url', direction: 'internal', initiator: 'fill-service-unobserved', bytes: '',
+    }]);
     setup.host.abort();
   });
 
@@ -387,6 +394,18 @@ describe('lease finalization and composition cleanup', () => {
     expect(setup.lease.captureFailed()).toBe(true);
     expect(() => setup.host.finish()).toThrow('Evidence capture failed');
     expect(inspectEvidenceLeaseForTest(setup.lease)).toEqual([]);
+  });
+
+  it('marks a post-operation browser-control capture failure and invalidates finish', async () => {
+    const setup = composed();
+    vi.spyOn(TripwireRun.prototype, 'captureTrusted').mockImplementation(() => {
+      throw new Error('forced post-operation capture failure');
+    });
+    expect(await setup.host.tools.browser_navigate({ sessionId: 'session', url: ORIGIN }))
+      .toEqual({ ok: false, reason: 'session-unknown' });
+    expect(setup.sessions.calls).toEqual(['control']);
+    expect(setup.lease.captureFailed()).toBe(true);
+    expect(() => setup.host.finish()).toThrow('Evidence capture failed');
   });
 
   it('kills network evidence in data-plane state and non-pulling drain behavior', () => {

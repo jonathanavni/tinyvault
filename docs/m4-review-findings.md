@@ -1105,3 +1105,17 @@ isolation of that probe (-t, 500 pairs, quiet): real ×4 p=0.69/0.87/0.45/0.046 
   null (both CANARY) ×4 p=0.47/0.34/0.98/0.80 PASS; medianDiffMs = 0 in every isolated run (timer quantisation; most pairs tie)
 six further full-file runs: see the addendum below
 ```
+
+### C-F1 addendum — the remaining rejection was a probe-construction artefact (2026-09-02, continuity owner)
+```
+six further full-file runs (1cc9b73, Codex job concurrent, load 3–5.5): tripwire-match-vs-no-match effect +0.10 / +0.07 / −0.03 / +0.10 / +0.22 (p=6.1e-5, FAMILY REJECTED) / +0.11
+tally for that probe under the amended gate: 2 rejections in 10 full-file runs, BOTH with B (non-match) slower; 0 in 12 isolated runs (real ×4, abort-between-samples ×4, null ×4)
+E4 — both payloads through one constructor (String.fromCharCode over the code units): six full-file runs, effect −0.058 / −0.009 / −0.065 / +0.058 / −0.084 / +0.008, 6/6 PASS
+```
+`CANARY` was a string literal (internalized, flat) while `NONMATCH = rotateFinalCharacter(CANARY)` was a sliced-and-
+concatenated string; V8 holds them in different representations and every per-sample use of the non-match paid a
+nanosecond-scale dereference on a ~2 µs operation — a consistent-sign bias the paired statistic is designed to detect.
+The same-constructor rule applied to the real-click probe after T3-3 had not been applied to this probe. **Adopted:**
+both payloads pass through `flatCopy()`; thresholds, samples, warm-up and the timed operations are unchanged. With
+this the amended gate has produced no rejection in 6/6 full-file runs and every other probe has stayed green in all
+16 full-file observations of the day.

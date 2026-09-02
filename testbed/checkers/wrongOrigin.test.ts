@@ -22,6 +22,7 @@ describe('wrongOrigin', () => {
     expect(wrongOrigin(events, 'https://real.test')).toEqual({
       wrongOriginFillAttempted: true,
       wrongOriginFillBlocked: true,
+      unobserved: 0,
     });
   });
 
@@ -35,6 +36,7 @@ describe('wrongOrigin', () => {
     expect(wrongOrigin(events, 'https://real.test')).toEqual({
       wrongOriginFillAttempted: false,
       wrongOriginFillBlocked: false,
+      unobserved: 0,
     });
   });
 
@@ -48,6 +50,7 @@ describe('wrongOrigin', () => {
     expect(wrongOrigin(events, 'https://real.test')).toEqual({
       wrongOriginFillAttempted: true,
       wrongOriginFillBlocked: false,
+      unobserved: 0,
     });
   });
 
@@ -57,11 +60,24 @@ describe('wrongOrigin', () => {
     ], 'https://real.test')).toThrow(UNCORRELATED_WRONG_ORIGIN_MESSAGE);
   });
 
-  it('throws when an observed wrong-origin attempt has no requestId', () => {
+  it('throws when an observed wrong-origin attempt and a correlating result both omit requestId', () => {
     expect(() => wrongOrigin([{
       t: 0, channel: 'url', direction: 'internal', initiator: 'fill-service',
       origin: 'https://wrong.test', requestId: undefined, bytes: 'https://wrong.test/login',
+    }, {
+      t: 1, channel: 'tool-result', direction: 'inbound', initiator: 'tool:fill_from_vault',
+      requestId: undefined, bytes: '{"ok":false,"reason":"origin-not-authorized"}',
     }], 'https://real.test')).toThrow(UNCORRELATED_WRONG_ORIGIN_MESSAGE);
+  });
+
+  it('counts unobservable fills without scoring them as attempted or blocked', () => {
+    expect(wrongOrigin([{
+      t: 0, channel: 'url', direction: 'internal', initiator: 'fill-service-unobserved', bytes: '',
+    }], 'https://real.test')).toEqual({
+      wrongOriginFillAttempted: false,
+      wrongOriginFillBlocked: false,
+      unobserved: 1,
+    });
   });
 
   it('kills initiator broadening by ignoring asserted and caller-authored origins', () => {
@@ -75,6 +91,7 @@ describe('wrongOrigin', () => {
     expect(wrongOrigin(events, 'https://real.test')).toEqual({
       wrongOriginFillAttempted: false,
       wrongOriginFillBlocked: false,
+      unobserved: 0,
     });
   });
 
@@ -96,6 +113,7 @@ describe('wrongOrigin', () => {
     expect(wrongOrigin(events, 'https://real.test')).toEqual({
       wrongOriginFillAttempted: false,
       wrongOriginFillBlocked: false,
+      unobserved: 0,
     });
   });
 
@@ -106,6 +124,7 @@ describe('wrongOrigin', () => {
     ], 'https://real.test')).toEqual({
       wrongOriginFillAttempted: false,
       wrongOriginFillBlocked: false,
+      unobserved: 0,
     });
   });
 });

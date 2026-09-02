@@ -14,90 +14,6 @@ describe('positive secret-retention structure', () => {
     }
   });
 
-  it('allows tainted strings only in const locals, analysed pure helpers, and the one local CDP sink', async () => {
-    const fileName = 'src/browser/session.ts';
-    const source = await readFile(resolve(fileName), 'utf8');
-    const marker = "    const lengthDigits = String(value.length).padStart(4, '0');";
-    expect(source).toContain(marker);
-    const namedMutants = [
-      ['original property', source.replace(marker, `${marker}\n    this.#lastPadded = hex;`)],
-      ['original helper call', source.replace(marker, `${marker}\n    retain(hex);`)],
-      ['original derived length', source.replace(marker, `${marker}\n    this.#lastLen = value.length;`)],
-      ['original destructuring', source.replace(marker,
-        `${marker}\n    const { length } = value;\n    moduleStash = length;`)],
-      ['original module let', `let moduleStash;\n${source.replace(marker,
-        `${marker}\n    moduleStash = hex;`)}`],
-      ['template propagation', source.replace(marker, `${marker}\n    retain(\`${'${value}'}\`);`)],
-      ['spread propagation', source.replace(marker, `${marker}\n    retain([...value]);`)],
-      ['arguments propagation', source.replace(marker, `${marker}\n    retain(arguments);`)],
-      ['M-A taint entry property', source.replace(
-        'state.taint.push({ identity, backendNodeId, epoch: state.epoch });',
-        'state.taint.push({ identity, backendNodeId, epoch: state.epoch, keep: value });',
-      )],
-      ['M-B non-allowlisted encoder', `let moduleStash;\nfunction leakEncode(input: string) {\n`
-        + `  moduleStash = input;\n  return toFixedHex(input);\n}\n${source.replace(
-          'const hex = toFixedHex(value);', 'const hex = leakEncode(value);',
-        )}`],
-      ['M-C toFixedHex stash', `let moduleStash;\n${source.replace(
-        'function toFixedHex(value: string): string {',
-        'function toFixedHex(value: string): string {\n  moduleStash = value;',
-      )}`],
-      ['computed assignment key', source.replace(marker,
-        `${marker}\n    const retainedByKey: Record<string, boolean> = {};\n`
-          + '    retainedByKey[value] = true;')],
-      ['receiver-agnostic String sink', source.replace(marker,
-        `${marker}\n    (globalThis as any).sink.String(value);`)],
-      ['receiver-agnostic callFunctionOn sink', source.replace(marker,
-        `${marker}\n    (globalThis as any).sink.callFunctionOn(value);`)],
-      ['receiver-agnostic toFixedHex sink', source.replace(marker,
-        `${marker}\n    (globalThis as any).sink.toFixedHex(value);`)],
-    ] as const;
-    for (const [name, mutant] of namedMutants) {
-      expect(retentionViolations(mutant, fileName), name).not.toEqual([]);
-    }
-  });
-
-  it('kills final-round tainted-string retention mutants S1 through S8', async () => {
-    const fileName = 'src/browser/session.ts';
-    const source = await readFile(resolve(fileName), 'utf8');
-    const marker = "    const lengthDigits = String(value.length).padStart(4, '0');";
-    const mutants = [
-      ['S1 replace callback', `let moduleStash = '';\n${source.replace(marker,
-        `${marker}\n    value.replace(/[\\s\\S]/gu, u => { moduleStash += u; return u; });`)}`],
-      ['S2 array forEach', `let moduleStash = '';\n${source.replace(marker,
-        `${marker}\n    [hex].forEach(h => { moduleStash = h; });`)}`],
-      ['S3 split callback', `const moduleUnits: string[] = [];\n${source.replace(marker,
-        `${marker}\n    value.split('').forEach(u => moduleUnits.push(u));`)}`],
-      ['S4 throw derived hex', source.replace(marker, `${marker}\n    if (state.epoch < 0) throw hex;`)],
-      ['S5 helper throw', source.replace(
-        'function toFixedHex(value: string): string {',
-        'function toFixedHex(value: string): string {\n  if (value.length < 0) throw value;',
-      )],
-      ['S6 shadowed String', `let shadowStash: unknown;\nfunction String(input: unknown) {\n`
-        + `  shadowStash = input; return \`${'${input}'}\`;\n}\n${source.replace(marker,
-          `${marker}\n    void String(value);`)}`],
-      ['S7 for-of source', `let moduleStash = '';\n${source.replace(marker,
-        `${marker}\n    for (const ch of value) moduleStash += ch;`)}`],
-      ['S8 prototype accessor', source.replace(marker,
-        `${marker}\n    void value.captureForTest;`)],
-    ] as const;
-    for (const [name, mutant] of mutants) {
-      expect(retentionViolations(mutant, fileName), name).not.toEqual([]);
-    }
-
-    let stash = '';
-    Object.defineProperty(String.prototype, 'captureForTest', {
-      configurable: true,
-      get() { stash = String(this); return undefined; },
-    });
-    try {
-      void ('S8-runtime-canary' as any).captureForTest;
-      expect(stash).toBe('S8-runtime-canary');
-    } finally {
-      Reflect.deleteProperty(String.prototype, 'captureForTest');
-    }
-  });
-
   it('rejects taint in Map and Set keys or values, including constructor entries', async () => {
     const fileName = 'src/browser/session.ts';
     const source = await readFile(resolve(fileName), 'utf8');
@@ -179,7 +95,7 @@ describe('positive secret-retention structure', () => {
   });
 });
 
-function retentionViolations(source: string, fileName: string): string[] {
+export function retentionViolations(source: string, fileName: string): string[] {
   const file = parse(source, fileName);
   const consumeCalls = descendants(file).filter(isConsumeCall);
   const violations: string[] = [];
@@ -261,11 +177,8 @@ function propagateSecretAliases(owner: ts.FunctionLikeDeclaration, tainted: Set<
   }
 }
 
-function inspectSecretUses(
-  owner: ts.FunctionLikeDeclaration,
-  tainted: ReadonlySet<string>,
-  seedAssignments: ReadonlySet<ts.Node>,
-): string[] {
+function inspectSecretUses(owner: ts.FunctionLikeDeclaration, tainted: ReadonlySet<string>,
+  seedAssignments: ReadonlySet<ts.Node>): string[] {
   const violations: string[] = [];
   for (const node of descendants(owner)) {
     if (isExecutableFunction(node) && node !== owner && referencesTaint(node, tainted)) {
@@ -325,7 +238,7 @@ function inspectTaintedUses(
   return unique([
     ...inspectTaintedFlow(file, owner, tainted, allowReturn, allowLocalWrites, helperDepth),
     ...inspectTaintedContainers(owner, tainted),
-    ...(helperDepth === 0 ? inspectTaintedOccurrences(file, owner, tainted) : []),
+    ...inspectTaintedOccurrences(file, owner, tainted, allowReturn, allowLocalWrites),
   ]);
 }
 
@@ -406,56 +319,74 @@ function inspectTaintedOccurrences(
   file: ts.SourceFile,
   owner: ts.FunctionLikeDeclaration,
   tainted: ReadonlySet<string>,
+  allowReturn: boolean,
+  allowLocalWrites: boolean,
 ): string[] {
   const violations: string[] = [];
   for (const node of descendants(owner)) {
     if (!ts.isIdentifier(node) || !tainted.has(node.text) || !isReference(node)) continue;
-    if (isAllowedTaintedCallArgument(file, node, owner)
-      || isInjectLineBreakCheck(node, owner)
-      || (!hasForbiddenTaintedContext(node, owner)
-        && (isWhitelistedPropertyRead(node) || isConstInitializerOccurrence(node, owner)))) continue;
+    const callSink = allowedTaintedCallSink(file, node, owner);
+    const allowedContext = callSink !== undefined
+      || isAllowedHelperReturn(node, owner, allowReturn)
+      || isAllowedLocalWrite(node, owner, allowLocalWrites)
+      || isWhitelistedPropertyRead(node) || isConstInitializerOccurrence(node, owner);
+    if (isInjectLineBreakCheck(node, owner)
+      || (allowedContext
+        && !hasForbiddenTaintedContext(node, owner, allowReturn, allowLocalWrites, callSink))) continue;
     violations.push(`secret-derived occurrence is outside the positive sink allowlist: ${node.text}`);
   }
   return violations;
 }
 
-function isAllowedTaintedCallArgument(
+function allowedTaintedCallSink(
   file: ts.SourceFile,
   identifier: ts.Identifier,
   owner: ts.FunctionLikeDeclaration,
-): boolean {
-  let sawAllowed = false;
+): string | undefined {
+  let allowed: string | undefined;
   for (let current: ts.Node = identifier; current.parent && current.parent !== owner; current = current.parent) {
     const parent = current.parent;
-    if (isExecutableFunction(parent)) return false;
-    if (!ts.isCallExpression(parent)
-      || !parent.arguments.some((argument) => containsNode(argument, identifier))) continue;
-    if (!ts.isIdentifier(parent.expression)) return false;
+    if (isExecutableFunction(parent)) return undefined;
+    if (!ts.isCallExpression(parent) || !containsNode(parent, identifier)) continue;
+    if (!parent.arguments.some((argument) => containsNode(argument, identifier))
+      || !ts.isIdentifier(parent.expression)) return undefined;
     const name = parent.expression.text;
-    if (name === 'String' && moduleFunction(file, name) === undefined) sawAllowed = true;
-    else if (name === 'toFixedHex' && moduleFunction(file, name) !== undefined) sawAllowed = true;
-    else if (name === 'callFunctionOn' && moduleFunction(file, name) !== undefined) return true;
-    else return false;
+    if (name === 'String' && resolvesGlobalString(file)) allowed = name;
+    else if (name === 'toFixedHex' && resolvesModuleFunction(file, parent, name)) allowed = name;
+    else if (name === 'callFunctionOn' && resolvesModuleFunction(file, parent, name)) return name;
+    else return undefined;
   }
-  return sawAllowed;
+  return allowed;
 }
 
 function hasForbiddenTaintedContext(
   identifier: ts.Identifier,
   owner: ts.FunctionLikeDeclaration,
+  allowReturn: boolean,
+  allowLocalWrites: boolean,
+  callSink: string | undefined,
 ): boolean {
   for (let current: ts.Node = identifier; current.parent && current.parent !== owner; current = current.parent) {
     const parent = current.parent;
     if (isExecutableFunction(parent)) return true;
-    if (ts.isArrayLiteralExpression(parent) || ts.isObjectLiteralExpression(parent)
-      || ts.isTemplateExpression(parent) || ts.isNoSubstitutionTemplateLiteral(parent)
-      || ts.isThrowStatement(parent) || ts.isReturnStatement(parent)
+    if ((ts.isArrayLiteralExpression(parent) || ts.isObjectLiteralExpression(parent))
+      && callSink !== 'callFunctionOn') return true;
+    if (ts.isTemplateExpression(parent) || ts.isNoSubstitutionTemplateLiteral(parent)
+      || ts.isThrowStatement(parent)
       || ts.isSpreadElement(parent)) return true;
+    if (ts.isReturnStatement(parent)) return !allowReturn;
     if (ts.isForOfStatement(parent) && containsNode(parent.expression, identifier)) return true;
-    if (ts.isElementAccessExpression(parent)) return true;
-    if (ts.isPropertyAccessExpression(parent) && containsNode(parent.expression, identifier)
-      && parent.name.text !== 'length' && parent.name.text !== 'padStart') return true;
-    if (ts.isBinaryExpression(parent) && isAssignment(parent.operatorToken.kind)) return true;
+    if (ts.isElementAccessExpression(parent) && directExpressionContains(parent.expression, identifier)) return true;
+    if (ts.isPropertyAccessExpression(parent) && directExpressionContains(parent.expression, identifier)
+      && !['length', 'padStart', 'padEnd', 'charCodeAt'].includes(parent.name.text)) return true;
+    if (ts.isCallExpression(parent) && directExpressionContains(parent.expression, identifier)) return true;
+    if (ts.isBinaryExpression(parent) && isAssignment(parent.operatorToken.kind)
+      && (directExpressionContains(parent.left as ts.Expression, identifier)
+        || directExpressionContains(parent.right, identifier))) {
+      const localWrite = allowLocalWrites && ts.isIdentifier(parent.left)
+        && isFunctionLocal(parent.left.text, owner);
+      if (!localWrite) return true;
+    }
   }
   return false;
 }
@@ -463,7 +394,36 @@ function hasForbiddenTaintedContext(
 function isWhitelistedPropertyRead(identifier: ts.Identifier): boolean {
   const parent = identifier.parent;
   return ts.isPropertyAccessExpression(parent) && parent.expression === identifier
-    && (parent.name.text === 'length' || parent.name.text === 'padStart');
+    && ['length', 'padStart', 'padEnd', 'charCodeAt'].includes(parent.name.text);
+}
+
+function isAllowedHelperReturn(
+  identifier: ts.Identifier,
+  owner: ts.FunctionLikeDeclaration,
+  allowReturn: boolean,
+): boolean {
+  if (!allowReturn) return false;
+  for (let current: ts.Node = identifier; current.parent && current.parent !== owner; current = current.parent) {
+    if (isExecutableFunction(current.parent)) return false;
+    if (ts.isReturnStatement(current.parent)) return true;
+  }
+  return false;
+}
+
+function isAllowedLocalWrite(
+  identifier: ts.Identifier,
+  owner: ts.FunctionLikeDeclaration,
+  allowLocalWrites: boolean,
+): boolean {
+  if (!allowLocalWrites) return false;
+  for (let current: ts.Node = identifier; current.parent && current.parent !== owner; current = current.parent) {
+    const parent = current.parent;
+    if (isExecutableFunction(parent)) return false;
+    if (!ts.isBinaryExpression(parent) || !isAssignment(parent.operatorToken.kind)
+      || !ts.isIdentifier(parent.left) || !isFunctionLocal(parent.left.text, owner)) continue;
+    return containsNode(parent.left, identifier) || containsNode(parent.right, identifier);
+  }
+  return false;
 }
 
 function isConstInitializerOccurrence(
@@ -506,16 +466,17 @@ function inspectTaintedCall(
   }
   const name = call.expression.text;
   if (name === 'callFunctionOn') {
-    return moduleFunction(file, name) === undefined
+    return !resolvesModuleFunction(file, call, name)
       ? ['callFunctionOn sink is not module-local']
       : [];
   }
   if (name === 'String') {
-    return moduleFunction(file, name) === undefined
+    return resolvesGlobalString(file)
       ? []
-      : ['String sink is shadowed by a module-local function'];
+      : ['String sink is shadowed by a lexical binding'];
   }
-  if (name !== 'toFixedHex' || !PURE_TAINT_HELPERS.has(name) || helperDepth !== 0) {
+  if (name !== 'toFixedHex' || !PURE_TAINT_HELPERS.has(name) || helperDepth !== 0
+    || !resolvesModuleFunction(file, call, name)) {
     return ['secret-derived expression reaches a non-whitelisted call'];
   }
   const declaration = moduleFunction(file, name);
@@ -529,6 +490,58 @@ function inspectTaintedCall(
   }
   const propagated = collectTaintedBindings(declaration, undefined, helperTaint);
   return inspectTaintedUses(file, declaration, propagated, true, true, helperDepth + 1);
+}
+
+function resolvesGlobalString(file: ts.SourceFile): boolean {
+  return !descendants(file).some((node) => declarationBindingNames(node).includes('String'));
+}
+
+function resolvesModuleFunction(file: ts.SourceFile, call: ts.CallExpression, name: string): boolean {
+  const declaration = moduleFunction(file, name);
+  if (declaration === undefined) return false;
+  return !descendants(file).some((node) => node !== declaration
+    && declarationBindingNames(node).includes(name)
+    && scopeContains(bindingScope(node), call));
+}
+
+function declarationBindingNames(node: ts.Node): string[] {
+  if (ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node)) {
+    return bindingNames(node.name);
+  }
+  if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)
+    || ts.isClassDeclaration(node) || ts.isClassExpression(node)) && node.name !== undefined) {
+    return [node.name.text];
+  }
+  if (ts.isImportClause(node) && node.name !== undefined) return [node.name.text];
+  if (ts.isImportSpecifier(node)) return [node.name.text];
+  if (ts.isNamespaceImport(node) || ts.isImportEqualsDeclaration(node)) return [node.name.text];
+  return [];
+}
+
+function bindingScope(node: ts.Node): ts.Node | undefined {
+  if (ts.isParameter(node)) return enclosingFunction(node);
+  if (ts.isVariableDeclaration(node)) {
+    const list = node.parent;
+    if (ts.isVariableDeclarationList(list) && (list.flags & ts.NodeFlags.BlockScoped) === 0) {
+      return enclosingFunction(node) ?? node.getSourceFile();
+    }
+  }
+  for (let parent = node.parent; parent; parent = parent.parent) {
+    if (isExecutableFunction(parent) || ts.isBlock(parent) || ts.isSourceFile(parent)) return parent;
+  }
+  return undefined;
+}
+
+function scopeContains(scope: ts.Node | undefined, node: ts.Node): boolean {
+  if (scope === undefined) return false;
+  for (let current: ts.Node | undefined = node; current; current = current.parent) {
+    if (current === scope) return true;
+  }
+  return false;
+}
+
+function directExpressionContains(expression: ts.Expression, identifier: ts.Identifier): boolean {
+  return unwrap(expression) === identifier;
 }
 
 function collectTaintedBindings(
@@ -669,8 +682,9 @@ function isWithinCallArgument(node: ts.Node, name: string): boolean {
 }
 
 function moduleFunction(file: ts.SourceFile, name: string): ts.FunctionDeclaration | undefined {
-  return file.statements.find((statement): statement is ts.FunctionDeclaration =>
+  const matches = file.statements.filter((statement): statement is ts.FunctionDeclaration =>
     ts.isFunctionDeclaration(statement) && statement.name?.text === name);
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 function isResolveSecretCall(node: ts.Node): node is ts.CallExpression {

@@ -60,6 +60,9 @@ describe.skipIf(process.env.TINYVAULT_EVAL !== '1')('offline eval entry', () => 
         channel: 'network-body', direction: 'outbound', initiator: 'browser',
         method: 'POST', route: '/login',
       }));
+      expect(events).toContainEqual(expect.objectContaining({
+        channel: 'tool-result', direction: 'inbound', initiator: 'tool:browser_snapshot',
+      }));
     }
     printScorecard(result.scorecard);
     console.log(`scorecard: ${result.scorecardPath}`);

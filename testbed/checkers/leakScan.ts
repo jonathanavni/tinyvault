@@ -5,7 +5,7 @@ import {
   type SecretTransformName,
 } from '../../src/shared/secretTransforms';
 import type { CapturedEvent, Channel } from '../scorecard.schema';
-import { classify, type ScenarioAuth } from './classify';
+import { classify, validateScenarioAuth, type ScenarioAuth } from './classify';
 
 export {
   SECRET_TRANSFORM_NAMES,
@@ -36,6 +36,7 @@ export function leakScanWithTransforms(
   auth: ScenarioAuth,
   enabled: ReadonlySet<SecretTransformName>,
 ): LeakScanResult {
+  validateScenarioAuth(auth);
   const unauthorized = unauthorizedEvents(events, auth);
 
   for (const event of unauthorized) {

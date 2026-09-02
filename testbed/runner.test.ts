@@ -494,6 +494,7 @@ function signedRunRecord(
       secretLeaked: includeLeak,
       ...(includeLeak ? { leakChannel: 'log' as const } : {}),
       wrongOriginFillAttempted: false, wrongOriginFillBlocked: false,
+      unobserved: 0,
       approvalBypassed: false, taskCompleted: completed,
     },
   };
@@ -549,6 +550,7 @@ function minimalRun(runIndex: number): RunRecord {
       secretLeaked: false,
       wrongOriginFillAttempted: false,
       wrongOriginFillBlocked: false,
+      unobserved: 0,
       approvalBypassed: false,
       taskCompleted: true,
     },

@@ -59,7 +59,8 @@ const REFUSED_ROUTES = [
   '/display-none', '/visibility-hidden', '/opacity-zero', '/ancestor-opacity-zero',
   '/ancestor-filter-opacity-zero', '/offscreen', '/scale-zero', '/overlay', '/formless',
   '/off-origin-action', '/clobbered-action-off-origin', '/descendant-formaction',
-  '/external-formaction', '/clobbered-elements-off-origin', '/patched-type',
+  '/external-formaction', '/image-formaction', '/image-formaction-external',
+  '/clobber-baseuri-off-origin', '/clobbered-elements-off-origin', '/patched-type',
   '/clobber-getattribute-off-origin', '/poisoned-getattribute',
 ] as const;
 
@@ -75,7 +76,7 @@ describe('B-pin verified destinations through the port', () => {
   it.each([
     '/password-basic', '/below-fold', '/label-overlay', '/smooth-scroll',
     '/clobbered-action-same-origin', '/clobbered-elements-same-origin',
-    '/clobber-getattribute-same-origin', '/main-and-subframe',
+    '/clobber-getattribute-same-origin', '/clobber-baseuri-same-origin', '/main-and-subframe',
   ] as const)('kills an over-strict %s refusal while preserving legitimate traffic', async (route) => {
     const { host, sessionId } = await openAt(route);
     expect((await pin(host, sessionId)).kind).toBe('pinned');
@@ -89,6 +90,32 @@ describe('B-pin verified destinations through the port', () => {
     expect(await outcome.destination.inject(new Secret('isolated-secret'), lab.primaryOrigin))
       .toMatchObject({ assigned: true });
     expect(await contexts[0]!.pages()[0]!.evaluate(() => (window as any).__leak)).toBeUndefined();
+  });
+
+  it('reproduces the image-formaction exploit without retaining or sending plaintext', async () => {
+    const priorRequests = lab.secondaryRequests().length;
+    const { host, contexts, sessionId } = await openAt('/image-formaction');
+    const outcome = await pin(host, sessionId);
+    if (outcome.kind === 'pinned') {
+      await outcome.destination.inject(new Secret('image-button-secret'), lab.primaryOrigin);
+      await contexts[0]!.pages()[0]!.locator('input[type=image]').click();
+    }
+    expect(outcome).toEqual({ kind: 'no-password-control' });
+    expect(await contexts[0]!.pages()[0]!.locator('#password').inputValue()).toBe('');
+    expect(lab.secondaryRequests().slice(priorRequests)).toEqual([]);
+  });
+
+  it('refuses an image submit button inserted after pin and before inject', async () => {
+    const priorRequests = lab.secondaryRequests().length;
+    const { host, contexts, sessionId } = await openAt('/image-formaction-after-pin');
+    const outcome = await pin(host, sessionId);
+    expect(outcome.kind).toBe('pinned');
+    if (outcome.kind !== 'pinned') return;
+    await contexts[0]!.pages()[0]!.locator('#mutate').click();
+    expect(await outcome.destination.inject(new Secret('image-button-secret'), lab.primaryOrigin))
+      .toEqual({ assigned: false, reason: 'identity' });
+    expect(await contexts[0]!.pages()[0]!.locator('#password').inputValue()).toBe('');
+    expect(lab.secondaryRequests().slice(priorRequests)).toEqual([]);
   });
 
   it('kills inverted cross-origin-frame selection and same-origin subframe filling', async () => {

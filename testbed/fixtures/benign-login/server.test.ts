@@ -49,6 +49,8 @@ describe('benign login fixture', () => {
       }).taskCompleted).toBe(true);
       expect(await readFile(fixture.capturePath(setup.runId), 'utf8')).toContain(setup.canary);
       const eventsBytes = Buffer.from('[{"t":0,"bytes":"fixture-events"}]\n');
+      expect(() => fixture.attestEvents('unregistered-run', eventsBytes))
+        .toThrow('Cannot attest unknown fixture run: unregistered-run');
       const attestation = fixture.attestEvents(setup.runId, eventsBytes);
       expect(verifyEventsDigest(
         attestation, setup.runId, eventsBytes, fixture.verificationPublicKey,

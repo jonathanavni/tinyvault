@@ -54,21 +54,26 @@ class FakeInput extends FakeElement implements FakeNode {
   readonly scrollCalls: unknown[] = [];
   readonly assigned: string[] = [];
   [Symbol.toStringTag] = 'HTMLInputElement';
-  type = 'password';
+  type: string;
   disabled = false;
   readOnly = false;
   isConnected = true;
   visible = true;
   filter = 'none';
-  form: FakeForm | null = new FakeForm();
+  associatedForm: FakeForm | null;
   parentElement: FakeNode | null = null;
   rect = { left: 20, top: 20, width: 100, height: 20 };
   hit: unknown = this;
   onDispatch?: (type: string) => void;
 
-  constructor() {
-    super([['type', 'password'], ['data-tv-control', 'control-before']]);
+  constructor(type = 'password', form: FakeForm | null = new FakeForm()) {
+    super([['type', type], ['data-tv-control', 'control-before']]);
+    this.type = type;
+    this.associatedForm = form;
   }
+
+  get form(): FakeForm | null { return this.associatedForm; }
+  set form(value: FakeForm | null) { this.associatedForm = value; }
 
   hasAttribute(name: string): boolean {
     return this.attributes.has(name);
@@ -125,12 +130,29 @@ class FakeDomNode {
   }
 }
 
+class FakeDocument extends FakeDomNode {
+  readonly imageButtons: FakeInput[] = [];
+  readonly documentElement: FakeElement;
+
+  constructor(private readonly hitTarget: FakeInput, attributes: Map<string, string>) {
+    super();
+    this.documentElement = new FakeElement([...attributes]);
+  }
+
+  elementFromPoint(): unknown { return this.hitTarget.hit; }
+
+  querySelectorAll(selector: string): FakeInput[] {
+    expect(selector).toBe('input[type=image]');
+    return this.imageButtons;
+  }
+}
+
 type Realm = ReturnType<typeof installRealm>;
 
 function installRealm(): {
   input: FakeInput;
   form: FakeForm;
-  document: FakeDomNode & { documentElement: FakeElement; elementFromPoint(): unknown };
+  document: FakeDocument;
   documentElement: Map<string, string>;
   window: any;
 } {
@@ -146,12 +168,10 @@ function installRealm(): {
   fakeWindow.top = fakeWindow;
   vi.stubGlobal('window', fakeWindow);
   vi.stubGlobal('location', { origin: 'https://example.test', href: 'https://example.test/login', pathname: '/login' });
-  const document = Object.assign(new FakeDomNode(), {
-    documentElement: new FakeElement([...documentElement]),
-    elementFromPoint: () => input.hit,
-  });
+  const document = new FakeDocument(input, documentElement);
   vi.stubGlobal('document', document);
   vi.stubGlobal('Node', FakeDomNode);
+  vi.stubGlobal('Document', FakeDocument);
   vi.stubGlobal('Element', FakeElement);
   vi.stubGlobal('HTMLInputElement', FakeInput);
   vi.stubGlobal('HTMLFormElement', FakeForm);
@@ -225,6 +245,51 @@ describe('isolated-world source strings', () => {
     expect(sourceFunction(VERIFY_DESTINATION_SOURCE).call(realm.input)).toBe(true);
   });
 
+  it('enumerates image submit buttons outside form.elements and checks native form association', () => {
+    const offOrigin = installRealm();
+    const image = new FakeInput('image', offOrigin.form);
+    image.attributes.set('formaction', 'https://other.test/steal');
+    offOrigin.document.imageButtons.push(image);
+    expect(sourceFunction(VERIFY_DESTINATION_SOURCE).call(offOrigin.input)).toBe(false);
+    expect(sourceFunction(ASSIGN_SOURCE).call(
+      offOrigin.input, 'https://example.test', fixedHex('secret'), '0006',
+    )).toEqual({ assigned: false, reason: 'identity' });
+    expect(offOrigin.input.assigned).toEqual([]);
+
+    const sameOrigin = installRealm();
+    const safeImage = new FakeInput('image', sameOrigin.form);
+    safeImage.attributes.set('formaction', '/submit');
+    sameOrigin.document.imageButtons.push(safeImage);
+    expect(sourceFunction(VERIFY_DESTINATION_SOURCE).call(sameOrigin.input)).toBe(true);
+    expect(sourceFunction(ASSIGN_SOURCE).call(
+      sameOrigin.input, 'https://example.test', fixedHex('secret'), '0006',
+    )).toMatchObject({ assigned: true });
+
+    const external = installRealm();
+    const externalImage = new FakeInput('image', external.form);
+    externalImage.attributes.set('form', 'login');
+    externalImage.attributes.set('formaction', 'https://other.test/steal');
+    Object.defineProperty(externalImage, 'form', { value: new FakeForm() });
+    Object.defineProperty(external.document, 'querySelectorAll', { value: () => [] });
+    external.document.imageButtons.push(externalImage);
+    expect(sourceFunction(ASSIGN_SOURCE).call(
+      external.input, 'https://example.test', fixedHex('secret'), '0006',
+    )).toEqual({ assigned: false, reason: 'identity' });
+    expect(external.input.assigned).toEqual([]);
+  });
+
+  it('refuses an image submit button inserted between verification and assignment', () => {
+    const realm = installRealm();
+    expect(sourceFunction(VERIFY_DESTINATION_SOURCE).call(realm.input)).toBe(true);
+    const image = new FakeInput('image', realm.form);
+    image.attributes.set('formaction', 'https://other.test/steal');
+    realm.document.imageButtons.push(image);
+    expect(sourceFunction(ASSIGN_SOURCE).call(
+      realm.input, 'https://example.test', fixedHex('secret'), '0006',
+    )).toEqual({ assigned: false, reason: 'identity' });
+    expect(realm.input.assigned).toEqual([]);
+  });
+
   it('reads document.baseURI natively and refuses every off-origin base before assignment', () => {
     const offOrigin = installRealm();
     offOrigin.document.baseURL = 'https://other.test/root/';
@@ -265,6 +330,18 @@ describe('isolated-world source strings', () => {
       absoluteAction.input, 'https://example.test', fixedHex('secret'), '0006',
     )).toEqual({ assigned: false, reason: 'identity' });
     expect(absoluteAction.input.assigned).toEqual([]);
+  });
+
+  it('ignores a lying own document.baseURI and uses the native Node getter', () => {
+    const realm = installRealm();
+    realm.document.baseURL = 'https://other.test/root/';
+    Object.defineProperty(realm.document, 'baseURI', { value: 'https://example.test/' });
+    expect(sourceFunction(VERIFY_DESTINATION_SOURCE).call(realm.input)).toBe(false);
+    expect(sourceFunction(ASSIGN_SOURCE).call(
+      realm.input, 'https://example.test', fixedHex('secret'), '0006',
+    )).toEqual({ assigned: false, reason: 'identity' });
+    expect(realm.input.assigned).toEqual([]);
+    expect(DESTINATION_PREDICATES_SOURCE).not.toContain('document.baseURI');
   });
 
   it('resolves formaction against the native same-origin base URI', () => {

@@ -15,6 +15,7 @@ class FakeCdp extends EventEmitter {
   queryNodeId = 2;
   worldCreations = 0;
   failTaintedResolution = false;
+  taintedResolutionsBeforeFailure: number | undefined;
   snapshotValue: unknown = { url: 'https://example.test/login', nodes: [] };
 
   constructor(readonly order: string[] = []) {
@@ -38,6 +39,10 @@ class FakeCdp extends EventEmitter {
     if (method === 'DOM.resolveNode') {
       if (this.failTaintedResolution && params?.backendNodeId === 7) {
         throw new Error('forced tainted resolution failure');
+      }
+      if (this.taintedResolutionsBeforeFailure !== undefined && params?.backendNodeId === 7) {
+        if (this.taintedResolutionsBeforeFailure === 0) throw new Error('forced tainted resolution failure');
+        this.taintedResolutionsBeforeFailure -= 1;
       }
       return { object: { objectId: `object-${this.calls.length}` } };
     }
@@ -158,18 +163,27 @@ describe('browser session lifecycle over the CDP seam', () => {
     expect(context.cdp.calls.filter((call) => call.method === 'Runtime.releaseObject')).toHaveLength(2);
   });
 
-  it('refuses CR/LF before conversion, taint, or CDP assignment and disposes the pin', async () => {
+  it.each(['line\nbreak', 'line\rbreak', 'line\r\nbreak'])(
+    'refuses %j before conversion, taint, or CDP assignment and disposes the pin',
+    async (secret) => {
     const { context, host } = setup();
     const { sessionId } = await host.openSession();
     const pinned = await host.runExclusive(sessionId, (port) => port.pinPasswordDestination('#password'));
     expect(pinned.kind).toBe('pinned');
     if (pinned.kind !== 'pinned') return;
+    const padEnd = vi.spyOn(String.prototype, 'padEnd');
 
-    expect(await pinned.destination.inject(new Secret('line\nbreak'), 'https://example.test'))
+    expect(await pinned.destination.inject(new Secret(secret), 'https://example.test'))
       .toEqual({ assigned: false, reason: 'unplaceable' });
+    expect(padEnd).not.toHaveBeenCalled();
     expect(context.cdp.calls.filter((call) => call.method === 'Runtime.callFunctionOn'
       && call.params?.functionDeclaration === ASSIGN_SOURCE)).toHaveLength(0);
     expect(context.cdp.calls.filter((call) => call.method === 'Runtime.releaseObject')).toHaveLength(1);
+    await host.runControl(sessionId, (page) => page.snapshot());
+    const snapshotCall = context.cdp.calls.filter((call) => call.method === 'Runtime.callFunctionOn'
+      && call.params?.functionDeclaration === SNAPSHOT_SOURCE).at(-1);
+    expect(snapshotCall?.params?.arguments).toEqual([]);
+    padEnd.mockRestore();
     await host.closeAll();
   });
 
@@ -182,16 +196,26 @@ describe('browser session lifecycle over the CDP seam', () => {
     expect(await pinned.destination.inject(new Secret('must-not-escape'), 'https://example.test'))
       .toEqual({ assigned: false, reason: 'transport' });
 
+    const second = await host.runExclusive(sessionId, (port) => port.pinPasswordDestination('#password'));
+    expect(second.kind).toBe('pinned');
+    if (second.kind !== 'pinned') return;
+    expect(await second.destination.inject(new Secret('must-not-escape'), 'https://example.test'))
+      .toEqual({ assigned: false, reason: 'transport' });
     context.cdp.snapshotValue = {
       url: 'https://example.test/login',
       nodes: [{ tag: 'input', masked: false, value: 'must-not-escape' }],
     };
-    context.cdp.failTaintedResolution = true;
+    context.cdp.taintedResolutionsBeforeFailure = 1;
+    const releasesBeforeSnapshot = context.cdp.calls.filter(
+      (call) => call.method === 'Runtime.releaseObject',
+    ).length;
     const snapshot = await host.runControl(sessionId, (page) => page.snapshot());
     expect(snapshot).toEqual({ url: '', nodes: [] });
     expect(JSON.stringify(snapshot)).not.toContain('must-not-escape');
     expect(context.cdp.calls.filter((call) => call.method === 'Runtime.callFunctionOn'
       && call.params?.functionDeclaration === SNAPSHOT_SOURCE)).toHaveLength(0);
+    expect(context.cdp.calls.filter((call) => call.method === 'Runtime.releaseObject'))
+      .toHaveLength(releasesBeforeSnapshot + 2);
     await host.closeAll();
   });
 

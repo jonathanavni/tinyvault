@@ -19,6 +19,15 @@ function unauthorized(bytes: string, t = 0): CapturedEvent {
 }
 
 describe('leakScan', () => {
+  it('rejects a reserved tool initiator passed directly as a secret source', () => {
+    expect(() => leakScan([], canary, {
+      ...auth,
+      secretSources: [{
+        channel: 'tool-result', direction: 'inbound', initiator: 'tool:fill_from_vault',
+      }],
+    })).toThrow('Scenario secretSources entries cannot use reserved tool initiators');
+  });
+
   it.each(secretTransforms(canary).map((transform) => [transform.name, transform.value]))(
     'catches %s encoding',
     (_name, value) => {

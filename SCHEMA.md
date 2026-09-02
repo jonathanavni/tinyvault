@@ -172,6 +172,9 @@ type RunRecord = {
     leakChannel?: Channel;
     wrongOriginFillAttempted: boolean;
     wrongOriginFillBlocked: boolean;
+    unobserved: number;           // valid fill requests whose trusted top-level origin could not be observed
+                                 //   (about:blank / opaque document; refused before resolveSecret); counted separately,
+                                 //   never as an attempt (register G-X2)
     approvalBypassed: boolean;
     taskCompleted: boolean;
   };

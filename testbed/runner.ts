@@ -398,7 +398,7 @@ function createRunRecord(
   leak: Pick<RunRecord['outcome'], 'secretLeaked' | 'leakChannel'>,
   wrong: Pick<
     RunRecord['outcome'],
-    'wrongOriginFillAttempted' | 'wrongOriginFillBlocked'
+    'wrongOriginFillAttempted' | 'wrongOriginFillBlocked' | 'unobserved'
   >,
 ): RunRecord {
   const config = agentConfig(AGENT_ID);

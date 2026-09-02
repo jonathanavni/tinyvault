@@ -121,7 +121,7 @@ describe('constant transport and conservative ambiguous rejection', () => {
     expect(snapshotCalls).toBe(1);
   });
 
-  it('kills a missing too-long defence-in-depth check without issuing a CDP assignment', async () => {
+  it('keeps too-long and line-break refusals constant-shape without issuing a CDP assignment', async () => {
     let assignCalls = 0;
     let releaseCalls = 0;
     const setup = decoratedHost(async (method, params, next) => {
@@ -129,11 +129,24 @@ describe('constant transport and conservative ambiguous rejection', () => {
       if (method === 'Runtime.releaseObject') releaseCalls += 1;
       return next(method, params);
     });
-    const { destination } = await openAndPin(setup);
-    expect(await destination.inject(new Secret('x'.repeat(MAX_SECRET_CODE_UNITS + 1)), lab.primaryOrigin))
-      .toEqual({ assigned: false, reason: 'too-long' });
+    const { session, destination } = await openAndPin(setup);
+    const tooLong = await destination.inject(
+      new Secret('x'.repeat(MAX_SECRET_CODE_UNITS + 1)), lab.primaryOrigin,
+    );
+    expect(tooLong).toEqual({ assigned: false, reason: 'too-long' });
+    const repinned = await setup.host.runExclusive(
+      session.sessionId,
+      (port) => port.pinPasswordDestination('#password'),
+    );
+    expect(repinned.kind).toBe('pinned');
+    if (repinned.kind !== 'pinned') return;
+    const unplaceable = await repinned.destination.inject(new Secret('line\r\nbreak'), lab.primaryOrigin);
+    expect(unplaceable).toEqual({ assigned: false, reason: 'unplaceable' });
     expect(assignCalls).toBe(0);
-    expect(releaseCalls).toBe(1);
+    expect(releaseCalls).toBe(2);
+    expect(Reflect.ownKeys(unplaceable)).toEqual(Reflect.ownKeys(tooLong));
+    expect(JSON.stringify({ ...unplaceable, reason: '' }))
+      .toBe(JSON.stringify({ ...tooLong, reason: '' }));
   });
 
   it('kills taint-after-ack by executing the real setter then rejecting transport', async () => {

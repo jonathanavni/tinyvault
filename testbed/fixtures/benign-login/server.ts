@@ -164,6 +164,7 @@ function attestFixtureEvents(
   eventsBytes: Uint8Array,
 ): string {
   assertRunId(runId);
+  // These bytes belong to this REGISTERED run; completion is proven only by the receipt.
   if (!state.runs.has(runId)) throw new Error(`Cannot attest unknown fixture run: ${runId}`);
   return signEventsDigest(runId, eventsBytes, state.signingKey);
 }

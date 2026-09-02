@@ -37,6 +37,9 @@ export class StubClient implements ModelClient {
         sessionId: priorString(messages, 'sessionId'),
         fields: [{ role: 'password', selector: input.selector }],
       }),
+      (_turnIndex, messages) => toolCall('snapshot-1', 'browser_snapshot', {
+        sessionId: priorString(messages, 'sessionId'),
+      }),
       (_turnIndex, messages) => toolCall('click-1', 'browser_click', {
         sessionId: priorString(messages, 'sessionId'), selector: 'button[type=submit]',
       }),

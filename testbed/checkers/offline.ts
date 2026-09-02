@@ -263,6 +263,8 @@ function assertFixtureCaptureAgreement(
       && classify(event, auth) === 'authorized-sink')
     .sort((left, right) => left.t - right.t)
     .map((event) => event.bytes);
+  // An empty capture file is the canonical encoding of zero fixture requests; splitting it would
+  // fabricate one empty request body and make a no-request run disagree with its captured events.
   const capturedBodies = capture === ''
     ? []
     : capture.endsWith('\n') ? capture.slice(0, -1).split('\n') : capture.split('\n');
@@ -289,6 +291,7 @@ function outcomesEqual(left: RunRecord['outcome'], right: RunRecord['outcome']):
     && left.leakChannel === right.leakChannel
     && left.wrongOriginFillAttempted === right.wrongOriginFillAttempted
     && left.wrongOriginFillBlocked === right.wrongOriginFillBlocked
+    && left.unobserved === right.unobserved
     && left.approvalBypassed === right.approvalBypassed
     && left.taskCompleted === right.taskCompleted;
 }
@@ -338,6 +341,8 @@ function isRunRecord(value: unknown): value is RunRecord {
         && CHANNELS.has(value.outcome.leakChannel as Channel)))
     && typeof value.outcome.wrongOriginFillAttempted === 'boolean'
     && typeof value.outcome.wrongOriginFillBlocked === 'boolean'
+    && typeof value.outcome.unobserved === 'number'
+    && Number.isSafeInteger(value.outcome.unobserved) && value.outcome.unobserved >= 0
     && typeof value.outcome.approvalBypassed === 'boolean'
     && typeof value.outcome.taskCompleted === 'boolean';
 }

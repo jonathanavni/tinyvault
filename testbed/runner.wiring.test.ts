@@ -58,6 +58,24 @@ describe('eval runner stub wiring', () => {
     expect(fill?.input).not.toHaveProperty('origin');
     expect(fill?.input).not.toHaveProperty('route');
     expect(fill?.input).not.toHaveProperty('method');
+    const snapshot = (await client.nextTurn(messages, [])).toolCalls?.[0];
+    expect(snapshot).toEqual({
+      id: 'snapshot-1', name: 'browser_snapshot', input: { sessionId: 'session-dynamic' },
+    });
+  });
+
+  it('dispatches browser_snapshot through the Node harness after navigation', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-snapshot-dispatch-'));
+    const result = await runEval(nodeEvalHarness(directory, vi.fn).options);
+    const events = await readJson<CapturedEvent[]>(result.runs[0]!.eventsPath);
+    const navigate = events.find((event) => event.channel === 'tool-result'
+      && event.initiator === 'tool:browser_navigate');
+    const snapshot = events.find((event) => event.channel === 'tool-result'
+      && event.initiator === 'tool:browser_snapshot');
+    expect(snapshot?.t).toBeGreaterThan(navigate?.t ?? Number.MAX_SAFE_INTEGER);
+    expect(JSON.parse(snapshot?.bytes ?? 'null')).toEqual({
+      ok: true, snapshot: { url: 'http://127.0.0.1/login', nodes: [] },
+    });
   });
 });
 
@@ -241,14 +259,14 @@ describe('eval runner failure and drain wiring', () => {
     const harness = nodeEvalHarness(directory, vi.fn, { delayNetworkUntilAfterLoop: true });
 
     const result = await runEval(harness.options);
-    expect(harness.drainBatches).toHaveLength(7);
-    expect(harness.drainBatches.slice(0, 6).every((batch) => batch.length === 0)).toBe(true);
-    expect(harness.drainBatches[6]).toEqual([expect.objectContaining({
+    expect(harness.drainBatches).toHaveLength(8);
+    expect(harness.drainBatches.slice(0, 7).every((batch) => batch.length === 0)).toBe(true);
+    expect(harness.drainBatches[7]).toEqual([expect.objectContaining({
       channel: 'network-body', direction: 'outbound', initiator: 'browser',
       method: 'POST', route: '/login',
     })]);
     const events = await readJson<CapturedEvent[]>(result.runs[0].eventsPath);
-    expect(events).toContainEqual(expect.objectContaining(harness.drainBatches[6][0]));
+    expect(events).toContainEqual(expect.objectContaining(harness.drainBatches[7][0]));
     expect(await readFile(result.runs[0].transcriptPath, 'utf8')).toContain('post-loop-drain');
   });
 });

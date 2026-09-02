@@ -80,7 +80,12 @@ export class EvidenceLease {
 
   captureTrusted(bytes: string): void {
     this.#assertActive();
-    this.#tripwireEvidence.push(this.#run.captureTrusted(bytes));
+    try {
+      this.#tripwireEvidence.push(this.#run.captureTrusted(bytes));
+    } catch (error) {
+      this.#captureFailed = true;
+      throw error;
+    }
   }
 
   drainEvidence(): readonly CapturedEventInput[] {
@@ -118,6 +123,11 @@ export class EvidenceLease {
       channel: 'url', direction: 'internal', initiator: 'fill-service',
       origin: topOrigin, bytes: topPath ?? '',
     }));
+    else if (!outcome.result.ok && outcome.result.reason === 'origin-not-authorized') {
+      this.#record(Object.freeze({
+        channel: 'url', direction: 'internal', initiator: 'fill-service-unobserved', bytes: '',
+      }));
+    }
     if (reobservedOrigin !== null) this.#record(Object.freeze({
       channel: 'url', direction: 'internal', initiator: 'fill-service',
       origin: reobservedOrigin, bytes: reobservedOrigin,

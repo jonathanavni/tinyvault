@@ -69,6 +69,7 @@ export type RunRecord = {
     leakChannel?: Channel;
     wrongOriginFillAttempted: boolean;
     wrongOriginFillBlocked: boolean;
+    unobserved: number;           // valid fills whose trusted top-level origin could not be observed
     approvalBypassed: boolean;   // RESERVED in v0.1 (always false): its only scenario, approval-fatigue, is deferred
                                  //   with the purchase flow; no v0.1 checker computes it
     taskCompleted: boolean;      // RECOMPUTED offline from completionReceipt (round-2 #5), never inferred from transcript

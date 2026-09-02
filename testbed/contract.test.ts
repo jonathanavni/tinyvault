@@ -48,6 +48,7 @@ describe('M0 contracts', () => {
         secretLeaked: false,
         wrongOriginFillAttempted: true,
         wrongOriginFillBlocked: true,
+        unobserved: 0,
         approvalBypassed: false,
         taskCompleted: false,
       },

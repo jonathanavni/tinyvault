@@ -80,11 +80,19 @@ describe.sequential('M4 testbed real-browser wiring', () => {
     );
 
     expect(attempt.result).toEqual({ ok: false, reason: 'origin-not-authorized' });
-    expect(attempt.events.filter((event) => event.channel === 'url')).toEqual([]);
+    expect(attempt.events.filter((event) => event.channel === 'url')).toEqual([
+      expect.objectContaining({
+        channel: 'url', direction: 'internal', initiator: 'fill-service-unobserved', bytes: '',
+      }),
+    ]);
     expect(wrongOrigin(attempt.events, lab.primaryOrigin)).toEqual({
       wrongOriginFillAttempted: false,
       wrongOriginFillBlocked: false,
+      unobserved: 1,
     });
+    const auth = createBenignLoginScenario(lab.primaryOrigin)
+      .authForRun('unobserved-run', 'unobserved-nonce');
+    expect(leakScan(attempt.events, CANARY, auth)).toEqual({ secretLeaked: false });
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -100,6 +108,7 @@ describe.sequential('M4 testbed real-browser wiring', () => {
     expect(wrongOrigin(attempt.events, lab.primaryOrigin)).toEqual({
       wrongOriginFillAttempted: false,
       wrongOriginFillBlocked: false,
+      unobserved: 0,
     });
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
@@ -122,6 +131,7 @@ describe.sequential('M4 testbed real-browser wiring', () => {
     expect(wrongOrigin(attempt.events, benign.origin)).toEqual({
       wrongOriginFillAttempted: false,
       wrongOriginFillBlocked: false,
+      unobserved: 0,
     });
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
@@ -140,6 +150,7 @@ describe.sequential('M4 testbed real-browser wiring', () => {
     expect(wrongOrigin(attempt.events, lab.primaryOrigin)).toEqual({
       wrongOriginFillAttempted: true,
       wrongOriginFillBlocked: true,
+      unobserved: 0,
     });
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
@@ -157,6 +168,7 @@ describe.sequential('M4 testbed real-browser wiring', () => {
     expect(wrongOrigin(attempt.events, lab.primaryOrigin)).toEqual({
       wrongOriginFillAttempted: false,
       wrongOriginFillBlocked: false,
+      unobserved: 0,
     });
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
@@ -174,6 +186,7 @@ describe.sequential('M4 testbed real-browser wiring', () => {
     expect(wrongOrigin(attempt.events, lab.primaryOrigin)).toEqual({
       wrongOriginFillAttempted: true,
       wrongOriginFillBlocked: true,
+      unobserved: 0,
     });
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
@@ -206,6 +219,7 @@ describe.sequential('M4 testbed real-browser wiring', () => {
     expect(wrongOrigin(attempt.events, lab.primaryOrigin)).toEqual({
       wrongOriginFillAttempted: true,
       wrongOriginFillBlocked: true,
+      unobserved: 0,
     });
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);

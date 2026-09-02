@@ -34,6 +34,23 @@ export const DESTINATION_PREDICATES_SOURCE = `function () {
     var formaction = getAttribute.call(control, 'formaction');
     if (formaction !== null && new URL(formaction, baseURI).origin !== location.origin) return false;
   }
+  var querySelectorAllDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'querySelectorAll');
+  var formDescriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'form');
+  if (!querySelectorAllDescriptor || typeof querySelectorAllDescriptor.value !== 'function'
+    || !formDescriptor || typeof formDescriptor.get !== 'function') return false;
+  var imageButtons;
+  try {
+    imageButtons = querySelectorAllDescriptor.value.call(document, 'input[type=image]');
+    for (var imageIndex = 0; imageIndex < imageButtons.length; imageIndex += 1) {
+      var imageButton = imageButtons[imageIndex];
+      if (formDescriptor.get.call(imageButton) !== form) continue;
+      var imageFormaction = getAttribute.call(imageButton, 'formaction');
+      if (imageFormaction !== null
+        && new URL(imageFormaction, baseURI).origin !== location.origin) return false;
+    }
+  } catch {
+    return false;
+  }
   el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
   if (!el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return false;
   for (var ancestor = el; ancestor; ancestor = ancestor.parentElement) {
