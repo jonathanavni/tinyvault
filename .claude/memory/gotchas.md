@@ -76,3 +76,19 @@ Example:
 - **`typescript`'s runtime JS contains a non-literal `require` and an unresolved optional
   `source-map-support` edge.** Any gate that follows real runtime modules fails closed on it; that is why the
   scripts-rooted tolerance exists and why it must stay keyed on the entry root. (2026-09-01)
+
+## M4 session (2026-09-01)
+
+- **`codex-companion.mjs status <job> --json` nests the state under `.job`** (`{workspaceRoot, job: {status, phase, …}}`),
+  not at the top level. A poll loop reading `.status` at the root printed the whole JSON as its "unknown"
+  fallback and reported a job that had died at 53 s as still running for ten minutes. Parse `job.status`,
+  treat anything not in the known-running set as terminal, and print the raw status on parse failure. Same
+  class as the zsh word-splitting monitor bug from M3: a monitor whose failure mode is silence. (2026-09-01)
+- **`gpt-5.6-sol` returns "Selected model is at capacity" within a minute of dispatch, sometimes.** The job
+  shows `failed` with the review never started. Retry once with the same arguments before changing anything.
+  (2026-09-01)
+- **The authoring hazard recurred: a NUL pad character written as a JS escape inside a spec code block landed as
+  a literal NUL byte.** `file(1)` said `data` and every `grep` over the doc went silent (binary), so the §5.1
+  stale-token sweep looked clean. Run `file -b <doc>` after every authored write and before any grep sweep; the
+  model's own tool calls render escape sequences into raw bytes, so spell the escape out (backslash, u, four
+  zeros) or use `perl` to insert it. (2026-09-01)

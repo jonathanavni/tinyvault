@@ -62,3 +62,14 @@ Example:
   table into the register. An equivalent mutant (the mutation changes nothing) is recorded as such, not as a gap.
 - **Continuity-owner amendments to a locked sentence are recorded in the register (C-section) *and* the spec
   in the same commit**, with the old wording annotated as superseded where it survives as history.
+
+## Paper-ladder conventions confirmed in M4 (2026-09-01)
+
+- **Do not append a blind channel's findings to the shared register until every parallel channel has reported.**
+  Codex's round-3 review read the register mid-run and saw the Claude channel's round-3 findings, breaking its
+  blindness for the final minutes (it flagged this itself). Buffer each channel's synthesis in the scratchpad and
+  append both at once.
+- **Probe the mechanism before locking the spec.** Three real-Chromium probes during the M4 paper ladder caught a
+  sign-flipped padding fix (JSON escapes NUL to six characters) and settled `document.open()`, `checkVisibility`,
+  and form-state restoration behaviour that reviewers had reasoned about from memory. A scratch worktree with the
+  real dependency costs minutes and turns a paper argument into evidence.
