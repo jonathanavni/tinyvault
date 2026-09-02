@@ -107,7 +107,7 @@ describe.sequential('M4 testbed real-browser wiring', () => {
     // Browser-initiated url events (the navigation itself) are recorded by design (H-S1); the assertion is
     // about the fill service's step-zero evidence only.
     expect(attempt.events.filter((event) => event.channel === 'url'
-      && event.initiator.startsWith('fill-service'))).toEqual([]);
+      && event.initiator?.startsWith('fill-service') === true)).toEqual([]);
     expect(wrongOrigin(attempt.events, lab.primaryOrigin)).toEqual({
       wrongOriginFillAttempted: false,
       wrongOriginFillBlocked: false,
