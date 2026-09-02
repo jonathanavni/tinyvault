@@ -12,47 +12,41 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 ## Current State
 
 `2026-09-01-m4` — focus: M4 (fill service end-to-end + all integration security gates, 🔴) through the full Codex ladder; in parallel: absorb A1/A3 + fact-check corrections into `PROJECT-SPEC.md`, prune merged agent branches, schedule the §9.1 LOC-budget question.
-
-`2026-09-01-m3` — focus: M3 (backend interface + libsodium local-file, B1 slice 2/3) through the full 🔴 Codex ladder; spec-amendment fact-check research in parallel.
-**Outcome: M3 built by Codex, reviewed across three pre-impl and three post-impl rounds, confirmed by the integrator's mutation pass, and merged to `main` (fast-forward to `1e24f73`). Fact-check thread closed.**
+**In progress (2026-09-02, ~00:30 CDT):** M4 spec LOCKED (r5); contract amendments on `main`; Codex implementing on
+`codex/m4-fill-service`; commit 1 landed and reviewed (three channels, fix slice queued); commit 2 in flight.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
-**M4 next.**
+**M4 in progress.**
 
-**Where the code actually is:** the trusted-side `CredentialBackend` interface and the libsodium local-file
-backend exist and are unit-tested with no browser — per-record XChaCha20-Poly1305 sealing with policy-bound
-additional data; `resolveSecret(handle, authorizedPolicy)` compares the parsed record to the authorized policy
-**before** decrypting (closing the policy/secret TOCTOU between the fill gate's two backend calls); no key or
-record cache; nested key/plaintext cleanup; typed fixed-text errors with foreign-exception containment; an
-atomic writer. The dependency gate now resolves external packages to their **runtime** modules with Node's own
-resolvers (it had been scanning `.d.ts` files — G-1), forbids production→`scripts/` edges, and refuses to run
-unflagged. `make test` 339 passing (up from 206); `make eval` unchanged at 10/10 completion, 0 leaks.
-**Still no fill service — that is M4.**
+**Where M4 actually is (read this first after a compaction):**
+- **Spec:** `docs/m4-slice-spec.md` r5, LOCKED after a three-round, two-channel blind paper ladder; register with
+  every finding and the real-Chromium probe evidence in `docs/m4-review-findings.md`. Four commits planned.
+- **`main`:** `2672136` carries the pre-authorized contract amendments (`BrowserControls` navigate/click/type/snapshot,
+  `MaskedSnapshot`, `LockdownLifecycle` + `InvalidControlIdentityError` in `src/core/lockdown.ts`, new
+  `src/core/browserPort.ts`, plan sentences). `make test` green there (339).
+- **Branch `codex/m4-fill-service`:** commit 1 = `5bfc401` (gate vetted tier + evaluator zone + `src/browser/playwright.ts`;
+  `playwright@1.62.1` pinned; my run: gate PASS 39/35, selftest PASS, 339 tests). Post-impl round 1 on commit 1: QA
+  NEEDS-ATTENTION (1 P1: version-pin test gap), security NEEDS-ATTENTION (no bypass; realpath-fragile rule-4
+  assertion; honest-claims sentence over-claimed — fixed in spec), Codex NEEDS-ATTENTION (importer rule ignores test
+  and `.d.ts` files; symlink re-zoning; `reachableFrom` accepts `..`). All in the register; **fix slice `m4-fix-c1`
+  queued to Codex** (packet in the session scratchpad `m4-fix-c1.md`) behind commit 2.
+- **Commit 2 (session owner, controls, in-realm sources, probe P, controls-lab, `loop.ts` hooks, writer bound)** is
+  being implemented by Codex in the main worktree right now — do not edit `src/`/`testbed/` there until it reports.
+  Then: integrator `make test` (Chromium is installed at `~/Library/Caches/ms-playwright`, headless shell 1234),
+  commit with explicit paths + dual co-author trailer, three reviews (isolated worktrees `scratchpad/wt-review`,
+  `wt-security` — recreate the `node_modules` symlink; Codex on the pinned range), then commit 3 (`m4-impl-c3.md`),
+  commit 4 (`m4-impl-c4.md`), the post-M4 whole-codebase audit (§9.2, carrying the §9.1 simplification question),
+  merge FF to `main`.
+- **Codex runtime quirks this session:** jobs serialize (a second dispatch shows `queued` in `status` even while it is
+  actually running — trust the job log's mtime, not the list); `gpt-5.6-sol` capacity errors within a minute → retry
+  once; `status --json` nests under `.job`.
 
-**Blocked / needs attention:**
-- Nothing blocking. Threads to carry forward:
-  1. **Spec-amendment corrections.** The external claims are fact-checked (`docs/spec-amendment-factcheck.md`:
-     27 confirmed / 7 partial / 3 wrong / 3 unverifiable), but A1/A3 have still not been absorbed into
-     `PROJECT-SPEC.md`; apply the report's corrections when they are (Grok Bot's credential model, the dead
-     CyberArk link, the Stripe×Instinct dates/attribution).
-  2. **Deferred residuals**, all in `docs/m3-review-findings.md` (§D, round-2 residuals) and the M2 register:
-     partial key file on non-EEXIST failure; no directory fsync after rename; the `createRequire` ban is
-     heuristic (M2 G-2); a scripts-rooted gate walk cannot see non-literal loads inside a toolchain package;
-     M2's residuals unchanged.
-  3. **LOC budget.** M3 added ~2,800 lines net in `src/` + `scripts/` (backend 6 files ≈ 900, its tests ≈ 1,300,
-     the gate + its 11-fixture matrix ≈ 600). The §9.1 simplification question has now been deferred by three
-     milestones and should be scheduled, not carried.
+**Also done this session:** A1/A3 absorbed into `PROJECT-SPEC.md` with fact-check corrections (`6eca987`); three merged
+`worktree-agent-*` branches deleted; §9.1 LOC-budget question scheduled into the post-M4 audit (Decisions Log).
 
-**Next session — M4 (fill service end-to-end + ALL integration security gates, 🔴):**
-- Full ladder per `docs/handoff-pattern.md` §4; gates in `phase-0-plan.md` §8 M4 row. First Playwright
-  dependency — **run the gate on it early** (second real runtime dependency, first with native pieces).
-- Backend contract to honour: `BackendError.kind → FillResult.reason` is `not-found → handle-unavailable`, all
-  else (incl. `integrity`) → `backend-error`, never an unlock instruction; `BackendStatus → SetupReason` per
-  §6; pass back the frozen policy from `resolvePolicy` unchanged; B1 slice 3/3 rotation through the fill.
-- **Pre-authorize in the packet:** Codex cannot write `.git` (integrator commits, explicit paths), and
-  "Deviations From Handoff" is mandatory for any departure from a locked sentence. Pin review base+head and
-  hold commits while a branch-scoped review runs.
+**Blocked / needs attention:** nothing blocking. Threads: A2 (payments non-goal) still not written into the spec
+(triaged accept); D1's spec half not written; deferred M2/M3 residuals unchanged (`docs/m3-review-findings.md` §D).
 
 ## Decisions Log
 
