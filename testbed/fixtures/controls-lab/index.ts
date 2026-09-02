@@ -32,8 +32,17 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
   ),
   '/clobbered-elements-same-origin': () =>
     loginForm('', 'id="login"', '<input name="elements"><button form="login" formaction="/submit">Go</button>'),
+  '/clobber-getattribute-same-origin': ({ secondary }) => `${loginForm()}<script>
+    document.querySelector('form').getAttribute=()=> '${secondary}/submit';
+  </script>`,
+  '/clobber-getattribute-off-origin': ({ secondary }) => `${loginForm('', `action="${secondary}/submit"`)}<script>
+    document.querySelector('form').getAttribute=()=> '/submit';
+  </script>`,
   '/patched-type': () => `${formWithField('<input id="password" type="text">')}<script>
     Object.defineProperty(HTMLInputElement.prototype, 'type', { get: () => 'password' });
+  </script>`,
+  '/poisoned-getattribute': () => `${formWithField('<input id="password" type="text">')}<script>
+    Element.prototype.getAttribute=function(name){return name==='type'?'password':null};
   </script>`,
   '/poisoned-setter': () => `${loginForm()}<script>
     Object.defineProperty(HTMLInputElement.prototype, 'value', {
@@ -86,6 +95,7 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
     document.querySelector('#local').value=localStorage.getItem('tv')||'';
   </script>`,
   '/controls': () => '<button id="button">Click</button><input id="username"><p>control page</p>',
+  '/post-body': () => '<form method="post" action="/submit"><input id="payload" name="payload"><button type="submit">Post</button></form>',
 } satisfies Record<string, Route>);
 
 export type ControlsLab = Readonly<{

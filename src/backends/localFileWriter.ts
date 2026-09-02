@@ -3,6 +3,8 @@
  *
  * A non-EEXIST failure during exclusive key creation can leave a partial key file behind. Operators
  * must inspect or remove that path before retrying; the writer never overwrites an existing key file.
+ * Secrets containing CR or LF are refused because HTML value sanitisation would otherwise strip those
+ * code units silently before form submission.
  */
 import { randomUUID } from 'node:crypto';
 import type { FileHandle } from 'node:fs/promises';
@@ -204,6 +206,7 @@ function validateEntry(input: LocalVaultEntry): ValidatedEntry {
     || typeof input.canonicalOrigin !== 'string'
     || !isValidFieldRecipe(input.fieldRecipe)
     || typeof input.secret !== 'string'
+    || /[\n\r]/u.test(input.secret)
     || input.secret.length > MAX_SECRET_CODE_UNITS) throw new Error(INVALID_ENTRY_MESSAGE);
 
   let canonicalOrigin: Origin;

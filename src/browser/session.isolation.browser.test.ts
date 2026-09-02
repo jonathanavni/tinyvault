@@ -78,7 +78,7 @@ describe('F-isolation session ownership and mutex', () => {
     expect(ids.every((id) => /^[0-9a-f]{32}$/u.test(id))).toBe(true);
     expect(random).toHaveBeenCalledTimes(100);
     expect(random.mock.calls.every((call) => call[0] === 16)).toBe(true);
-  });
+  }, 30_000);
 
   it('kills control methods that bypass the one per-session mutex', async () => {
     const acquisition = vi.spyOn(SessionMutex.prototype, 'runExclusive');

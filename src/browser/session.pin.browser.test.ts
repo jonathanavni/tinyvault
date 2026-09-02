@@ -60,6 +60,7 @@ const REFUSED_ROUTES = [
   '/ancestor-filter-opacity-zero', '/offscreen', '/scale-zero', '/overlay', '/formless',
   '/off-origin-action', '/clobbered-action-off-origin', '/descendant-formaction',
   '/external-formaction', '/clobbered-elements-off-origin', '/patched-type',
+  '/clobber-getattribute-off-origin', '/poisoned-getattribute',
 ] as const;
 
 describe('B-pin verified destinations through the port', () => {
@@ -73,7 +74,8 @@ describe('B-pin verified destinations through the port', () => {
 
   it.each([
     '/password-basic', '/below-fold', '/label-overlay', '/smooth-scroll',
-    '/clobbered-action-same-origin', '/clobbered-elements-same-origin', '/main-and-subframe',
+    '/clobbered-action-same-origin', '/clobbered-elements-same-origin',
+    '/clobber-getattribute-same-origin', '/main-and-subframe',
   ] as const)('kills an over-strict %s refusal while preserving legitimate traffic', async (route) => {
     const { host, sessionId } = await openAt(route);
     expect((await pin(host, sessionId)).kind).toBe('pinned');

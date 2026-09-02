@@ -20,7 +20,7 @@ import { validateBareOrigin } from '../core/originGuard';
 import type { Secret } from '../core/redaction';
 import { MUTEX_CLOSED_MESSAGE, MUTEX_REENTRANT_MESSAGE, SessionMutex } from '../core/sessionMutex';
 import type { MaskedSnapshot, Origin } from '../core/types';
-import { ASSIGN_SOURCE, SNAPSHOT_SOURCE, VERIFY_DESTINATION_SOURCE } from './inRealm';
+import { ASSIGN_SOURCE, SNAPSHOT_SOURCE, TYPE_SOURCE, VERIFY_DESTINATION_SOURCE } from './inRealm';
 import type { BrowserContext, CDPSession, Page } from './playwright';
 
 export type BrowserSessionHostOptions = Readonly<{
@@ -63,23 +63,6 @@ type SessionState = {
 };
 
 type RemoteArgument = Readonly<{ value: unknown }> | Readonly<{ objectId: string }>;
-
-const TYPE_SOURCE = `function (text) {
-  if (!this.isConnected) return false;
-  var tag = Object.prototype.toString.call(this);
-  var prototype = tag === '[object HTMLInputElement]' ? HTMLInputElement.prototype :
-    tag === '[object HTMLTextAreaElement]' ? HTMLTextAreaElement.prototype :
-    tag === '[object HTMLSelectElement]' ? HTMLSelectElement.prototype : null;
-  if (prototype === null) return false;
-  var descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
-  if (!descriptor || typeof descriptor.set !== 'function') return false;
-  descriptor.set.call(this, text);
-  this.dispatchEvent(new Event('focus'));
-  this.dispatchEvent(new Event('input', { bubbles: true }));
-  this.dispatchEvent(new Event('change', { bubbles: true }));
-  this.dispatchEvent(new Event('blur'));
-  return true;
-}`;
 
 const MISSING_CONTROL_MESSAGE = 'Missing browser control';
 const CLICK_TIMEOUT_MS = 5_000;
@@ -238,6 +221,7 @@ function resetDocument(
 function closePageState(state: SessionState, lifecycle: LockdownLifecycle): void {
   if (state.pageClosed) return;
   state.pageClosed = true;
+  state.epoch += 1;
   sendCloseLifecycle(state, lifecycle);
   state.world = undefined;
   state.taint.length = 0;
@@ -351,6 +335,8 @@ async function reasonFromChildFrames(page: Page, selector: string): Promise<PinO
 
 async function frameOrigin(frame: ReturnType<Page['mainFrame']>): Promise<string | null> {
   try {
+    // Main-world location.origin is an unforgeable platform read used only to select a refusal reason;
+    // both same-origin and cross-origin child-frame branches refuse to pin or fill the subframe.
     return await frame.evaluate(() => location.origin);
   } catch {
     return null;
@@ -385,23 +371,24 @@ async function injectDestination(
   secret: Secret,
   expectedOrigin: Origin,
 ): Promise<InjectOutcome> {
+  const value = secret.consume();
+  if (value.length > MAX_SECRET_CODE_UNITS) return tooLongOutcome();
+  const hex = toFixedHex(value);
+  const lengthDigits = String(value.length).padStart(4, '0');
+  state.taint.push({ identity, backendNodeId, epoch: state.epoch });
+  let out: unknown;
   try {
-    const value = secret.consume();
-    if (value.length > MAX_SECRET_CODE_UNITS) return tooLongOutcome();
-    const hex = toFixedHex(value);
-    const lengthDigits = String(value.length).padStart(4, '0');
-    state.taint.push({ identity, backendNodeId, epoch: state.epoch });
-    const out = await callFunctionOn<unknown>(state.cdp, objectId, ASSIGN_SOURCE, [
+    out = await callFunctionOn<unknown>(state.cdp, objectId, ASSIGN_SOURCE, [
       { value: expectedOrigin }, { value: hex }, { value: lengthDigits },
     ]);
-    const normalized = normalizeInjectOutcome(out);
-    if (!normalized.assigned && normalized.reason !== 'transport') removeTaint(state, identity);
-    return normalized;
   } catch {
     return Object.freeze({ assigned: false, reason: 'transport' });
   } finally {
     await disposePinnedObject(state, objectId);
   }
+  const normalized = normalizeInjectOutcome(out);
+  if (!normalized.assigned && normalized.reason !== 'transport') removeTaint(state, identity);
+  return normalized;
 }
 
 function tooLongOutcome(): InjectOutcome {

@@ -106,6 +106,7 @@ describe.sequential('E-controls closed exception matrix', () => {
     const { controls, sessionId } = await openControlsPage();
     const before = await controls.browser_snapshot({ sessionId });
     expect(before).toMatchObject({ ok: true, snapshot: { url: `${lab.primaryOrigin}/controls` } });
+    if (before.ok) expect(before.snapshot.url).not.toBe('');
     await contexts[0]!.close();
     const after = await controls.browser_snapshot({ sessionId });
     expect(after).toEqual({ ok: true, snapshot: { url: '', nodes: [] } });

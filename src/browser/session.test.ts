@@ -1,8 +1,11 @@
 import { EventEmitter } from 'node:events';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { INVALID_CONTROL_IDENTITY_MESSAGE } from '../core/lockdown';
+import { Secret } from '../core/redaction';
+import { SessionMutex } from '../core/sessionMutex';
 import { createLockdownDomain } from '../supervisor/lockdownDomain';
+import { assertProbeP } from '../../testbed/probe/probeP';
 import type { BrowserContext, CDPSession, Page } from './playwright';
 import { createBrowserSessionHost } from './session';
 
@@ -12,8 +15,13 @@ class FakeCdp extends EventEmitter {
   queryNodeId = 2;
   worldCreations = 0;
 
+  constructor(readonly order: string[] = []) {
+    super();
+  }
+
   async send(method: string, params?: Record<string, unknown>): Promise<any> {
     this.calls.push({ method, params });
+    if (method === 'Runtime.releaseObject') this.order.push('taint/cdp-drop');
     if (this.fail) throw new Error('fake CDP failure');
     if (method === 'Page.getFrameTree') {
       return { frameTree: { frame: { id: 'main', loaderId: 'loader-0' } } };
@@ -30,7 +38,7 @@ class FakeCdp extends EventEmitter {
     return {};
   }
 
-  async detach(): Promise<void> {}
+  async detach(): Promise<void> { this.order.push('cdp.detach'); }
 }
 
 class FakePage extends EventEmitter {
@@ -41,6 +49,10 @@ class FakePage extends EventEmitter {
   readonly gotoCalls: string[] = [];
   readonly locatorCalls: string[] = [];
   readonly clickOptions: unknown[] = [];
+
+  constructor(readonly order: string[] = []) {
+    super();
+  }
 
   url(): string { return this.currentUrl; }
   async waitForLoadState(_state: string, options: { timeout: number }): Promise<void> {
@@ -72,11 +84,17 @@ class FakePage extends EventEmitter {
 }
 
 class FakeContext extends EventEmitter {
-  readonly page = new FakePage();
-  readonly cdp = new FakeCdp();
+  readonly page: FakePage;
+  readonly cdp: FakeCdp;
   newPageCalls = 0;
   cdpCalls = 0;
   closeCalls = 0;
+
+  constructor(readonly order: string[] = []) {
+    super();
+    this.page = new FakePage(order);
+    this.cdp = new FakeCdp(order);
+  }
 
   async newPage(): Promise<Page> { this.newPageCalls += 1; return this.page as unknown as Page; }
   async newCDPSession(page: Page): Promise<CDPSession> {
@@ -84,11 +102,16 @@ class FakeContext extends EventEmitter {
     this.cdpCalls += 1;
     return this.cdp as unknown as CDPSession;
   }
-  async close(): Promise<void> { this.closeCalls += 1; this.page.emit('close'); }
+  async close(): Promise<void> {
+    this.closeCalls += 1;
+    this.order.push('context.close');
+    this.page.emit('close');
+  }
 }
 
 function setup() {
-  const context = new FakeContext();
+  const order: string[] = [];
+  const context = new FakeContext(order);
   const domain = createLockdownDomain();
   const lifecycleCalls: string[] = [];
   const host = createBrowserSessionHost({
@@ -102,11 +125,12 @@ function setup() {
       },
       clearOnSessionClose(sessionId) {
         lifecycleCalls.push(`close:${sessionId}`);
+        order.push('lifecycle.clearOnSessionClose');
         domain.lifecycle.clearOnSessionClose(sessionId);
       },
     },
   });
-  return { context, domain, lifecycleCalls, host };
+  return { context, domain, lifecycleCalls, order, host };
 }
 
 describe('browser session lifecycle over the CDP seam', () => {
@@ -184,6 +208,35 @@ describe('browser session lifecycle over the CDP seam', () => {
     expect(host.openSessionCount()).toBe(0);
   });
 
+  it('kills reordered close cleanup across mutex, lifecycle, CDP drop, detach, and context close', async () => {
+    const { context, order, host } = setup();
+    const close = SessionMutex.prototype.close;
+    vi.spyOn(SessionMutex.prototype, 'close').mockImplementation(async function (
+      this: SessionMutex,
+      sessionId: string,
+    ) {
+      await close.call(this, sessionId);
+      order.push('mutex.close');
+    });
+    const { sessionId } = await host.openSession();
+    const first = await host.runExclusive(sessionId, (port) => port.pinPasswordDestination('#password'));
+    expect(first.kind).toBe('pinned');
+    if (first.kind !== 'pinned') return;
+    expect(await first.destination.inject(new Secret('taint-before-close'), 'https://example.test'))
+      .toEqual({ assigned: false, reason: 'transport' });
+    await host.runExclusive(sessionId, (port) => port.pinPasswordDestination('#password'));
+    order.length = 0;
+    expect(await host.closeSession(sessionId)).toBe(true);
+    expect(order).toEqual([
+      'mutex.close',
+      'lifecycle.clearOnSessionClose',
+      'taint/cdp-drop',
+      'cdp.detach',
+      'context.close',
+    ]);
+    vi.restoreAllMocks();
+  });
+
   it('kills missing-selector waits and unbounded clicks while retaining click traffic', async () => {
     const { context, host } = setup();
     const { sessionId } = await host.openSession();
@@ -224,7 +277,9 @@ describe('browser session lifecycle over the CDP seam', () => {
     expect(pinned.kind).toBe('pinned');
     if (pinned.kind !== 'pinned') return;
     domain.registry.lock(pinned.destination.identity);
+    const epoch0 = await host.runExclusive(sessionId, (port) => Promise.resolve(port.documentEpoch()));
     context.page.emit('close');
+    expect(await host.runExclusive(sessionId, (port) => Promise.resolve(port.documentEpoch()))).toBe(epoch0 + 1);
     expect(await host.runExclusive(sessionId, (port) => port.observeTop()))
       .toEqual({ origin: null, path: null });
     expect(await host.runExclusive(sessionId, (port) => port.pinPasswordDestination('#password')))
@@ -234,5 +289,18 @@ describe('browser session lifecycle over the CDP seam', () => {
     expect(host.openSessionCount()).toBe(1);
     expect(lifecycleCalls.filter((call) => call === `close:${sessionId}`)).toHaveLength(1);
     await host.closeAll();
+  });
+});
+
+describe('Probe P locked threshold boundaries', () => {
+  it.each([
+    ['p just below 0.01', { pValue: 0.009_999, medianDiffMs: 0 }, true],
+    ['p just above 0.01', { pValue: 0.010_001, medianDiffMs: 0 }, false],
+    ['median delta just below 2 ms', { pValue: 1, medianDiffMs: 1.999 }, false],
+    ['median delta just above 2 ms', { pValue: 1, medianDiffMs: -2.001 }, true],
+  ] as const)('kills a loosened assertProbeP cutoff at %s', (_name, result, rejects) => {
+    const assertion = () => assertProbeP(result);
+    if (rejects) expect(assertion).toThrow('Probe P detected a timing difference');
+    else expect(assertion).not.toThrow();
   });
 });

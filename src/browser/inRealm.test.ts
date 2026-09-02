@@ -4,6 +4,7 @@ import {
   ASSIGN_SOURCE,
   DESTINATION_PREDICATES_SOURCE,
   SNAPSHOT_SOURCE,
+  TYPE_SOURCE,
   VERIFY_DESTINATION_SOURCE,
 } from './inRealm';
 
@@ -13,12 +14,23 @@ type FakeNode = {
   parentElement: FakeNode | null;
 };
 
-class FakeForm {
-  readonly attributes = new Map<string, string>([['action', '/submit']]);
-  controls: FakeControl[] = [];
+class FakeElement {
+  readonly attributes: Map<string, string>;
+
+  constructor(attributes: readonly (readonly [string, string])[] = []) {
+    this.attributes = new Map(attributes);
+  }
 
   getAttribute(name: string): string | null {
     return this.attributes.get(name) ?? null;
+  }
+}
+
+class FakeForm extends FakeElement {
+  controls: FakeControl[] = [];
+
+  constructor() {
+    super([['action', '/submit']]);
   }
 }
 
@@ -26,20 +38,15 @@ Object.defineProperty(FakeForm.prototype, 'elements', {
   get(this: FakeForm) { return this.controls; },
 });
 
-class FakeControl {
+class FakeControl extends FakeElement {
   tagName = 'BUTTON';
-  readonly attributes = new Map<string, string>([['type', 'submit']]);
 
-  getAttribute(name: string): string | null {
-    return this.attributes.get(name) ?? null;
+  constructor() {
+    super([['type', 'submit']]);
   }
 }
 
-class FakeInput implements FakeNode {
-  readonly attributes = new Map<string, string>([
-    ['type', 'password'],
-    ['data-tv-control', 'control-before'],
-  ]);
+class FakeInput extends FakeElement implements FakeNode {
   readonly events: string[] = [];
   readonly scrollCalls: unknown[] = [];
   readonly assigned: string[] = [];
@@ -56,8 +63,8 @@ class FakeInput implements FakeNode {
   hit: unknown = this;
   onDispatch?: (type: string) => void;
 
-  getAttribute(name: string): string | null {
-    return this.attributes.get(name) ?? null;
+  constructor() {
+    super([['type', 'password'], ['data-tv-control', 'control-before']]);
   }
 
   hasAttribute(name: string): boolean {
@@ -122,9 +129,10 @@ function installRealm(): { input: FakeInput; form: FakeForm; documentElement: Ma
   vi.stubGlobal('window', fakeWindow);
   vi.stubGlobal('location', { origin: 'https://example.test', href: 'https://example.test/login', pathname: '/login' });
   vi.stubGlobal('document', {
-    documentElement: { getAttribute: (name: string) => documentElement.get(name) ?? null },
+    documentElement: new FakeElement([...documentElement]),
     elementFromPoint: () => input.hit,
   });
+  vi.stubGlobal('Element', FakeElement);
   vi.stubGlobal('HTMLInputElement', FakeInput);
   vi.stubGlobal('HTMLFormElement', FakeForm);
   vi.stubGlobal('Event', FakeEvent);
@@ -231,6 +239,40 @@ describe('isolated-world source strings', () => {
     expect(poisoned).toBe(false);
   });
 
+  it('kills length-bounded decoding by touching all 4096 transported code units before slicing', () => {
+    for (const [value, lengthDigits] of [['x', '0001'], ['y'.repeat(4096), '4096']] as const) {
+      const realm = installRealm();
+      const parse = vi.spyOn(Number, 'parseInt');
+      expect(sourceFunction(ASSIGN_SOURCE).call(
+        realm.input, 'https://example.test', fixedHex(value), lengthDigits,
+      )).toMatchObject({ assigned: true });
+      expect(parse).toHaveBeenCalledTimes(4096);
+      expect(realm.input.assigned).toEqual([value]);
+      parse.mockRestore();
+    }
+  });
+
+  it('kills page-owned getAttribute reads and retains native descriptor traffic', () => {
+    const realm = installRealm();
+    realm.input.getAttribute = () => 'text';
+    realm.form.getAttribute = () => 'https://other.test/submit';
+    realm.form.controls[0]!.getAttribute = () => 'https://other.test/submit';
+    expect(sourceFunction(VERIFY_DESTINATION_SOURCE).call(realm.input)).toBe(true);
+    expect(sourceFunction(ASSIGN_SOURCE).call(
+      realm.input, 'https://example.test', fixedHex('secret'), '0006',
+    )).toMatchObject({ assigned: true, controlToken: 'control-before', documentToken: 'document-before' });
+  });
+
+  it('kills selector-backed typing and page value setters by assigning the resolved node natively', () => {
+    const realm = installRealm();
+    let poisoned = false;
+    Object.defineProperty(realm.input, 'value', { set: () => { poisoned = true; } });
+    expect(sourceFunction(TYPE_SOURCE).call(realm.input, 'caller text')).toBe(true);
+    expect(realm.input.assigned).toEqual(['caller text']);
+    expect(realm.input.events).toEqual(['focus', 'input', 'change', 'blur']);
+    expect(poisoned).toBe(false);
+  });
+
   it.each(['self', 'descendant', 'label'] as const)(
     'kills an over-strict hit-test while retaining the legitimate %s traffic control',
     (kind) => {
@@ -242,16 +284,19 @@ describe('isolated-world source strings', () => {
   );
 
   it('kills split/shared-source and asynchronous in-realm implementations', () => {
-    for (const source of [DESTINATION_PREDICATES_SOURCE, VERIFY_DESTINATION_SOURCE, ASSIGN_SOURCE, SNAPSHOT_SOURCE]) {
+    for (const source of [
+      DESTINATION_PREDICATES_SOURCE, VERIFY_DESTINATION_SOURCE, ASSIGN_SOURCE, SNAPSHOT_SOURCE, TYPE_SOURCE,
+    ]) {
       expect(source.trimStart().startsWith('function')).toBe(true);
       expect(source).not.toMatch(/\b(?:async|await)\b|\.then\s*\(/u);
+      expect(source).not.toMatch(/\.getAttribute\s*\(/u);
     }
     expect(VERIFY_DESTINATION_SOURCE).toContain(DESTINATION_PREDICATES_SOURCE);
     expect(ASSIGN_SOURCE).toContain(DESTINATION_PREDICATES_SOURCE);
   });
 
   it('kills value-dependent masking by allowing .value only in the unmasked branch', () => {
-    const accesses = [...SNAPSHOT_SOURCE.matchAll(/\.value\b/gu)].map((match) => match.index);
+    const accesses = [...SNAPSHOT_SOURCE.matchAll(/element\.value\b/gu)].map((match) => match.index);
     expect(accesses.length).toBeGreaterThan(0);
     expect(accesses.every((index) => index! > SNAPSHOT_SOURCE.indexOf('} else {'))).toBe(true);
     expect(SNAPSHOT_SOURCE.indexOf('var masked =')).toBeLessThan(SNAPSHOT_SOURCE.indexOf('if (masked)'));
@@ -259,24 +304,31 @@ describe('isolated-world source strings', () => {
 
   it('pins value to controls and own text to name without duplicating it as value', () => {
     vi.stubGlobal('Node', { TEXT_NODE: 3 });
+    vi.stubGlobal('Element', FakeElement);
     vi.stubGlobal('location', { origin: 'https://example.test', pathname: '/snapshot' });
     const textNode = { nodeType: 3, textContent: 'paragraph text', nextSibling: null };
     const input = {
       tagName: 'INPUT', type: 'text', value: 'field value', firstChild: null, labels: undefined,
-      getAttribute: (name: string) => name === 'aria-label' ? 'Echo' : null,
+      attributes: new Map([['aria-label', 'Echo']]),
     };
     const paragraph = {
-      tagName: 'P', firstChild: textNode, labels: undefined,
-      getAttribute: (_name: string) => null,
+      tagName: 'P', firstChild: textNode, labels: undefined, attributes: new Map(),
     };
-    const root = { querySelectorAll: () => [input, paragraph] };
+    const password = {
+      tagName: 'INPUT', type: 'password', value: 'must not escape', firstChild: null, labels: undefined,
+      attributes: new Map([['role', 'textbox'], ['aria-label', 'Password']]),
+    };
+    const root = { querySelectorAll: () => [input, password, paragraph] };
 
-    expect(sourceFunction(SNAPSHOT_SOURCE).call(root)).toEqual({
+    const snapshot = sourceFunction(SNAPSHOT_SOURCE).call(root);
+    expect(snapshot).toEqual({
       url: 'https://example.test/snapshot',
       nodes: [
         { tag: 'input', masked: false, name: 'Echo', value: 'field value' },
+        { tag: 'input', masked: true },
         { tag: 'p', masked: false, name: 'paragraph text' },
       ],
     });
+    expect(Reflect.ownKeys(snapshot.nodes[1])).toEqual(['tag', 'masked']);
   });
 });

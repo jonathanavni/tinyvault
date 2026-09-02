@@ -56,6 +56,18 @@ describe('local vault writer', () => {
     expect(MAX_SECRET_CODE_UNITS).toBe(4096);
   });
 
+  it.each(['line\nfeed', 'carriage\rreturn', 'both\r\nends'])(
+    'kills HTML value-sanitisation drift by refusing CR/LF secret %# before disk access',
+    async (secret) => {
+      const touched: string[] = [];
+      await expect(writeLocalVault(
+        '/vault', '/key', [entry(secret)],
+        { fs: writerFsWithKey(new Uint8Array(32), touched) },
+      )).rejects.toThrow('Invalid local vault entry');
+      expect(touched).toEqual([]);
+    },
+  );
+
   it('kills non-round-tripping handles, normalization-on-read-only, and loose fresh-file modes', async () => {
     // Mutation killed: writer emits malformed/duplicate handles, stores unnormalized origin, or omits 0600.
     const { vaultPath, keyPath } = await paths();

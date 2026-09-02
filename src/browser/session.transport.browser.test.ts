@@ -91,6 +91,13 @@ describe('constant transport and conservative ambiguous rejection', () => {
       if (method === 'Runtime.callFunctionOn' && params?.functionDeclaration === ASSIGN_SOURCE) {
         assignCalls += 1;
         argumentBytes.push(Buffer.byteLength(JSON.stringify(params.arguments)));
+        const args = params.arguments as Array<{ value?: unknown }>;
+        const hex = args[1]?.value;
+        expect(typeof hex).toBe('string');
+        expect(hex as string).toMatch(/^[0-9a-f]{16384}$/u);
+        const decoded = Array.from({ length: (hex as string).length / 4 }, (_, index) =>
+          String.fromCharCode(Number.parseInt((hex as string).slice(index * 4, index * 4 + 4), 16))).join('');
+        expect(decoded).toHaveLength(MAX_SECRET_CODE_UNITS);
       }
       if (method === 'Runtime.callFunctionOn' && params?.functionDeclaration === SNAPSHOT_SOURCE) snapshotCalls += 1;
       return next(method, params);
@@ -98,7 +105,7 @@ describe('constant transport and conservative ambiguous rejection', () => {
     const { session } = await openAndPin(setup);
     const secrets = [
       'a', 'x'.repeat(16), 'x'.repeat(64), 'x'.repeat(1024), 'x'.repeat(MAX_SECRET_CODE_UNITS),
-      '\"\\\n\r\t', 'é漢字', `${'\"\\'.repeat(128)}`,
+      '\"\\\n\r\t\b\f', 'é漢字', `${'\"\\'.repeat(128)}`,
     ];
     for (const secret of secrets) {
       const outcome = await setup.host.runExclusive(session.sessionId, async (port) => {

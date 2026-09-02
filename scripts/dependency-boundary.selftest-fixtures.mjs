@@ -317,6 +317,12 @@ function runTraversalCapFixture() {
 }
 
 function runVettedConfigurationFixtures() {
+  runVettedVersionFixtures();
+  runVettedShapeFixtures();
+  runInvalidVettedGrantFixture();
+}
+
+function runVettedVersionFixtures() {
   withVettedProbe((root, vetted) => {
     writeVettedProbe(root, { 'index.js': cleanModule(), 'opaque.js': cleanModule() });
     rewriteInstalledPackageVersion(root, 'vetted-probe', '2.0.0');
@@ -350,6 +356,9 @@ function runVettedConfigurationFixtures() {
     lockFixturePackage(root, 'vetted-probe', '1.0.0', 'sha512-fixture-integrity');
     assertPass(root, vetted, 'present lockfile-integrity control was rejected');
   });
+}
+
+function runVettedShapeFixtures() {
   withVettedProbe((root, vetted) => {
     writeVettedProbe(root, { 'index.js': cleanModule(), 'opaque.js': cleanModule() });
     assertConfigurationViolation(root, [{ ...vetted[0], packages: [] }],
@@ -371,6 +380,15 @@ function runVettedConfigurationFixtures() {
         `invalid reachableFrom entry was accepted: ${value}`);
     });
   }
+  withVettedProbe((root, vetted) => {
+    writeVettedProbe(root, { 'index.js': cleanModule(), 'opaque.js': cleanModule() });
+    assertConfigurationViolation(root, [{ ...vetted[0], reachableFrom: ['src/browser/../core'] }],
+      'reachableFrom path must be a normalized, non-empty, in-repo directory',
+      'C3 path-normalization mutant accepted src/browser/../core');
+  });
+}
+
+function runInvalidVettedGrantFixture() {
   withVettedProbe((root, vetted) => {
     write(root, 'src/browser/playwright.ts', "import 'vetted-probe';\n");
     writeVettedProbe(root, {
@@ -398,6 +416,8 @@ function runDirectImporterFixtures() {
       'session.ts -> playwright-core importer mutant passed'],
     ['src/browser/playwright.ts', 'playwright-core', 'vetted package direct import forbidden',
       'playwright.ts -> playwright-core direct-package mutant passed'],
+    ['src/core/fillService.ts', 'playwright', 'vetted package importer file',
+      'fillService.ts -> playwright importer mutant passed'],
     ['src/core/x.ts', 'playwright', 'vetted package importer file',
       'src/core/x.ts -> playwright importer mutant passed'],
     ['src/supervisor/marker.ts', 'playwright', 'vetted package importer file',
@@ -428,6 +448,16 @@ function runDirectImporterFixtures() {
 }
 
 function runTypeImportFixtures() {
+  withFixture('export const safe = true;', (root) => {
+    write(root, 'src/supervisor/host.ts', 'export const host = true;\n');
+    write(root, 'src/core/fillService.ts', "import { host } from '../supervisor/host'; void host;\n");
+    assertBoundaryViolation(root, undefined, (violation) =>
+      violation.entry.endsWith('src/core/fillService.ts')
+        && violation.target.endsWith('src/supervisor/host.ts'),
+    'fillService.ts -> supervisor/host protected-edge mutant passed');
+    write(root, 'src/core/fillService.ts', 'export const clean = true;\n');
+    assertPass(root, undefined, 'fillService.ts protected-edge same-file clean mirror was rejected');
+  });
   withFixture('export const safe = true;', (root) => {
     write(root, 'src/supervisor/lockdownDomain.ts',
       'export type LockdownLifecycle = Readonly<{ clear(): void }>;\n');
@@ -483,6 +513,20 @@ function runProductionWalkFixtures() {
     write(root, 'src/core/evil.mjs', 'export const clean = true;\n');
     assertPass(root, undefined, 'clean orphan src/core .mjs control was rejected');
   });
+  withFixture('export const safe = true;', (root) => {
+    write(root, 'src/supervisor/host.ts', 'export const host = true;\n');
+    write(root, 'rogue/evil.mjs', "import '../src/supervisor/host.ts';\n");
+    fs.symlinkSync('../../rogue', path.join(root, 'src/core/alias'), 'dir');
+    assertConfigurationViolation(root, undefined, 'source directory symlink is forbidden: src/core/alias',
+      'rogue .mjs directory symlink escaped the production filesystem walk');
+  });
+  withFixture('export const safe = true;', (root) => {
+    write(root, 'rogue-tests/escape.test.ts', "import '../src/supervisor/host.ts';\n");
+    write(root, 'src/supervisor/host.ts', 'export const host = true;\n');
+    fs.symlinkSync('../rogue-tests', path.join(root, 'testbed/linked-tests'), 'dir');
+    assertConfigurationViolation(root, undefined, 'source directory symlink is forbidden: testbed/linked-tests',
+      'symlinked test directory escaped the all-source importer scan');
+  });
 }
 
 function runZoneIdentityFixtures() {
@@ -506,6 +550,13 @@ function runZoneIdentityFixtures() {
       violation.entry.endsWith('src/browser/session.ts')
         && violation.syntax.startsWith('vetted package importer file'),
     'src/browser alias inherited playwright.ts importer-file identity');
+  });
+  withFixture('export const safe = true;', (root) => {
+    write(root, 'src/core/core-real.ts', 'export const clean = true;\n');
+    fs.unlinkSync(path.join(root, 'src/browser/playwright.ts'));
+    fs.symlinkSync('../core/core-real.ts', path.join(root, 'src/browser/playwright.ts'));
+    assertConfigurationViolation(root, undefined, 'source file resolves across zones',
+      'C2 reverse browser-link to core-real symlink escaped cross-zone classification');
   });
 }
 

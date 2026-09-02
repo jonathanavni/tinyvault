@@ -1,12 +1,15 @@
 export const DESTINATION_PREDICATES_SOURCE = `function () {
   var el = this;
+  var getAttributeDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'getAttribute');
+  if (!getAttributeDescriptor || typeof getAttributeDescriptor.value !== 'function') return false;
+  var getAttribute = getAttributeDescriptor.value;
   if (Object.prototype.toString.call(el) !== '[object HTMLInputElement]') return false;
-  var declaredType = el.getAttribute('type');
+  var declaredType = getAttribute.call(el, 'type');
   if (typeof declaredType !== 'string' || declaredType.toLowerCase() !== 'password') return false;
   if (el.type !== 'password' || el.disabled || el.readOnly || el.hasAttribute('hidden')) return false;
   if (!el.isConnected || window.top !== window || !el.form) return false;
   var form = el.form;
-  var action = form.getAttribute('action');
+  var action = getAttribute.call(form, 'action');
   if (new URL(action === null ? '' : action, location.href).origin !== location.origin) return false;
   var descriptor = Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, 'elements');
   if (!descriptor || typeof descriptor.get !== 'function') return false;
@@ -14,10 +17,10 @@ export const DESTINATION_PREDICATES_SOURCE = `function () {
   for (var index = 0; index < controls.length; index += 1) {
     var control = controls[index];
     var tag = String(control.tagName || '').toLowerCase();
-    var type = String(control.getAttribute('type') || '').toLowerCase();
+    var type = String(getAttribute.call(control, 'type') || '').toLowerCase();
     var submits = tag === 'button' || (tag === 'input' && (type === 'submit' || type === 'image'));
     if (!submits) continue;
-    var formaction = control.getAttribute('formaction');
+    var formaction = getAttribute.call(control, 'formaction');
     if (formaction !== null && new URL(formaction, location.href).origin !== location.origin) return false;
   }
   el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
@@ -49,13 +52,19 @@ export const ASSIGN_SOURCE = `function (expectedOrigin, hex, lengthDigits) {
   }
   var destinationPredicates = ${DESTINATION_PREDICATES_SOURCE};
   if (!destinationPredicates.call(el)) return { assigned: false, reason: 'identity' };
-  var controlToken = el.getAttribute('data-tv-control');
-  var documentToken = document.documentElement.getAttribute('data-tv-document');
+  var getAttributeDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'getAttribute');
+  if (!getAttributeDescriptor || typeof getAttributeDescriptor.value !== 'function') {
+    return { assigned: false, reason: 'identity' };
+  }
+  var getAttribute = getAttributeDescriptor.value;
+  var controlToken = getAttribute.call(el, 'data-tv-control');
+  var documentToken = getAttribute.call(document.documentElement, 'data-tv-document');
   var length = Number(lengthDigits);
   var decoded = '';
-  for (var index = 0; index < length; index += 1) {
+  for (var index = 0; index < 4096; index += 1) {
     decoded += String.fromCharCode(Number.parseInt(hex.slice(index * 4, index * 4 + 4), 16));
   }
+  decoded = decoded.slice(0, length);
   var descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
   if (!descriptor || typeof descriptor.set !== 'function') return { assigned: false, reason: 'identity' };
   descriptor.set.call(el, decoded);
@@ -71,8 +80,30 @@ export const ASSIGN_SOURCE = `function (expectedOrigin, hex, lengthDigits) {
   };
 }`;
 
+export const TYPE_SOURCE = `function (text) {
+  if (!this.isConnected) return false;
+  var tag = Object.prototype.toString.call(this);
+  var prototype = tag === '[object HTMLInputElement]' ? HTMLInputElement.prototype :
+    tag === '[object HTMLTextAreaElement]' ? HTMLTextAreaElement.prototype :
+    tag === '[object HTMLSelectElement]' ? HTMLSelectElement.prototype : null;
+  if (prototype === null) return false;
+  var descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+  if (!descriptor || typeof descriptor.set !== 'function') return false;
+  descriptor.set.call(this, text);
+  this.dispatchEvent(new Event('focus'));
+  this.dispatchEvent(new Event('input', { bubbles: true }));
+  this.dispatchEvent(new Event('change', { bubbles: true }));
+  this.dispatchEvent(new Event('blur'));
+  return true;
+}`;
+
 export const SNAPSHOT_SOURCE = `function () {
   var root = this;
+  var getAttributeDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'getAttribute');
+  if (!getAttributeDescriptor || typeof getAttributeDescriptor.value !== 'function') {
+    return { url: location.origin + location.pathname, nodes: [] };
+  }
+  var getAttribute = getAttributeDescriptor.value;
   var tainted = Array.prototype.slice.call(arguments);
   var selector = 'input,textarea,select,button,a[href],h1,h2,h3,h4,h5,h6,label,p,span,div';
   var elements = root.querySelectorAll(selector);
@@ -95,11 +126,11 @@ export const SNAPSHOT_SOURCE = `function () {
       nodes.push({ tag: tag, masked: true });
     } else {
       var node = { tag: tag, masked: false };
-      var role = element.getAttribute('role');
+      var role = getAttribute.call(element, 'role');
       var labels = element.labels;
       var labelText = labels && labels.length > 0 ? String(labels[0].textContent || '').trim() : '';
-      var name = element.getAttribute('aria-label') || labelText || element.getAttribute('placeholder') ||
-        element.getAttribute('name') || text;
+      var name = getAttribute.call(element, 'aria-label') || labelText ||
+        getAttribute.call(element, 'placeholder') || getAttribute.call(element, 'name') || text;
       var value = tag === 'input' || tag === 'textarea' || tag === 'select' ? String(element.value) : '';
       if (role !== null) node.role = role.slice(0, 200);
       if (name) node.name = String(name).slice(0, 200);

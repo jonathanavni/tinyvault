@@ -182,6 +182,14 @@ const unsupportedCases = [
     'createRequire',
     "import { createRequire } from 'node:module'; void createRequire(import.meta.url)('../supervisor/evaluator');",
   ],
+  [
+    'dynamic node:module loader to playwright-core',
+    "const mod = await import('node:module'); mod.createRequire(import.meta.url)('playwright-core');",
+  ],
+  [
+    'dynamic module loader to protected target',
+    "const mod = await import('module'); mod.createRequire(import.meta.url)('../supervisor/evaluator');",
+  ],
 ];
 
 for (const [name, source] of unsupportedCases) {

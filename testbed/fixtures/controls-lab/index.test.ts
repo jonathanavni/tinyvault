@@ -8,14 +8,16 @@ const REQUIRED_CASE_ROUTES = [
   '/ancestor-opacity-zero', '/ancestor-filter-opacity-zero', '/offscreen', '/scale-zero',
   '/overlay', '/formless', '/off-origin-action', '/clobbered-action-off-origin',
   '/clobbered-action-same-origin', '/descendant-formaction', '/external-formaction',
-  '/clobbered-elements-off-origin', '/clobbered-elements-same-origin', '/patched-type',
-  '/poisoned-setter', '/below-fold', '/label-overlay', '/smooth-scroll', '/main-and-subframe',
+  '/clobbered-elements-off-origin', '/clobbered-elements-same-origin',
+  '/clobber-getattribute-same-origin', '/clobber-getattribute-off-origin',
+  '/patched-type', '/poisoned-getattribute', '/poisoned-setter', '/below-fold', '/label-overlay',
+  '/smooth-scroll', '/main-and-subframe',
   '/cross-origin-frame-only', '/same-origin-frame-only', '/nowhere', '/redirect-start',
   '/redirect-middle', '/redirect-final', '/document-open-after-pin', '/remove-after-pin',
   '/replace-after-pin', '/action-after-pin', '/opacity-after-pin', '/overlay-after-pin',
   '/push-state-after-pin', '/token-rewrite', '/mirror-span', '/echo-field',
   '/self-navigating-iframe', '/iframe-self', '/iframe-final', '/static-token-login',
-  '/storage', '/controls',
+  '/storage', '/controls', '/post-body',
 ] as const;
 
 describe('two-origin controls lab manifest', () => {
