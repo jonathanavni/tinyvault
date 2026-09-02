@@ -243,6 +243,31 @@ describe('origin, staleness, and backend mapping', () => {
     expect(setup.log).toContain('observe');
   });
 
+  it('kills deleting the impossible unobserved-with-topOrigin observation throw', async () => {
+    const setup = harness();
+    let reads = 0;
+    const impossiblePort: FillDestinationPort = {
+      ...setup.port,
+      observeTop: async () => ({
+        get origin() { return reads++ === 0 ? ORIGIN_A : null; },
+        path: `${ORIGIN_A}/login`,
+      }),
+    };
+    const sessions: SessionHost = { runExclusive: async (_id, operation) => operation(impossiblePort) };
+    const service = createFillService({ backend: setup.backend, sessions, registry: setup.domain.registry });
+
+    const outcome = await service.fill(request());
+    expect(outcome).toEqual({
+      result: { ok: false, reason: 'no-password-control' },
+      observation: {
+        topOrigin: null, topPath: null, unobserved: false, reobservedOrigin: null,
+        assertedMismatch: null, assigned: null,
+      },
+    });
+    expect(setup.backend.resolveSecret).toHaveBeenCalledOnce();
+    expect(setup.secrets[0]!.clearCalls).toBe(1);
+  });
+
   it('kills canonicalOrigin re-reads after the step-1 policy snapshot', async () => {
     let originReads = 0;
     const policy = {

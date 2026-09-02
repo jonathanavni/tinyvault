@@ -160,10 +160,23 @@ export function plantedLeakCases(
     ...channelLeakCases(auth),
     vaultedModelContextLeakCase(),
     ...fragmentedLeakCases(auth),
+    base64OffsetLeakCase(auth),
     ...encodedLeakCases(auth),
     ...caseVariantLeakCases(auth),
     ...structuredLeakCases(auth),
   ];
+}
+
+function base64OffsetLeakCase(auth: ScenarioAuth): PlantedLeakCase {
+  const generator = new CanaryGenerator();
+  const canary = generator.mint('meta-base64-offset', 'run-0');
+  const canaryBytes = new TextEncoder().encode(canary);
+  const bytes = Buffer.from(Uint8Array.of(0xff, ...canaryBytes)).toString('base64');
+  return {
+    name: 'binary:base64-offset-1',
+    canary,
+    events: [unauthorizedEvent('network-body', bytes, 190, auth)],
+  };
 }
 
 function channelLeakCases(auth: ScenarioAuth): PlantedLeakCase[] {

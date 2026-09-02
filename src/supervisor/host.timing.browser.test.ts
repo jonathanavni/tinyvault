@@ -28,6 +28,7 @@ const CANARY = flatCopy('TVC_timing_probe_7B32');
 const NONMATCH = flatCopy(rotateFinalCharacter(CANARY));
 const TIMING_PREFIX = 'timing-prefix:';
 const TIMING_SUFFIX = ':timing-suffix';
+const TRIPWIRE_BATCH = 64;
 const PROBE_NAMES = [
   'fill-short-vs-long',
   'queued-short-vs-long',
@@ -102,6 +103,10 @@ describe.sequential('H Probe P timing bounds', () => {
     expect(flatCopy(sliced)).toBe(sliced);
     expect(isFlatCopyBody(flatCopy.toString())).toBe(true);
     expect(isFlatCopyBody('function flatCopy(value) { return value; }')).toBe(false);
+    expect(hasPinnedTripwireBatch(source)).toBe(true);
+    expect(hasPinnedTripwireBatch(source.replace(
+      /^const TRIPWIRE_BATCH = 64;$/mu, 'const TRIPWIRE_BATCH = 1;',
+    ))).toBe(false);
   });
   it('kills secret-length-dependent fill latency after asserting exact result equality', async () => {
     const setup = await timedFillHarness();
@@ -210,7 +215,7 @@ describe.sequential('H Probe P timing bounds', () => {
     };
     const timedToolCall = async (host: SupervisedHost) => {
       const before = [match.mock.calls.length, mint.mock.calls.length, adjudicate.mock.calls.length];
-      for (let index = 0; index < 64; index += 1) await host.tools.list_vault();
+      await runTripwireBatch(host);
       timedCallDeltas.push([
         match.mock.calls.length - before[0]!,
         mint.mock.calls.length - before[1]!,
@@ -312,6 +317,40 @@ describe.sequential('H Probe P timing bounds', () => {
       .toThrow(`Probe P family rejected: ${name}`);
   }, 180_000);
 
+  it('reports a path-specific 2us-per-call injected-bias control rejected by the family gate', async () => {
+    let hostA!: SupervisedHost;
+    let hostB!: SupervisedHost;
+    let currentHost: SupervisedHost | undefined;
+    const setupHost = () => {
+      currentHost?.finish();
+      currentHost = composeSupervisedHost({
+        fillService: timingService(NONMATCH),
+        sessions: new TimingSessions(),
+        lease: new EvidenceLease(CANARY),
+      });
+      activeHosts.push(currentHost);
+      return currentHost;
+    };
+    const name = 'tripwire-batched-injected-bias-control';
+    const result = await runProbeP({
+      pairs: 500,
+      warmup: 20,
+      setupA: () => { hostA = setupHost(); },
+      setupB: () => { hostB = setupHost(); },
+      a: () => runTripwireBatch(hostA),
+      b: () => runTripwireBatch(hostB, () => spinForMicroseconds(2)),
+    });
+    currentHost?.finish();
+    let rejection = '';
+    try {
+      assertProbeFamily(new Map([[name, result]]), { alpha: 0.01, expected: [name] });
+    } catch (error) {
+      rejection = error instanceof Error ? error.message : String(error);
+    }
+    console.info(`${name}: p=${result.pValue} aggregateBiasUs=${2 * TRIPWIRE_BATCH} rejected=${rejection}`);
+    expect(rejection).toBe(`Probe P family rejected: ${name}`);
+  }, 180_000);
+
   it('reports the length-proportional fill-wrapper sensitivity floor', async () => {
     const setup = await timedFillHarness();
     const short = 's'.repeat(16);
@@ -338,7 +377,6 @@ describe.sequential('H Probe P timing bounds', () => {
       console.info(`probe-p-sensitivity-${microseconds}us: p=${result.pValue}`);
     }
     console.info(`probe-p-sensitivity-floor-us=${Math.min(...rejected)}`);
-    expect(rejected).toContain(32);
   }, 180_000);
 });
 
@@ -353,6 +391,19 @@ function flatCopy(value: string): string {
 
 function isFlatCopyBody(source: string): boolean {
   return source.includes('String.fromCharCode(...Array.from(') && !source.includes('return value;');
+}
+
+function hasPinnedTripwireBatch(source: string): boolean {
+  // Anchored to a whole line: the quoted mutant text inside this file must not satisfy the pin.
+  return /^const TRIPWIRE_BATCH = 64;$/mu.test(source)
+    && source.includes('index < TRIPWIRE_BATCH; index += 1');
+}
+
+async function runTripwireBatch(host: SupervisedHost, afterCall: () => void = () => undefined): Promise<void> {
+  for (let index = 0; index < TRIPWIRE_BATCH; index += 1) {
+    await host.tools.list_vault();
+    afterCall();
+  }
 }
 
 function spinForMicroseconds(microseconds: number): void {

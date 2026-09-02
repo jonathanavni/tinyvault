@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
@@ -7,6 +7,25 @@ import { roundEightViolations } from '../../scripts/retention/rules';
 
 
 describe('retention rule round-eight support', () => {
+  it('registers the round-eight describe title exactly once across every retention test', async () => {
+    const files = (await readdir('src/browser'))
+      .filter((name) => /^retention.*\.test\.ts$/u.test(name)).sort();
+    const registrations: string[] = [];
+    for (const name of files) {
+      const fileName = `src/browser/${name}`;
+      const source = ts.createSourceFile(
+        fileName, await readFile(fileName, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS,
+      );
+      walk(source, (node) => {
+        if (!ts.isCallExpression(node) || !isDescribeCall(node.expression)) return;
+        const title = node.arguments[0];
+        if (title !== undefined && ts.isStringLiteral(title)
+          && title.text === 'retention rule round-eight support') registrations.push(fileName);
+      });
+    }
+    expect(registrations).toEqual(['src/browser/retention.round8.test.ts']);
+  });
+
   it('fails closed when the local-file Secret constructor disappears', () => {
     expect(roundEightViolations('const value = 1;', 'src/backends/localFile.ts'))
       .toContain('expected one local-file Secret construction, got 0');
@@ -57,3 +76,14 @@ describe('retention rule round-eight support', () => {
     expect(roundEightViolations(mutant, fileName)).not.toEqual([]);
   });
 });
+
+function isDescribeCall(expression: ts.LeftHandSideExpression): boolean {
+  if (ts.isIdentifier(expression)) return expression.text === 'describe';
+  return ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression)
+    && expression.expression.text === 'describe';
+}
+
+function walk(root: ts.Node, visit: (node: ts.Node) => void): void {
+  visit(root);
+  root.forEachChild((child) => walk(child, visit));
+}

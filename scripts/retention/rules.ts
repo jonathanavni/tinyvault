@@ -1,4 +1,5 @@
 import { FUNCTION_ALLOWLISTS } from './allowlists';
+import { inspectNonLocalAssignments } from './nonLocalAssignments';
 import { isRoundEightConditionOccurrence, roundEightViolations } from './round8.rules';
 import ts from 'typescript';
 
@@ -16,10 +17,12 @@ export { roundEightViolations } from './round8.rules';
 
 /**
  * Definitive M4 scope: direct syntactic data, object, property, control, try/finally, constructor,
- * and CDP-return shapes in the fixed source set below, across every function named by its per-file
- * allowlist, plus the named S1-S30 mutant corpus. Not covered: interprocedural flows through modules
- * outside the file set, eval/Function, dynamic property names, or in-realm source strings. No further
- * shape classes are added in M4.
+ * CDP-return, and non-local write shapes in the fixed source set below. Every function in every fixed
+ * file is analysed; non-local writes are tainted from parameters, this.#value/this.value, locals derived
+ * from either, and sodium decrypt/open results, plus the named S1-S35 mutant corpus. Not covered:
+ * interprocedural flows outside the file set, eval/Function, dynamic property names, or in-realm source
+ * strings. The permitted CDP guard is a name allowlist; a look-alike guard that performs work inside its
+ * condition is not detected. No further shape classes are added in M4.
  */
 export const RETENTION_SOURCE_FILES = [
   'src/browser/session.ts',
@@ -36,18 +39,21 @@ export function retentionViolations(source: string, fileName: string): string[] 
   const file = parse(source, fileName);
   const roundEight = roundEightViolations(source, fileName);
   const inventory = inspectFunctionAllowlist(file, fileName);
+  const nonLocal = inspectNonLocalAssignments(file, fileName);
   if (fileName.endsWith('src/backends/localFile.ts')) {
-    return unique([...inventory, ...roundEight, ...inspectLocalFileKey(file)]);
+    return unique([...inventory, ...nonLocal, ...roundEight, ...inspectLocalFileKey(file)]);
   }
   if (fileName.endsWith('src/backends/localFileSodium.ts')) {
-    return unique([...inventory, ...roundEight, ...inspectSodiumOpen(file)]);
+    return unique([...inventory, ...nonLocal, ...roundEight, ...inspectSodiumOpen(file)]);
   }
   if (fileName.endsWith('src/core/redaction.ts')) {
-    return unique([...inventory, ...roundEight, ...inspectSecretConsume(file)]);
+    return unique([...inventory, ...nonLocal, ...roundEight, ...inspectSecretConsume(file)]);
   }
-  if (fileName.endsWith('src/backends/localFileFormat.ts')) return unique([...inventory, ...roundEight]);
+  if (fileName.endsWith('src/backends/localFileFormat.ts')) {
+    return unique([...inventory, ...nonLocal, ...roundEight]);
+  }
   const consumeCalls = descendants(file).filter(isConsumeCall);
-  const violations: string[] = [...inventory];
+  const violations: string[] = [...inventory, ...nonLocal];
   if (fileName.endsWith('src/core/fillService.ts')) {
     const resolveCalls = descendants(file).filter(isResolveSecretCall);
     if (resolveCalls.length !== 1) violations.push(`expected one resolveSecret call, got ${resolveCalls.length}`);
@@ -516,23 +522,6 @@ function collectTaintedBindings(
   return tainted;
 }
 
-function nonLocalAssignments(owner: TsFunctionLikeDeclaration): string[] {
-  const violations: string[] = [];
-  for (const node of descendants(owner)) {
-    if (ts.isBinaryExpression(node) && isAssignment(node.operatorToken.kind)) {
-      if (!ts.isIdentifier(node.left) || !isFunctionLocal(node.left.text, owner)) {
-        violations.push(node.left.getText());
-      }
-    }
-    if ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node))
-      && [ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(node.operator)
-      && (!ts.isIdentifier(node.operand) || !isFunctionLocal(node.operand.text, owner))) {
-      violations.push(node.operand.getText());
-    }
-  }
-  return violations;
-}
-
 function inspectFunctionAllowlist(file: TsSourceFile, fileName: string): string[] {
   const expected = FUNCTION_ALLOWLISTS[fileName];
   if (expected === undefined) return [];
@@ -544,6 +533,7 @@ function inspectFunctionAllowlist(file: TsSourceFile, fileName: string): string[
 
 function functionLabel(node: TsFunctionLikeDeclaration): string {
   if (node.name !== undefined && ts.isIdentifier(node.name)) return node.name.text;
+  if (node.name !== undefined && ts.isComputedPropertyName(node.name)) return node.name.expression.getText();
   if (ts.isConstructorDeclaration(node)) return 'constructor';
   const parent = node.parent;
   if (ts.isPropertyAssignment(parent) && ts.isIdentifier(parent.name)) return parent.name.text;

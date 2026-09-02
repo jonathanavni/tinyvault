@@ -13,6 +13,7 @@ describe('secret-retention named mutant corpus', () => {
       'src/browser/retention.corpus.test.ts',
       'src/browser/retention.round8.test.ts',
       'scripts/retention/rules.ts',
+      'scripts/retention/nonLocalAssignments.ts',
       'scripts/retention/round8.rules.ts',
       'scripts/retention/allowlists.ts',
     ]) {
@@ -224,6 +225,85 @@ describe('secret-retention named mutant corpus', () => {
       .replace('      key,\n    );\n  },\n  async memzero',
         '      key,\n    );\n    zzStash.push(plaintext);\n    return plaintext;\n  },\n  async memzero')}`;
     expect(retentionViolations(s30, sodiumName), 'S30 sodium open stash').not.toEqual([]);
+  });
+
+  it('kills all-function non-local write mutants S31 through S35', async () => {
+    const redactionName = 'src/core/redaction.ts';
+    const redaction = await readFile(resolve(redactionName), 'utf8');
+    const constructorWrite = '    this.#value = value;';
+    const s31 = `let RETAINED: unknown;\n${redaction.replace(
+      constructorWrite, `${constructorWrite}\n    RETAINED = value;`,
+    )}`;
+    expect(retentionViolations(s31, redactionName), 'S31 Secret constructor stash').not.toEqual([]);
+
+    const sodiumName = 'src/backends/localFileSodium.ts';
+    const sodium = await readFile(resolve(sodiumName), 'utf8');
+    const memzero = '  async memzero(buffer: Uint8Array): Promise<void> {\n    await sodium.ready;';
+    const s32 = `let RETAINED: unknown;\n${sodium.replace(
+      memzero, `${memzero}\n    RETAINED = buffer;`,
+    )}`;
+    expect(retentionViolations(s32, sodiumName), 'S32 memzero buffer stash').not.toEqual([]);
+
+    const localName = 'src/backends/localFile.ts';
+    const local = await readFile(resolve(localName), 'utf8');
+    const construction = "new Secret(new TextDecoder('utf-8', { fatal: true }).decode(plaintext))";
+    const s33 = `let RETAINED: string;\n${local.replace(
+      construction, "new Secret(RETAINED = new TextDecoder('utf-8', { fatal: true }).decode(plaintext))",
+    )}`;
+    expect(retentionViolations(s33, localName), 'S33 Secret constructor decode stash').not.toEqual([]);
+
+    const exposeReturn = '    return this.#value;';
+    const s34 = `let RETAINED: unknown;\n${redaction.replace(
+      exposeReturn, `    RETAINED = this.#value;\n${exposeReturn}`,
+    )}`;
+    expect(retentionViolations(s34, redactionName), 'S34 expose stash').not.toEqual([]);
+
+    const s35 = `let RETAINED: Uint8Array;\n${sodium
+      .replace('    return sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(',
+        '    return (RETAINED = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(')
+      .replace('      key,\n    );\n  },\n  async memzero',
+        '      key,\n    ));\n  },\n  async memzero')}`;
+    expect(retentionViolations(s35, sodiumName), 'S35 return assignment in sodium open').not.toEqual([]);
+  });
+
+  it('kills every named non-local mutation sink while allowing function-local mutation', async () => {
+    const fileName = 'src/backends/localFileSodium.ts';
+    const source = await readFile(resolve(fileName), 'utf8');
+    const marker = '    await sodium.ready;\n    sodium.memzero(buffer);';
+    const declarations = `
+      let RETAINED: unknown;
+      const RETAINED_LIST: unknown[] = [];
+      const RETAINED_MAP = new Map<string, unknown>();
+      const RETAINED_SET = new Set<unknown>();
+      const RETAINED_OBJECT: Record<string, unknown> = {};
+    `;
+    const mutations = [
+      'RETAINED = buffer;',
+      'RETAINED_LIST.push(buffer);',
+      "RETAINED_MAP.set('key', buffer);",
+      'RETAINED_SET.add(buffer);',
+      'Object.assign(RETAINED_OBJECT, { buffer });',
+      "Object.defineProperty(RETAINED_OBJECT, 'buffer', { value: buffer });",
+      'return (RETAINED = buffer);',
+    ];
+    for (const mutation of mutations) {
+      const mutant = `${declarations}\n${source.replace(marker,
+        `    await sodium.ready;\n    ${mutation}\n    sodium.memzero(buffer);`)}`;
+      expect(retentionViolations(mutant, fileName), mutation).not.toEqual([]);
+    }
+    const localMutation = source.replace(marker,
+      '    await sodium.ready;\n    const local: Uint8Array[] = [];\n    local.push(buffer);\n    sodium.memzero(buffer);');
+    expect(retentionViolations(localMutation, fileName)).toEqual([]);
+  });
+
+  it('pins secret-bearing occurrences even in redaction members with an empty production list', async () => {
+    const fileName = 'src/core/redaction.ts';
+    const source = await readFile(resolve(fileName), 'utf8');
+    const mutant = source.replace(
+      '  toString(): string {\n    return REDACTED;\n  }',
+      '  toString(): string {\n    void this.#value;\n    return REDACTED;\n  }',
+    );
+    expect(retentionViolations(mutant, fileName)).not.toEqual([]);
   });
 
   it('kills propertyReadAllowed and fixed-consequent checker mutants by source shape', async () => {

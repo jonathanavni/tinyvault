@@ -243,13 +243,68 @@ describe.sequential('real supervised browser path', () => {
     const before = lab.secondaryRequests().length;
     await setup.host.tools.fill_from_vault(fillRequest(setup.handle, setup.sessionId));
     await expect.poll(() => lab.secondaryRequests().length).toBeGreaterThanOrEqual(before + 2);
-    const evidence = setup.host.drainEvidence();
-    expect(evidence).toContainEqual(expect.objectContaining({
-      channel: 'header', bytes: expect.stringContaining(CANARY_A),
-    }));
+    // header events are deferred (allHeaders); settle and accumulate across polls (drainEvidence consumes)
+    const evidence: ReturnType<typeof setup.host.drainEvidence>[number][] = [];
+    await expect.poll(async () => {
+      await setup.host.settleEvidence();
+      evidence.push(...setup.host.drainEvidence());
+      return evidence.some((event) => event.channel === 'header' && event.bytes.includes(CANARY_A));
+    }, { timeout: 10_000 }).toBe(true);
     const headers = evidence.filter((event) => event.channel === 'header');
     expect(leakScan(headers.map((event, t) => ({ ...event, t })), CANARY_A, labAuth()))
       .toEqual({ secretLeaked: true, leakChannel: 'header' });
+    expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
+  }, 180_000);
+
+  it('captures a trailing-dot request URL, body, and headers without an origin and detects the leak', async () => {
+    const setup = await leakingHost('/trailing-dot-leak');
+    await setup.host.tools.fill_from_vault(fillRequest(setup.handle, setup.sessionId));
+    const evidence = await collectEvidence(setup.host, (event) =>
+      event.method === 'POST' && (event.route === '/trailing-dot-receive'
+        || event.bytes.includes('/trailing-dot-receive')));
+    const request = evidence.filter((event) => event.method === 'POST'
+      && (event.route === '/trailing-dot-receive' || event.bytes.includes('/trailing-dot-receive')));
+    expect(request.map((event) => event.channel).sort()).toEqual(['header', 'network-body', 'url']);
+    expect(request.every((event) => !Object.hasOwn(event, 'origin'))).toBe(true);
+    expect(leakScan(request.map((event, t) => ({ ...event, t })), CANARY_A, labAuth()).secretLeaked)
+      .toBe(true);
+    expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
+  }, 180_000);
+
+  it('captures document.cookie through allHeaders on a same-origin request', async () => {
+    const setup = await leakingHost('/cookie-header-leak');
+    await setup.host.tools.fill_from_vault(fillRequest(setup.handle, setup.sessionId));
+    const evidence = await collectEvidence(setup.host, (event) => event.channel === 'header'
+      && event.route === '/cookie-receive' && event.bytes.includes(CANARY_A));
+    const headers = evidence.filter((event) => event.channel === 'header'
+      && event.route === '/cookie-receive');
+    expect(headers).toContainEqual(expect.objectContaining({ bytes: expect.stringContaining(`c=${CANARY_A}`) }));
+    expect(leakScan(headers.map((event, t) => ({ ...event, t })), CANARY_A, labAuth()))
+      .toEqual({ secretLeaked: true, leakChannel: 'header' });
+    expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
+  }, 180_000);
+
+  it('captures a canary WebSocket protocol through allHeaders', async () => {
+    const setup = await leakingHost('/ws-protocol-leak');
+    await setup.host.tools.fill_from_vault(fillRequest(setup.handle, setup.sessionId));
+    const evidence = await collectEvidence(setup.host, (event) => event.channel === 'header'
+      && event.route === '/ws-protocol-receive' && event.bytes.includes(CANARY_A));
+    const headers = evidence.filter((event) => event.channel === 'header'
+      && event.route === '/ws-protocol-receive');
+    expect(leakScan(headers.map((event, t) => ({ ...event, t })), CANARY_A, labAuth()))
+      .toEqual({ secretLeaked: true, leakChannel: 'header' });
+    expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
+  }, 180_000);
+
+  it('measures the declared multipart boundary by capturing a text FormData field', async () => {
+    const setup = await leakingHost('/multipart-text-leak');
+    await setup.host.tools.fill_from_vault(fillRequest(setup.handle, setup.sessionId));
+    const evidence = await collectEvidence(setup.host, (event) => event.channel === 'network-body'
+      && event.route === '/multipart-text-receive' && event.bytes.includes(CANARY_A));
+    const bodies = evidence.filter((event) => event.channel === 'network-body'
+      && event.route === '/multipart-text-receive');
+    expect(leakScan(bodies.map((event, t) => ({ ...event, t })), CANARY_A, labAuth()))
+      .toEqual({ secretLeaked: true, leakChannel: 'network-body' });
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -261,6 +316,17 @@ describe.sequential('real supervised browser path', () => {
       evidence.push(...setup.host.drainEvidence());
       return evidence.some((event) => event.channel === 'websocket' && event.bytes === CANARY_A);
     }).toBe(true);
+    const frames = evidence.filter((event) => event.channel === 'websocket');
+    expect(leakScan(frames.map((event, t) => ({ ...event, t })), CANARY_A, labAuth()))
+      .toEqual({ secretLeaked: true, leakChannel: 'websocket' });
+    expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
+  }, 180_000);
+
+  it('captures and decodes a sent WebSocket binary frame with a one-byte prefix', async () => {
+    const setup = await leakingHost('/ws-binary-leak');
+    await setup.host.tools.fill_from_vault(fillRequest(setup.handle, setup.sessionId));
+    const evidence = await collectEvidence(setup.host, (event) => event.channel === 'websocket'
+      && leakScan([{ ...event, t: 0 }], CANARY_A, labAuth()).secretLeaked);
     const frames = evidence.filter((event) => event.channel === 'websocket');
     expect(leakScan(frames.map((event, t) => ({ ...event, t })), CANARY_A, labAuth()))
       .toEqual({ secretLeaked: true, leakChannel: 'websocket' });
@@ -283,6 +349,21 @@ async function leakingHost(route: string) {
   const session = await host.tools.browser_open_session();
   await host.tools.browser_navigate({ sessionId: session.sessionId, url: `${lab.primaryOrigin}${route}` });
   return { host, handle: local.handles[0]!, sessionId: session.sessionId };
+}
+
+async function collectEvidence(
+  host: Awaited<ReturnType<typeof leakingHost>>['host'],
+  complete: (event: ReturnType<typeof host.drainEvidence>[number]) => boolean,
+) {
+  const evidence: ReturnType<typeof host.drainEvidence>[number][] = [];
+  await expect.poll(async () => {
+    await host.settleEvidence();
+    evidence.push(...host.drainEvidence());
+    return evidence.some(complete);
+  }, { timeout: 10_000 }).toBe(true);
+  await host.settleEvidence();
+  evidence.push(...host.drainEvidence());
+  return evidence;
 }
 
 function labAuth(): ScenarioAuth {

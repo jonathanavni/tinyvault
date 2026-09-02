@@ -51,6 +51,7 @@ describe('checker meta-gate', () => {
   it('plants vaulted model-context and noisy cross-stream fragmentation cases', () => {
     const names = plantedLeakCases().map((testCase) => testCase.name);
     expect(names).toContain('vaulted:model-context');
+    expect(names).toContain('binary:base64-offset-1');
     expect(names).toContain('fragmented:cross-stream-noise');
     expect(names).toContain('fragmented:cross-request-noise');
   });

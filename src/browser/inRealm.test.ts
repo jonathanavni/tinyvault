@@ -447,8 +447,10 @@ describe('isolated-world source strings', () => {
     ]) {
       expect(DESTINATION_PREDICATES_SOURCE).toContain(`function ${helper}(`);
     }
-    expect(DESTINATION_PREDICATES_SOURCE.split('\n'))
-      .not.toEqual(expect.arrayContaining([expect.stringMatching(/;[ \t]+(?!(?:\/\/|\/\*))\S/u)]));
+    const stripped = stripStringLiteralsAndComments(DESTINATION_PREDICATES_SOURCE);
+    expect(stripped.split('\n')).not.toEqual(expect.arrayContaining([
+      expect.stringMatching(/;\s*\S/u),
+    ]));
   });
 
   it('derives the ASSIGN_SOURCE loop bound from MAX_SECRET_CODE_UNITS', async () => {
@@ -494,3 +496,10 @@ describe('isolated-world source strings', () => {
     expect(Reflect.ownKeys(snapshot.nodes[1])).toEqual(['tag', 'masked']);
   });
 });
+
+function stripStringLiteralsAndComments(source: string): string {
+  return source.replace(
+    /'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`|\/\/[^\n]*|\/\*[\s\S]*?\*\//gu,
+    (match) => match.replace(/[^\n]/gu, ' '),
+  );
+}

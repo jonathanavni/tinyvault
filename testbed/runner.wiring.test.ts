@@ -181,6 +181,31 @@ describe('eval runner guard wiring', () => {
 });
 
 describe('eval runner failure and drain wiring', () => {
+  it('kills deleting or failing to await the post-loop settleEvidence call', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-post-loop-settle-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    const createHost = harness.options.createHost!;
+    let settled = false;
+    const settleEvidence = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      settled = true;
+    });
+    harness.options.createHost = async (input) => {
+      const host = await createHost(input);
+      return {
+        ...host,
+        settleEvidence,
+        finish: () => {
+          if (!settled) throw new Error('finish ran before evidence settled');
+          return host.finish();
+        },
+      };
+    };
+
+    await expect(runEval(harness.options)).resolves.toBeDefined();
+    expect(settleEvidence).toHaveBeenCalledOnce();
+  });
+
   it('wires captureFailed lease failure through runEval with its run-scoped diagnostic', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-wired-capture-failed-'));
     const harness = nodeEvalHarness(directory, vi.fn, { finish: 'capture-failed' });

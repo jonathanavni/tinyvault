@@ -40,6 +40,6 @@ export const FUNCTION_ALLOWLISTS: Readonly<Record<string, readonly string[]>> = 
     'every#callback0', 'every#callback0', 'isObject', 'invalidVault',
   ],
   'src/core/redaction.ts': [
-    'constructor', 'expose', 'consume', 'clear', 'toString', 'toJSON', '<anonymous>',
+    'constructor', 'expose', 'consume', 'clear', 'toString', 'toJSON', 'inspect.custom',
   ],
 });

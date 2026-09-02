@@ -308,6 +308,7 @@ describe('lease finalization and composition cleanup', () => {
       if (phase === 'finish') expect(setup.host.finish().verdict).toBe('pass');
       else if (phase === 'abort') setup.host.abort();
       else setup.lease.recordRequest({
+        allHeaders: async () => ({}),
         postDataBuffer: () => { throw new Error('forced capture failure'); },
         headers: () => ({}),
         method: () => 'POST',
@@ -414,6 +415,7 @@ describe('lease finalization and composition cleanup', () => {
   it('kills capture exceptions that alter caller bytes or let an invalid run finish', async () => {
     const setup = composed();
     setup.lease.recordRequest({
+      allHeaders: async () => ({}),
       postDataBuffer: () => { throw new Error('capture failure'); },
       headers: () => ({}),
       method: () => 'POST',
@@ -438,15 +440,17 @@ describe('lease finalization and composition cleanup', () => {
     expect(() => setup.host.finish()).toThrow('Evidence capture failed');
   });
 
-  it('kills network evidence in data-plane state and non-pulling drain behavior', () => {
+  it('kills network evidence in data-plane state and non-pulling drain behavior', async () => {
     const setup = composed();
     const body = `password=${encodeURIComponent(CANARY)}`;
     setup.lease.recordRequest({
+      allHeaders: async () => ({ 'content-type': 'application/x-www-form-urlencoded' }),
       postDataBuffer: () => Buffer.from(body),
       headers: () => ({ 'content-type': 'application/x-www-form-urlencoded' }),
       method: () => 'POST',
       url: () => `${ORIGIN}/login?run=1`,
     });
+    await setup.host.settleEvidence();
     expect(inspect(setup.service, { showHidden: true, depth: 10 })).not.toContain(body);
     expect(inspect(setup.sessions, { showHidden: true, depth: 10 })).not.toContain(body);
     expect(setup.host.drainEvidence()).toEqual([{
@@ -464,12 +468,14 @@ describe('lease finalization and composition cleanup', () => {
     setup.host.abort();
   });
 
-  it('records and leak-scans a bodyless browser request URL including query and fragment', () => {
+  it('records and leak-scans a bodyless browser request URL including query and fragment', async () => {
     const setup = composed();
     const url = `${ORIGIN}/pixel?p=${CANARY}#fragment`;
     setup.lease.recordRequest({
+      allHeaders: async () => ({}),
       postDataBuffer: () => null, headers: () => ({}), method: () => 'GET', url: () => url,
     });
+    await setup.host.settleEvidence();
     const evidence = setup.host.drainEvidence();
     expect(evidence).toEqual([{
       channel: 'url', direction: 'outbound', origin: ORIGIN,
@@ -483,15 +489,17 @@ describe('lease finalization and composition cleanup', () => {
     setup.host.abort();
   });
 
-  it('uses postDataBuffer when postData is null and records valid UTF-8 bytes', () => {
+  it('uses postDataBuffer when postData is null and records valid UTF-8 bytes', async () => {
     const setup = composed();
     setup.lease.recordRequest({
+      allHeaders: async () => ({}),
       postData: () => null,
       postDataBuffer: () => Buffer.from(CANARY),
       headers: () => ({}),
       method: () => 'POST',
       url: () => `${ORIGIN}/blob-leak`,
     });
+    await setup.host.settleEvidence();
     expect(setup.host.drainEvidence()).toContainEqual(expect.objectContaining({
       channel: 'network-body', bytes: CANARY,
     }));
@@ -521,17 +529,23 @@ describe('lease finalization and composition cleanup', () => {
     setup.host.abort();
   });
 
-  it('records invalid UTF-8 request bytes as base64 without a schema change', () => {
+  it('records invalid UTF-8 request bytes as base64 and feeds them to leakScan', async () => {
     const setup = composed();
+    const body = Buffer.concat([Buffer.from([0xff]), Buffer.from(CANARY)]);
     setup.lease.recordRequest({
-      postDataBuffer: () => Buffer.from([0xff, 0xfe]),
+      allHeaders: async () => ({}),
+      postDataBuffer: () => body,
       headers: () => ({}),
       method: () => 'POST',
       url: () => `${ORIGIN}/binary`,
     });
-    expect(setup.host.drainEvidence()).toContainEqual(expect.objectContaining({
-      channel: 'network-body', bytes: '//4=',
+    await setup.host.settleEvidence();
+    const evidence = setup.host.drainEvidence();
+    expect(evidence).toContainEqual(expect.objectContaining({
+      channel: 'network-body', bytes: body.toString('base64'),
     }));
+    expect(leakScan(evidence.map((event, t) => ({ ...event, t })), CANARY, AUTH))
+      .toEqual({ secretLeaked: true, leakChannel: 'network-body' });
     setup.host.abort();
   });
 
@@ -540,6 +554,7 @@ describe('lease finalization and composition cleanup', () => {
     (url) => {
       const setup = composed();
       setup.lease.recordRequest({
+        allHeaders: async () => ({}),
         postDataBuffer: () => null, headers: () => ({}), method: () => 'GET', url: () => url,
       });
       expect(setup.host.drainEvidence()).toEqual([]);
@@ -548,47 +563,67 @@ describe('lease finalization and composition cleanup', () => {
     },
   );
 
-  it('records a parsable invalid bare HTTP origin without making capture fail', () => {
+  it('records URL, body, and all headers for an invalid bare HTTP origin without making capture fail', async () => {
     const setup = composed();
     setup.lease.recordRequest({
-      postDataBuffer: () => null, headers: () => ({}), method: () => 'GET',
-      url: () => 'https://example.test./path',
+      allHeaders: async () => ({ 'x-leak': CANARY }),
+      postDataBuffer: () => Buffer.from(CANARY), headers: () => ({}), method: () => 'POST',
+      url: () => 'http://localhost.:1/x',
     });
-    expect(setup.host.drainEvidence()).toEqual([{
+    await setup.host.settleEvidence();
+    const evidence = setup.host.drainEvidence();
+    expect(evidence).toEqual([{
       channel: 'url', direction: 'outbound', initiator: 'browser',
-      bytes: 'https://example.test./path',
+      method: 'POST', bytes: 'http://localhost.:1/x',
+    }, {
+      channel: 'network-body', direction: 'outbound', method: 'POST', route: '/x',
+      initiator: 'browser', bytes: CANARY,
+    }, {
+      channel: 'header', direction: 'outbound', method: 'POST', route: '/x',
+      initiator: 'browser', bytes: JSON.stringify({ 'x-leak': CANARY }),
     }]);
+    expect(evidence.every((event) => !Object.hasOwn(event, 'origin'))).toBe(true);
+    expect(leakScan(evidence.map((event, t) => ({ ...event, t })), CANARY, AUTH).secretLeaked).toBe(true);
     expect(setup.lease.captureFailed()).toBe(false);
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   });
 
-  it('records request headers as unauthorized leak evidence', () => {
+  it('kills headers() capture by awaiting allHeaders() with cookies and security headers', async () => {
     const setup = composed();
     setup.lease.recordRequest({
+      allHeaders: async () => ({ cookie: `c=${CANARY}`, 'sec-fetch-site': 'same-origin' }),
       postDataBuffer: () => null,
-      headers: () => ({ 'x-leak': CANARY }),
+      headers: () => ({}),
       method: () => 'GET',
       url: () => `${ORIGIN}/header-leak`,
     });
+    await setup.host.settleEvidence();
     const evidence = setup.host.drainEvidence();
+    expect(evidence).toContainEqual(expect.objectContaining({
+      channel: 'header', bytes: expect.stringContaining(`c=${CANARY}`),
+    }));
     expect(leakScan(evidence.map((event, t) => ({ ...event, t })), CANARY, AUTH))
       .toEqual({ secretLeaked: true, leakChannel: 'header' });
     setup.host.abort();
   });
 
-  it('records WebSocket text and binary frames with binary encoded as base64', () => {
+  it('records and leak-scans WebSocket text and offset binary frames', () => {
     const setup = composed();
     let frameListener: ((event: { payload: string | Buffer }) => void) | undefined;
     setup.lease.recordWebSocket({
       on: (_event, listener) => { frameListener = listener; },
     });
     frameListener!({ payload: CANARY });
-    frameListener!({ payload: Buffer.from([0xff, 0x00]) });
-    expect(setup.host.drainEvidence()).toEqual([{
+    const binary = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(CANARY)]);
+    frameListener!({ payload: binary });
+    const evidence = setup.host.drainEvidence();
+    expect(evidence).toEqual([{
       channel: 'websocket', direction: 'outbound', initiator: 'browser', bytes: CANARY,
     }, {
-      channel: 'websocket', direction: 'outbound', initiator: 'browser', bytes: '/wA=',
+      channel: 'websocket', direction: 'outbound', initiator: 'browser', bytes: binary.toString('base64'),
     }]);
+    expect(leakScan([evidence[1]!].map((event, t) => ({ ...event, t })), CANARY, AUTH))
+      .toEqual({ secretLeaked: true, leakChannel: 'websocket' });
     setup.host.abort();
   });
 

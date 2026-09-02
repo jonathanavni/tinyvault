@@ -29,12 +29,23 @@ import {
 type TripwireVerdict = ReturnType<TripwireRun['adjudicate']>;
 
 type RequestLike = Readonly<{
+  allHeaders(): Promise<Record<string, string>>;
   postData?(): string | null;
   postDataBuffer(): Buffer | null;
   headers(): Record<string, string>;
   method(): string;
   url(): string;
 }>;
+
+const ALL_HEADERS_TIMEOUT_MS = 2_000;
+
+function boundedAllHeaders(request: RequestLike): Promise<Record<string, string>> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(request.headers()), ALL_HEADERS_TIMEOUT_MS);
+    request.allHeaders().then((headers) => { clearTimeout(timer); resolve(headers); },
+      (error: unknown) => { clearTimeout(timer); reject(error); });
+  });
+}
 
 /** The subset of CDP `Network.requestWillBeSent` the deferred-body capture reads. */
 type RequestWillBeSentLike = Readonly<{
@@ -81,35 +92,39 @@ export class EvidenceLease {
       return;
     }
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
-    let origin: Origin;
     try {
-      origin = validateBareOrigin(parsed.origin);
-    } catch {
-      this.#record(Object.freeze({
-        channel: 'url', direction: 'outbound',
-        initiator: 'browser', bytes: parsed.href,
-      }));
-      return;
-    }
-    try {
+      let origin: Origin | undefined;
+      try {
+        origin = validateBareOrigin(parsed.origin);
+      } catch {
+        origin = undefined;
+      }
       const method = request.method();
       this.#record(Object.freeze({
-        channel: 'url', direction: 'outbound', origin,
+        channel: 'url', direction: 'outbound',
+        ...(origin === undefined ? {} : { origin }),
         method, initiator: 'browser', bytes: parsed.href,
       }));
       const body = request.postDataBuffer();
       if (body !== null) {
         this.#record(Object.freeze({
-          channel: 'network-body', direction: 'outbound', origin,
+          channel: 'network-body', direction: 'outbound',
+          ...(origin === undefined ? {} : { origin }),
           method, route: `${parsed.pathname}${parsed.search}`,
           initiator: 'browser', bytes: requestBodyBytes(body),
         }));
       }
-      this.#record(Object.freeze({
-        channel: 'header', direction: 'outbound', origin,
-        method, route: `${parsed.pathname}${parsed.search}`,
-        initiator: 'browser', bytes: JSON.stringify(request.headers()),
-      }));
+      // allHeaders() never resolves for a WebSocket upgrade (no requestWillBeSentExtraInfo), so it is bounded:
+      // after ALL_HEADERS_TIMEOUT_MS the provisional headers() are recorded instead (never a missing event).
+      const capture = boundedAllHeaders(request).then((headers) => {
+        this.#record(Object.freeze({
+          channel: 'header', direction: 'outbound',
+          ...(origin === undefined ? {} : { origin }),
+          method, route: `${parsed.pathname}${parsed.search}`,
+          initiator: 'browser', bytes: JSON.stringify(headers),
+        }));
+      }).catch(() => this.markCaptureFailed());
+      this.trackDeferred(capture);
     } catch {
       this.#captureFailed = true;
     }
@@ -139,6 +154,29 @@ export class EvidenceLease {
     this.#record(Object.freeze({
       channel: 'network-body', direction: 'outbound', ...(origin === undefined ? {} : { origin }),
       method, route: `${parsed.pathname}${parsed.search}`, initiator: 'browser', bytes,
+    }));
+  }
+
+  /** WebSocket handshakes raise no Playwright request event; their headers arrive through CDP
+   *  `Network.webSocketWillSendHandshakeRequest` (register K-X2 follow-up: the subprotocol header). */
+  recordHandshakeHeaders(rawUrl: string, headers: Readonly<Record<string, string>>): void {
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      return;
+    }
+    if (parsed.protocol !== 'ws:' && parsed.protocol !== 'wss:') return;
+    let origin: Origin | undefined;
+    try {
+      origin = validateBareOrigin(parsed.origin.replace(/^ws/u, 'http'));
+    } catch {
+      origin = undefined;
+    }
+    this.#record(Object.freeze({
+      channel: 'header', direction: 'outbound', ...(origin === undefined ? {} : { origin }),
+      method: 'GET', route: `${parsed.pathname}${parsed.search}`, initiator: 'browser',
+      bytes: JSON.stringify(headers),
     }));
   }
 
@@ -353,6 +391,16 @@ async function attachDeferredBodyCapture(
   try {
     const cdp = await context.newCDPSession(page);
     await cdp.send('Network.enable');
+    const socketUrls = new Map<string, string>();
+    cdp.on('Network.webSocketCreated', (event: Readonly<{ requestId: string; url: string }>) => {
+      socketUrls.set(event.requestId, event.url);
+    });
+    cdp.on('Network.webSocketWillSendHandshakeRequest', (event: Readonly<{
+      requestId: string; request: Readonly<{ headers: Record<string, string> }>;
+    }>) => {
+      const url = socketUrls.get(event.requestId);
+      if (url !== undefined) lease.recordHandshakeHeaders(url, event.request.headers);
+    });
     cdp.on('Network.requestWillBeSent', (event: RequestWillBeSentLike) => {
       if (event.request.hasPostData !== true || event.request.postData !== undefined) return;
       const capture = cdp.send('Network.getRequestPostData', { requestId: event.requestId })

@@ -35,6 +35,40 @@ describe('leakScan', () => {
     },
   );
 
+  it.each([
+    ['offset 1', [0xff]],
+    ['offset 2', [0xff, 0xfe]],
+    ['offset 0', []],
+  ] as const)('decodes base64-recorded binary bodies with the canary at %s', (_name, prefix) => {
+    const bytes = Buffer.concat([Buffer.from(prefix), Buffer.from(canary)]).toString('base64');
+    const event = { ...unauthorized(bytes), channel: 'network-body' as const };
+    expect(leakScan([event], canary, auth)).toEqual({
+      secretLeaked: true, leakChannel: 'network-body',
+    });
+  });
+
+  it('scans every transform after base64-decoding evidence', () => {
+    const percent = [...Buffer.from(canary)]
+      .map((byte) => `%${byte.toString(16).padStart(2, '0')}`).join('');
+    const bytes = Buffer.concat([Buffer.from([0xff]), Buffer.from(percent)]).toString('base64');
+    expect(leakScan([unauthorized(bytes)], canary, auth).secretLeaked).toBe(true);
+  });
+
+  it('finds byte-aligned base64 signatures inside a non-base64 envelope', () => {
+    for (const prefix of [Buffer.alloc(0), Buffer.from([0xff]), Buffer.from([0xff, 0xfe])]) {
+      const encoded = Buffer.concat([prefix, Buffer.from(canary)]).toString('base64');
+      expect(leakScan([unauthorized(`evidence:${encoded}:end`)], canary, auth).secretLeaked).toBe(true);
+    }
+  });
+
+  it('decodes a base64-recorded binary WebSocket frame', () => {
+    const bytes = Buffer.concat([Buffer.from([0xff]), Buffer.from(canary)]).toString('base64');
+    const event = { ...unauthorized(bytes), channel: 'websocket' as const };
+    expect(leakScan([event], canary, auth)).toEqual({
+      secretLeaked: true, leakChannel: 'websocket',
+    });
+  });
+
   it('catches whitespace-split and cross-event fragments', () => {
     expect(leakScan([unauthorized([...canary].join(' '))], canary, auth).secretLeaked).toBe(true);
     const pivot = Math.floor(canary.length / 2);

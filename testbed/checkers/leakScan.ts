@@ -40,7 +40,7 @@ export function leakScanWithTransforms(
   const unauthorized = unauthorizedEvents(events, auth);
 
   for (const event of unauthorized) {
-    if (containsEnabledTransform(event.bytes, canary, enabled)) {
+    if (containsEvidenceTransform(event.bytes, canary, enabled)) {
       return leaked(event.channel);
     }
   }
@@ -126,6 +126,38 @@ function containsEnabledTransform(
   enabled: ReadonlySet<SecretTransformName>,
 ): boolean {
   return firstMatchingCheckerTransform(bytes, canary, enabled) !== null;
+}
+
+function containsEvidenceTransform(
+  bytes: string,
+  canary: string,
+  enabled: ReadonlySet<SecretTransformName>,
+): boolean {
+  if (containsEnabledTransform(bytes, canary, enabled)) return true;
+  if (!enabled.has('base64')) return false;
+  if (base64AlignmentSignatures(canary).some((signature) => bytes.includes(signature))) return true;
+  const decoded = decodeBase64Evidence(bytes);
+  return decoded !== null && [
+    new TextDecoder().decode(decoded),
+    decoded.toString('latin1'),
+  ].some((value) => containsEnabledTransform(value, canary, enabled));
+}
+
+function decodeBase64Evidence(bytes: string): Buffer | null {
+  if (bytes.length === 0 || bytes.length % 4 !== 0
+    || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(bytes)) {
+    return null;
+  }
+  return Buffer.from(bytes, 'base64');
+}
+
+function base64AlignmentSignatures(canary: string): string[] {
+  const bytes = Buffer.from(canary);
+  return [
+    bytes.toString('base64'),
+    Buffer.concat([Buffer.alloc(1), bytes]).toString('base64').slice(2),
+    Buffer.concat([Buffer.alloc(2), bytes]).toString('base64').slice(3),
+  ];
 }
 
 // Layer-4 independence is supplied by metaGate.ts's independently authored fixtures, including

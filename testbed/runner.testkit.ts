@@ -134,6 +134,7 @@ function createHostFactory(
 function initializeFailedLease(state: HarnessState, canary: string): void {
   state.captureFailedLease = new EvidenceLease(canary);
   state.captureFailedLease.recordRequest({
+    allHeaders: async () => ({}),
     postDataBuffer: () => { throw new Error('forced capture failure'); },
     headers: () => ({}),
     method: () => 'POST',
