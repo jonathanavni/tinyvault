@@ -2,6 +2,7 @@ import { createServer, type Server } from 'node:http';
 
 type Origins = Readonly<{ primary: string; secondary: string }>;
 type Route = (origins: Origins) => string;
+type LabRequest = Readonly<{ method: string; path: string }>;
 
 export const CONTROL_LAB_ROUTES = Object.freeze({
   '/password-basic': () => loginForm(),
@@ -20,6 +21,11 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
   '/overlay': () => `${loginForm()}<div class="overlay"></div>${overlayStyle()}`,
   '/formless': () => '<input id="password" type="password">',
   '/off-origin-action': ({ secondary }) => loginForm('', `action="${secondary}/submit"`),
+  '/base-off-origin': ({ secondary }) => `<base href="${secondary}/">${loginForm('', 'action="/login"')}`,
+  '/base-same-origin': ({ primary }) => `<base href="${primary}/nested/">${loginForm('', 'action="/login"')}`,
+  '/base-plus-formaction': ({ primary, secondary }) => `<base href="${secondary}/nested/">${loginForm(
+    '', `action="${primary}/login"`, '<button type="submit" formaction="login">Go</button>',
+  )}`,
   '/clobbered-action-off-origin': ({ secondary }) =>
     loginForm('', `action="${secondary}/submit"`, '<input name="action">'),
   '/clobbered-action-same-origin': () => loginForm('', 'action="/submit"', '<input name="action">'),
@@ -67,6 +73,9 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
   '/action-after-pin': ({ secondary }) => mutationPage(
     `document.querySelector('form').setAttribute('action', '${secondary}/submit')`,
   ),
+  '/base-injected-after-pin': ({ secondary }) => mutationPage(
+    `var base=document.createElement('base');base.href='${secondary}/';document.head.appendChild(base)`,
+  ),
   '/opacity-after-pin': () => mutationPage("document.querySelector('form').style.opacity = '0'"),
   '/overlay-after-pin': () => mutationPage(`var overlay=document.createElement('div');
     overlay.className='overlay';document.body.appendChild(overlay)`, overlayStyle()),
@@ -100,12 +109,20 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
 export type ControlsLab = Readonly<{
   primaryOrigin: string;
   secondaryOrigin: string;
+  secondaryRequests(): readonly LabRequest[];
   close(): Promise<void>;
 }>;
 
 export async function startControlsLab(): Promise<ControlsLab> {
   let origins: Origins = { primary: '', secondary: '' };
-  const secondary = createServer((request, response) => serve(request.url, response, () => origins));
+  const secondaryRequests: LabRequest[] = [];
+  const secondary = createServer((request, response) => {
+    secondaryRequests.push(Object.freeze({
+      method: request.method ?? '',
+      path: new URL(request.url ?? '/', 'http://fixture.invalid').pathname,
+    }));
+    serve(request.url, response, () => origins);
+  });
   const secondaryOrigin = await listen(secondary);
   const primary = createServer((request, response) => serve(request.url, response, () => origins));
   let primaryOrigin: string;
@@ -119,6 +136,7 @@ export async function startControlsLab(): Promise<ControlsLab> {
   return Object.freeze({
     primaryOrigin,
     secondaryOrigin,
+    secondaryRequests: () => Object.freeze([...secondaryRequests]),
     close: async () => { await Promise.all([closeServer(primary), closeServer(secondary)]); },
   });
 }
@@ -181,7 +199,9 @@ function overlayStyle(): string {
 }
 
 function document(body: string, htmlAttributes: string): string {
-  return `<!doctype html><html ${htmlAttributes}><head><meta charset="utf-8"></head><body>${body}</body></html>`;
+  const base = body.match(/^<base\b[^>]*>/u)?.[0] ?? '';
+  const bodyWithoutBase = base === '' ? body : body.slice(base.length);
+  return `<!doctype html><html ${htmlAttributes}><head><meta charset="utf-8">${base}</head><body>${bodyWithoutBase}</body></html>`;
 }
 
 function redirect(response: import('node:http').ServerResponse, location: string): void {

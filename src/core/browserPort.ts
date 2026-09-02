@@ -17,7 +17,8 @@ export type InjectOutcome =
 
 export type PinnedDestination = Readonly<{
   identity: ControlIdentity;
-  /** The single consume() site lives behind this. Never rejects. */
+  /** The single consume() site lives behind this. Rejects on exactly one precondition — an already-consumed
+   *  Secret (consume() throws before any browser call; audit A-5) — and on nothing else. */
   inject(secret: Secret, expectedOrigin: Origin): Promise<InjectOutcome>;
 }>;
 

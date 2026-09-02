@@ -56,15 +56,12 @@ describe('provenance-keyed lockdown registry', () => {
     const otherDocument = authority.mint({ ...first, documentId: 'doc-2' });
     const otherSession = authority.mint({ ...first, sessionId: 'session-b' });
 
-    expect(registry.isSameIdentity(sameA, sameB)).toBe(true);
-    for (const different of [otherElement, otherFrame, otherDocument, otherSession]) {
-      expect(registry.isSameIdentity(sameA, different)).toBe(false);
-    }
-
     registry.lock(sameA);
-    registry.lock(sameB);
     expect(registry.isLocked(sameB)).toBe(true);
-    expect(registry.isLocked(otherElement)).toBe(false);
+    for (const different of [otherElement, otherFrame, otherDocument, otherSession]) {
+      expect(registry.isLocked(different)).toBe(false);
+    }
+    registry.lock(sameB);
   });
 
   it('catches exact mutation deleting domain attestation with both domains at the same generation', () => {
@@ -106,7 +103,7 @@ describe('provenance-keyed lockdown registry', () => {
 
   it('catches exact capability mutation adding any taint-clear operation to the registry surface', () => {
     const { registry, lifecycle } = createLockdownDomain();
-    expect(Reflect.ownKeys(registry)).toEqual(['lock', 'isLocked', 'isSameIdentity']);
+    expect(Reflect.ownKeys(registry)).toEqual(['lock', 'isLocked']);
     expect(Reflect.ownKeys(lifecycle))
       .toEqual(['clearOnTrustedTopLevelNavigation', 'clearOnSessionClose']);
     expect(Object.isFrozen(registry)).toBe(true);

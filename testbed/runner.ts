@@ -39,6 +39,7 @@ import {
 } from './scenarios';
 import type { Scenario } from './scenarios/types';
 import type { ScenarioAuth } from './checkers/classify';
+import { validateScenarioAuth } from './checkers/classify';
 
 const DEFAULT_SAMPLE_SIZE = 10;
 const MODEL_ID = 'stub-scripted-v1';
@@ -77,11 +78,15 @@ export type EvalOptions = {
   startFixture?: typeof startBenignLoginFixture;
   /** Test seam for proving supervised-host guards are wired through the eval path. */
   createHost?: typeof createSupervisedHost;
+  /** Test seam for proving backend cleanup on host-construction failure. */
+  createBackend?: typeof createLocalFileBackend;
+  /** Test seam for proving the checker gate precedes artifact replacement. */
+  runMetaGate?: typeof runMetaGate;
 };
 
 export type CaptureOptions = Pick<
   EvalOptions,
-  'launchChromium' | 'startFixture' | 'createHost'
+  'launchChromium' | 'startFixture' | 'createHost' | 'createBackend'
 >;
 
 export type EvalResult = { scorecard: Scorecard; runs: RunRecord[]; scorecardPath: string };
@@ -98,14 +103,13 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
   if (!Number.isInteger(sampleSize) || sampleSize < 1) {
     throw new Error('sampleSize must be a positive integer');
   }
-  const artifactDirectory = resolve(options.artifactDirectory ?? 'artifacts/eval');
-  await rm(artifactDirectory, { recursive: true, force: true });
-  await mkdir(artifactDirectory, { recursive: true });
-
-  const metaGate = runMetaGate();
+  const metaGate = (options.runMetaGate ?? runMetaGate)();
   if (!metaGate.passed) {
     throw new Error(`Checker meta-gate failed:\n${metaGate.failures.join('\n')}`);
   }
+  const artifactDirectory = resolve(options.artifactDirectory ?? 'artifacts/eval');
+  await rm(artifactDirectory, { recursive: true, force: true });
+  await mkdir(artifactDirectory, { recursive: true });
 
   const browser = await (options.launchChromium ?? launchChromium)();
   try {
@@ -167,6 +171,7 @@ async function captureWithBrowser(
       const result = await runOnce({
         runIndex, scenario, fixture, generator, artifactDirectory, browser,
         createHost: options.createHost ?? createSupervisedHost,
+        createBackend: options.createBackend ?? createLocalFileBackend,
       });
       capturedRuns.push(result.record);
       evidenceRuns.push(result.evidence);
@@ -204,6 +209,7 @@ type RunOnceInput = {
   artifactDirectory: string;
   browser: Browser;
   createHost: typeof createSupervisedHost;
+  createBackend: typeof createLocalFileBackend;
 };
 
 type RunOnceResult = { record: RunRecord; evidence: OfflineRunEvidence };
@@ -325,11 +331,13 @@ async function prepareRun(input: RunOnceInput): Promise<PreparedRun> {
 
 async function executeStubRun(input: RunOnceInput, run: PreparedRun, config: AgentConfig) {
   const transcript = await TranscriptWriter.create(run.transcriptPath, run.eventsPath);
-  const backend = createLocalFileBackend({ vaultPath: run.vaultPath, keyPath: run.keyPath });
+  const backend = input.createBackend({ vaultPath: run.vaultPath, keyPath: run.keyPath });
   let host: SupervisedHost;
   try {
     host = await input.createHost({ backend, canary: run.canary, browser: input.browser });
   } catch {
+    await backend.dispose().catch(() => undefined);
+    await transcript.close().catch(() => undefined);
     throw missingEndMarker(run.runId);
   }
 
@@ -338,7 +346,7 @@ async function executeStubRun(input: RunOnceInput, run: PreparedRun, config: Age
   try { result = await runWithHost(input, run, config, transcript, host); }
   catch (error) { failure = error; }
   try { await host.closeAll(); }
-  catch (error) { failure ??= error; }
+  catch { failure ??= new Error(`Run teardown failed: ${run.runId}`); }
   if (failure !== undefined) throw failure;
   return result!;
 }
@@ -459,18 +467,20 @@ function invokeHostTool(host: SupervisedHost, call: ToolCall): Promise<unknown> 
     case 'browser_type': return host.tools.browser_type(call.input as never);
     case 'fill_from_vault': return host.tools.fill_from_vault(call.input as FillRequest);
     case 'browser_click': return host.tools.browser_click(call.input as never);
+    case 'browser_snapshot': return host.tools.browser_snapshot(call.input as never);
     case 'browser_close_session': return host.tools.browser_close_session(call.input as never);
     default: throw new Error(`No supervised handler for tool: ${call.name}`);
   }
 }
 
-function browserToolDefinitions(): ToolDefinition[] {
+export function browserToolDefinitions(): ToolDefinition[] {
   return [
     toolDefinition('browser_open_session', []),
     toolDefinition('browser_navigate', ['sessionId', 'url']),
     toolDefinition('browser_type', ['sessionId', 'selector', 'text']),
     toolDefinition('fill_from_vault', ['handle', 'sessionId', 'fields']),
     toolDefinition('browser_click', ['sessionId', 'selector']),
+    toolDefinition('browser_snapshot', ['sessionId']),
     toolDefinition('browser_close_session', ['sessionId']),
   ];
 }
@@ -577,7 +587,9 @@ function agentConfig(agentId: string): AgentConfig {
 }
 
 function authForAgent(auth: ScenarioAuth, config: AgentConfig): ScenarioAuth {
-  return { ...auth, secretSources: [...config.secretSources] };
+  const merged = { ...auth, secretSources: [...config.secretSources] };
+  validateScenarioAuth(merged);
+  return merged;
 }
 
 /**

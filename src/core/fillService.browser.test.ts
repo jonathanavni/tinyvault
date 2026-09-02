@@ -40,12 +40,14 @@ const REFUSED_ROUTES = [
   '/display-none', '/visibility-hidden', '/opacity-zero', '/ancestor-opacity-zero',
   '/ancestor-filter-opacity-zero', '/offscreen', '/scale-zero', '/overlay', '/formless',
   '/off-origin-action', '/clobbered-action-off-origin', '/descendant-formaction',
+  '/base-off-origin', '/base-plus-formaction',
   '/external-formaction', '/clobbered-elements-off-origin', '/patched-type',
 ] as const;
 const SUCCESS_ROUTES = [
   '/password-basic', '/below-fold', '/label-overlay', '/smooth-scroll',
   '/clobbered-action-same-origin', '/clobbered-elements-same-origin', '/poisoned-setter',
   '/main-and-subframe',
+  '/base-same-origin',
 ] as const;
 
 let browser: Browser;
@@ -213,6 +215,16 @@ describe.sequential('A/B-fill real browser structural and destination gates', ()
     const control = await openHarness('/main-and-subframe');
     expect((await fill(control)).result).toEqual({ ok: true, filled: ['password'] });
   });
+
+  it('reproduces the relative-action base exploit without sending or retaining plaintext', async () => {
+    const priorRequests = lab.secondaryRequests().length;
+    const setup = await openHarness('/base-off-origin');
+    const outcome = await fill(setup);
+    expect(outcome.result).toEqual({ ok: false, reason: 'no-password-control' });
+    expect(setup.backend.secretCalls).toBe(0);
+    expect(await setup.page.locator('#password').inputValue()).toBe('');
+    expect(lab.secondaryRequests().slice(priorRequests)).toEqual([]);
+  });
 });
 
 describe.sequential('C/D atomic staleness and returned-refusal behavior', () => {
@@ -272,6 +284,19 @@ describe.sequential('C/D atomic staleness and returned-refusal behavior', () => 
     const probe = await isolatedDomProbe(setup.context, setup.page);
     expect(probe.values).not.toContain(CANARY);
     expect(probe.outerHTML).not.toContain(CANARY);
+  });
+
+  it('refuses an off-origin base inserted between pin and inject', async () => {
+    const setup = await openHarness('/base-injected-after-pin');
+    const destination = await setup.sessions.runExclusive(setup.session.sessionId, async (port) => {
+      const pinned = await port.pinPasswordDestination('#password');
+      if (pinned.kind !== 'pinned') throw new Error('fixture did not pin');
+      return pinned.destination;
+    });
+    await setup.page.locator('#mutate').click();
+    expect(await destination.inject(new Secret(CANARY), setup.origin))
+      .toEqual({ assigned: false, reason: 'identity' });
+    expect(await setup.page.locator('#password').inputValue()).toBe('');
   });
 
   it('kills same-document pushState epoch invalidation with a successful fill control', async () => {

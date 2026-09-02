@@ -57,6 +57,47 @@ describe('positive secret-retention structure', () => {
     }
   });
 
+  it('kills final-round tainted-string retention mutants S1 through S8', async () => {
+    const fileName = 'src/browser/session.ts';
+    const source = await readFile(resolve(fileName), 'utf8');
+    const marker = "    const lengthDigits = String(value.length).padStart(4, '0');";
+    const mutants = [
+      ['S1 replace callback', `let moduleStash = '';\n${source.replace(marker,
+        `${marker}\n    value.replace(/[\\s\\S]/gu, u => { moduleStash += u; return u; });`)}`],
+      ['S2 array forEach', `let moduleStash = '';\n${source.replace(marker,
+        `${marker}\n    [hex].forEach(h => { moduleStash = h; });`)}`],
+      ['S3 split callback', `const moduleUnits: string[] = [];\n${source.replace(marker,
+        `${marker}\n    value.split('').forEach(u => moduleUnits.push(u));`)}`],
+      ['S4 throw derived hex', source.replace(marker, `${marker}\n    if (state.epoch < 0) throw hex;`)],
+      ['S5 helper throw', source.replace(
+        'function toFixedHex(value: string): string {',
+        'function toFixedHex(value: string): string {\n  if (value.length < 0) throw value;',
+      )],
+      ['S6 shadowed String', `let shadowStash: unknown;\nfunction String(input: unknown) {\n`
+        + `  shadowStash = input; return \`${'${input}'}\`;\n}\n${source.replace(marker,
+          `${marker}\n    void String(value);`)}`],
+      ['S7 for-of source', `let moduleStash = '';\n${source.replace(marker,
+        `${marker}\n    for (const ch of value) moduleStash += ch;`)}`],
+      ['S8 prototype accessor', source.replace(marker,
+        `${marker}\n    void value.captureForTest;`)],
+    ] as const;
+    for (const [name, mutant] of mutants) {
+      expect(retentionViolations(mutant, fileName), name).not.toEqual([]);
+    }
+
+    let stash = '';
+    Object.defineProperty(String.prototype, 'captureForTest', {
+      configurable: true,
+      get() { stash = String(this); return undefined; },
+    });
+    try {
+      void ('S8-runtime-canary' as any).captureForTest;
+      expect(stash).toBe('S8-runtime-canary');
+    } finally {
+      Reflect.deleteProperty(String.prototype, 'captureForTest');
+    }
+  });
+
   it('rejects taint in Map and Set keys or values, including constructor entries', async () => {
     const fileName = 'src/browser/session.ts';
     const source = await readFile(resolve(fileName), 'utf8');
@@ -118,6 +159,7 @@ describe('positive secret-retention structure', () => {
       ['inferred resolveSecret result retained', inferredRetention],
       ['duplicate resolveSecret call', source.replace(marker,
         `${marker}\n    await options.backend.resolveSecret(request.handle, policy);`)],
+      ['Secret throw sink', source.replace(marker, `${marker}\n    throw secret;`)],
     ] as const;
     for (const [name, mutant] of namedMutants) {
       expect(retentionViolations(mutant, fileName), name).not.toEqual([]);
@@ -253,6 +295,8 @@ function inspectSecretUses(
     }
     if (ts.isReturnStatement(node) && node.expression !== undefined
       && referencesTaint(node.expression, tainted)) violations.push('Secret is returned');
+    if (ts.isThrowStatement(node) && node.expression !== undefined
+      && referencesTaint(node.expression, tainted)) violations.push('Secret is thrown');
     if ((ts.isTemplateExpression(node) || ts.isNoSubstitutionTemplateLiteral(node))
       && referencesTaint(node, tainted)) violations.push('Secret reaches a template');
     if (ts.isSpreadElement(node) && referencesTaint(node.expression, tainted)) {
@@ -271,6 +315,21 @@ function inspectSecretUses(
 }
 
 function inspectTaintedUses(
+  file: ts.SourceFile,
+  owner: ts.FunctionLikeDeclaration,
+  tainted: ReadonlySet<string>,
+  allowReturn: boolean,
+  allowLocalWrites: boolean,
+  helperDepth: number,
+): string[] {
+  return unique([
+    ...inspectTaintedFlow(file, owner, tainted, allowReturn, allowLocalWrites, helperDepth),
+    ...inspectTaintedContainers(owner, tainted),
+    ...(helperDepth === 0 ? inspectTaintedOccurrences(file, owner, tainted) : []),
+  ]);
+}
+
+function inspectTaintedFlow(
   file: ts.SourceFile,
   owner: ts.FunctionLikeDeclaration,
   tainted: ReadonlySet<string>,
@@ -303,12 +362,26 @@ function inspectTaintedUses(
       && referencesTaint(node.expression, tainted)) {
       violations.push('secret-derived expression is returned');
     }
+    if (ts.isThrowStatement(node) && node.expression !== undefined
+      && referencesTaint(node.expression, tainted)) {
+      violations.push('secret-derived expression is thrown');
+    }
     if (ts.isCallExpression(node) && node.arguments.some((argument) => referencesTaint(argument, tainted))) {
       violations.push(...inspectTaintedCall(file, node, tainted, helperDepth));
     }
     if (ts.isNewExpression(node) && node.arguments?.some((argument) => referencesTaint(argument, tainted))) {
       violations.push('secret-derived expression reaches a Map, Set, or other constructor');
     }
+  }
+  return violations;
+}
+
+function inspectTaintedContainers(
+  owner: ts.FunctionLikeDeclaration,
+  tainted: ReadonlySet<string>,
+): string[] {
+  const violations: string[] = [];
+  for (const node of descendants(owner)) {
     if ((ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node))
       && referencesTaint(node, tainted) && !isWithinCallArgument(node, 'callFunctionOn')) {
       violations.push('secret-derived expression reaches an object property');
@@ -329,6 +402,99 @@ function inspectTaintedUses(
   return unique(violations);
 }
 
+function inspectTaintedOccurrences(
+  file: ts.SourceFile,
+  owner: ts.FunctionLikeDeclaration,
+  tainted: ReadonlySet<string>,
+): string[] {
+  const violations: string[] = [];
+  for (const node of descendants(owner)) {
+    if (!ts.isIdentifier(node) || !tainted.has(node.text) || !isReference(node)) continue;
+    if (isAllowedTaintedCallArgument(file, node, owner)
+      || isInjectLineBreakCheck(node, owner)
+      || (!hasForbiddenTaintedContext(node, owner)
+        && (isWhitelistedPropertyRead(node) || isConstInitializerOccurrence(node, owner)))) continue;
+    violations.push(`secret-derived occurrence is outside the positive sink allowlist: ${node.text}`);
+  }
+  return violations;
+}
+
+function isAllowedTaintedCallArgument(
+  file: ts.SourceFile,
+  identifier: ts.Identifier,
+  owner: ts.FunctionLikeDeclaration,
+): boolean {
+  let sawAllowed = false;
+  for (let current: ts.Node = identifier; current.parent && current.parent !== owner; current = current.parent) {
+    const parent = current.parent;
+    if (isExecutableFunction(parent)) return false;
+    if (!ts.isCallExpression(parent)
+      || !parent.arguments.some((argument) => containsNode(argument, identifier))) continue;
+    if (!ts.isIdentifier(parent.expression)) return false;
+    const name = parent.expression.text;
+    if (name === 'String' && moduleFunction(file, name) === undefined) sawAllowed = true;
+    else if (name === 'toFixedHex' && moduleFunction(file, name) !== undefined) sawAllowed = true;
+    else if (name === 'callFunctionOn' && moduleFunction(file, name) !== undefined) return true;
+    else return false;
+  }
+  return sawAllowed;
+}
+
+function hasForbiddenTaintedContext(
+  identifier: ts.Identifier,
+  owner: ts.FunctionLikeDeclaration,
+): boolean {
+  for (let current: ts.Node = identifier; current.parent && current.parent !== owner; current = current.parent) {
+    const parent = current.parent;
+    if (isExecutableFunction(parent)) return true;
+    if (ts.isArrayLiteralExpression(parent) || ts.isObjectLiteralExpression(parent)
+      || ts.isTemplateExpression(parent) || ts.isNoSubstitutionTemplateLiteral(parent)
+      || ts.isThrowStatement(parent) || ts.isReturnStatement(parent)
+      || ts.isSpreadElement(parent)) return true;
+    if (ts.isForOfStatement(parent) && containsNode(parent.expression, identifier)) return true;
+    if (ts.isElementAccessExpression(parent)) return true;
+    if (ts.isPropertyAccessExpression(parent) && containsNode(parent.expression, identifier)
+      && parent.name.text !== 'length' && parent.name.text !== 'padStart') return true;
+    if (ts.isBinaryExpression(parent) && isAssignment(parent.operatorToken.kind)) return true;
+  }
+  return false;
+}
+
+function isWhitelistedPropertyRead(identifier: ts.Identifier): boolean {
+  const parent = identifier.parent;
+  return ts.isPropertyAccessExpression(parent) && parent.expression === identifier
+    && (parent.name.text === 'length' || parent.name.text === 'padStart');
+}
+
+function isConstInitializerOccurrence(
+  identifier: ts.Identifier,
+  owner: ts.FunctionLikeDeclaration,
+): boolean {
+  for (let current: ts.Node = identifier; current.parent && current.parent !== owner; current = current.parent) {
+    const parent = current.parent;
+    if (isExecutableFunction(parent)) return false;
+    if (!ts.isVariableDeclaration(parent) || parent.initializer === undefined
+      || !containsNode(parent.initializer, identifier)) continue;
+    const list = parent.parent;
+    return ts.isIdentifier(parent.name) && ts.isVariableDeclarationList(list)
+      && (list.flags & ts.NodeFlags.Const) !== 0;
+  }
+  return false;
+}
+
+function isInjectLineBreakCheck(
+  identifier: ts.Identifier,
+  owner: ts.FunctionLikeDeclaration,
+): boolean {
+  if (!ts.isFunctionDeclaration(owner) || owner.name?.text !== 'injectDestination') return false;
+  const access = identifier.parent;
+  if (!ts.isPropertyAccessExpression(access) || access.expression !== identifier
+    || access.name.text !== 'includes' || !ts.isCallExpression(access.parent)) return false;
+  const argument = access.parent.arguments[0];
+  return argument !== undefined && ts.isStringLiteral(argument)
+    && (argument.text === '\n' || argument.text === '\r');
+}
+
 function inspectTaintedCall(
   file: ts.SourceFile,
   call: ts.CallExpression,
@@ -344,7 +510,11 @@ function inspectTaintedCall(
       ? ['callFunctionOn sink is not module-local']
       : [];
   }
-  if (name === 'String') return [];
+  if (name === 'String') {
+    return moduleFunction(file, name) === undefined
+      ? []
+      : ['String sink is shadowed by a module-local function'];
+  }
   if (name !== 'toFixedHex' || !PURE_TAINT_HELPERS.has(name) || helperDepth !== 0) {
     return ['secret-derived expression reaches a non-whitelisted call'];
   }

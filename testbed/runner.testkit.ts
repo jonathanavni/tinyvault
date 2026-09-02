@@ -17,6 +17,7 @@ type HarnessBehavior = Readonly<{
   handlerError?: string;
   delayNetworkUntilAfterLoop?: boolean;
   uncorrelatedWrongOrigin?: boolean;
+  closeAllError?: string;
 }>;
 
 type HarnessState = {
@@ -43,13 +44,13 @@ export function nodeEvalHarness(
   const launchChromium = mockFunction(mock, async () => fakeBrowser(closeBrowser));
   const abortHost = mockFunction(mock, () => state.captureFailedLease?.abort());
   const finishHost = createFinishHost(state, behavior, mock);
-  const options = {
+  const options: EvalOptions = {
     artifactDirectory,
     sampleSize: 1,
     launchChromium,
     startFixture: createFixtureStarter(state),
     createHost: createHostFactory(state, behavior, finishHost, abortHost),
-  } satisfies EvalOptions;
+  };
   return {
     options, launchChromium, closeBrowser, abortHost, finishHost,
     drainBatches: state.drainBatches,
@@ -121,7 +122,10 @@ function createHostFactory(
       drainEvidence: createEvidenceDrain(state, behavior),
       finish: finishHost,
       abort: abortHost,
-      closeAll: async () => backend.dispose(),
+      closeAll: async () => {
+        await backend.dispose();
+        if (behavior.closeAllError !== undefined) throw new Error(behavior.closeAllError);
+      },
     };
   };
 }

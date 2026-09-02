@@ -11,8 +11,17 @@ export const DESTINATION_PREDICATES_SOURCE = `function () {
   if (el.type !== 'password' || el.disabled || el.readOnly || el.hasAttribute('hidden')) return false;
   if (!el.isConnected || window.top !== window || !el.form) return false;
   var form = el.form;
+  var baseURIDescriptor = Object.getOwnPropertyDescriptor(Node.prototype, 'baseURI');
+  if (!baseURIDescriptor || typeof baseURIDescriptor.get !== 'function') return false;
+  var baseURI;
+  try {
+    baseURI = baseURIDescriptor.get.call(document);
+    if (typeof baseURI !== 'string' || new URL(baseURI).origin !== location.origin) return false;
+  } catch {
+    return false;
+  }
   var action = getAttribute.call(form, 'action');
-  if (new URL(action === null ? '' : action, location.href).origin !== location.origin) return false;
+  if (new URL(action === null ? '' : action, baseURI).origin !== location.origin) return false;
   var descriptor = Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, 'elements');
   if (!descriptor || typeof descriptor.get !== 'function') return false;
   var controls = descriptor.get.call(form);
@@ -23,7 +32,7 @@ export const DESTINATION_PREDICATES_SOURCE = `function () {
     var submits = tag === 'button' || (tag === 'input' && (type === 'submit' || type === 'image'));
     if (!submits) continue;
     var formaction = getAttribute.call(control, 'formaction');
-    if (formaction !== null && new URL(formaction, location.href).origin !== location.origin) return false;
+    if (formaction !== null && new URL(formaction, baseURI).origin !== location.origin) return false;
   }
   el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
   if (!el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return false;

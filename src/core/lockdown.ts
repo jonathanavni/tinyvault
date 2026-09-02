@@ -17,7 +17,6 @@ export type ControlIdentityMintAuthority = Readonly<{
 export type LockdownRegistry = Readonly<{
   lock(identity: ControlIdentity): void;
   isLocked(identity: ControlIdentity): boolean;
-  isSameIdentity(left: ControlIdentity, right: ControlIdentity): boolean;
 }>;
 
 /**

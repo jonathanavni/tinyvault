@@ -5,6 +5,7 @@ import { INVALID_CONTROL_IDENTITY_MESSAGE } from '../core/lockdown';
 import { Secret } from '../core/redaction';
 import { SessionMutex } from '../core/sessionMutex';
 import { createLockdownDomain } from '../supervisor/lockdownDomain';
+import { ASSIGN_SOURCE, SNAPSHOT_SOURCE } from './inRealm';
 import type { BrowserContext, CDPSession, Page } from './playwright';
 import { createBrowserSessionHost } from './session';
 
@@ -13,6 +14,8 @@ class FakeCdp extends EventEmitter {
   fail = false;
   queryNodeId = 2;
   worldCreations = 0;
+  failTaintedResolution = false;
+  snapshotValue: unknown = { url: 'https://example.test/login', nodes: [] };
 
   constructor(readonly order: string[] = []) {
     super();
@@ -32,8 +35,15 @@ class FakeCdp extends EventEmitter {
       this.worldCreations += 1;
       return { executionContextId: 40 + this.worldCreations };
     }
-    if (method === 'DOM.resolveNode') return { object: { objectId: `object-${this.calls.length}` } };
-    if (method === 'Runtime.callFunctionOn') return { result: { value: true } };
+    if (method === 'DOM.resolveNode') {
+      if (this.failTaintedResolution && params?.backendNodeId === 7) {
+        throw new Error('forced tainted resolution failure');
+      }
+      return { object: { objectId: `object-${this.calls.length}` } };
+    }
+    if (method === 'Runtime.callFunctionOn') {
+      return { result: { value: params?.functionDeclaration === SNAPSHOT_SOURCE ? this.snapshotValue : true } };
+    }
     return {};
   }
 
@@ -146,6 +156,43 @@ describe('browser session lifecycle over the CDP seam', () => {
     expect(context.cdp.worldCreations).toBe(1);
     await host.closeAll();
     expect(context.cdp.calls.filter((call) => call.method === 'Runtime.releaseObject')).toHaveLength(2);
+  });
+
+  it('refuses CR/LF before conversion, taint, or CDP assignment and disposes the pin', async () => {
+    const { context, host } = setup();
+    const { sessionId } = await host.openSession();
+    const pinned = await host.runExclusive(sessionId, (port) => port.pinPasswordDestination('#password'));
+    expect(pinned.kind).toBe('pinned');
+    if (pinned.kind !== 'pinned') return;
+
+    expect(await pinned.destination.inject(new Secret('line\nbreak'), 'https://example.test'))
+      .toEqual({ assigned: false, reason: 'unplaceable' });
+    expect(context.cdp.calls.filter((call) => call.method === 'Runtime.callFunctionOn'
+      && call.params?.functionDeclaration === ASSIGN_SOURCE)).toHaveLength(0);
+    expect(context.cdp.calls.filter((call) => call.method === 'Runtime.releaseObject')).toHaveLength(1);
+    await host.closeAll();
+  });
+
+  it('fails a snapshot closed when any tainted node cannot be resolved', async () => {
+    const { context, host } = setup();
+    const { sessionId } = await host.openSession();
+    const pinned = await host.runExclusive(sessionId, (port) => port.pinPasswordDestination('#password'));
+    expect(pinned.kind).toBe('pinned');
+    if (pinned.kind !== 'pinned') return;
+    expect(await pinned.destination.inject(new Secret('must-not-escape'), 'https://example.test'))
+      .toEqual({ assigned: false, reason: 'transport' });
+
+    context.cdp.snapshotValue = {
+      url: 'https://example.test/login',
+      nodes: [{ tag: 'input', masked: false, value: 'must-not-escape' }],
+    };
+    context.cdp.failTaintedResolution = true;
+    const snapshot = await host.runControl(sessionId, (page) => page.snapshot());
+    expect(snapshot).toEqual({ url: '', nodes: [] });
+    expect(JSON.stringify(snapshot)).not.toContain('must-not-escape');
+    expect(context.cdp.calls.filter((call) => call.method === 'Runtime.callFunctionOn'
+      && call.params?.functionDeclaration === SNAPSHOT_SOURCE)).toHaveLength(0);
+    await host.closeAll();
   });
 
   it('kills missing main-frame/documentOpened epoch invalidation and subframe over-clearing', async () => {

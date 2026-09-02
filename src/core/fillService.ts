@@ -238,7 +238,9 @@ function refusedInjection(
     observation.reobservedOrigin = injected.observedOrigin;
     return finish('origin-not-authorized', observation);
   }
-  if (injected.reason === 'too-long') return finish('backend-error', observation);
+  if (injected.reason === 'too-long' || injected.reason === 'unplaceable') {
+    return finish('backend-error', observation);
+  }
   return finish('no-password-control', observation);
 }
 
@@ -351,6 +353,6 @@ function freezeObservation(observation: MutableObservation): FillObservation {
   return Object.freeze({ ...observation });
 }
 
-function isRecord(value: unknown): value is Record<string, any> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

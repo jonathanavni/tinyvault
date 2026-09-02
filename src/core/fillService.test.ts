@@ -142,7 +142,6 @@ function tracingRegistry(registry: LockdownRegistry, log: string[]): LockdownReg
   return Object.freeze({
     lock(identity) { log.push('lock'); registry.lock(identity); },
     isLocked(identity) { log.push('isLocked'); return registry.isLocked(identity); },
-    isSameIdentity: (left, right) => registry.isSameIdentity(left, right),
   });
 }
 
@@ -296,7 +295,6 @@ describe('origin, staleness, and backend mapping', () => {
     const registry: LockdownRegistry = Object.freeze({
       lock: () => { throw new InvalidControlIdentityError(); },
       isLocked: () => false,
-      isSameIdentity: () => false,
     });
     const setup = harness({ registry, reobserved: ORIGIN_B });
     const outcome = await setup.service.fill(request());
@@ -357,12 +355,14 @@ describe('Secret cleanup and closed inject mapping', () => {
     ['identity', { assigned: false, reason: 'identity' }],
     ['transport', { assigned: false, reason: 'transport' }],
     ['too-long', { assigned: false, reason: 'too-long' }],
+    ['unplaceable', { assigned: false, reason: 'unplaceable' }],
   ] as const)('kills missing clear and result mapping on the post-consume %s path', async (_name, injected) => {
     const setup = harness({ inject: async (secret) => { secret.consume(); return injected; } });
     const outcome = await setup.service.fill(request());
     const reasons = {
       origin: 'origin-not-authorized', identity: 'no-password-control',
       transport: 'no-password-control', 'too-long': 'backend-error',
+      unplaceable: 'backend-error',
     } as const;
     expect(outcome.result).toEqual({ ok: false, reason: reasons[injected.reason] });
     expect(setup.secrets[0]!.clearCalls).toBe(1);
@@ -444,6 +444,7 @@ describe('noninterference, setup, and structural surface', () => {
       { assigned: false, reason: 'origin', observedOrigin: ORIGIN_B },
       { assigned: false, reason: 'identity' },
       { assigned: false, reason: 'too-long' },
+      { assigned: false, reason: 'unplaceable' },
       { assigned: false, reason: 'transport' },
     ] as const) {
       const bytes: string[] = [];

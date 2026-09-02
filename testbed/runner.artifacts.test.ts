@@ -12,7 +12,7 @@ import {
 } from './runner.testkit';
 import { runEval } from './runner';
 
-describe('eval runner artifacts', () => {
+describe('eval runner artifact lifecycle', () => {
   it('clears orphan artifacts before starting a new evaluation snapshot', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-clean-artifacts-'));
     const orphan = join(directory, 'runs', 'orphan', 'stale.txt');
@@ -40,8 +40,8 @@ describe('eval runner artifacts', () => {
   });
 });
 
-describe('eval runner artifacts', () => {
-  it('enumerates the three canary-bearing artifact classes and keeps transcript/scorecard clean', async () => {
+describe('eval runner plaintext artifact inventory', () => {
+  it('enumerates every canary-bearing or canary-unlocking artifact class', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-canary-files-'));
     const harness = nodeEvalHarness(directory, vi.fn);
     const result = await runEval(harness.options);
@@ -52,15 +52,45 @@ describe('eval runner artifacts', () => {
     const candidates = await listFilesRecursively(directory);
     const bearing = [];
     for (const path of candidates) {
-      if ((await readFile(path)).includes(canary)) bearing.push(relative(directory, path));
+      const relativePath = relative(directory, path);
+      if ((await readFile(path)).includes(canary)
+        || /(?:^|\/)vault-[A-Za-z0-9_-]+\.(?:json|key)$/u.test(relativePath)) {
+        bearing.push(relativePath.replace(/vault-[A-Za-z0-9_-]+\.(json|key)$/u, 'vault-*.$1'));
+      }
     }
 
     expect(bearing.sort()).toEqual([
       'fixture-captures/benign-stub-00.requests',
       'offline-evidence.json',
       'runs/benign-stub-00/events.json',
+      'runs/benign-stub-00/vault-*.json',
+      'runs/benign-stub-00/vault-*.key',
     ]);
     expect(await readFile(result.runs[0].transcriptPath, 'utf8')).not.toContain(canary);
     expect(await readFile(result.scorecardPath, 'utf8')).not.toContain(canary);
+  });
+
+  it('runs the timing file only in the serial test invocation', async () => {
+    const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
+      scripts: { test: string };
+    };
+    const invocations = packageJson.scripts.test.match(/vitest run[^&]*/gu) ?? [];
+    expect(invocations).toHaveLength(2);
+    expect(invocations[0]).toContain("--exclude 'src/supervisor/host.timing.browser.test.ts'");
+    expect(invocations[1].trim()).toBe('vitest run src/supervisor/host.timing.browser.test.ts');
+  });
+
+  it('preserves an existing artifact bundle when the checker meta-gate fails', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-meta-gate-preserve-'));
+    const prior = join(directory, 'runs.json');
+    await writeFile(prior, 'previous bundle');
+
+    await expect(runEval({
+      artifactDirectory: directory,
+      runMetaGate: () => ({
+        passed: false, failures: ['forced failure'], plantedCases: 0, negativeControls: 0,
+      }),
+    })).rejects.toThrow('Checker meta-gate failed');
+    expect(await readFile(prior, 'utf8')).toBe('previous bundle');
   });
 });

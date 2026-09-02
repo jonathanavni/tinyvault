@@ -244,6 +244,7 @@ export function cleanModule() {
 export function runM4Fixtures() {
   runOpaqueImporterFixtures();
   runTraversalCapFixture();
+  runToolchainModuleLoaderFixture();
   runVettedConfigurationFixtures();
   runDirectImporterFixtures();
   runTypeImportFixtures();
@@ -253,6 +254,23 @@ export function runM4Fixtures() {
   runManifestPathFixture();
   runSymlinkedNodeModulesFixture();
   runRealGraphFixture();
+}
+
+function runToolchainModuleLoaderFixture() {
+  withFixture('export const safe = true;', (root) => {
+    write(root, 'scripts/tool.mjs', "import 'relay';\n");
+    writeRuntimePackage(root, 'relay', { main: './index.mjs', type: 'module' }, {
+      'index.mjs': "const { createRequire } = await import('node:module'); void createRequire;\n",
+    });
+    const result = checkDependencyBoundary(root);
+    assert.deepEqual(
+      result.violations.map((violation) => violation.syntax),
+      ['external-package module loader dynamic import()'],
+      `scripts-rooted node:module relay did not produce exactly one violation\n${formatResult(result)}`,
+    );
+    assert.equal(result.violations[0].entry.endsWith('scripts/tool.mjs'), true,
+      'toolchain module-loader violation was not attributed to scripts/tool.mjs');
+  });
 }
 
 function runOpaqueImporterFixtures() {

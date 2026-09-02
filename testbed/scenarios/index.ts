@@ -4,8 +4,10 @@ import type { Scenario } from './types';
 
 export type ScenarioRegistry = ReadonlyMap<string, Scenario>;
 
-export function createScenarioRegistry(origin: string): ScenarioRegistry {
-  const scenarios = [createBenignLoginScenario(origin)];
+export function createScenarioRegistry(
+  origin: string,
+  scenarios: readonly Scenario[] = [createBenignLoginScenario(origin)],
+): ScenarioRegistry {
   for (const scenario of scenarios) validateScenarioAuth(scenario.authForRun('validation-run', 'validation-nonce'));
   return new Map(scenarios.map((scenario) => [scenario.id, scenario]));
 }

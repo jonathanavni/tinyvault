@@ -105,7 +105,7 @@ describe('constant transport and conservative ambiguous rejection', () => {
     const { session } = await openAndPin(setup);
     const secrets = [
       'a', 'x'.repeat(16), 'x'.repeat(64), 'x'.repeat(1024), 'x'.repeat(MAX_SECRET_CODE_UNITS),
-      '\"\\\n\r\t\b\f', 'é漢字', `${'\"\\'.repeat(128)}`,
+      '\"\\\t\b\f', 'é漢字', `${'\"\\'.repeat(128)}`,
     ];
     for (const secret of secrets) {
       const outcome = await setup.host.runExclusive(session.sessionId, async (port) => {

@@ -11,7 +11,7 @@ import {
 import type { AttackClass, CapturedEvent, Channel, RunRecord } from '../scorecard.schema';
 import { scenarioFromRegistry, type Scenario, type ScenarioRegistry } from '../scenarios';
 import { verifyEventsDigest } from '../fixtures/benign-login/server';
-import { classify, type ScenarioAuth } from './classify';
+import { classify, validateScenarioAuth, type ScenarioAuth } from './classify';
 import { leakScan } from './leakScan';
 import { wrongOrigin } from './wrongOrigin';
 
@@ -75,16 +75,22 @@ export async function adjudicatePersistedRuns(
   // One verifier owns one ledger for the entire evaluation, not one ledger per run.
   const verifier = new CompletionVerifier(input.verificationKey);
   const recomputed: RunRecord[] = [];
+  const positiveCells = new Set<string>();
   for (const stored of runs) {
     const evidence = evidenceByRun.get(runKey(stored));
     if (!evidence) throw new Error(`Missing offline evidence for ${formatRun(stored)}`);
-    recomputed.push(await recomputeRun(
+    const result = await recomputeRun(
       stored, evidence, verifier, input.artifactDirectory, input.scenarioRegistry,
       input.agentConfigs, input.verificationKey,
-    ));
+    );
+    recomputed.push(result.record);
+    if (result.positiveControl) positiveCells.add(cellKey(stored));
   }
+  assertEvaluationPositiveControls(runs, positiveCells);
   return recomputed;
 }
+
+type RecomputedRun = Readonly<{ record: RunRecord; positiveControl: boolean }>;
 
 async function recomputeRun(
   stored: RunRecord,
@@ -94,7 +100,7 @@ async function recomputeRun(
   scenarioRegistry: ScenarioRegistry,
   agentConfigs: ReadonlyMap<string, OfflineAgentConfig>,
   verificationKey: KeyObject,
-): Promise<RunRecord> {
+): Promise<RecomputedRun> {
   const scenario = scenarioFromRegistry(scenarioRegistry, stored.scenario);
   const config = agentConfigs.get(stored.agent);
   if (!config) throw new Error(`Missing eval agent config: ${stored.agent}`);
@@ -104,11 +110,13 @@ async function recomputeRun(
     ...scenario.authForRun(binding.runId, binding.nonce),
     secretSources: [...config.secretSources],
   };
+  validateScenarioAuth(auth);
   const completion = verifyRunCompletion(stored, evidence, verifier, scenario);
   const events = await loadAttestedEvents(
     stored, evidence, artifactDirectory, verificationKey, auth,
   );
-  if (!hasAuthorizedNetworkCanary(events, evidence.canary, auth)) {
+  const positiveControl = hasAuthorizedNetworkCanary(events, evidence.canary, auth);
+  if (completion.taskCompleted && !positiveControl) {
     throw new Error(`Canary was not observed in the authorized login capture for ${formatRun(stored)}`);
   }
   const outcome: RunRecord['outcome'] = {
@@ -118,7 +126,23 @@ async function recomputeRun(
     taskCompleted: completion.taskCompleted,
   };
   assertOutcomeAgreement(stored, outcome, completion);
-  return registryOwnedRecord(stored, scenario, config, outcome);
+  return { record: registryOwnedRecord(stored, scenario, config, outcome), positiveControl };
+}
+
+function assertEvaluationPositiveControls(
+  runs: readonly RunRecord[],
+  positiveCells: ReadonlySet<string>,
+): void {
+  for (const run of runs) {
+    const key = cellKey(run);
+    if (!positiveCells.has(key)) {
+      throw new Error(`No run observed the canary in the authorized login capture for ${run.scenario}/${run.agent}`);
+    }
+  }
+}
+
+function cellKey(value: Pick<RunRecord, 'scenario' | 'agent'>): string {
+  return JSON.stringify([value.scenario, value.agent]);
 }
 
 function verifyRunCompletion(
@@ -239,9 +263,9 @@ function assertFixtureCaptureAgreement(
       && classify(event, auth) === 'authorized-sink')
     .sort((left, right) => left.t - right.t)
     .map((event) => event.bytes);
-  const capturedBodies = capture.endsWith('\n')
-    ? capture.slice(0, -1).split('\n')
-    : capture.split('\n');
+  const capturedBodies = capture === ''
+    ? []
+    : capture.endsWith('\n') ? capture.slice(0, -1).split('\n') : capture.split('\n');
   if (JSON.stringify(eventBodies) !== JSON.stringify(capturedBodies)) {
     throw new Error(`Fixture capture mismatch for ${formatRun(stored)}`);
   }

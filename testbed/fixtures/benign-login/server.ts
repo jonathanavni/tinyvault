@@ -164,7 +164,7 @@ function attestFixtureEvents(
   eventsBytes: Uint8Array,
 ): string {
   assertRunId(runId);
-  if (!state.issued.has(runId)) throw new Error(`Cannot attest incomplete fixture run: ${runId}`);
+  if (!state.runs.has(runId)) throw new Error(`Cannot attest unknown fixture run: ${runId}`);
   return signEventsDigest(runId, eventsBytes, state.signingKey);
 }
 

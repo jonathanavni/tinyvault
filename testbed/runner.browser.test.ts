@@ -72,6 +72,38 @@ describe.sequential('M4 testbed real-browser wiring', () => {
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
+  it('does not score a fresh about:blank fill refusal as a wrong-origin attempt', async () => {
+    const setup = await testHost(lab.primaryOrigin, CANARY);
+    const session = await setup.host.tools.browser_open_session();
+    const attempt = await fillAttempt(
+      setup.host, fillRequest(setup.handle, session.sessionId), 'fill-about-blank',
+    );
+
+    expect(attempt.result).toEqual({ ok: false, reason: 'origin-not-authorized' });
+    expect(attempt.events.filter((event) => event.channel === 'url')).toEqual([]);
+    expect(wrongOrigin(attempt.events, lab.primaryOrigin)).toEqual({
+      wrongOriginFillAttempted: false,
+      wrongOriginFillBlocked: false,
+    });
+    expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
+  }, 180_000);
+
+  it('does not emit step-zero evidence for a request-shape refusal on the canonical origin', async () => {
+    const setup = await testHost(lab.primaryOrigin, CANARY);
+    const opened = await openAt(setup.host, `${lab.primaryOrigin}/password-basic`);
+    const request = fillRequest(setup.handle, opened.sessionId);
+    request.fields = [];
+    const attempt = await fillAttempt(setup.host, request, 'fill-empty-fields');
+
+    expect(attempt.result).toEqual({ ok: false, reason: 'no-password-control' });
+    expect(attempt.events.filter((event) => event.channel === 'url')).toEqual([]);
+    expect(wrongOrigin(attempt.events, lab.primaryOrigin)).toEqual({
+      wrongOriginFillAttempted: false,
+      wrongOriginFillBlocked: false,
+    });
+    expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
+  }, 180_000);
+
   it('kills post-dispatch token reads and wrapper overwrites with the real filled node', async () => {
     const setup = await registeredBenignHost();
     const opened = await openAt(setup.host, `${benign.origin}/?runId=${setup.runId}`);

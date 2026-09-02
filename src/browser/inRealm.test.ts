@@ -1,5 +1,8 @@
+import { readFile } from 'node:fs/promises';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { MAX_SECRET_CODE_UNITS } from '../core/browserPort';
 import {
   ASSIGN_SOURCE,
   DESTINATION_PREDICATES_SOURCE,
@@ -113,9 +116,24 @@ class FakeEvent {
   constructor(readonly type: string, readonly options?: unknown) {}
 }
 
+class FakeDomNode {
+  static readonly TEXT_NODE = 3;
+  baseURL = 'https://example.test/login';
+
+  get baseURI(): string {
+    return this.baseURL;
+  }
+}
+
 type Realm = ReturnType<typeof installRealm>;
 
-function installRealm(): { input: FakeInput; form: FakeForm; documentElement: Map<string, string>; window: any } {
+function installRealm(): {
+  input: FakeInput;
+  form: FakeForm;
+  document: FakeDomNode & { documentElement: FakeElement; elementFromPoint(): unknown };
+  documentElement: Map<string, string>;
+  window: any;
+} {
   const input = new FakeInput();
   const form = input.form!;
   form.controls.push(new FakeControl());
@@ -128,15 +146,17 @@ function installRealm(): { input: FakeInput; form: FakeForm; documentElement: Ma
   fakeWindow.top = fakeWindow;
   vi.stubGlobal('window', fakeWindow);
   vi.stubGlobal('location', { origin: 'https://example.test', href: 'https://example.test/login', pathname: '/login' });
-  vi.stubGlobal('document', {
+  const document = Object.assign(new FakeDomNode(), {
     documentElement: new FakeElement([...documentElement]),
     elementFromPoint: () => input.hit,
   });
+  vi.stubGlobal('document', document);
+  vi.stubGlobal('Node', FakeDomNode);
   vi.stubGlobal('Element', FakeElement);
   vi.stubGlobal('HTMLInputElement', FakeInput);
   vi.stubGlobal('HTMLFormElement', FakeForm);
   vi.stubGlobal('Event', FakeEvent);
-  return { input, form, documentElement, window: fakeWindow };
+  return { input, form, document, documentElement, window: fakeWindow };
 }
 
 function sourceFunction(source: string): (...args: any[]) => any {
@@ -203,6 +223,57 @@ describe('isolated-world source strings', () => {
     expect(sourceFunction(VERIFY_DESTINATION_SOURCE).call(realm.input)).toBe(false);
     realm.form.controls[0]!.attributes.set('formaction', '/submit');
     expect(sourceFunction(VERIFY_DESTINATION_SOURCE).call(realm.input)).toBe(true);
+  });
+
+  it('reads document.baseURI natively and refuses every off-origin base before assignment', () => {
+    const offOrigin = installRealm();
+    offOrigin.document.baseURL = 'https://other.test/root/';
+    expect(sourceFunction(VERIFY_DESTINATION_SOURCE).call(offOrigin.input)).toBe(false);
+    expect(sourceFunction(ASSIGN_SOURCE).call(
+      offOrigin.input, 'https://example.test', fixedHex('secret'), '0006',
+    )).toEqual({ assigned: false, reason: 'identity' });
+    expect(offOrigin.input.assigned).toEqual([]);
+
+    const relativeAction = installRealm();
+    relativeAction.document.baseURL = 'https://other.test/root/';
+    relativeAction.form.attributes.set('action', 'login');
+    expect(sourceFunction(VERIFY_DESTINATION_SOURCE).call(relativeAction.input)).toBe(false);
+    expect(sourceFunction(ASSIGN_SOURCE).call(
+      relativeAction.input, 'https://example.test', fixedHex('secret'), '0006',
+    )).toEqual({ assigned: false, reason: 'identity' });
+    expect(relativeAction.input.assigned).toEqual([]);
+
+    const sameOrigin = installRealm();
+    sameOrigin.document.baseURL = 'https://example.test/root/';
+    sameOrigin.form.attributes.set('action', 'login');
+    expect(sourceFunction(VERIFY_DESTINATION_SOURCE).call(sameOrigin.input)).toBe(true);
+    expect(sourceFunction(ASSIGN_SOURCE).call(
+      sameOrigin.input, 'https://example.test', fixedHex('secret'), '0006',
+    )).toEqual({
+      assigned: true,
+      observedOrigin: 'https://example.test',
+      controlToken: 'control-before',
+      documentToken: 'document-before',
+    });
+    expect(sameOrigin.input.assigned).toEqual(['secret']);
+
+    const absoluteAction = installRealm();
+    absoluteAction.document.baseURL = 'https://example.test/root/';
+    absoluteAction.form.attributes.set('action', 'https://other.test/login');
+    expect(sourceFunction(VERIFY_DESTINATION_SOURCE).call(absoluteAction.input)).toBe(false);
+    expect(sourceFunction(ASSIGN_SOURCE).call(
+      absoluteAction.input, 'https://example.test', fixedHex('secret'), '0006',
+    )).toEqual({ assigned: false, reason: 'identity' });
+    expect(absoluteAction.input.assigned).toEqual([]);
+  });
+
+  it('resolves formaction against the native same-origin base URI', () => {
+    const realm = installRealm();
+    realm.document.baseURL = 'https://example.test/root/';
+    realm.form.controls[0]!.attributes.set('formaction', 'submit');
+    expect(sourceFunction(VERIFY_DESTINATION_SOURCE).call(realm.input)).toBe(true);
+    realm.document.baseURL = 'https://other.test/root/';
+    expect(sourceFunction(VERIFY_DESTINATION_SOURCE).call(realm.input)).toBe(false);
   });
 
   it('kills a missing top-frame predicate while retaining the specified origin-first assign reason', () => {
@@ -293,6 +364,12 @@ describe('isolated-world source strings', () => {
     }
     expect(VERIFY_DESTINATION_SOURCE).toContain(DESTINATION_PREDICATES_SOURCE);
     expect(ASSIGN_SOURCE).toContain(DESTINATION_PREDICATES_SOURCE);
+  });
+
+  it('derives the ASSIGN_SOURCE loop bound from MAX_SECRET_CODE_UNITS', async () => {
+    const source = await readFile('src/browser/inRealm.ts', 'utf8');
+    expect(source).toContain('index < ${MAX_SECRET_CODE_UNITS}; index += 1');
+    expect(ASSIGN_SOURCE).toContain(`index < ${MAX_SECRET_CODE_UNITS}; index += 1`);
   });
 
   it('kills value-dependent masking by allowing .value only in the unmasked branch', () => {

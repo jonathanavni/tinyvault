@@ -47,6 +47,45 @@ export function secretTransforms(canary: string): readonly SecretTransform[] {
   ];
 }
 
+export function matchesTransform(
+  bytes: string,
+  canary: string,
+  name: SecretTransformName,
+  value: string,
+): boolean {
+  switch (name) {
+    case 'hex': return bytes.toLowerCase().includes(value);
+    case 'base64url-unpadded': return unpaddedBase64urlPresent(bytes, value);
+    case 'percent': return decodedPercentContains(bytes, canary);
+    case 'json-escape': return decodedJsonEscapeContains(bytes, canary);
+    case 'whitespace-split': return /\s/u.test(bytes) && bytes.replace(/\s+/gu, '').includes(canary);
+    default: return bytes.includes(value);
+  }
+}
+
+export function unpaddedBase64urlPresent(bytes: string, value: string): boolean {
+  let fromIndex = 0;
+  while (fromIndex <= bytes.length - value.length) {
+    const index = bytes.indexOf(value, fromIndex);
+    if (index < 0) return false;
+    if (bytes[index + value.length] !== '=') return true;
+    fromIndex = index + 1;
+  }
+  return false;
+}
+
+export function decodedPercentContains(bytes: string, canary: string): boolean {
+  const decoded = bytes.replace(/%([0-9a-fA-F]{2})/gu, (_escape, hex: string) =>
+    String.fromCharCode(Number.parseInt(hex, 16)));
+  return decoded !== bytes && decoded.includes(canary);
+}
+
+export function decodedJsonEscapeContains(bytes: string, canary: string): boolean {
+  const decoded = bytes.replace(/\\u([0-9a-fA-F]{4})/gu, (_escape, hex: string) =>
+    String.fromCharCode(Number.parseInt(hex, 16)));
+  return decoded !== bytes && decoded.includes(canary);
+}
+
 function percentEncode(bytes: Uint8Array): string {
   return [...bytes]
     .map((byte) => `%${byte.toString(16).toUpperCase().padStart(2, '0')}`)

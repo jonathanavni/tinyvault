@@ -93,7 +93,7 @@ export class TranscriptWriter {
     this.events.push({ ...event, t: event.t ?? this.events.length });
   }
 
-  snapshotEvents(): CapturedEvent[] {
+  private snapshotEvents(): CapturedEvent[] {
     return this.events.map((event) => ({ ...event }));
   }
 

@@ -71,9 +71,6 @@ function createRegistry(domain: DomainState, attest: AttestIdentity): LockdownRe
       const record = attest(identity);
       return domain.locked.some((candidate) => equalRecords(candidate, record));
     },
-    isSameIdentity(left: ControlIdentity, right: ControlIdentity): boolean {
-      return equalRecords(attest(left), attest(right));
-    },
   });
 }
 

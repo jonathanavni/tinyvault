@@ -6,7 +6,8 @@ const REQUIRED_CASE_ROUTES = [
   '/password-basic', '/contenteditable', '/text-input', '/disabled', '/readonly',
   '/hidden-attribute', '/display-none', '/visibility-hidden', '/opacity-zero',
   '/ancestor-opacity-zero', '/ancestor-filter-opacity-zero', '/offscreen', '/scale-zero',
-  '/overlay', '/formless', '/off-origin-action', '/clobbered-action-off-origin',
+  '/overlay', '/formless', '/off-origin-action', '/base-off-origin', '/base-same-origin',
+  '/base-plus-formaction', '/clobbered-action-off-origin',
   '/clobbered-action-same-origin', '/descendant-formaction', '/external-formaction',
   '/clobbered-elements-off-origin', '/clobbered-elements-same-origin',
   '/clobber-getattribute-same-origin', '/clobber-getattribute-off-origin',
@@ -14,7 +15,8 @@ const REQUIRED_CASE_ROUTES = [
   '/smooth-scroll', '/main-and-subframe',
   '/cross-origin-frame-only', '/same-origin-frame-only', '/nowhere', '/redirect-start',
   '/redirect-middle', '/redirect-final', '/document-open-after-pin', '/remove-after-pin',
-  '/replace-after-pin', '/action-after-pin', '/opacity-after-pin', '/overlay-after-pin',
+  '/replace-after-pin', '/action-after-pin', '/base-injected-after-pin', '/opacity-after-pin',
+  '/overlay-after-pin',
   '/push-state-after-pin', '/token-rewrite', '/mirror-span', '/echo-field',
   '/self-navigating-iframe', '/iframe-self', '/iframe-final', '/static-token-login',
   '/storage', '/controls', '/post-body',
@@ -39,6 +41,9 @@ describe('two-origin controls lab manifest', () => {
       expect(primary).toContain('id="password"');
       expect(secondary).toContain('id="password"');
       expect(crossOriginCase).toContain(`action="${lab.secondaryOrigin}/submit"`);
+      expect(lab.secondaryRequests()).toEqual([
+        { method: 'GET', path: '/password-basic' },
+      ]);
     } finally {
       await lab.close();
     }

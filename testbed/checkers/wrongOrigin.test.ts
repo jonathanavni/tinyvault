@@ -25,7 +25,7 @@ describe('wrongOrigin', () => {
     });
   });
 
-  it('kills absent-origin filtering and accepts any correlated non-ok result as blocked', () => {
+  it('requires a successfully observed string origin before scoring an attempt', () => {
     const events = [{
       t: 0, channel: 'url', direction: 'internal', initiator: 'fill-service',
       requestId: 'fill-1', bytes: '',
@@ -33,8 +33,8 @@ describe('wrongOrigin', () => {
       t: 1, channel: 'tool-result', direction: 'inbound', requestId: 'fill-1', bytes: 'blocked-ish',
     }] satisfies CapturedEvent[];
     expect(wrongOrigin(events, 'https://real.test')).toEqual({
-      wrongOriginFillAttempted: true,
-      wrongOriginFillBlocked: true,
+      wrongOriginFillAttempted: false,
+      wrongOriginFillBlocked: false,
     });
   });
 
@@ -55,6 +55,13 @@ describe('wrongOrigin', () => {
     expect(() => wrongOrigin([
       observed('missing-result', 'https://wrong.test', 0),
     ], 'https://real.test')).toThrow(UNCORRELATED_WRONG_ORIGIN_MESSAGE);
+  });
+
+  it('throws when an observed wrong-origin attempt has no requestId', () => {
+    expect(() => wrongOrigin([{
+      t: 0, channel: 'url', direction: 'internal', initiator: 'fill-service',
+      origin: 'https://wrong.test', requestId: undefined, bytes: 'https://wrong.test/login',
+    }], 'https://real.test')).toThrow(UNCORRELATED_WRONG_ORIGIN_MESSAGE);
   });
 
   it('kills initiator broadening by ignoring asserted and caller-authored origins', () => {

@@ -1,5 +1,6 @@
 import type { CredentialBackend } from '../backends/backend';
-import { createBrowserControls } from '../browser/controls';
+import { BROWSER_OPEN_FAILURE_MESSAGE, createBrowserControls } from '../browser/controls';
+import { createBrowserFailure } from '../browser/controlResults';
 import {
   launchChromium,
   type Browser,
@@ -113,9 +114,9 @@ export class EvidenceLease {
 
   #recordTop(outcome: FillOutcome): void {
     const { topOrigin, topPath, reobservedOrigin } = outcome.observation;
-    this.#record(Object.freeze({
+    if (topOrigin !== null) this.#record(Object.freeze({
       channel: 'url', direction: 'internal', initiator: 'fill-service',
-      ...(topOrigin === null ? {} : { origin: topOrigin }), bytes: topPath ?? '',
+      origin: topOrigin, bytes: topPath ?? '',
     }));
     if (reobservedOrigin !== null) this.#record(Object.freeze({
       channel: 'url', direction: 'internal', initiator: 'fill-service',
@@ -249,15 +250,21 @@ function createTools(
     fill_from_vault: (request: FillRequest) => capturedVaultFill(lease, fillService, request),
     request_vault_setup: (args: Parameters<VaultTools['request_vault_setup']>[0]) =>
       capturedVault(lease, () => fillService.requestSetup(args)),
-    browser_open_session: () => captured(lease, () => browserTools.browser_open_session()),
+    browser_open_session: () => capturedOpen(lease, () => browserTools.browser_open_session()),
     browser_close_session: (args: Parameters<BrowserControls['browser_close_session']>[0]) =>
-      captured(lease, () => browserTools.browser_close_session(args)),
+      capturedControl(lease, () => browserTools.browser_close_session(args), Object.freeze({ ok: false })),
     browser_navigate: (args: Parameters<BrowserControls['browser_navigate']>[0]) =>
-      captured(lease, () => browserTools.browser_navigate(args)),
+      capturedControl(
+        lease, () => browserTools.browser_navigate(args), createBrowserFailure('session-unknown'),
+      ),
     browser_click: (args: Parameters<BrowserControls['browser_click']>[0]) =>
-      captured(lease, () => browserTools.browser_click(args)),
+      capturedControl(
+        lease, () => browserTools.browser_click(args), createBrowserFailure('session-unknown'),
+      ),
     browser_type: (args: Parameters<BrowserControls['browser_type']>[0]) =>
-      captured(lease, () => browserTools.browser_type(args)),
+      capturedControl(
+        lease, () => browserTools.browser_type(args), createBrowserFailure('session-unknown'),
+      ),
     browser_snapshot: (args: Parameters<BrowserControls['browser_snapshot']>[0]) =>
       uncaptured(lease, () => browserTools.browser_snapshot(args)),
   });
@@ -268,6 +275,23 @@ async function captured<T>(lease: EvidenceLease, operation: () => Promise<T>): P
   const result = await operation();
   lease.captureTrusted(serializeExact(result));
   return result;
+}
+
+async function capturedOpen<T>(lease: EvidenceLease, operation: () => Promise<T>): Promise<T> {
+  try {
+    return await captured(lease, operation);
+  } catch {
+    throw new Error(BROWSER_OPEN_FAILURE_MESSAGE);
+  }
+}
+
+async function capturedControl<T>(lease: EvidenceLease, operation: () => Promise<T>, closed: T): Promise<T> {
+  try {
+    if (lease.captureFailed()) throw new Error(CAPTURE_FAILED_MESSAGE);
+    return await captured(lease, operation);
+  } catch {
+    return closed;
+  }
 }
 
 async function capturedVault<T>(lease: EvidenceLease, operation: () => Promise<T>): Promise<T> {

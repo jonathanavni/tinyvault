@@ -201,6 +201,15 @@ describe('tripwire tool composition and evidence separation', () => {
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   });
 
+  it('records no step-0 URL event when no string origin was observed', async () => {
+    const setup = composed(fillOutcome({
+      topOrigin: null, topPath: null, reobservedOrigin: null, assertedMismatch: null, assigned: null,
+    }));
+    expect(await setup.host.tools.fill_from_vault(fillRequest())).toEqual({ ok: true, filled: ['password'] });
+    expect(setup.host.drainEvidence().filter((event) => event.channel === 'url')).toEqual([]);
+    setup.host.abort();
+  });
+
   it('kills eager matching/mint/adjudicate and direct tripwire-side imports in host.ts', async () => {
     const match = vi.spyOn(secretMatcher, 'firstMatchingSecretTransform');
     const mint = vi.spyOn(TripwireRun.prototype, 'mint');
@@ -255,6 +264,39 @@ describe('lease finalization and composition cleanup', () => {
     expect(setup.host.finish().verdict).toBe('fail');
     expect(inspectEvidenceLeaseForTest(setup.lease)).toEqual([]);
     expect(() => setup.host.drainEvidence()).toThrow('Evidence capture failed');
+  });
+
+  it.each(['finish', 'abort', 'capture-failed'] as const)(
+    'closes every non-open captured browser control after a %s lease without rejecting',
+    async (phase) => {
+      const setup = composed();
+      if (phase === 'finish') expect(setup.host.finish().verdict).toBe('pass');
+      else if (phase === 'abort') setup.host.abort();
+      else setup.lease.recordRequest({
+        postData: () => { throw new Error('forced capture failure'); },
+        method: () => 'POST',
+        url: () => ORIGIN,
+      });
+      const before = [...setup.sessions.calls];
+      expect(await setup.host.tools.browser_navigate({ sessionId: 'session', url: ORIGIN }))
+        .toEqual({ ok: false, reason: 'session-unknown' });
+      expect(await setup.host.tools.browser_click({ sessionId: 'session', selector: '#button' }))
+        .toEqual({ ok: false, reason: 'session-unknown' });
+      expect(await setup.host.tools.browser_type({ sessionId: 'session', selector: '#field', text: 'text' }))
+        .toEqual({ ok: false, reason: 'session-unknown' });
+      expect(await setup.host.tools.browser_close_session({ sessionId: 'session' }))
+        .toEqual({ ok: false });
+      expect(setup.sessions.calls).toEqual(before);
+      if (phase === 'capture-failed') setup.host.abort();
+    },
+  );
+
+  it('keeps browser_open_session on its single fixed rejection after lease closure', async () => {
+    const setup = composed();
+    setup.host.abort();
+    await expect(setup.host.tools.browser_open_session())
+      .rejects.toThrow('Browser session could not be opened');
+    expect(setup.sessions.calls).toEqual([]);
   });
 
   it('kills a finish finally missing run/evidence cleanup when adjudication throws', async () => {

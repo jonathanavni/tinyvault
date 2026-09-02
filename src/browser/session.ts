@@ -374,6 +374,7 @@ async function injectDestination(
   const value = secret.consume();
   try {
     if (value.length > MAX_SECRET_CODE_UNITS) return tooLongOutcome();
+    if (value.includes('\n') || value.includes('\r')) return unplaceableOutcome();
     const hex = toFixedHex(value);
     const lengthDigits = String(value.length).padStart(4, '0');
     state.taint.push({ identity, backendNodeId, epoch: state.epoch });
@@ -395,6 +396,10 @@ async function injectDestination(
 
 function tooLongOutcome(): InjectOutcome {
   return Object.freeze({ assigned: false, reason: 'too-long' });
+}
+
+function unplaceableOutcome(): InjectOutcome {
+  return Object.freeze({ assigned: false, reason: 'unplaceable' });
 }
 
 function toFixedHex(value: string): string {
@@ -526,6 +531,8 @@ async function resolveTaintedObjects(state: SessionState, executionContextId: nu
       objectIds.push(await resolveObject(state.cdp, entry.backendNodeId, executionContextId));
     } catch {
       // Keep the provenance entry; a later re-insertion of this node must remain masked.
+      await Promise.all(objectIds.map((objectId) => releaseObject(state.cdp, objectId)));
+      throw new Error('Tainted browser node could not be resolved');
     }
   }
   return objectIds;
@@ -535,18 +542,15 @@ function normalizeSnapshot(value: unknown): MaskedSnapshot {
   if (!isRecord(value) || typeof value.url !== 'string' || !Array.isArray(value.nodes)) {
     return Object.freeze({ url: '', nodes: Object.freeze([]) }) as unknown as MaskedSnapshot;
   }
-  const nodes = value.nodes.flatMap((node) => normalizeSnapshotNode(node));
+  const nodes = value.nodes.filter(isSnapshotNode);
   return Object.freeze({ url: value.url, nodes: Object.freeze(nodes) }) as MaskedSnapshot;
 }
 
-function normalizeSnapshotNode(value: unknown): MaskedSnapshot['nodes'] {
-  if (!isRecord(value) || typeof value.tag !== 'string' || typeof value.masked !== 'boolean') return [];
-  if (value.masked) return [Object.freeze({ tag: value.tag, masked: true })];
-  const node: Record<string, unknown> = { tag: value.tag, masked: false };
-  for (const field of ['role', 'name', 'value'] as const) {
-    if (typeof value[field] === 'string') node[field] = value[field];
-  }
-  return [Object.freeze(node) as MaskedSnapshot['nodes'][number]];
+function isSnapshotNode(value: unknown): value is MaskedSnapshot['nodes'][number] {
+  if (!isRecord(value) || typeof value.tag !== 'string' || typeof value.masked !== 'boolean') return false;
+  if (value.masked) return true;
+  return ['role', 'name', 'value'].every((field) =>
+    value[field] === undefined || typeof value[field] === 'string');
 }
 
 function isTainted(state: SessionState, backendNodeId: number): boolean {
