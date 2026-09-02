@@ -13,10 +13,12 @@ Active planning docs:
   eval contract, and the §10 residual risks. Amended post-lock where recorded in `PLAN.md`.
 - `spec-amendment-2026-08-31.md` — planning-side proposal (external intelligence since kickoff).
   **Triaged 2026-08-31** — all 8 outcomes in the `PLAN.md` Decisions Log. **Fact-checked 2026-09-01**
-  (`0876589`) — see the next entry; A1/A3 are still not absorbed into `PROJECT-SPEC.md`.
+  (`0876589`). **A1 and A3 absorbed into `PROJECT-SPEC.md` 2026-09-01** (§2, §3, §7, §8); the remaining
+  outcomes stay where triage put them (A2 accepted but not yet written into the spec; A4 at M10, B1 at
+  M2/M3, C1 at M7+, D1 at roadmap step 5).
 - `spec-amendment-factcheck.md` — verification of every external claim in the amendment: 27 confirmed,
-  7 partial, 3 wrong, 3 unverifiable, with sources and replacement wording. Apply its corrections when
-  the amendment's content is lifted into the spec or README.
+  7 partial, 3 wrong, 3 unverifiable, with sources and replacement wording. Its corrections are applied
+  in the absorbed A1/A3 text; apply them again to anything else lifted into the spec or the README.
 - `audit-opus5-m0-m1.md` — independent Opus 5 blind audit of M0+M1. **Resolved** (`07996a2`);
   deferred items live in the M4/M5 gate lists.
 - `m2-slice-spec.md` — the M2 implementation contract (revision 4). **Shipped** (`6a6b67c`); carries

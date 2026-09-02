@@ -2,7 +2,7 @@
 
 > **Fact-check (2026-09-01):** every external claim in this document was verified in [`spec-amendment-factcheck.md`](spec-amendment-factcheck.md) — 27 confirmed, 7 partially, 3 wrong, 3 unverifiable. **Do not lift text from here into `PROJECT-SPEC.md` or the README without applying that report's corrections** (Grok Bot's credential model, the CyberArk dead link, the Stripe Link dates/attribution).
 
-> **Status:** PROPOSAL from the planning side (the author of `PROJECT-SPEC.md`), to be triaged by the continuity owner against the **LOCKED** Phase 0 plan.
+> **Status:** PROPOSAL from the planning side (the author of `PROJECT-SPEC.md`). **Triaged 2026-08-31** — all 8 outcomes are in the `PLAN.md` Decisions Log, which governs. **A1 and A3 were absorbed into `PROJECT-SPEC.md` on 2026-09-01** (§2 timing + convergence, §3 attended/unattended, §7 step 5, §8 prior art), with the fact-check's corrections applied; this document is now provenance for those two. A2 is accepted but not yet written into the spec; A4/B1/C1/D1 sit at their triaged milestones.
 >
 > **This document does not jump the queue.** The M1-hardening slice from `docs/audit-opus5-m0-m1.md` remains first. Triage this afterward, before or alongside M2 dispatch.
 >
