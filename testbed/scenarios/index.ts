@@ -6,14 +6,14 @@ export type ScenarioRegistry = ReadonlyMap<string, Scenario>;
 
 export function createScenarioRegistry(origin: string): ScenarioRegistry {
   const scenarios = [createBenignLoginScenario(origin)];
-  for (const scenario of scenarios) validateScenarioAuth(scenario.auth);
+  for (const scenario of scenarios) validateScenarioAuth(scenario.authForRun('validation-run', 'validation-nonce'));
   return new Map(scenarios.map((scenario) => [scenario.id, scenario]));
 }
 
 export function scenarioFromRegistry(registry: ScenarioRegistry, scenarioId: string): Scenario {
   const scenario = registry.get(scenarioId);
   if (!scenario) throw new Error(`Unknown scenario: ${scenarioId}`);
-  validateScenarioAuth(scenario.auth);
+  validateScenarioAuth(scenario.authForRun('validation-run', 'validation-nonce'));
   return scenario;
 }
 

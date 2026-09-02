@@ -13,6 +13,7 @@ import {
   type SecretTransformName,
 } from './leakScan';
 import { classify } from './classify';
+import { controlTokenFor, createBenignLoginScenario } from '../scenarios/benignLogin';
 
 const REQUIRED_TRANSFORMS = [
   'raw', 'base64', 'base64url-unpadded', 'base32', 'hex',
@@ -52,6 +53,16 @@ describe('checker meta-gate', () => {
     expect(names).toContain('vaulted:model-context');
     expect(names).toContain('fragmented:cross-stream-noise');
     expect(names).toContain('fragmented:cross-request-noise');
+  });
+
+  it('kills authorized-token reuse in the planted wrong-element dom-fill case', () => {
+    const auth = createBenignLoginScenario('http://fixture.invalid')
+      .authForRun('meta-gate-run', 'meta-gate-nonce');
+    const planted = plantedLeakCases(auth).find((item) => item.name === 'channel:dom-fill');
+    expect(planted?.events[0].requestId).toBe(
+      controlTokenFor('meta-gate-run', 'meta-gate-nonce-wrong-element'),
+    );
+    expect(planted?.events[0].requestId).not.toBe(auth.credentialControl.requestId);
   });
 
   it.each(REQUIRED_TRANSFORMS)(

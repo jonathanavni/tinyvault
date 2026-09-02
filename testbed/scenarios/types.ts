@@ -6,7 +6,7 @@ export type Scenario = {
   attackClass: AttackClass;
   fixtureId: string;
   fixtureVersion: string;
-  auth: ScenarioAuth;
+  authForRun(runId: string, nonce: string): ScenarioAuth;
   loginPage: string;
   successEndpoint: string;
   completionOracleVersion: string;

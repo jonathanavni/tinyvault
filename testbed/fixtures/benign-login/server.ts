@@ -23,6 +23,7 @@ import {
   BENIGN_FIXTURE_ID,
   BENIGN_FIXTURE_VERSION,
   BENIGN_USERNAME,
+  controlTokenFor,
 } from '../../scenarios/benignLogin';
 
 export type FixtureRunSetup = {
@@ -55,83 +56,121 @@ export type BenignLoginFixture = {
 export async function startBenignLoginFixture(captureDirectory: string): Promise<BenignLoginFixture> {
   const { privateKey, publicKey } = generateKeyPairSync('ed25519');
   const completionVerifier = new CompletionVerifier(publicKey);
-  const runs = new Map<string, FixtureRunSetup>();
-  const receipts = new Map<string, string>();
-  const issued = new Set<string>();
   const indexPath = join(dirname(fileURLToPath(import.meta.url)), 'index.html');
   const page = await readFile(indexPath, 'utf8');
   await mkdir(captureDirectory, { recursive: true });
+  const state: RequestState = {
+    origin: '', page, signingKey: privateKey,
+    runs: new Map(), receipts: new Map(), issued: new Set(), captureDirectory,
+  };
+  const server = createFixtureServer(state);
+  const transport = await bindFixtureServer(server, state);
+  return createFixtureApi(server, state, publicKey, completionVerifier, transport);
+}
 
-  let origin = '';
-  const server = createServer((request, response) => {
-    void handleRequest(request, response, {
-      origin, page, signingKey: privateKey, runs, receipts, issued, captureDirectory,
-    }).catch((error: unknown) => {
+function createFixtureApi(
+  server: ReturnType<typeof createServer>,
+  state: RequestState,
+  publicKey: KeyObject,
+  completionVerifier: CompletionVerifier,
+  transport: BenignLoginFixture['transport'],
+): BenignLoginFixture {
+  return {
+    origin: state.origin,
+    transport,
+    verificationPublicKey: publicKey,
+    registerRun: (setup) => registerFixtureRun(state, setup),
+    getLoginPage: (runId) => getFixtureLoginPage(state, transport, runId),
+    submitLogin: (body) => submitFixtureLogin(state, transport, body),
+    takeReceipt: (runId) => takeFixtureReceipt(state, runId),
+    verifyCompletion: (receipt, expected, nowMs) =>
+      completionVerifier.verify(receipt, expected, nowMs),
+    attestEvents: (runId, eventsBytes) => attestFixtureEvents(state, runId, eventsBytes),
+    capturePath: (runId) => checkedCapturePath(state.captureDirectory, runId),
+    close: () => closeServer(server),
+  };
+}
+
+function createFixtureServer(state: RequestState): ReturnType<typeof createServer> {
+  return createServer((request, response) => {
+    void handleRequest(request, response, state).catch((error: unknown) => {
       response.statusCode = 500;
       response.end('fixture error');
       console.error(error);
     });
   });
+}
 
-  let transport: BenignLoginFixture['transport'] = 'http';
+async function bindFixtureServer(
+  server: ReturnType<typeof createServer>,
+  state: RequestState,
+): Promise<BenignLoginFixture['transport']> {
   try {
     await listen(server);
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('Fixture did not bind a TCP port');
-    origin = `http://127.0.0.1:${address.port}`;
+    state.origin = `http://127.0.0.1:${address.port}`;
+    return 'http';
   } catch (error) {
     if (!isListenPermissionError(error)) throw error;
-    transport = 'in-process';
-    origin = 'http://127.0.0.1:0';
+    state.origin = 'http://127.0.0.1:0';
+    return 'in-process';
   }
+}
 
-  const state: RequestState = {
-    origin, page, signingKey: privateKey, runs, receipts, issued, captureDirectory,
-  };
+async function registerFixtureRun(state: RequestState, setup: FixtureRunSetup): Promise<void> {
+  assertRunId(setup.runId);
+  if (state.runs.has(setup.runId)) throw new Error(`Duplicate fixture run: ${setup.runId}`);
+  state.runs.set(setup.runId, setup);
+  await writeFile(capturePath(state.captureDirectory, setup.runId), '');
+}
 
-  return {
-    origin,
-    transport,
-    verificationPublicKey: publicKey,
-    async registerRun(setup) {
-      assertRunId(setup.runId);
-      if (runs.has(setup.runId)) throw new Error(`Duplicate fixture run: ${setup.runId}`);
-      runs.set(setup.runId, setup);
-      await writeFile(capturePath(captureDirectory, setup.runId), '');
-    },
-    async getLoginPage(runId) {
-      if (transport === 'in-process') return page;
-      return fetch(`${origin}/?runId=${encodeURIComponent(runId)}`).then((response) => response.text());
-    },
-    async submitLogin(body) {
-      if (transport === 'in-process') return processLoginBody(body, state);
-      const response = await fetch(`${origin}/login`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body,
-        redirect: 'manual',
-      });
-      return response.status;
-    },
-    takeReceipt(runId) {
-      const receipt = receipts.get(runId);
-      receipts.delete(runId);
-      return receipt;
-    },
-    verifyCompletion(receipt, expected, nowMs) {
-      return completionVerifier.verify(receipt, expected, nowMs);
-    },
-    attestEvents(runId, eventsBytes) {
-      assertRunId(runId);
-      if (!issued.has(runId)) throw new Error(`Cannot attest incomplete fixture run: ${runId}`);
-      return signEventsDigest(runId, eventsBytes, privateKey);
-    },
-    capturePath(runId) {
-      assertRunId(runId);
-      return capturePath(captureDirectory, runId);
-    },
-    close: () => closeServer(server),
-  };
+function getFixtureLoginPage(
+  state: RequestState,
+  transport: BenignLoginFixture['transport'],
+  runId: string,
+): Promise<string> {
+  if (transport === 'in-process') {
+    return Promise.resolve(renderLoginPage(state.page, state.runs.get(runId)));
+  }
+  return fetch(`${state.origin}/?runId=${encodeURIComponent(runId)}`)
+    .then((response) => response.text());
+}
+
+async function submitFixtureLogin(
+  state: RequestState,
+  transport: BenignLoginFixture['transport'],
+  body: string,
+): Promise<number> {
+  if (transport === 'in-process') return processLoginBody(body, state);
+  const response = await fetch(`${state.origin}/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+    redirect: 'manual',
+  });
+  return response.status;
+}
+
+function takeFixtureReceipt(state: RequestState, runId: string): string | undefined {
+  const receipt = state.receipts.get(runId);
+  state.receipts.delete(runId);
+  return receipt;
+}
+
+function attestFixtureEvents(
+  state: RequestState,
+  runId: string,
+  eventsBytes: Uint8Array,
+): string {
+  assertRunId(runId);
+  if (!state.issued.has(runId)) throw new Error(`Cannot attest incomplete fixture run: ${runId}`);
+  return signEventsDigest(runId, eventsBytes, state.signingKey);
+}
+
+function checkedCapturePath(directory: string, runId: string): string {
+  assertRunId(runId);
+  return capturePath(directory, runId);
 }
 
 type EventsDigestPayload = { runId: string; eventsSha256: string };
@@ -229,7 +268,7 @@ async function handleRequest(
   const url = new URL(request.url ?? '/', state.origin);
   if (request.method === 'GET' && url.pathname === '/') {
     response.setHeader('content-type', 'text/html; charset=utf-8');
-    response.end(state.page);
+    response.end(renderLoginPage(state.page, state.runs.get(url.searchParams.get('runId') ?? '')));
     return;
   }
   if (request.method === 'GET' && url.pathname === '/success') {
@@ -246,6 +285,16 @@ async function handleRequest(
   response.statusCode = status;
   if (status === 303) response.setHeader('location', '/success');
   response.end(status === 303 ? undefined : 'login rejected');
+}
+
+function renderLoginPage(page: string, setup: FixtureRunSetup | undefined): string {
+  const documentAttribute = setup === undefined ? '' : ` data-tv-document="${setup.runId}"`;
+  const controlAttribute = setup === undefined
+    ? ''
+    : ` data-tv-control="${controlTokenFor(setup.runId, setup.nonce)}"`;
+  return page
+    .replace('{{TV_DOCUMENT_ATTRIBUTE}}', documentAttribute)
+    .replace('{{TV_CONTROL_ATTRIBUTE}}', controlAttribute);
 }
 
 async function processLoginBody(body: string, state: RequestState): Promise<number> {

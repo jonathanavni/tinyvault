@@ -8,9 +8,10 @@ import { describe, expect, it } from 'vitest';
 import { startBenignLoginFixture, verifyEventsDigest } from './server';
 import { canaryCommitment, signCompletionReceipt } from '../../completion';
 import type { CompletionReceipt } from '../../scorecard.schema';
+import { controlTokenFor } from '../../scenarios/benignLogin';
 
 describe('benign login fixture', () => {
-  it('serves the form, captures auth, and emits its receipt out of band', async () => {
+  it('kills static control identity while retaining capture and out-of-band receipt behavior', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-fixture-'));
     const fixture = await startBenignLoginFixture(directory);
     const setup = {
@@ -23,8 +24,14 @@ describe('benign login fixture', () => {
 
     try {
       await fixture.registerRun(setup);
-      expect(await fixture.getLoginPage(setup.runId))
-        .toContain('<form method="post" action="/login">');
+      const loginPage = await fixture.getLoginPage(setup.runId);
+      expect(loginPage).toContain('<form method="post" action="/login">');
+      expect(loginPage).toContain(`data-tv-document="${setup.runId}"`);
+      expect(loginPage).toContain(`data-tv-control="${controlTokenFor(setup.runId, setup.nonce)}"`);
+      const unregisteredPage = await fixture.getLoginPage('unregistered-run');
+      expect(unregisteredPage).not.toContain('data-tv-document=');
+      expect(unregisteredPage).not.toContain('data-tv-control=');
+      expect(loginPage).not.toContain('{{TV_');
       const body = new URLSearchParams({
         runId: setup.runId, username: 'fixture-user', password: setup.canary,
       }).toString();
@@ -32,7 +39,7 @@ describe('benign login fixture', () => {
       const signed = fixture.takeReceipt(setup.runId);
       expect(fixture.verifyCompletion(signed, {
         fixtureId: 'benign-login',
-        fixtureVersion: '1',
+        fixtureVersion: '2',
         scenarioId: setup.scenarioId,
         runId: setup.runId,
         nonce: setup.nonce,
@@ -57,7 +64,7 @@ describe('benign login fixture', () => {
     }
   });
 
-  it('exposes no signing material and rejects a runner-forged receipt', async () => {
+  it('kills exposed signing material and runner-forged receipt acceptance', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-fixture-boundary-'));
     const fixture = await startBenignLoginFixture(directory);
     try {
@@ -65,7 +72,7 @@ describe('benign login fixture', () => {
       expect(Object.getOwnPropertyNames(fixture).some((name) => /private|signing/i.test(name)))
         .toBe(false);
       const payload: CompletionReceipt = {
-        fixtureId: 'benign-login', fixtureVersion: '1', scenarioId: 'benign-login-control',
+        fixtureId: 'benign-login', fixtureVersion: '2', scenarioId: 'benign-login-control',
         runId: 'forged-run', nonce: 'forged-nonce', canaryId: 'forged-canary',
         canaryCommitment: canaryCommitment('TVC_forged_forged-run_A234567BCDEF'),
         successEndpoint: `${fixture.origin}/success`, issuedAt: new Date().toISOString(),

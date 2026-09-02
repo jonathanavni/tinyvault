@@ -1,6 +1,9 @@
 import { CanaryGenerator } from '../canary';
 import { createScenarioRegistry } from '../scenarios';
-import { MODEL_CONTEXT_SECRET_SOURCE } from '../scenarios/benignLogin';
+import {
+  MODEL_CONTEXT_SECRET_SOURCE,
+  controlTokenFor,
+} from '../scenarios/benignLogin';
 import type { AttackClass, CapturedEvent, Channel } from '../scorecard.schema';
 import { leakScan, type LeakScanResult } from './leakScan';
 import type { ScenarioAuth } from './classify';
@@ -22,6 +25,8 @@ export type LiveFireResult = { suspicious: boolean; reason?: string };
 
 const CANARY = 'TVC_meta-gate_run-0_A234567BCDEF';
 const ORIGIN = 'http://fixture.invalid';
+const META_RUN_ID = 'meta-gate-run';
+const META_NONCE = 'meta-gate-nonce';
 
 export const META_GATE_REQUIRED_TRANSFORMS = [
   'raw',
@@ -89,7 +94,8 @@ export function runMetaGate(checker: LeakChecker = leakScan): MetaGateResult {
   let negativeControlCount = 0;
 
   for (const scenario of scenarios) {
-    const vaultedAuth: ScenarioAuth = { ...scenario.auth, secretSources: [] };
+    const scenarioAuth = scenario.authForRun(META_RUN_ID, META_NONCE);
+    const vaultedAuth: ScenarioAuth = { ...scenarioAuth, secretSources: [] };
     const planted = plantedLeakCases(vaultedAuth);
     plantedCases += planted.length;
     failures.push(...transformInventoryFailures(planted));
@@ -105,14 +111,14 @@ export function runMetaGate(checker: LeakChecker = leakScan): MetaGateResult {
     }
 
     const controls = negativeControls(CANARY, {
-      ...scenario.auth,
+      ...scenarioAuth,
       secretSources: [MODEL_CONTEXT_SECRET_SOURCE],
     });
     negativeControlCount += controls.length;
     for (const control of controls) {
       try {
         const leaked = checker(control.events, CANARY, {
-          ...scenario.auth,
+          ...scenarioAuth,
           secretSources: [MODEL_CONTEXT_SECRET_SOURCE],
         }).secretLeaked;
         if (leaked !== control.expectedLeak) {
@@ -423,7 +429,7 @@ function unauthorizedEvent(
       t, channel, direction: 'internal', origin: ORIGIN,
       frameId: auth.credentialControl.frameId,
       documentId: auth.credentialControl.documentId,
-      requestId: 'wrong-element', bytes,
+      requestId: controlTokenFor(META_RUN_ID, `${META_NONCE}-wrong-element`), bytes,
     };
   }
   return {
@@ -439,7 +445,7 @@ function unauthorizedEvent(
 }
 
 function defaultScenarioAuth(): ScenarioAuth {
-  return [...createScenarioRegistry(ORIGIN).values()][0].auth;
+  return [...createScenarioRegistry(ORIGIN).values()][0].authForRun(META_RUN_ID, META_NONCE);
 }
 
 function errorMessage(error: unknown): string {
