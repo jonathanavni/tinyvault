@@ -9,6 +9,19 @@ import { createLockdownDomain } from '../supervisor/lockdownDomain';
 const first = { sessionId: 'session-a', documentId: 'doc-1', frameId: 'top', elementId: 'password' };
 
 describe('provenance-keyed lockdown registry', () => {
+  it('kills lockdown introspection getters that miss mint, lock, navigation, or close transitions', () => {
+    const domain = createLockdownDomain();
+    expect([domain.sessionCount(), domain.lockedCount()]).toEqual([0, 0]);
+    const identity = domain.authority.mint(first);
+    expect([domain.sessionCount(), domain.lockedCount()]).toEqual([1, 0]);
+    domain.registry.lock(identity);
+    expect([domain.sessionCount(), domain.lockedCount()]).toEqual([1, 1]);
+    domain.lifecycle.clearOnTrustedTopLevelNavigation(first.sessionId);
+    expect([domain.sessionCount(), domain.lockedCount()]).toEqual([1, 0]);
+    domain.lifecycle.clearOnSessionClose(first.sessionId);
+    expect([domain.sessionCount(), domain.lockedCount()]).toEqual([0, 0]);
+  });
+
   it('catches mutation from attested identity to forgeable structural objects', () => {
     const { registry, authority } = createLockdownDomain();
     const real = authority.mint(first);

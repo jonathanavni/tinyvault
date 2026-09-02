@@ -11,6 +11,15 @@ function deferred(): { promise: Promise<void>; resolve(): void } {
 describe('per-session non-reentrant mutex', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it('kills an active-session introspection getter that counts neither creation nor final close', async () => {
+    const mutex = new SessionMutex();
+    expect(mutex.activeSessionCount()).toBe(0);
+    await mutex.runExclusive('session', () => undefined);
+    expect(mutex.activeSessionCount()).toBe(1);
+    await mutex.close('session');
+    expect(mutex.activeSessionCount()).toBe(0);
+  });
+
   it('catches mutation that overlaps the active owner or reorders multiple queued operations', async () => {
     const mutex = new SessionMutex();
     const gate = deferred();

@@ -28,6 +28,8 @@ export function createLockdownDomain(): Readonly<{
   registry: LockdownRegistry;
   authority: ControlIdentityMintAuthority;
   lifecycle: LockdownLifecycle;
+  lockedCount(): number;
+  sessionCount(): number;
 }> {
   const domain: DomainState = {
     sessions: new Map(),
@@ -86,7 +88,13 @@ export function createLockdownDomain(): Readonly<{
     },
   });
 
-  return Object.freeze({ registry, authority, lifecycle });
+  return Object.freeze({
+    registry,
+    authority,
+    lifecycle,
+    lockedCount: () => domain.locked.length,
+    sessionCount: () => domain.sessions.size,
+  });
 }
 
 function equalRecords(left: IdentityRecord, right: IdentityRecord): boolean {

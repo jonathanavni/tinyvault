@@ -17,6 +17,10 @@ export class SessionMutex {
   readonly #closedSessions = new Set<string>();
   readonly #owners = new AsyncLocalStorage<ReadonlySet<string>>();
 
+  activeSessionCount(): number {
+    return this.#states.size;
+  }
+
   runExclusive<T>(sessionId: string, operation: () => T | Promise<T>): Promise<T> {
     if (this.#owners.getStore()?.has(sessionId)) {
       return Promise.reject(new Error(MUTEX_REENTRANT_MESSAGE));
