@@ -1183,3 +1183,75 @@ the retention rule is a syntactic pass over a pinned file set; a filtered test c
 ### Disposition
 **Not merge-ready as committed.** Fix slice `m4-fix-final3` (Codex) absorbs everything above; the three channels
 review that diff; then merge.
+
+## Final3 round — three channels on 5757a24..cd152a2 (`m4-fix-final3`) — 2026-09-02
+
+Claude QA (`J-Q*`), Claude security (`J-S*`), Codex (`J-X*`). **NEEDS-ATTENTION ×3.** Every H-*/I-X* absorption is
+CLOSED by reproduced mutation except the items below; layer 1–2 destination gating held under 13 further real-Chromium
+form-association probes; the query-string exfiltration test detects; eval 10/10, 0 leaks, `unobserved=0`.
+*(Correction to the Final2 section: the corpus added S16–S22, not S16–S23.)*
+
+### P1
+- **J-Q1 / J-X1 / J-S0 the pinned commit did not typecheck** — the integrator's step-zero narrowing dereferenced the
+  optional `initiator`; the commit stanza's "tsc OK" came from a run before that edit. **Fixed `3e74854`; gotcha
+  recorded (tsc is the last thing before every commit).**
+- **J-S1 Blob-bodied requests exfiltrate silently:** `request.postData()` is null for `Blob` bodies (`fetch` and
+  `sendBeacon`), so the body is dropped with no event and no capture failure; a `TextEncoder` body is captured.
+  **Absorb:** `postDataBuffer()` (UTF-8, else base64) for every request.
+- **J-S3 the retention rule's file set, not its logic, is the hole:** a key stash in `localFile.ts`'s
+  `openRecordSecret` (the rule analyses only `decryptRecord`), a stash in `redaction.ts`'s `Secret.consume()` (outside
+  the set and excluded by the structure test), and one in `localFileSodium.ts` `open()` all pass 739 tests and recover
+  the plaintext after `closeAll` + dispose. **Absorb:** the set becomes `session.ts`, `fillService.ts`,
+  `localFile.ts`, `localFileSodium.ts`, `localFileFormat.ts`, `redaction.ts`; every function in every file is
+  analysed; a completeness test asserts that no other production module imports `Secret`'s constructor or the
+  sodium open/decrypt primitives.
+- **J-Q2 / J-S2 the CDP call guard was removed silently** to satisfy `inspectCdpSink`: `callFunctionOn` became `return
+  response.result?.value`. Measured: a thrown *primitive* returns `{ value: true }` **with** `exceptionDetails`, so
+  `throw true` inside the destination predicates would count as verified. Not page-reachable today (the in-realm
+  source throws only native errors), but the fail-closed invariant on the most security-critical call was lost
+  without a test or a deviation entry. **Absorb:** restore the guard; the rule permits exactly that guard shape;
+  unit tests for `exceptionDetails`, missing `value`, and a truthy value alongside `exceptionDetails`. **New
+  mandatory rule:** any production change made to satisfy the retention rule is a Deviations entry.
+- **J-Q3 / J-S4 the url-event change moved a hole:** origin validation now runs before the bodyless early return, so
+  a bodyless request with an unvalidatable origin (`<img src="file:///etc/passwd">`, a trailing-dot host) sets
+  `captureFailed` and aborts the run with a `missingEndMarker` diagnostic — a hostile page can deny measurement with
+  one tag, and a real trailing-dot-host leak goes uncounted. **Absorb:** record the raw URL (origin undefined) for any
+  parsable request before validation; never route scheme validation through `captureFailed`; capture failure gets its
+  own diagnostic.
+
+### P2
+- **J-X2 retention round nine** (`try/finally` implicit bit; a getter on an object returned from the sink exposing
+  `args`; overriding a returned `Secret`'s `consume()`). **Absorb S23–S25 — and this is the last syntactic round:**
+  the spec's honest-claims sentence now names the rule as an allowlist of shapes over a fixed file set with a named
+  corpus, not an escape analysis; the cross-model review is the check on a malicious implementer.
+- **J-S5 request headers and WebSocket frames are neither recorded nor declared** though the `Channel` union lists
+  them. **Absorb:** headers recorded as `header` events (serialised request headers), WebSocket `framesent` as
+  `websocket` events; tests for each.
+- **J-S6 the unobserved-masking residual is understated and its `blob:` clause is false** for a sandboxed iframe
+  top-navigating to its own blob (`blob:null`); a trailing-dot host and a failed navigation (`chrome-error`) also
+  yield `unobserved`. **Absorb (SCHEMA):** "any page-initiated navigation to a document whose URL has no bare http(s)
+  origin".
+- **J-S7 probe P's sensitivity floor is ~5–10 µs on the fill path** (injected length-proportional spin: 50 µs and
+  20 µs rejected, 8 µs rejected on an unrelated probe, 4 µs passed 2/2); one spurious family rejection in 13
+  whole-file runs; the ~1.6 µs tripwire-call probe has `medianDiffMs ≡ 0` and measures timer quantisation.
+  **Continuity-owner decision:** that probe times a batch of 64 calls per sample (the same operation, quantisation
+  negligible; D10 amended in place); a sensitivity calibration test records the floor (reported, not gated); the
+  honest-claims sentence states "no length-dependent difference above the recorded floor on the reference machine".
+- **J-Q4 `propertyReadAllowed` survives `return true`** (the older whitelist also gained `includes`) → S26/S27.
+- **J-X3 `flatCopy` identity mutant** passes the source assertion → the assertion requires the reconstruction body.
+
+### P3 (absorbed unless marked)
+`inspectCdpSink` 51 lines (all three); the in-realm source met 50 lines by joining statements and pinning the count
+(J-Q7/J-S10) → **continuity decision: decompose into named in-realm helpers, one statement per line, no total-count
+pin**; exploit-repro assertion order (J-Q5); `credentialControl.initiator` is dead surface (J-S11) → literal type;
+`#recordTop` with `topOrigin !== null && unobserved` untested; `structuredPayloadValues` does not leaf-extract `url`
+query values; the round-8 `describe` is registered three times; `isFixedReturnConsequent` accepts any zero-arg call
+→ the factory must be one of the named fixed-outcome constructors; the step-zero test lost its assertion that no
+browser-initiated `url` event exists (it now legitimately exists — assert exactly the navigation's). **Ownership:**
+`src/agents/transcript.ts` was edited under an explicit packet carve-out for I-X3 (recorded here; the spec table is
+not amended — it stays a must-avoid file by default). **Residuals:** url/header/websocket events are a deliberate
+plaintext residence in the evidence plane (`events.json`), consistent with SCHEMA; the retention rule can dictate
+production shape — guarded by the new mandatory-deviation rule.
+
+### Disposition
+**Not merge-ready.** Fix slice `m4-fix-final4` (Codex) absorbs everything above; three channels review that diff.

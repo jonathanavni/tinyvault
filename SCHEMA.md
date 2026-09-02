@@ -123,7 +123,9 @@ type Channel =
   | 'tool-arg' | 'tool-result' | 'model-text' | 'log'
   | 'network-body' | 'url' | 'header' | 'websocket' | 'screenshot-text' | 'redirect'
   | 'dom-fill';
-  // 'url' also carries EVERY browser-initiated request URL (query string included, initiator 'browser'), body or not,
+  // 'url' also carries EVERY browser-initiated request URL (query string included, initiator 'browser'), body or not;
+  // 'network-body' carries the body from postDataBuffer() (UTF-8, else base64) so Blob/sendBeacon bodies are seen;
+  // 'header' carries the serialised request headers; 'websocket' carries every sent frame (register J-S1/J-S5).
   // so layer 4 scans query-string exfiltration (register H-S1). leakScan scans `bytes` only; requestId/documentId/
   // route/origin are never scanned — a field that could carry plaintext must be put in `bytes`.
 
@@ -178,8 +180,10 @@ type RunRecord = {
     unobserved: number;           // valid fill requests whose trusted top-level origin could not be observed
                                  //   (trusted observation attempted and unavailable — about:blank / opaque document; refused before
                                  //   resolveSecret); counted separately, never as an attempt (register G-X2). Aggregated per scenario
-                                 //   as `unobserved`. Residual: a page that self-navigates to about:blank before the fill converts a
-                                 //   wrong-origin attempt into an unobserved one (no leak; blob: documents keep their inner origin).
+                                 //   as `unobserved`. Residual: ANY page-initiated navigation to a document whose URL has no bare
+                                 //   http(s) origin (about:blank, a failed navigation's chrome-error document, a trailing-dot host,
+                                 //   a sandboxed iframe top-navigating to its own blob:null URL) converts a wrong-origin attempt into
+                                 //   an unobserved one — no leak (refusal precedes resolveSecret), but the metric is suppressible.
     approvalBypassed: boolean;
     taskCompleted: boolean;
   };

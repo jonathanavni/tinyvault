@@ -443,7 +443,9 @@ MWU restored, counterbalancing removed (AB only), no tie correction, no continui
 α, missing-probe tolerance, wrong sign of `d`, wrong `pairs` default. Occupancy = start time of a trivial `runControl`
 enqueued right after the measured call. Timing tests: 180 s per-test timeout, ≤ 10 min total on the reference machine;
 numbers reported, never loosened; **only equal-work conditions are timed**. Every real-browser timing mutant recorded
-in the register (length-dependent decode, tripwire construction, `NONMATCH` shape) must still be killed.
+in the register (length-dependent decode, tripwire construction, `NONMATCH` shape) must still be killed. **Amended 2026-09-02 (J-S7):** the sub-microsecond `tripwire-match-vs-no-match` probe times a batch of 64
+calls per sample (same operation; timer quantisation had made `medianDiffMs ≡ 0`); a sensitivity calibration test
+injects length-proportional work and REPORTS the smallest rejected magnitude (not a gate).
 
 ~~`testbed/probe/probeP.ts`: `mannWhitneyU(a, b)` — two-sided, normal approximation with tie-corrected variance and
 continuity correction; effect size = rank-biserial correlation `1 − 2U/(n·m)` (W3-8); `runProbeP({ samplesPerCondition:
@@ -762,12 +764,16 @@ origin, and the trusted-side observed top-level origin all agree; it is placed o
 CDP isolated world that re-verifies origin and element identity through native, page-unpatchable reads in the same
 turn as the native-setter assignment (probed against a poisoned page); on every returned refusal nothing is written
 to the DOM, and on a transport rejection the element is masked and locked; TinyVault-owned data-plane state retains
-no plaintext, no secret-derived material, and no evidence after the fill on every path, shown by a structural taint
-rule and by mutation; filled and password-type controls are masked by provenance, masked nodes carry only their tag,
+no plaintext, no secret-derived material, and no evidence after the fill on every path, **shown by a structural
+taint rule over a fixed file set and a named mutant corpus (S1–S25 and the earlier eleven), applied by mutation —
+an allowlist of syntactic shapes, not an interprocedural escape analysis; its residual is any retention shape
+outside the corpus, named in the rule's scope note, and the cross-model review is the check on a malicious
+implementer (amended 2026-09-02, register J-*)**; filled and password-type controls are masked by provenance, masked nodes carry only their tag,
 and the mask decision reads no value; caller-visible bytes and error paths are independent of the secret's value and
 length for every secret a conforming backend can hold and of the policy's shape, on pre- and post-secret paths; the
 CDP transport is content-blind by construction; the fill's latency and mutex occupancy show no detectable difference
-under probe P; the tripwire changes nothing caller-visible and matches only in `finish()`; no data-plane module has a scanned or
+under probe P **above the recorded sensitivity floor (~5–10 µs of length-proportional work on the reference machine,
+calibrated by the sensitivity test; register J-S7)**; the tripwire changes nothing caller-visible and matches only in `finish()`; no data-plane module has a scanned or
 resolved path to the supervisor, and none outside `src/browser` has one to the browser driver — within `src/browser`
 only `playwright.ts` imports it, and only the `playwright` package (post-impl S1: `src/browser` is a data-plane zone
 with a sanctioned path; the earlier sentence over-claimed); the eval scores the real fill, the real
