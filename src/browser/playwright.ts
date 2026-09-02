@@ -8,9 +8,13 @@ import {
 
 export type { Browser, BrowserContext, CDPSession, Page };
 
-export async function launchChromium(): Promise<Browser> {
+export type ChromiumLauncher = Pick<typeof chromium, 'launch'>;
+
+export async function launchChromium(
+  launcher: ChromiumLauncher = chromium,
+): Promise<Browser> {
   try {
-    return await chromium.launch({
+    return await launcher.launch({
       headless: true,
       args: ['--disable-back-forward-cache'],
     });

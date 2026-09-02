@@ -7,8 +7,14 @@ import ts from 'typescript';
 // The four zones are data plane (`src/**` except protected modules), control plane (`src/supervisor/**`),
 // evaluator (`testbed/**`), and tooling (`scripts/**`). Every reachable external module is traversed.
 // Data-plane entries may not reach the control plane or tooling; evaluator entries may reach the control plane;
-// tooling keeps its package-local tolerance; vetted packages add only their manifest-scoped exceptions.
-// Residual: the two Playwright bundles are opaque; the gate proves no scanned or resolved path through them.
+// tooling keeps its package-local tolerance. Vetted packages add only their manifest-scoped `opaqueFiles`,
+// `importerFiles`/`directImportOnly`, and `reachableFrom` relaxations.
+// Honest boundary claim: no data-plane module has a scanned or resolved path to the supervisor, and none outside
+// src/browser has one to the browser driver; within src/browser only playwright.ts imports it, and only the
+// playwright package.
+// Residuals: lockfile v1 fails closed while v2/v3 are accepted; nested/shadow copies are unpinned but held to the
+// general rules; lockfile integrity is recorded, not verified against installed bytes; the two Playwright bundles
+// are opaque, so the gate proves only that no other scanned or resolved path was found through them.
 
 const FLAG_ERROR = 'dependency gate requires --experimental-import-meta-resolve';
 const flagProbe = import.meta.resolve(
@@ -19,6 +25,7 @@ if (!flagProbe.startsWith('file:///tinyvault-flag-probe/')) throw new Error(FLAG
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs'];
 const PROTECTED_DIRECTORIES = ['src/supervisor'];
+const SOURCE_DIRECTORIES = ['src', 'testbed', 'scripts'];
 const BUILTIN_MODULES = new Set(builtinModules.map((specifier) => specifier.replace(/^node:/u, '')));
 const MAX_EXTERNAL_MODULES = 10_000;
 const GATE_MODULE = fs.realpathSync(fileURLToPath(import.meta.url));
@@ -37,7 +44,6 @@ export const VETTED_EXTERNAL_PACKAGES = [
     reason: 'browser driver; the two bundles carry non-literal and optional loads; the plaintext is handed to it by design',
   },
 ];
-
 export function checkDependencyBoundary(
   root,
   { vetted = VETTED_EXTERNAL_PACKAGES } = {},
@@ -46,18 +52,29 @@ export function checkDependencyBoundary(
   const { files: configuredFiles, errors, options } = configuredProductionFiles(absoluteRoot);
   const scriptsDirectory = path.join(absoluteRoot, 'scripts');
   const protectedRealPaths = new Set();
+  const locationsByRealPath = new Map();
   const canonicalConfiguredFiles = canonicalizeFiles(
-    configuredFiles, absoluteRoot, protectedRealPaths,
+    configuredFiles, absoluteRoot, protectedRealPaths, locationsByRealPath,
   );
   const scriptFiles = canonicalizeFiles(
-    walk(scriptsDirectory).filter(isProductionModule), absoluteRoot, protectedRealPaths,
+    walk(scriptsDirectory).filter(isProductionModule),
+    absoluteRoot,
+    protectedRealPaths,
+    locationsByRealPath,
   );
+  const allSourceFiles = SOURCE_DIRECTORIES.flatMap((directory) =>
+    walk(path.join(absoluteRoot, directory)).filter(isSourceModule));
+  recordFileLocations(allSourceFiles, absoluteRoot, protectedRealPaths, locationsByRealPath);
   const files = [...new Set([...canonicalConfiguredFiles, ...scriptFiles])];
   const fileSet = new Set(files);
   const graph = buildGraph(files, fileSet, options);
   const roots = files.filter((file) => !isProtected(file, absoluteRoot, protectedRealPaths));
   const vettedConfiguration = configureVettedPackages(absoluteRoot, vetted);
-  const configurationErrors = [...errors, ...vettedConfiguration.errors];
+  const configurationErrors = [
+    ...errors,
+    ...vettedConfiguration.errors,
+    ...zoneConfigurationErrors(absoluteRoot, locationsByRealPath),
+  ];
   const violations = configurationErrors.map(
     (message) => configurationViolation(absoluteRoot, message),
   );
@@ -65,7 +82,10 @@ export function checkDependencyBoundary(
     violations, absoluteRoot, files, roots, protectedRealPaths,
   );
   addVettedImporterViolations(
-    violations, files, graph, vettedConfiguration.entries,
+    violations,
+    allSourceFiles,
+    options,
+    vettedConfiguration.entries,
   );
 
   const context = {
@@ -73,13 +93,13 @@ export function checkDependencyBoundary(
     scriptsDirectory,
     absoluteRoot,
     protectedRealPaths,
+    locationsByRealPath,
     vetted: vettedConfiguration.entries,
   };
   for (const entry of roots) violations.push(...walkEntry(entry, context));
 
   return { files: files.length, roots: roots.length, violations: dedupeViolations(violations) };
 }
-
 function addConfigurationViolations(violations, root, files, roots, protectedRealPaths) {
   for (const protectedDirectory of PROTECTED_DIRECTORIES) {
     const absoluteDirectory = path.join(root, protectedDirectory);
@@ -97,7 +117,6 @@ function addConfigurationViolations(violations, root, files, roots, protectedRea
     violations.push(configurationViolation(root, 'data-plane scan resolved zero roots'));
   }
 }
-
 function configureVettedPackages(root, vetted) {
   if (!Array.isArray(vetted)) {
     return { entries: [], errors: ['vetted package manifest must be an array'] };
@@ -110,16 +129,17 @@ function configureVettedPackages(root, vetted) {
   ));
   return { entries, errors };
 }
-
 function configureVettedEntry(root, lock, entry, index, errors) {
   const label = `vetted manifest entry ${index}`;
-  const packageNames = configuredStrings(entry?.packages, `${label} packages`, errors);
+  const errorsBefore = errors.length;
+  const packageNames = configuredNonEmptyStrings(entry?.packages, `${label} packages`, errors);
   const directImportOnly = configuredStrings(
     entry?.directImportOnly, `${label} directImportOnly`, errors,
   );
-  const reachableFrom = configuredStrings(entry?.reachableFrom, `${label} reachableFrom`, errors)
-    .map((relative) => path.join(root, relative));
-  const importerFiles = configuredFiles(
+  const reachableFrom = configuredReachableDirectories(
+    root, entry?.reachableFrom, `${label} reachableFrom`, errors,
+  );
+  const importerFiles = configuredImporterFiles(
     root, entry?.importerFiles, `${label} importerFiles`, errors,
   );
   const opaqueFiles = configuredOpaqueFiles(
@@ -128,16 +148,15 @@ function configureVettedEntry(root, lock, entry, index, errors) {
   const packages = packageNames.flatMap((name) => configureVettedPackage(
     root, lock, name, entry?.version, index, errors,
   ));
+  const valid = errors.length === errorsBefore;
   return {
     packages,
-    packageNames: new Set(packageNames),
-    directImportOnly: new Set(directImportOnly),
-    reachableFrom,
-    importerFiles: new Set(importerFiles),
-    opaqueFiles: new Set(opaqueFiles),
+    directImportOnly: new Set(valid ? directImportOnly : []),
+    reachableFrom: valid ? reachableFrom : [],
+    importerFiles: new Set(valid ? importerFiles : []),
+    opaqueFiles: new Set(valid ? opaqueFiles : []),
   };
 }
-
 function configuredStrings(value, label, errors) {
   if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
     errors.push(`${label} must be an array of strings`);
@@ -145,16 +164,39 @@ function configuredStrings(value, label, errors) {
   }
   return value;
 }
-
-function configuredFiles(root, value, label, errors) {
-  return configuredStrings(value, label, errors).flatMap((relative) => {
+function configuredNonEmptyStrings(value, label, errors) {
+  const configured = configuredStrings(value, label, errors);
+  if (configured.length === 0) errors.push(`${label} must not be empty`);
+  return configured;
+}
+function configuredImporterFiles(root, value, label, errors) {
+  return configuredNonEmptyStrings(value, label, errors).flatMap((relative) => {
+    const linkPath = configuredLinkPath(root, relative);
     const file = configuredRepoPath(root, relative);
-    if (file !== undefined) return [file];
+    if (linkPath !== undefined && file !== undefined) return [linkPath, file];
     errors.push(`${label} path is missing: ${relative}`);
     return [];
   });
 }
-
+function configuredReachableDirectories(root, value, label, errors) {
+  return configuredStrings(value, label, errors).flatMap((relative) => {
+    if (relative.length === 0
+      || path.isAbsolute(relative)
+      || path.normalize(relative) !== relative) {
+      errors.push(`${label} path must be a normalized, non-empty, in-repo directory: ${relative}`);
+      return [];
+    }
+    const directory = path.resolve(root, relative);
+    const realDirectory = realDirectoryPath(directory);
+    if (!isWithin(directory, root)
+      || realDirectory === undefined
+      || !isWithin(realDirectory, root)) {
+      errors.push(`${label} path must be a normalized, non-empty, in-repo directory: ${relative}`);
+      return [];
+    }
+    return [directory];
+  });
+}
 function configuredOpaqueFiles(root, value, label, errors) {
   return configuredStrings(value, label, errors).flatMap((relative) => {
     const file = configuredRepoPath(root, path.join('node_modules', relative));
@@ -165,14 +207,16 @@ function configuredOpaqueFiles(root, value, label, errors) {
     return [];
   });
 }
-
 function configuredRepoPath(root, relative) {
-  if (path.isAbsolute(relative)) return undefined;
-  const linkPath = path.resolve(root, relative);
-  if (!isAtOrWithin(linkPath, root)) return undefined;
+  const linkPath = configuredLinkPath(root, relative);
+  if (linkPath === undefined) return undefined;
   return realFilePath(linkPath);
 }
-
+function configuredLinkPath(root, relative) {
+  if (typeof relative !== 'string' || path.isAbsolute(relative)) return undefined;
+  const linkPath = path.resolve(root, relative);
+  return isAtOrWithin(linkPath, root) ? linkPath : undefined;
+}
 function readPackageLock(root, errors) {
   try {
     return JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
@@ -181,7 +225,6 @@ function readPackageLock(root, errors) {
     return {};
   }
 }
-
 function configureVettedPackage(root, lock, name, version, index, errors) {
   const label = `vetted manifest entry ${index} package ${name}`;
   const packageJson = readInstalledPackage(root, name);
@@ -195,7 +238,6 @@ function configureVettedPackage(root, lock, name, version, index, errors) {
   validateLockedPackage(lock, name, version, label, errors);
   return [{ name, root: packageJson.directory }];
 }
-
 function readInstalledPackage(root, name) {
   const packageFile = path.join(root, 'node_modules', name, 'package.json');
   try {
@@ -205,7 +247,6 @@ function readInstalledPackage(root, name) {
     return undefined;
   }
 }
-
 function validateLockedPackage(lock, name, version, label, errors) {
   const locked = lock.packages?.[`node_modules/${name}`];
   if (locked?.version !== version) {
@@ -215,28 +256,40 @@ function validateLockedPackage(lock, name, version, label, errors) {
     errors.push(`${label} lockfile integrity is missing`);
   }
 }
-
-function addVettedImporterViolations(violations, files, graph, vetted) {
-  for (const importer of files) {
-    for (const edge of graph.get(importer)?.edges ?? []) {
-      if (edge.unresolved || edge.unscanned) continue;
-      const owner = vettedPackageForFile(edge.target, vetted);
+function addVettedImporterViolations(violations, sourceFiles, compilerOptions, vetted) {
+  for (const importerLinkPath of sourceFiles) {
+    const importerRealPath = realFilePath(importerLinkPath);
+    if (importerRealPath === undefined) continue;
+    const parsed = dependencies(importerLinkPath, fs.readFileSync(importerLinkPath, 'utf8'));
+    for (const edge of parsed.edges) {
+      const target = resolveImporterSpecifier(
+        importerLinkPath, edge.specifier, edge.syntax, compilerOptions,
+      );
+      const owner = vettedPackageForSpecifier(edge.specifier, vetted)
+        ?? (target === undefined ? undefined : vettedPackageForFile(target, vetted));
       if (owner === undefined) continue;
-      const dependencyPath = [importer, edge.target];
-      if (!owner.manifest.importerFiles.has(importer)) {
+      const resolvedTarget = target ?? owner.root;
+      const dependencyPath = [importerLinkPath, resolvedTarget];
+      if (!owner.manifest.importerFiles.has(importerLinkPath)
+        || !owner.manifest.importerFiles.has(importerRealPath)) {
         violations.push(edgeViolation(
-          importer, edge.target, `vetted package importer file: ${owner.name}`, dependencyPath,
+          importerLinkPath,
+          resolvedTarget,
+          `vetted package importer file: ${owner.name}`,
+          dependencyPath,
         ));
       }
       if (!owner.manifest.directImportOnly.has(owner.name)) {
         violations.push(edgeViolation(
-          importer, edge.target, `vetted package direct import forbidden: ${owner.name}`, dependencyPath,
+          importerLinkPath,
+          resolvedTarget,
+          `vetted package direct import forbidden: ${owner.name}`,
+          dependencyPath,
         ));
       }
     }
   }
 }
-
 function walkEntry(entry, context) {
   const { graph } = context;
   const violations = [];
@@ -270,7 +323,6 @@ function walkEntry(entry, context) {
   }
   return violations;
 }
-
 function classifyEdge(edge, entry, currentFile, dependencyPath, context) {
   const { scriptsDirectory, absoluteRoot, protectedRealPaths } = context;
   const violations = [];
@@ -300,14 +352,13 @@ function classifyEdge(edge, entry, currentFile, dependencyPath, context) {
     return { violations, traverse: false };
   }
   if (isProtected(edge.target, absoluteRoot, protectedRealPaths)) {
-    if (!isEvaluatorEntry(entry, absoluteRoot)) {
+    if (!isEvaluatorEntry(entry, context)) {
       violations.push(edgeViolation(entry, edge.target, edge.syntax, dependencyPath));
       return { violations, traverse: false };
     }
   }
   return { violations, traverse: true };
 }
-
 function classifyVettedReach(edge, entry, dependencyPath, context) {
   if (edge.unresolved || edge.unscanned) return [];
   const owner = vettedPackageForFile(edge.target, context.vetted);
@@ -320,39 +371,45 @@ function classifyVettedReach(edge, entry, dependencyPath, context) {
   }
   return violations;
 }
-
 function entryMayReachVetted(entry, manifest, context) {
-  if (isEvaluatorEntry(entry, context.absoluteRoot)) return true;
-  if (isProtected(entry, context.absoluteRoot, context.protectedRealPaths)) return true;
-  return manifest.reachableFrom.some((allowed) => isAtOrWithin(entry, allowed));
+  if (isEvaluatorEntry(entry, context)) return true;
+  return fileLocations(entry, context.locationsByRealPath).every((location) =>
+    manifest.reachableFrom.some((allowed) => isAtOrWithin(location, allowed)));
 }
-
-function isEvaluatorEntry(entry, root) {
-  return isWithin(entry, path.join(root, 'testbed'));
+function isEvaluatorEntry(entry, context) {
+  return fileLocations(entry, context.locationsByRealPath).every((location) =>
+    isWithin(location, path.join(context.absoluteRoot, 'testbed')));
 }
-
 function vettedPackageForFile(file, manifests) {
   for (const manifest of manifests) {
     for (const configuredPackage of manifest.packages) {
       if (isAtOrWithin(file, configuredPackage.root)) {
-        return { name: configuredPackage.name, manifest };
+        return { ...configuredPackage, manifest };
       }
     }
   }
   return undefined;
 }
-
+function vettedPackageForSpecifier(specifier, manifests) {
+  for (const manifest of manifests) {
+    for (const configuredPackage of manifest.packages) {
+      if (specifier === configuredPackage.name
+        || specifier.startsWith(`${configuredPackage.name}/`)) {
+        return { ...configuredPackage, manifest };
+      }
+    }
+  }
+  return undefined;
+}
 function edgeViolation(entry, target, syntax, dependencyPath) {
   return { entry, target, syntax, path: dependencyPath };
 }
-
 export function formatViolations(root, violations) {
   return violations.map((violation) => {
-    const relativePath = violation.path.map((file) => path.relative(root, file) || '.').join(' -> ');
+    const relativePath = violation.path.map((file) => formatBoundaryPath(root, file)).join(' -> ');
     return `${violation.syntax}: ${relativePath}`;
   });
 }
-
 function configuredProductionFiles(root) {
   const configPath = path.join(root, 'tsconfig.json');
   if (!fs.existsSync(configPath)) {
@@ -363,17 +420,17 @@ function configuredProductionFiles(root) {
     return { files: [], errors: [formatDiagnostic(read.error)], options: {} };
   }
   const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, root, undefined, configPath);
+  const walkedFiles = ['src', 'testbed'].flatMap((directory) =>
+    walk(path.join(root, directory)).filter(isProductionModule));
   return {
-    files: parsed.fileNames.filter(isProductionModule),
+    files: [...new Set([...parsed.fileNames.filter(isProductionModule), ...walkedFiles])],
     errors: parsed.errors.map(formatDiagnostic),
     options: parsed.options,
   };
 }
-
 function formatDiagnostic(diagnostic) {
   return ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
 }
-
 function walk(directory) {
   if (!fs.existsSync(directory)) return [];
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -381,42 +438,91 @@ function walk(directory) {
     return entry.isDirectory() ? walk(target) : [target];
   });
 }
-
 function isProductionModule(file) {
-  return SOURCE_EXTENSIONS.includes(path.extname(file))
+  return isSourceModule(file)
     && !/\.(?:test|spec)\.[^.]+$/u.test(file)
     && !file.endsWith('.d.ts');
 }
-
-function canonicalizeFiles(files, root, protectedRealPaths) {
+function isSourceModule(file) {
+  return SOURCE_EXTENSIONS.includes(path.extname(file));
+}
+function canonicalizeFiles(files, root, protectedRealPaths, locationsByRealPath) {
   return files.map((file) => {
     const linkPath = path.resolve(file);
     const realPath = canonicalFile(linkPath);
+    addFileLocation(locationsByRealPath, realPath, linkPath);
     if (isProtected(linkPath, root, new Set())) protectedRealPaths.add(realPath);
     return realPath;
   });
 }
-
+function recordFileLocations(files, root, protectedRealPaths, locationsByRealPath) {
+  for (const file of files) {
+    const linkPath = path.resolve(file);
+    const realPath = realFilePath(linkPath);
+    if (realPath === undefined) continue;
+    addFileLocation(locationsByRealPath, realPath, linkPath);
+    if (isProtected(linkPath, root, new Set())) protectedRealPaths.add(realPath);
+  }
+}
+function addFileLocation(locationsByRealPath, realPath, linkPath) {
+  const locations = locationsByRealPath.get(realPath) ?? new Set([realPath]);
+  locations.add(linkPath);
+  locationsByRealPath.set(realPath, locations);
+}
+function fileLocations(file, locationsByRealPath) {
+  return [...(locationsByRealPath.get(file) ?? new Set([file]))];
+}
+function zoneConfigurationErrors(root, locationsByRealPath) {
+  const errors = [];
+  for (const [realPath, locations] of locationsByRealPath) {
+    const zones = new Set([...locations].map((location) => sourceZone(location, root)).filter(Boolean));
+    if (zones.size < 2) continue;
+    errors.push(
+      `source file resolves across zones (${[...zones].sort().join(', ')}): ${formatBoundaryPath(root, realPath)}`,
+    );
+  }
+  return errors;
+}
+function sourceZone(file, root) {
+  if (PROTECTED_DIRECTORIES.some((directory) => isWithin(file, path.join(root, directory)))) {
+    return 'protected';
+  }
+  if (isWithin(file, path.join(root, 'src/browser'))) return 'src/browser';
+  if (isWithin(file, path.join(root, 'src'))) return 'data plane';
+  if (isWithin(file, path.join(root, 'testbed'))) return 'evaluator';
+  if (isWithin(file, path.join(root, 'scripts'))) return 'tooling';
+  return undefined;
+}
 function isProtected(file, root, protectedRealPaths) {
   if (protectedRealPaths.has(file)) return true;
   return PROTECTED_DIRECTORIES.some((directory) => isWithin(file, path.join(root, directory)));
 }
-
 function isWithin(file, directory) {
   const relative = path.relative(directory, file);
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
-
 function isAtOrWithin(file, directory) {
   return path.resolve(file) === path.resolve(directory) || isWithin(file, directory);
 }
-
-function realpathEndsWith(realFile, suffix) {
+export function realpathEndsWith(realFile, suffix) {
   const normalizedRealFile = path.resolve(realFile).split(path.sep).join('/');
   const normalizedSuffix = suffix.split(path.sep).join('/');
   return normalizedRealFile.endsWith(`/${normalizedSuffix}`);
 }
-
+function formatBoundaryPath(root, file) {
+  const absoluteFile = path.resolve(file);
+  const absoluteRoot = realDirectoryPath(root) ?? path.resolve(root);
+  if (isAtOrWithin(absoluteFile, absoluteRoot)) {
+    return path.relative(absoluteRoot, absoluteFile) || '.';
+  }
+  const segments = absoluteFile.split(path.sep);
+  const nodeModulesIndex = segments.lastIndexOf('node_modules');
+  if (nodeModulesIndex >= 0) {
+    const suffix = segments.slice(nodeModulesIndex).join(path.sep);
+    if (realpathEndsWith(absoluteFile, suffix)) return suffix;
+  }
+  return absoluteFile;
+}
 function buildGraph(files, fileSet, compilerOptions) {
   const graph = new Map();
   const visitedExternalFiles = new Set();
@@ -440,7 +546,6 @@ function buildGraph(files, fileSet, compilerOptions) {
   }
   return graph;
 }
-
 function unresolvedEdge(file, specifier, syntax) {
   return {
     target: path.resolve(path.dirname(file), specifier),
@@ -450,7 +555,6 @@ function unresolvedEdge(file, specifier, syntax) {
     unscanned: false,
   };
 }
-
 function dependencies(file, source) {
   const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const edges = [];
@@ -492,7 +596,6 @@ function dependencies(file, source) {
   visit(sourceFile);
   return { edges, unsupported };
 }
-
 function isCreateRequireImport(node) {
   if (!ts.isStringLiteralLike(node.moduleSpecifier)
     || !['node:module', 'module'].includes(node.moduleSpecifier.text)) return false;
@@ -501,23 +604,19 @@ function isCreateRequireImport(node) {
     && ts.isNamedImports(bindings)
     && bindings.elements.some((element) => (element.propertyName ?? element.name).text === 'createRequire');
 }
-
 function isRequireAlias(initializer) {
   return initializer !== undefined
     && ((ts.isIdentifier(initializer) && initializer.text === 'require')
       || (ts.isPropertyAccessExpression(initializer) && initializer.name.text === 'require'));
 }
-
 function isRequireExpression(expression) {
   return (ts.isIdentifier(expression) && expression.text === 'require')
     || (ts.isPropertyAccessExpression(expression) && expression.name.text === 'require');
 }
-
 function isCreateRequireExpression(expression) {
   return (ts.isIdentifier(expression) && expression.text === 'createRequire')
     || (ts.isPropertyAccessExpression(expression) && expression.name.text === 'createRequire');
 }
-
 function resolveSpecifier(importer, specifier, syntax, fileSet, compilerOptions) {
   const compilerResolved = ts.resolveModuleName(
     specifier,
@@ -549,7 +648,17 @@ function resolveSpecifier(importer, specifier, syntax, fileSet, compilerOptions)
 
   return resolveRuntimeSpecifier(importer, specifier, syntax);
 }
-
+function resolveImporterSpecifier(importer, specifier, syntax, compilerOptions) {
+  const compilerResolved = ts.resolveModuleName(
+    specifier,
+    importer,
+    compilerOptions,
+    ts.sys,
+  ).resolvedModule?.resolvedFileName;
+  const compilerTarget = compilerResolved === undefined ? undefined : realFilePath(compilerResolved);
+  if (compilerTarget !== undefined) return compilerTarget;
+  return resolveRuntimeSpecifier(importer, specifier, syntax);
+}
 function addExternalEntry(graph, file, fileSet, compilerOptions, visited) {
   const pending = [realFilePath(file)];
   while (pending.length > 0) {
@@ -563,7 +672,6 @@ function addExternalEntry(graph, file, fileSet, compilerOptions, visited) {
     pending.push(...node.pending);
   }
 }
-
 function scanExternalFile(current, fileSet, compilerOptions, visitedCount) {
   if (visitedCount > MAX_EXTERNAL_MODULES) {
     return {
@@ -599,7 +707,6 @@ function scanExternalFile(current, fileSet, compilerOptions, visitedCount) {
     unsupported: parsed.unsupported.map((syntax) => `external-package ${syntax}`),
   };
 }
-
 function unresolvedExternalEdge(current, specifier, syntax, target) {
   return {
     target: target === undefined ? path.resolve(path.dirname(current), specifier) : path.resolve(target),
@@ -609,11 +716,9 @@ function unresolvedExternalEdge(current, specifier, syntax, target) {
     unscanned: false,
   };
 }
-
 function isBuiltinSpecifier(specifier) {
   return BUILTIN_MODULES.has(specifier.replace(/^node:/u, ''));
 }
-
 function resolveRuntimeSpecifier(importer, specifier, syntax) {
   try {
     const resolved = isRequireSyntax(syntax)
@@ -627,19 +732,15 @@ function resolveRuntimeSpecifier(importer, specifier, syntax) {
     return undefined;
   }
 }
-
 function isRequireSyntax(syntax) {
   return syntax === 'require-style access' || syntax === 'import = require()';
 }
-
 function isDeclarationFile(file) {
   return /\.d\.(?:ts|mts|cts)$/u.test(file);
 }
-
 function canonicalFile(file) {
   return fs.realpathSync(path.resolve(file));
 }
-
 function toleratesTraversalIssue(entry, currentFile, syntax, context) {
   if (syntax.includes('traversal exceeded')) return false;
   const owner = vettedPackageForFile(currentFile, context.vetted);
@@ -649,17 +750,14 @@ function toleratesTraversalIssue(entry, currentFile, syntax, context) {
   }
   return toleratesToolchainIssue(entry, currentFile, context.scriptsDirectory, syntax);
 }
-
 function toleratesToolchainIssue(entry, currentFile, scriptsDirectory, syntax) {
   return isWithin(entry, scriptsDirectory)
     && isNodeModulesFile(currentFile)
     && syntax.startsWith('external-package');
 }
-
 function isNodeModulesFile(file) {
   return path.resolve(file).split(path.sep).includes('node_modules');
 }
-
 function realFilePath(file) {
   try {
     const target = fs.realpathSync(path.resolve(file));
@@ -668,11 +766,17 @@ function realFilePath(file) {
     return undefined;
   }
 }
-
+function realDirectoryPath(directory) {
+  try {
+    const target = fs.realpathSync(path.resolve(directory));
+    return fs.statSync(target).isDirectory() ? target : undefined;
+  } catch {
+    return undefined;
+  }
+}
 function configurationViolation(root, message) {
   return { entry: root, target: root, syntax: `gate configuration: ${message}`, path: [root] };
 }
-
 function dedupeViolations(violations) {
   const seen = new Set();
   return violations.filter((violation) => {

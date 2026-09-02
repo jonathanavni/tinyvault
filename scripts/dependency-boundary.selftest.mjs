@@ -16,7 +16,10 @@ const flagProbe = import.meta.resolve(
 );
 if (!flagProbe.startsWith('file:///tinyvault-flag-probe/')) throw new Error(FLAG_ERROR);
 
-const { checkDependencyBoundary } = await import('./dependency-boundary.mjs');
+const {
+  checkDependencyBoundary,
+  VETTED_EXTERNAL_PACKAGES,
+} = await import('./dependency-boundary.mjs');
 const {
   assertCliStatus,
   assertEdgeOutcomes,
@@ -45,6 +48,21 @@ const selftest = fileURLToPath(import.meta.url);
 const projectLock = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package-lock.json'), 'utf8'));
 
 configureFixtureHarness({ cli, projectLock, projectRoot });
+
+assert.deepEqual(VETTED_EXTERNAL_PACKAGES, [
+  {
+    packages: ['playwright', 'playwright-core'],
+    version: '1.62.1',
+    importerFiles: ['src/browser/playwright.ts'],
+    directImportOnly: ['playwright'],
+    reachableFrom: ['src/browser', 'testbed'],
+    opaqueFiles: [
+      'playwright-core/lib/coreBundle.js',
+      'playwright-core/lib/utilsBundle.js',
+    ],
+    reason: 'browser driver; the two bundles carry non-literal and optional loads; the plaintext is handed to it by design',
+  },
+], 'the shipped vetted-package manifest changed without updating its policy regression');
 
 {
   const result = spawnSync(process.execPath, [selftest], {
