@@ -36,9 +36,13 @@ three reviews on `5bfc401..b1407cd` and the commit-3 implementation are in fligh
   assertion; honest-claims sentence over-claimed — fixed in spec), Codex NEEDS-ATTENTION (importer rule ignores test
   and `.d.ts` files; symlink re-zoning; `reachableFrom` accepts `..`). All in the register; **fix slice `m4-fix-c1`
   queued to Codex** (packet in the session scratchpad `m4-fix-c1.md`) behind commit 2.
-- **Commit 3 (fill service + supervisor host + every fill-dependent gate)** is being implemented by Codex in the main
-  worktree right now (packet `m4-impl-c3.md` in the scratchpad) — do not edit `src/`/`testbed/` there until it reports;
-  reviews of `5bfc401..b1407cd` run in `scratchpad/wt-review` / `wt-security` (Claude) and on the pinned range (Codex).
+- **Commit 3 (fill service + supervisor host + every fill-dependent gate)** is implemented but UNCOMMITTED in the main
+  worktree (integrator run: 576 passed, 3 timing failures — two from the length-dependent in-realm decode T2-2, one a
+  sub-microsecond construction artefact in the tripwire timing test). The commit-2 post-impl round (three channels,
+  register section written) found a three-way convergent P1 (retention rule non-enforcing) and a gate symlink-directory
+  bypass; **fix slice `m4-fix-c2b` (packet in the scratchpad) is running in Codex now** and covers commit-2 findings + the
+  decode + the timing-test construction. Next: integrator run → commit the fix + commit 3 (explicit paths) → three
+  reviews on the new range → commit 4 (`m4-impl-c4.md`) → post-M4 audit → merge FF.
   Then: integrator `make test` (Chromium is installed at `~/Library/Caches/ms-playwright`, headless shell 1234),
   commit with explicit paths + dual co-author trailer, three reviews (isolated worktrees `scratchpad/wt-review`,
   `wt-security` — recreate the `node_modules` symlink; Codex on the pinned range), then commit 3 (`m4-impl-c3.md`),
