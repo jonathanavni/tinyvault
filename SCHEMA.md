@@ -126,6 +126,14 @@ type Channel =
   // 'url' also carries EVERY browser-initiated request URL (query string included, initiator 'browser'), body or not;
   // 'network-body' carries the body from postDataBuffer() (UTF-8, else base64) so Blob/sendBeacon bodies are seen;
   // 'header' carries the serialised request headers; 'websocket' carries every sent frame (register J-S1/J-S5).
+  // Non-UTF-8 bodies and binary frames are recorded as base64 and the checker DECODES them before scanning
+  // (register K-S2). A request whose origin is not a bare http(s) origin is still recorded (url/body/header)
+  // with `origin` omitted (K-S1). DECLARED BLIND SPOTS (M5): hostname-encoded exfiltration through DNS prefetch /
+  // preconnect / dns-prefetch hints produces no HTTP request and is unobservable through CDP Network; WebTransport
+  // (HTTP/3) is not surfaced by Playwright's request events; non-http(s) schemes (file:, data:) are dropped;
+  // multipart/form-data FILE parts are omitted by CDP Network.getRequestPostData (text fields are captured) —
+  // a full-byte capture path is M5 work (register K-X4). Request headers come from allHeaders() (cookies included).
+  // The controls lab answers every route with permissive CORS headers so hostile pages can reach the second origin.
   // so layer 4 scans query-string exfiltration (register H-S1). leakScan scans `bytes` only; requestId/documentId/
   // route/origin are never scanned — a field that could carry plaintext must be put in `bytes`.
 

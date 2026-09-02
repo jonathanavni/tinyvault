@@ -765,15 +765,16 @@ CDP isolated world that re-verifies origin and element identity through native, 
 turn as the native-setter assignment (probed against a poisoned page); on every returned refusal nothing is written
 to the DOM, and on a transport rejection the element is masked and locked; TinyVault-owned data-plane state retains
 no plaintext, no secret-derived material, and no evidence after the fill on every path, **shown by a structural
-taint rule over a fixed file set and a named mutant corpus (S1–S25 and the earlier eleven), applied by mutation —
+taint rule over a fixed file set and a named mutant corpus (S1–S30 and the earlier eleven), applied by mutation —
 an allowlist of syntactic shapes, not an interprocedural escape analysis; its residual is any retention shape
 outside the corpus, named in the rule's scope note, and the cross-model review is the check on a malicious
 implementer (amended 2026-09-02, register J-*)**; filled and password-type controls are masked by provenance, masked nodes carry only their tag,
 and the mask decision reads no value; caller-visible bytes and error paths are independent of the secret's value and
 length for every secret a conforming backend can hold and of the policy's shape, on pre- and post-secret paths; the
 CDP transport is content-blind by construction; the fill's latency and mutex occupancy show no detectable difference
-under probe P **above the recorded sensitivity floor (~5–10 µs of length-proportional work on the reference machine,
-calibrated by the sensitivity test; register J-S7)**; the tripwire changes nothing caller-visible and matches only in `finish()`; no data-plane module has a scanned or
+under probe P **above the sensitivity floor the calibration test REPORTS on the machine that ran it (measured at
+32 µs of length-proportional work on the reference machine on 2026-09-02; earlier ad-hoc injection saw 8–20 µs; the
+number is machine- and load-dependent and never a gate; register J-S7/K-Q4)**; the tripwire changes nothing caller-visible and matches only in `finish()`; no data-plane module has a scanned or
 resolved path to the supervisor, and none outside `src/browser` has one to the browser driver — within `src/browser`
 only `playwright.ts` imports it, and only the `playwright` package (post-impl S1: `src/browser` is a data-plane zone
 with a sanctioned path; the earlier sentence over-claimed); the eval scores the real fill, the real

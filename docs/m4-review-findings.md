@@ -1255,3 +1255,58 @@ production shape — guarded by the new mandatory-deviation rule.
 
 ### Disposition
 **Not merge-ready.** Fix slice `m4-fix-final4` (Codex) absorbs everything above; three channels review that diff.
+
+## Final4 round — three channels on cd152a2..58ca087 (`m4-fix-final4`) — 2026-09-02
+
+Claude QA (`K-Q*`), Claude security (`K-S*`), Codex (`K-X*`). **NEEDS-ATTENTION ×3; layers 1–2 held** (no CDP-guard
+shape yields a truthy value without `exceptionDetails`; the URL-shape matrix — userinfo, IPv6, mapped, ports 0/65535,
+60 kB, punycode, zero-width — records everything; twelve exfiltration channels confirmed captured: CSS `url()`, popup,
+iframe, `<a ping>`, service-worker and worker fetch, worker WebSocket, multipart text fields, `URLSearchParams`,
+keepalive header, `sendBeacon` Blob). J-X2/J-Q4/J-X3/J-Q7/J-S11 and the pairing, leaf-extraction, relocation and
+Blob-synchronisation items are CLOSED by reproduced mutation. Batched tripwire probe: `medianDiffMs` no longer 0.
+
+### P1
+- **K-Q1 / K-S1 / K-X1 the trailing-dot hole was half-closed:** on `validateBareOrigin` failure the raw `url` event is
+  recorded and the function returns, dropping the body and headers; a string POST to `http://localhost.:P/sink`
+  reaches the collector and scores clean; `host.test.ts:551` pins the hole. **Absorb:** record url/body/header with
+  `origin` omitted (the deferred-body pattern); the origin-invalid `#record` moves inside the try (K-S5).
+- **K-S2 / K-X3 base64-recorded bytes are stored, not seen:** the checker matches only the canonical base64 of the
+  canary, which appears in `base64(body)` only at byte offset ≡ 0 (mod 3) — `sendBeacon(url, new Blob([0xff, …pw]))`
+  and binary WebSocket frames evade at two of three alignments. **Absorb:** the checker decodes base64 evidence before
+  scanning and also matches the three aligned encodings; killing tests at each alignment; a metaGate vector.
+- **K-X2 Playwright's `headers()` omits cookie and security headers:** a canary placed in `document.cookie` rides a
+  same-site request unseen. **Absorb:** `allHeaders()` (deferred, tracked like the deferred body) with Cookie and
+  WebSocket-protocol tests.
+- **K-Q3 / K-S4 the sensitivity calibration was a gate** (`toContain(32)`) and flips on the α boundary — `make test`
+  red in 1 of 4 runs on two machines; D10's amendment says report-only. **Absorb:** report only; the family gate stays
+  the only gate. The measured floor is 32 µs on the reference machine (spec wording corrected: K-Q4).
+- **K-X4 CDP's `getRequestPostData` omits multipart FILE parts** (pinned protocol docs), so a `FormData` file carrying
+  the canary is unobserved while multipart text fields are captured. **Declared blind spot (M5 owner) in SCHEMA** —
+  failing capture on it would hand a hostile page a denial-of-measurement lever; a full-byte capture path is M5 work.
+
+### P2
+- **K-Q2 / K-S3 "every function in every file is analysed" was false:** only eight owners were analysed; residuals
+  proven at runtime through the real backend — a `Secret` constructor stash, an `expose()`/`clear()` stash, a
+  `memzero` buffer stash retaining plaintext and key, `new Secret(RETAINED = decode(...))`, `return (RETAINED =
+  decrypt(...))`. `nonLocalAssignments` was dead code that would have caught most of them. **Absorb:** wire it as a
+  per-file rule over every function (non-local write whose right-hand side references a parameter, `#value`, or a
+  decrypt result); pinned occurrence lists for every `redaction.ts` member; corpus S31–S35.
+- **K-Q5 / K-X6 the completeness test is a name regex** (aliasing, dynamic import, re-export, subclass evade). **Absorb:**
+  import-graph assertion over `src/**` (fail-closed) plus a computed-access scan on `Secret`-typed bindings.
+- **K-X5 the permitted CDP-guard shape whitelists names and exempts calls inside the condition** — a look-alike guard
+  with `Object.defineProperty` in its condition retains. **CAP residual, recorded:** the rule is a shape allowlist.
+- **K-X7 nothing pins the 64-call batch** → source pin + a path-specific injected-bias control (reported).
+- **K-Q4 the spec's "~5–10 µs" floor was not reproducible** (32 µs on two machines) → spec restated (done).
+
+### P3 (absorbed unless marked)
+`settleEvidence`/`trackDeferred` and the CDP deferred-body mechanism were undeclared and have no killing test; a
+deferred body resolving after `finish()` is silently dropped (K-Q6) → tests + "recorded before drop, `captureFailed`
+after"; lab-wide permissive CORS undeclared (K-Q8) → declared in SCHEMA; the in-realm one-statement regex is
+whitespace-evadable; `fillService`'s pairing throw is source-only asserted; duplicate round-8 registration
+unenforced (K-X8); spec corpus range stale (fixed: S1–S30). **Residuals declared (SCHEMA):** DNS prefetch /
+preconnect hostname exfiltration (no HTTP request), WebTransport, non-http(s) schemes, multipart file parts;
+batching measures the aggregate of 64 calls, not a one-shot call; `rules.ts` at 798/800 (split in this slice).
+
+### Disposition
+**Not merge-ready; one more slice, scoped to the P1/P2 items above, then the last three-channel review.** New
+retention shapes after this slice are residuals, not absorptions (the honest-claims sentence already says so).
