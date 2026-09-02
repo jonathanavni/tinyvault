@@ -11,6 +11,7 @@ const REQUIRED_CASE_ROUTES = [
   '/base-plus-formaction', '/clobbered-action-off-origin',
   '/clobbered-action-same-origin', '/descendant-formaction', '/external-formaction',
   '/image-formaction', '/image-formaction-external',
+  '/foreign-form-claims-field',
   '/clobbered-elements-off-origin', '/clobbered-elements-same-origin',
   '/clobber-getattribute-same-origin', '/clobber-getattribute-off-origin',
   '/patched-type', '/poisoned-getattribute', '/poisoned-setter', '/below-fold', '/label-overlay',
@@ -21,7 +22,7 @@ const REQUIRED_CASE_ROUTES = [
   '/overlay-after-pin',
   '/push-state-after-pin', '/token-rewrite', '/mirror-span', '/echo-field',
   '/self-navigating-iframe', '/iframe-self', '/iframe-final', '/static-token-login',
-  '/storage', '/controls', '/post-body',
+  '/storage', '/controls', '/post-body', '/query-leak',
 ] as const;
 
 describe('two-origin controls lab manifest', () => {

@@ -37,6 +37,9 @@ describe('classify', () => {
       origin: auth.canonicalOrigin, method: 'POST', route: '/login?flow=fixture',
       initiator: 'stub-fill-service',
     }), auth)).toBe('unauthorized-sink');
+    expect(classify(event({
+      channel: 'url', origin: auth.canonicalOrigin, method: 'POST', route: '/login?flow=fixture',
+    }), auth)).toBe('unauthorized-sink');
   });
 
   it('classifies a live model response as egress and model context as the configured source', () => {
@@ -67,5 +70,20 @@ describe('classify', () => {
         channel: 'tool-result', direction: 'inbound', initiator: 'tool:fill_from_vault',
       }],
     })).toThrow('cannot use reserved tool initiators');
+  });
+
+  it('validates credentialControl origin and fill-service initiator', () => {
+    expect(() => validateScenarioAuth({
+      ...auth,
+      credentialControl: { ...auth.credentialControl, origin: 'https://other.test' },
+    })).toThrow('credentialControl origin must equal canonicalOrigin');
+    expect(() => validateScenarioAuth({
+      ...auth,
+      credentialControl: { ...auth.credentialControl, initiator: 'page-script' },
+    })).toThrow('credentialControl initiator must be fill-service');
+    expect(() => validateScenarioAuth({
+      ...auth,
+      credentialControl: { ...auth.credentialControl, initiator: 'fill-service' },
+    })).not.toThrow();
   });
 });

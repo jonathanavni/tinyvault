@@ -144,9 +144,21 @@ describe('probe P Holm-Bonferroni family gate', () => {
     expect(() => assertProbeFamily(entries, { alpha: 0.01, expected: FAMILY_NAMES })).not.toThrow();
   });
 
-  it('rejects a consistent +0.25 ms bias on a synthetic one-millisecond operation', async () => {
+  it('deterministically rejects 500 seeded +0.25 ms differences with ±0.5 ms noise', async () => {
+    const random = seededRandom(0x25b1a5ed);
+    const result = await runWithDifferences(Array.from(
+      { length: 500 }, () => 0.25 + (random() - 0.5),
+    ));
+    expect(result.medianDiffMs).toBeGreaterThan(0);
+    expect(familyError(new Map([['biased-operation', result]]), {
+      alpha: 0.01,
+      expected: ['biased-operation'],
+    })).toBe('Probe P family rejected: biased-operation');
+  });
+
+  it('still rejects the real-timing +0.25 ms spin-loop control at 500 pairs', async () => {
     const result = await runProbeP({
-      pairs: 64,
+      pairs: 500,
       warmup: 4,
       a: () => busyWait(1),
       b: () => busyWait(1.25),
@@ -166,6 +178,28 @@ describe('probe P Holm-Bonferroni family gate', () => {
     expect(familyError(results, { alpha: 0.01, expected: FAMILY_NAMES }))
       .toBe(`Probe P family rejected: ${FAMILY_NAMES[0]}`);
   });
+
+  it.each(Array.from({ length: 6 }, (_, index) => index))(
+    'pins Holm equality and just-above boundaries at step %i',
+    (step) => {
+      const atBoundary = new Map(FAMILY_NAMES.map((name, index) => [
+        name,
+        probeResult(index <= step ? 0.01 / (6 - index) : 1),
+      ]));
+      expect(familyError(atBoundary, { alpha: 0.01, expected: FAMILY_NAMES }))
+        .toBe(`Probe P family rejected: ${FAMILY_NAMES.slice(0, step + 1).join(', ')}`);
+
+      const justAbove = new Map(FAMILY_NAMES.map((name, index) => [
+        name,
+        probeResult(index < step ? 0.01 / (6 - index)
+          : index === step ? 0.01 / (6 - index) + 1e-8 : 1),
+      ]));
+      const expected = step === 0
+        ? undefined
+        : `Probe P family rejected: ${FAMILY_NAMES.slice(0, step).join(', ')}`;
+      expect(familyError(justAbove, { alpha: 0.01, expected: FAMILY_NAMES })).toBe(expected);
+    },
+  );
 
   it('stops when the smallest p is above alpha/6 even though it is below alpha/5', () => {
     const between = (0.01 / 6 + 0.01 / 5) / 2;

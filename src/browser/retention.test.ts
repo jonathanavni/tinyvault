@@ -3,12 +3,21 @@ import { resolve } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
-const RETENTION_SOURCE_FILES = ['src/browser/session.ts', 'src/core/fillService.ts'] as const;
+import { isRoundEightConditionOccurrence, roundEightViolations } from './retention.round8.test';
+
+// Scope: this syntactic gate does NOT analyse inRealm.ts source strings (token/source assertions defend them),
+// general dynamic-property-name value flow (Secret-object element access is rejected), or eval-generated code.
+
+const RETENTION_SOURCE_FILES = [
+  'src/browser/session.ts', 'src/core/fillService.ts', 'src/backends/localFile.ts',
+] as const;
 const PURE_TAINT_HELPERS = new Set(['String', 'toFixedHex']);
 
 describe('positive secret-retention structure', () => {
   it('keeps the fixed source set non-vacuous and clean', async () => {
-    expect(RETENTION_SOURCE_FILES).toEqual(['src/browser/session.ts', 'src/core/fillService.ts']);
+    expect(RETENTION_SOURCE_FILES).toEqual([
+      'src/browser/session.ts', 'src/core/fillService.ts', 'src/backends/localFile.ts',
+    ]);
     for (const file of RETENTION_SOURCE_FILES) {
       expect(retentionViolations(await readFile(resolve(file), 'utf8'), file)).toEqual([]);
     }
@@ -97,13 +106,17 @@ describe('positive secret-retention structure', () => {
 
 export function retentionViolations(source: string, fileName: string): string[] {
   const file = parse(source, fileName);
+  const roundEight = roundEightViolations(source, fileName);
+  if (fileName.endsWith('src/backends/localFile.ts')) return roundEight;
   const consumeCalls = descendants(file).filter(isConsumeCall);
   const violations: string[] = [];
   if (fileName.endsWith('src/core/fillService.ts')) {
     const resolveCalls = descendants(file).filter(isResolveSecretCall);
     if (resolveCalls.length !== 1) violations.push(`expected one resolveSecret call, got ${resolveCalls.length}`);
   }
-  if (consumeCalls.length === 0) return unique([...violations, ...inspectSecretObjectUses(file)]);
+  if (consumeCalls.length === 0) return unique([
+    ...violations, ...inspectSecretObjectUses(file), ...roundEight,
+  ]);
   if (consumeCalls.length !== 1) return unique([
     ...violations, `expected one consume call, got ${consumeCalls.length}`,
   ]);
@@ -115,7 +128,9 @@ export function retentionViolations(source: string, fileName: string): string[] 
       && node.expression.text === 'callFunctionOn'
       && node.arguments.some((argument) => referencesTaint(argument, tainted)));
   if (cdpSinks.length !== 1) violations.push(`expected one tainted callFunctionOn sink, got ${cdpSinks.length}`);
-  return unique([...violations, ...inspectTaintedUses(file, owner, tainted, false, false, 0)]);
+  return unique([
+    ...violations, ...inspectTaintedUses(file, owner, tainted, false, false, 0), ...roundEight,
+  ]);
 }
 
 function inspectSecretObjectUses(file: ts.SourceFile): string[] {
@@ -329,10 +344,10 @@ function inspectTaintedOccurrences(
     const allowedContext = callSink !== undefined
       || isAllowedHelperReturn(node, owner, allowReturn)
       || isAllowedLocalWrite(node, owner, allowLocalWrites)
-      || isWhitelistedPropertyRead(node) || isConstInitializerOccurrence(node, owner);
-    if (isInjectLineBreakCheck(node, owner)
-      || (allowedContext
-        && !hasForbiddenTaintedContext(node, owner, allowReturn, allowLocalWrites, callSink))) continue;
+      || isWhitelistedPropertyRead(node) || isConstInitializerOccurrence(node, owner)
+      || isRoundEightConditionOccurrence(node, owner);
+    if (allowedContext
+      && !hasForbiddenTaintedContext(node, owner, allowReturn, allowLocalWrites, callSink)) continue;
     violations.push(`secret-derived occurrence is outside the positive sink allowlist: ${node.text}`);
   }
   return violations;
@@ -378,7 +393,7 @@ function hasForbiddenTaintedContext(
     if (ts.isForOfStatement(parent) && containsNode(parent.expression, identifier)) return true;
     if (ts.isElementAccessExpression(parent) && directExpressionContains(parent.expression, identifier)) return true;
     if (ts.isPropertyAccessExpression(parent) && directExpressionContains(parent.expression, identifier)
-      && !['length', 'padStart', 'padEnd', 'charCodeAt'].includes(parent.name.text)) return true;
+      && !['length', 'includes', 'padStart', 'padEnd', 'charCodeAt'].includes(parent.name.text)) return true;
     if (ts.isCallExpression(parent) && directExpressionContains(parent.expression, identifier)) return true;
     if (ts.isBinaryExpression(parent) && isAssignment(parent.operatorToken.kind)
       && (directExpressionContains(parent.left as ts.Expression, identifier)
@@ -440,19 +455,6 @@ function isConstInitializerOccurrence(
       && (list.flags & ts.NodeFlags.Const) !== 0;
   }
   return false;
-}
-
-function isInjectLineBreakCheck(
-  identifier: ts.Identifier,
-  owner: ts.FunctionLikeDeclaration,
-): boolean {
-  if (!ts.isFunctionDeclaration(owner) || owner.name?.text !== 'injectDestination') return false;
-  const access = identifier.parent;
-  if (!ts.isPropertyAccessExpression(access) || access.expression !== identifier
-    || access.name.text !== 'includes' || !ts.isCallExpression(access.parent)) return false;
-  const argument = access.parent.arguments[0];
-  return argument !== undefined && ts.isStringLiteral(argument)
-    && (argument.text === '\n' || argument.text === '\r');
 }
 
 function inspectTaintedCall(

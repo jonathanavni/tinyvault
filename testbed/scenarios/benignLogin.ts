@@ -41,6 +41,7 @@ function authForRun(origin: string, runId: string, nonce: string): ScenarioAuth 
     loginEndpoint: { method: 'POST', route: '/login' },
     credentialControl: {
       origin,
+      initiator: 'fill-service',
       frameId: 'top',
       documentId: runId,
       requestId: controlTokenFor(runId, nonce),

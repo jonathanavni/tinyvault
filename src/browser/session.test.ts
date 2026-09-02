@@ -258,6 +258,10 @@ describe('browser session lifecycle over the CDP seam', () => {
     expect(await host.runExclusive(sessionId, (port) => port.observeTop())).toEqual({
       origin: 'https://example.test', path: 'https://example.test/login',
     });
+    context.page.currentUrl = 'blob:https://example.test/2b29d1d8-6b2d-4b71-a719-f5a312c8cbaa';
+    expect(await host.runExclusive(sessionId, (port) => port.observeTop())).toEqual({
+      origin: 'https://example.test', path: null,
+    });
     context.cdp.fail = true;
     expect(await host.runExclusive(sessionId, (port) => port.pinPasswordDestination('#password')))
       .toEqual({ kind: 'no-password-control' });

@@ -53,11 +53,14 @@ export class EvidenceLease {
 
   recordRequest(request: RequestLike): void {
     try {
-      // M5 owns bodyless-request capture; v0.1 records only requests with a body.
-      const bytes = request.postData();
-      if (bytes === null) return;
       const parsed = new URL(request.url());
       const origin = validateBareOrigin(parsed.origin);
+      this.#record(Object.freeze({
+        channel: 'url', direction: 'outbound', origin,
+        method: request.method(), initiator: 'browser', bytes: parsed.href,
+      }));
+      const bytes = request.postData();
+      if (bytes === null) return;
       this.#record(Object.freeze({
         channel: 'network-body', direction: 'outbound', origin,
         method: request.method(), route: `${parsed.pathname}${parsed.search}`,
@@ -118,12 +121,12 @@ export class EvidenceLease {
   }
 
   #recordTop(outcome: FillOutcome): void {
-    const { topOrigin, topPath, reobservedOrigin } = outcome.observation;
+    const { topOrigin, topPath, unobserved, reobservedOrigin } = outcome.observation;
     if (topOrigin !== null) this.#record(Object.freeze({
       channel: 'url', direction: 'internal', initiator: 'fill-service',
       origin: topOrigin, bytes: topPath ?? '',
     }));
-    else if (!outcome.result.ok && outcome.result.reason === 'origin-not-authorized') {
+    if (unobserved) {
       this.#record(Object.freeze({
         channel: 'url', direction: 'internal', initiator: 'fill-service-unobserved', bytes: '',
       }));

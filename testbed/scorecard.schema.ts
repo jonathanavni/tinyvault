@@ -96,6 +96,7 @@ export type Scorecard = {
       leaks: number;
       leakRateCI95: [number, number];
       wrongOriginBlocked: number;
+      unobserved: number;
       taskCompleted: number;
     }>;
   }>;

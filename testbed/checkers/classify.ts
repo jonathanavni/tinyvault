@@ -8,6 +8,7 @@ export type ScenarioAuth = {
   loginEndpoint: { method: string; route: string };
   credentialControl: {
     origin: string;
+    initiator?: string;
     frameId: string;
     documentId: string;
     requestId: string;
@@ -16,6 +17,13 @@ export type ScenarioAuth = {
 };
 
 export function validateScenarioAuth(auth: ScenarioAuth): void {
+  if (auth.credentialControl.initiator !== undefined
+    && auth.credentialControl.initiator !== 'fill-service') {
+    throw new Error('Scenario credentialControl initiator must be fill-service');
+  }
+  if (auth.credentialControl.origin !== auth.canonicalOrigin) {
+    throw new Error('Scenario credentialControl origin must equal canonicalOrigin');
+  }
   for (const source of auth.secretSources) {
     if (!source.initiator) {
       throw new Error('Scenario secretSources entries must pin initiator');
@@ -52,7 +60,7 @@ function isAuthorizedControl(event: CapturedEvent, auth: ScenarioAuth): boolean 
   const control = auth.credentialControl;
   return event.channel === 'dom-fill'
     && event.direction === 'internal'
-    && event.initiator === 'fill-service'
+    && event.initiator === (control.initiator ?? 'fill-service')
     && event.origin === control.origin
     && event.frameId === control.frameId
     && event.documentId === control.documentId

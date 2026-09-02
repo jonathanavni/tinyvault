@@ -33,6 +33,7 @@ import type {
 export type FillObservation = Readonly<{
   topOrigin: Origin | null;
   topPath: string | null;
+  unobserved: boolean;
   reobservedOrigin: Origin | null;
   assertedMismatch: Origin | null;
   assigned: Readonly<{
@@ -64,6 +65,7 @@ export type FillServiceOptions = Readonly<{
 type MutableObservation = {
   topOrigin: Origin | null;
   topPath: string | null;
+  unobserved: boolean;
   reobservedOrigin: Origin | null;
   assertedMismatch: Origin | null;
   assigned: FillObservation['assigned'];
@@ -113,10 +115,16 @@ async function fillExclusive(
   let epoch0: number;
   try {
     epoch0 = port.documentEpoch();
+  } catch {
+    return finish('no-password-control', observation);
+  }
+  try {
     const top = await port.observeTop();
     observation.topOrigin = top.origin;
     observation.topPath = top.path;
+    observation.unobserved = top.origin === null;
   } catch {
+    observation.unobserved = true;
     return finish('no-password-control', observation);
   }
   const resolved = await resolvePolicy(options.backend, request.handle);
@@ -325,6 +333,7 @@ function emptyObservation(): MutableObservation {
   return {
     topOrigin: null,
     topPath: null,
+    unobserved: false,
     reobservedOrigin: null,
     assertedMismatch: null,
     assigned: null,

@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { CredentialBackend } from '../backends/backend';
@@ -86,8 +88,15 @@ async function timedFillHarness() {
   return { controls, request, service, session, sessions, setup };
 }
 
-// Honest timing claim: short/long fills differ in logical length beyond transport/decode (padEnd, slice, native assignment), so only the empirical probe-P claim is made.
+// The two length probes are equal-work by constant-size transport construction and stay in the
+// six-probe family to detect any length-dependent work.
 describe.sequential('H Probe P timing bounds', () => {
+  it('pins same-constructor timing payloads against the bare-rotation mutant', async () => {
+    const source = await readFile(new URL('./host.timing.browser.test.ts', import.meta.url), 'utf8');
+    expect(source).toContain("const CANARY = flatCopy('TVC_timing_probe_7B32');");
+    expect(source).toContain('const NONMATCH = flatCopy(rotateFinalCharacter(CANARY));');
+    expect(source).not.toMatch(/const\s+NONMATCH\s*=\s*rotateFinalCharacter\(CANARY\)/u);
+  });
   it('kills secret-length-dependent fill latency after asserting exact result equality', async () => {
     const setup = await timedFillHarness();
     const short = 's'.repeat(16);
@@ -290,6 +299,11 @@ describe.sequential('H Probe P timing bounds', () => {
 
   it('applies the Holm–Bonferroni family gate over the six probes', () => {
     expect(() => assertProbeFamily(probeResults, { alpha: 0.01, expected: PROBE_NAMES })).not.toThrow();
+    const biased = new Map(probeResults);
+    const name = 'reflection-equal-length';
+    biased.set(name, { ...biased.get(name)!, pValue: 0 });
+    expect(() => assertProbeFamily(biased, { alpha: 0.01, expected: PROBE_NAMES }))
+      .toThrow(`Probe P family rejected: ${name}`);
   }, 180_000);
 });
 
@@ -340,7 +354,8 @@ function timingService(payload: string): FillService {
   const outcome: FillOutcome = {
     result: { ok: false, reason: 'no-password-control' },
     observation: {
-      topOrigin: null, topPath: null, reobservedOrigin: null, assertedMismatch: null, assigned: null,
+      topOrigin: null, topPath: null, unobserved: false,
+      reobservedOrigin: null, assertedMismatch: null, assigned: null,
     },
   };
   return {
@@ -377,7 +392,8 @@ function timingFillOutcome(payload: string): FillOutcome {
   return {
     result: { ok: true, filled: [timingLabel(payload)] } as unknown as FillOutcome['result'],
     observation: {
-      topOrigin: null, topPath: null, reobservedOrigin: null, assertedMismatch: null, assigned: null,
+      topOrigin: null, topPath: null, unobserved: false,
+      reobservedOrigin: null, assertedMismatch: null, assigned: null,
     },
   };
 }

@@ -42,6 +42,7 @@ const REFUSED_ROUTES = [
   '/off-origin-action', '/clobbered-action-off-origin', '/descendant-formaction',
   '/base-off-origin', '/base-plus-formaction',
   '/image-formaction', '/image-formaction-external',
+  '/foreign-form-claims-field',
   '/external-formaction', '/clobbered-elements-off-origin', '/patched-type',
 ] as const;
 const SUCCESS_ROUTES = [

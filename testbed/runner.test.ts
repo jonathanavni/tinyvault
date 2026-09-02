@@ -44,6 +44,7 @@ describe('eval runner aggregation', () => {
   it('kills nondeterministic aggregation with completed zero-leak unit records', () => {
     const generatedAt = '2026-08-31T00:00:00.000Z';
     const runs = [minimalRun(0), minimalRun(1)];
+    runs[0]!.outcome.unobserved = 1;
     const first = aggregateScorecard(runs, 2, generatedAt);
     const second = aggregateScorecard(runs, 2, generatedAt);
 
@@ -51,6 +52,7 @@ describe('eval runner aggregation', () => {
     expect(first.perAgent[0]).toMatchObject({
       runs: 2, leaks: 0, leakRate: 0, tasksCompleted: 2,
     });
+    expect(first.perAgent[0].byScenario[0].unobserved).toBe(1);
     expect(first.perAgent[0].byScenario[0].leakRateCI95).toEqual(wilsonInterval(0, 2));
   });
 
@@ -66,6 +68,7 @@ describe('eval runner aggregation', () => {
     try {
       printScorecard(scorecard);
       expect(log.mock.calls[0][0]).toContain('pooled leak rate');
+      expect(log.mock.calls.some(([line]) => String(line).includes('unobserved=0'))).toBe(true);
     } finally {
       log.mockRestore();
     }
@@ -200,6 +203,29 @@ describe('offline completion authenticity', () => {
     await writeFile(captured.paths.manifestPath, JSON.stringify(manifest));
 
     await expect(adjudicate(captured)).rejects.toThrow('Canary commitment mismatch');
+  });
+});
+
+describe('offline unobserved integrity', () => {
+  it('rejects a stored outcome differing from recomputation only in unobserved', async () => {
+    const captured = await createPersistedEval('tinyvault-offline-unobserved-mismatch-');
+    const runs = await readJson<RunRecord[]>(captured.paths.capturedRunsPath);
+    runs[0]!.outcome.unobserved += 1;
+    await writeFile(captured.paths.capturedRunsPath, JSON.stringify(runs));
+    await expect(adjudicate(captured)).rejects.toThrow('Offline outcome mismatch');
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['negative', -1],
+    ['non-integer', 0.5],
+  ] as const)('rejects a %s persisted unobserved value', async (_name, value) => {
+    const captured = await createPersistedEval(`tinyvault-offline-unobserved-${_name}-`);
+    const runs = await readJson<RunRecord[]>(captured.paths.capturedRunsPath);
+    if (value === undefined) delete (runs[0]!.outcome as Partial<RunRecord['outcome']>).unobserved;
+    else runs[0]!.outcome.unobserved = value;
+    await writeFile(captured.paths.capturedRunsPath, JSON.stringify(runs));
+    await expect(adjudicate(captured)).rejects.toThrow('Invalid persisted RunRecord array');
   });
 });
 

@@ -30,6 +30,7 @@ describe.skipIf(process.env.TINYVAULT_EVAL !== '1')('offline eval entry', () => 
       leaks: 0,
       tasksCompleted: expectedRuns,
     });
+    expect(result.scorecard.perAgent[0].byScenario[0]).toMatchObject({ unobserved: 0 });
     const artifactDirectory = dirname(result.scorecardPath);
     const manifest = JSON.parse(await readFile(
       offlineArtifactPaths(artifactDirectory).manifestPath,

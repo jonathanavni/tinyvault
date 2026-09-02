@@ -156,7 +156,7 @@ describe('D4 locked fill order and closed boundary', () => {
     expect(outcome).toEqual({
       result: { ok: true, filled: ['password'] },
       observation: {
-        topOrigin: ORIGIN_A, topPath: `${ORIGIN_A}/login`, reobservedOrigin: null,
+        topOrigin: ORIGIN_A, topPath: `${ORIGIN_A}/login`, unobserved: false, reobservedOrigin: null,
         assertedMismatch: null,
         assigned: { observedOrigin: ORIGIN_A, controlToken: 'control', documentToken: 'document' },
       },
@@ -216,8 +216,10 @@ describe('origin, staleness, and backend mapping', () => {
     expect(mismatch.backend.resolveSecret).not.toHaveBeenCalled();
 
     const malformed = harness();
-    expect((await malformed.service.fill(request({ assertedOrigin: 'https://a.example/path' }))).result)
-      .toEqual({ ok: false, reason: 'origin-not-authorized' });
+    const malformedOutcome = await malformed.service.fill(request({ assertedOrigin: 'https://a.example/path' }));
+    expect(malformedOutcome.result).toEqual({ ok: false, reason: 'origin-not-authorized' });
+    expect(malformedOutcome.observation.unobserved).toBe(false);
+    expect(malformed.log).not.toContain('observe');
     expect(malformed.backend.resolvePolicy).not.toHaveBeenCalled();
 
     expect((await harness().service.fill(request())).result).toEqual({ ok: true, filled: ['password'] });
@@ -229,8 +231,16 @@ describe('origin, staleness, and backend mapping', () => {
     const setup = harness({ origin: null });
     const outcome = await setup.service.fill(request());
     expect(outcome.result).toEqual({ ok: false, reason: 'origin-not-authorized' });
-    expect(outcome.observation).toMatchObject({ topOrigin: null, topPath: null });
+    expect(outcome.observation).toMatchObject({ topOrigin: null, topPath: null, unobserved: true });
     expect(setup.backend.resolveSecret).not.toHaveBeenCalled();
+  });
+
+  it('marks an observeTop throw as unobserved only after request validation', async () => {
+    const setup = harness({ observeThrows: true });
+    const outcome = await setup.service.fill(request());
+    expect(outcome.result).toEqual({ ok: false, reason: 'no-password-control' });
+    expect(outcome.observation.unobserved).toBe(true);
+    expect(setup.log).toContain('observe');
   });
 
   it('kills canonicalOrigin re-reads after the step-1 policy snapshot', async () => {

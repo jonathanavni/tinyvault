@@ -274,7 +274,10 @@ async function observeTop(state: SessionState): Promise<TopObservation> {
   try {
     const parsed = new URL(state.page.url());
     const origin = validateBareOrigin(parsed.origin);
-    return Object.freeze({ origin, path: `${origin}${parsed.pathname}` });
+    const path = parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      ? `${origin}${parsed.pathname}`
+      : null;
+    return Object.freeze({ origin, path });
   } catch {
     return Object.freeze({ origin: null, path: null });
   }
@@ -357,8 +360,7 @@ function pinnedOutcome(
   });
   const destination: PinnedDestination = Object.freeze({
     identity,
-    inject: (secret: Secret, expectedOrigin: Origin) =>
-      injectDestination(state, identity, backendNodeId, objectId, secret, expectedOrigin),
+    inject: injectDestination.bind(undefined, state, identity, backendNodeId, objectId),
   });
   return Object.freeze({ kind: 'pinned', destination });
 }
@@ -607,10 +609,7 @@ async function callFunctionOn<T>(
     objectId, functionDeclaration, arguments: [...args],
     returnByValue: true, awaitPromise: false,
   }) as Record<string, any>;
-  if (response.exceptionDetails !== undefined || !Object.hasOwn(response.result ?? {}, 'value')) {
-    throw new Error('Browser function failed');
-  }
-  return response.result.value as T;
+  return response.result?.value as T;
 }
 
 async function disposePinnedObject(state: SessionState, objectId: string): Promise<void> {

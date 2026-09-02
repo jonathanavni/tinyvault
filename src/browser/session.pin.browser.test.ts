@@ -60,6 +60,7 @@ const REFUSED_ROUTES = [
   '/ancestor-filter-opacity-zero', '/offscreen', '/scale-zero', '/overlay', '/formless',
   '/off-origin-action', '/clobbered-action-off-origin', '/descendant-formaction',
   '/external-formaction', '/image-formaction', '/image-formaction-external',
+  '/foreign-form-claims-field',
   '/clobber-baseuri-off-origin', '/clobbered-elements-off-origin', '/patched-type',
   '/clobber-getattribute-off-origin', '/poisoned-getattribute',
 ] as const;
@@ -100,9 +101,9 @@ describe('B-pin verified destinations through the port', () => {
       await outcome.destination.inject(new Secret('image-button-secret'), lab.primaryOrigin);
       await contexts[0]!.pages()[0]!.locator('input[type=image]').click();
     }
-    expect(outcome).toEqual({ kind: 'no-password-control' });
     expect(await contexts[0]!.pages()[0]!.locator('#password').inputValue()).toBe('');
-    expect(lab.secondaryRequests().slice(priorRequests)).toEqual([]);
+    expect(lab.secondaryRequests()).toHaveLength(priorRequests);
+    expect(outcome).toEqual({ kind: 'no-password-control' });
   });
 
   it('refuses an image submit button inserted after pin and before inject', async () => {

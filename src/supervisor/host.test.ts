@@ -10,6 +10,8 @@ import type { FillDestinationPort } from '../core/browserPort';
 import { createFillService, type FillOutcome, type FillService } from '../core/fillService';
 import type { BrowserControls, FillRequest, Origin, SetupReason } from '../core/types';
 import { secretTransforms } from '../shared/secretTransforms';
+import { leakScan } from '../../testbed/checkers/leakScan';
+import type { ScenarioAuth } from '../../testbed/checkers/classify';
 import * as secretMatcher from './secretMatcher';
 import {
   EvidenceLease,
@@ -24,6 +26,15 @@ import { TripwireRun, INVALID_SEALED_BATCH_MESSAGE } from './tripwireSeam';
 
 const CANARY = 'TVC_host_canary_4E91';
 const ORIGIN = 'https://example.test' as Origin;
+const AUTH: ScenarioAuth = {
+  canonicalOrigin: ORIGIN,
+  loginEndpoint: { method: 'POST', route: '/login' },
+  credentialControl: {
+    origin: ORIGIN, initiator: 'fill-service', frameId: 'top',
+    documentId: 'document-token', requestId: 'control-token',
+  },
+  secretSources: [],
+};
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -33,6 +44,7 @@ function fillOutcome(overrides: Partial<FillOutcome['observation']> = {}): FillO
     observation: Object.freeze({
       topOrigin: ORIGIN,
       topPath: `${ORIGIN}/login`,
+      unobserved: false,
       reobservedOrigin: null,
       assertedMismatch: null,
       assigned: Object.freeze({
@@ -205,6 +217,7 @@ describe('tripwire tool composition and evidence separation', () => {
     const outcome = Object.freeze({
       ...fillOutcome({
         topOrigin: null, topPath: null, reobservedOrigin: null, assertedMismatch: null, assigned: null,
+        unobserved: true,
       }),
       result: Object.freeze({ ok: false, reason: 'origin-not-authorized' }),
     }) as FillOutcome;
@@ -214,6 +227,21 @@ describe('tripwire tool composition and evidence separation', () => {
     expect(setup.host.drainEvidence().filter((event) => event.channel === 'url')).toEqual([{
       channel: 'url', direction: 'internal', initiator: 'fill-service-unobserved', bytes: '',
     }]);
+    setup.host.abort();
+  });
+
+  it('does not infer an unobserved event from null origin plus refusal reason', async () => {
+    const outcome = Object.freeze({
+      ...fillOutcome({
+        topOrigin: null, topPath: null, unobserved: false,
+        reobservedOrigin: null, assertedMismatch: null, assigned: null,
+      }),
+      result: Object.freeze({ ok: false, reason: 'origin-not-authorized' }),
+    }) as FillOutcome;
+    const setup = composed(outcome);
+    await setup.host.tools.fill_from_vault(fillRequest());
+    expect(setup.host.drainEvidence().filter((event) =>
+      event.initiator === 'fill-service-unobserved')).toEqual([]);
     setup.host.abort();
   });
 
@@ -419,10 +447,27 @@ describe('lease finalization and composition cleanup', () => {
     expect(inspect(setup.service, { showHidden: true, depth: 10 })).not.toContain(body);
     expect(inspect(setup.sessions, { showHidden: true, depth: 10 })).not.toContain(body);
     expect(setup.host.drainEvidence()).toEqual([{
+      channel: 'url', direction: 'outbound', origin: ORIGIN,
+      method: 'POST', initiator: 'browser', bytes: `${ORIGIN}/login?run=1`,
+    }, {
       channel: 'network-body', direction: 'outbound', origin: ORIGIN,
       method: 'POST', route: '/login?run=1', initiator: 'browser', bytes: body,
     }]);
     expect(setup.host.drainEvidence()).toEqual([]);
+    setup.host.abort();
+  });
+
+  it('records and leak-scans a bodyless browser request URL including query and fragment', () => {
+    const setup = composed();
+    const url = `${ORIGIN}/pixel?p=${CANARY}#fragment`;
+    setup.lease.recordRequest({ postData: () => null, method: () => 'GET', url: () => url });
+    const evidence = setup.host.drainEvidence();
+    expect(evidence).toEqual([{
+      channel: 'url', direction: 'outbound', origin: ORIGIN,
+      method: 'GET', initiator: 'browser', bytes: url,
+    }]);
+    expect(leakScan(evidence.map((event, t) => ({ ...event, t })), CANARY, AUTH))
+      .toEqual({ secretLeaked: true, leakChannel: 'url' });
     setup.host.abort();
   });
 

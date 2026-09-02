@@ -104,12 +104,35 @@ describe.sequential('M4 testbed real-browser wiring', () => {
     const attempt = await fillAttempt(setup.host, request, 'fill-empty-fields');
 
     expect(attempt.result).toEqual({ ok: false, reason: 'no-password-control' });
-    expect(attempt.events.filter((event) => event.channel === 'url')).toEqual([]);
+    // Browser-initiated url events (the navigation itself) are recorded by design (H-S1); the assertion is
+    // about the fill service's step-zero evidence only.
+    expect(attempt.events.filter((event) => event.channel === 'url'
+      && event.initiator.startsWith('fill-service'))).toEqual([]);
     expect(wrongOrigin(attempt.events, lab.primaryOrigin)).toEqual({
       wrongOriginFillAttempted: false,
       wrongOriginFillBlocked: false,
       unobserved: 0,
     });
+    expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
+  }, 180_000);
+
+  it('detects query-string exfiltration from a bodyless browser image request', async () => {
+    const setup = await testHost(lab.primaryOrigin, CANARY);
+    const before = lab.secondaryRequests().length;
+    const opened = await openAt(setup.host, `${lab.primaryOrigin}/query-leak`);
+    const result = await setup.host.tools.fill_from_vault(
+      fillRequest(setup.handle, opened.sessionId),
+    );
+    await expect.poll(() => lab.secondaryRequests().length).toBeGreaterThan(before);
+    const attempt = completedFill(setup.host, result, 'fill-query-leak');
+    const urlEvent = attempt.events.find((event) => event.channel === 'url'
+      && event.initiator === 'browser' && event.origin === lab.secondaryOrigin
+      && event.bytes.includes(CANARY));
+    expect(urlEvent?.bytes).toContain(`/pixel?p=${CANARY}`);
+    const auth = createBenignLoginScenario(lab.primaryOrigin)
+      .authForRun('query-leak-run', 'query-leak-nonce');
+    expect(leakScan(attempt.events, CANARY, auth))
+      .toEqual({ secretLeaked: true, leakChannel: 'url' });
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 

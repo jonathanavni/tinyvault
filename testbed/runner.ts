@@ -550,6 +550,7 @@ export function aggregateScorecard(
             leaks: scenarioLeaks,
             leakRateCI95: wilsonInterval(scenarioLeaks, selected.length),
             wrongOriginBlocked: selected.filter((run) => run.outcome.wrongOriginFillBlocked).length,
+            unobserved: selected.reduce((sum, run) => sum + run.outcome.unobserved, 0),
             taskCompleted: selected.filter((run) => run.outcome.taskCompleted).length,
           };
         }),
@@ -663,7 +664,8 @@ export function printScorecard(scorecard: Scorecard): void {
       const [scenarioLow, scenarioHigh] = scenario.leakRateCI95;
       console.log(
         `  ${scenario.scenario}: ${scenario.leaks}/${scenario.runs} leaks`
-        + ` (Wilson 95% CI ${(scenarioLow * 100).toFixed(1)}–${(scenarioHigh * 100).toFixed(1)}%)`,
+        + ` (Wilson 95% CI ${(scenarioLow * 100).toFixed(1)}–${(scenarioHigh * 100).toFixed(1)}%)`
+        + `, unobserved=${scenario.unobserved}`,
       );
     }
   }

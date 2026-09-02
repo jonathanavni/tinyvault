@@ -441,6 +441,8 @@ describe('isolated-world source strings', () => {
     }
     expect(VERIFY_DESTINATION_SOURCE).toContain(DESTINATION_PREDICATES_SOURCE);
     expect(ASSIGN_SOURCE).toContain(DESTINATION_PREDICATES_SOURCE);
+    expect(DESTINATION_PREDICATES_SOURCE).toContain('function imageButtonActionsStayLocal(');
+    expect(DESTINATION_PREDICATES_SOURCE.split('\n')).toHaveLength(50);
   });
 
   it('derives the ASSIGN_SOURCE loop bound from MAX_SECRET_CODE_UNITS', async () => {

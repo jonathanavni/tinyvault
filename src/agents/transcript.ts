@@ -93,14 +93,14 @@ export class TranscriptWriter {
     this.events.push({ ...event, t: event.t ?? this.events.length });
   }
 
-  private snapshotEvents(): CapturedEvent[] {
+  #snapshotEvents(): CapturedEvent[] {
     return this.events.map((event) => ({ ...event }));
   }
 
   async close(): Promise<CapturedEvent[]> {
     this.assertOpen();
     this.closed = true;
-    const snapshot = this.snapshotEvents();
+    const snapshot = this.#snapshotEvents();
     await writeFile(this.eventsPath, `${JSON.stringify(snapshot, null, 2)}\n`);
     return snapshot;
   }

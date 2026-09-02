@@ -6,7 +6,11 @@ import { retentionViolations } from './retention.test';
 
 describe('secret-retention named mutant corpus', () => {
   it('keeps the retention rule files and inspectSecretUses within their review budgets', async () => {
-    for (const path of ['src/browser/retention.test.ts', 'src/browser/retention.corpus.test.ts']) {
+    for (const path of [
+      'src/browser/retention.test.ts',
+      'src/browser/retention.corpus.test.ts',
+      'src/browser/retention.round8.test.ts',
+    ]) {
       expect((await readFile(resolve(path), 'utf8')).split('\n').length - 1, path).toBeLessThanOrEqual(800);
     }
     const source = await readFile(resolve('src/browser/retention.test.ts'), 'utf8');
@@ -110,6 +114,47 @@ describe('secret-retention named mutant corpus', () => {
     for (const [name, mutant] of mutants) {
       expect(retentionViolations(mutant, fileName), name).not.toEqual([]);
     }
+  });
+
+  it('kills round-eight mutants S16 through S22 by their named assertions', async () => {
+    const sessionName = 'src/browser/session.ts';
+    const session = await readFile(resolve(sessionName), 'utf8');
+    const injectMarker = "    const lengthDigits = String(value.length).padStart(4, '0');";
+    const sinkMarker = '): Promise<T> {\n  const response = await cdp.send';
+    const localName = 'src/backends/localFile.ts';
+    const local = await readFile(resolve(localName), 'utf8');
+    const secretMarker = "      return new Secret(new TextDecoder('utf-8', { fatal: true }).decode(plaintext));";
+    const sessionMutants = [
+      // S16/S17 are killed by the loop-condition prohibition, independently of the write sink.
+      ['S16 length loop condition', `let moduleCounter = 0;\n${session.replace(injectMarker,
+        `${injectMarker}\n    for (let i = 0; i < value.length; i += 1) moduleCounter += 1;`)}`],
+      ['S17 charCodeAt loop condition', `let moduleCounter = 0;\n${session.replace(injectMarker,
+        `${injectMarker}\n    for (let i = 0; i < value.charCodeAt(0); i += 1) moduleCounter += 1;`)}`],
+      // S18/S19 are killed by the fixed-return-if consequent assertion; S19 also pins includes context.
+      ['S18 charCodeAt non-local conditional write', `let moduleStash = '';\n${session.replace(injectMarker,
+        `${injectMarker}\n    if (value.charCodeAt(0) === 115) moduleStash = 's';`)}`],
+      ['S19 includes non-local conditional write', `let zzBit = 0;\n${session.replace(injectMarker,
+        `${injectMarker}\n    if (value.includes('\\n')) zzBit = 1;`)}`],
+      // S20 is killed by the callFunctionOn parameter-derived non-escape assertion.
+      ['S20 callFunctionOn argument stash', `const zzStash: string[] = [];\n${session.replace(
+        sinkMarker,
+        `): Promise<T> {\n  zzStash.push(JSON.stringify(args));\n  const response = await cdp.send`,
+      )}`],
+      // S21 is killed by the direct PropertyAccessExpression .consume assertion.
+      ['S21 computed Secret access', session.replace(
+        '  const value = secret.consume();',
+        "  const value = (secret as unknown as Record<string, () => string>)['expo' + 'se']();",
+      )],
+    ] as const;
+    for (const [name, mutant] of sessionMutants) {
+      expect(retentionViolations(mutant, sessionName), name).not.toEqual([]);
+    }
+
+    // S22 is killed by localFile.ts's exact fail-closed plaintext occurrence list.
+    const localMutant = `const zzStash: Uint8Array[] = [];\n${local.replace(
+      secretMarker, `      zzStash.push(plaintext);\n${secretMarker}`,
+    )}`;
+    expect(retentionViolations(localMutant, localName), 'S22 local-file plaintext stash').not.toEqual([]);
   });
 
   it('demonstrates that the S8 accessor can recover the source string at runtime', () => {
