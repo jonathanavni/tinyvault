@@ -118,9 +118,9 @@ test that kills its mutation, or say why it cannot.
 - **R2-1 (P2, regression):** protected classification = **union** of link path and real path. Collect
   `protectedRealPaths` from every configured/walked file whose *pre-realpath* location is protected;
   `isProtected(target)` checks the real-path directory rule **or** membership in that set. Fixtures:
-  `src/supervisor/evil.ts → ../../outside/evil.ts` imported from a data-plane file → **FAIL**; the same alias
-  pointing at a clean module inside `src/supervisor`... no — mirror: `src/core/alias.ts → ../../outside/clean.ts`
-  imported → **PASS**.
+  `src/supervisor/evil.ts → ../../outside/evil.ts` imported from a data-plane file → **FAIL** (link path is
+  protected); control: `src/core/alias.ts → ../../outside/clean.ts` imported → **PASS** (neither path is
+  protected).
 - **R2-3 + R2-9:** header states the two-tier rule verbatim: *"A scripts-rooted BFS tolerates unsupported,
   unscanned, or unresolved external-package loads inside node_modules; data-plane roots tolerate nothing; neither
   tier may reach a protected directory; production modules may not import scripts/ (directly or transitively)."*
@@ -156,14 +156,11 @@ test that kills its mutation, or say why it cannot.
 ## Set 2 — backend (`src/backends/**`)
 
 - **R2-2 (P2, hard rule):** split `src/backends/localFile.test.ts` (843 lines): move `describe('policy binding
-  and error ordering')` to `src/backends/localFile.policy.test.ts`; shared helpers into
-  `src/backends/localFile.testkit.ts` (a test-only module: name it so the dependency gate's `isProductionModule`
-  excludes it, e.g. `localFile.test-kit.ts` is NOT excluded — use `localFile.testkit.test.ts`? No: it exports
-  helpers, not tests. **Use `src/backends/testkit/localFile.ts` and add `src/backends/testkit/**` to nothing —
-  it will be scanned as a production module by the gate and by tsc; that is acceptable only if it imports no
-  test framework.** Simplest compliant option: keep helpers in a file named `localFile.helpers.test.ts` that
-  exports helpers and contains one trivial `describe` so vitest and the gate both treat it as a test file.
-  Pick one, state it in Deviations.) Both files stay under 400 lines.
+  and error ordering')` to `src/backends/localFile.policy.test.ts`. Shared helpers go in a test-only module
+  that both the dependency gate and vitest treat as a test file — the gate's `isProductionModule` excludes
+  names matching `.test.` or `.spec.`, so use `src/backends/localFile.helpers.test.ts` (exports the helpers; may
+  contain no `describe` — vitest tolerates a suite-less file only with `passWithNoTests`, so include one trivial
+  `it` that asserts a helper's shape). State the choice under Deviations. Both files stay under 400 lines.
 - **R2-5:** delete the vacuous `stat` assertion at `localFileWriter.test.ts:170`.
 - **R2-11:** the writer failure trace asserts the **exact** sequence `['readFile']` (and, for the nth-record
   case, still exactly `['readFile']` — sealing happens before any mutating fs call).
