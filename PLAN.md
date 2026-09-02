@@ -12,11 +12,13 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 ## Current State
 
 `2026-09-01-m4` — focus: M4 (fill service end-to-end + all integration security gates, 🔴) through the full Codex ladder; in parallel: absorb A1/A3 + fact-check corrections into `PROJECT-SPEC.md`, prune merged agent branches, schedule the §9.1 LOC-budget question.
-**In progress (2026-09-02, ~14:00 CDT):** `codex/m4-fill-service` at `6c657a4`: `58ca087` (fix-final4) reviewed by three
-channels (register "Final4 round": layers 1–2 held; layer-4 capture P1s — trailing-dot body drop, base64 alignment,
-cookie headers, multipart file parts declared; calibration was a gate; every-function claim false). **The LAST slice
-`m4-fix-final5` is running in Codex** (P1/P2 only). Then: integrator run (tsc last), commit, the last three-channel
-review, merge FF to `main`, `/wrapup`. New retention shapes after this slice are residuals, not absorptions.
+**In progress (2026-09-02, ~15:00 CDT):** `codex/m4-fill-service` at `9ce3a44` = the last fix slice `m4-fix-final5`
+(invalid-origin evidence kept; base64 decoded before scanning; allHeaders incl. cookies, bounded, plus WebSocket
+handshake headers via CDP; calibration report-only; nonLocalAssignments over every function, S31–S35; import-graph
+completeness; batch pin). Integrator: 772 tests + 10-test timing family, gate 53/48, `make eval` 10/10 0 leaks, tsc
+last. **The FINAL three-channel review of `58ca087..9ce3a44` is in flight** (Codex, QA `wt-review`, security
+`wt-security`). Its residuals go verbatim into the register; P1 only for a layers-1–2 leak, an undeclared layer-4
+blind spot, or a red `make test`. Then: merge FF to `main`, `/wrapup`.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
