@@ -793,3 +793,72 @@ native assignment) — only the empirical probe-P claim is made.
 **Not merge-ready as committed; no leak bypass found in three rounds of hostile-page probing.** Fix slice `m4-fix-c3b`
 (Codex, same branch, dispatched after commit 4's write job finishes) implements every absorbed item with a killing test
 each; the three channels re-run on the fix diff together with commit 4's review.
+
+---
+
+# Post-implementation round 1 — commit 4 `2652104..76035cc` (testbed wiring), 2026-09-02
+
+Implementer: Codex. Three channels, blind, parallel; both Claude channels ran the suite and the 10-run real-browser
+eval in isolated worktrees; Codex reviewed the pinned range read-only (no vitest).
+
+| Channel | Family | Verdict |
+|---|---|---|
+| Claude `/review` (QA, `wt-review`) | different | **NEEDS-ATTENTION** — 2 P1, 3 P2, 4 P3; 16 mutants: 13 killed / 3 survived |
+| Claude security review (`wt-security`) | different | **NEEDS-ATTENTION** — 0 P1, 1 P2 (latent), 4 P3; tamper matrix, evasions, per-run identity, diagnostics all **HELD** |
+| Codex adversarial diff review | same | **NEEDS-ATTENTION** — 1 P1, 3 P2, 1 P3 |
+
+Integrator's run: `make test` 620 passed, gate PASS 48/43; `make eval` 10/10 completed, 0/10 leaks, real-browser
+evidence per run. `testbed/scorecard.schema.ts` and `SCHEMA.md` byte-identical across the range (all channels).
+**Convergent:** `classify` ignores the initiator on both authorized-sink shapes (security S4-2 = Codex X4-1's mechanism);
+no Deviations section in the commit message (all three).
+
+## Findings and the continuity owner's synthesis
+
+### P1
+- **T4-1 Guards tested as pure functions, never proven wired (QA Q4-1/Q4-2).** Deleting the `assertHostFinished`
+  call (tripwire `fail` verdict → throw) or the `assertHttpFixture` call leaves 620 tests and the real eval green.
+  **Absorb:** wiring assertions through `runEval`/`capturePersistedRuns` for every runner guard (verdict, HTTP fixture,
+  uncorrelated attempt, `captureFailed`), and the pattern recorded: *a guard exported as a pure function needs a
+  call-site test.*
+- **T4-2 Authorized sinks ignore the initiator (X4-1, S4-2).** A Node-submitted POST plus a fabricated `network-body`
+  event with `initiator: 'stub-fill-service'` passes offline. **Absorb:** authorized `network-body` requires
+  `initiator === 'browser'`, authorized `dom-fill` requires `'fill-service'`; the runner tests' fabricated events are
+  recast as tamper cases. **Residual restated:** a runner fabricating `initiator: 'browser'` is the single-process
+  limit SCHEMA already states ("post-capture integrity, not independent authenticity").
+
+### P2
+- **T4-3 (latent) Secret-source identity partly minted from the model's tool name (S4-1).** Not reachable at HEAD
+  (`secretSources: []`), but M6's naive baseline will declare a tool-result source. **Absorb:** model-derived
+  initiators get a reserved `tool:` prefix in the loop; `validateScenarioAuth` rejects such initiators as sources;
+  `rejectSelfDeclaredSecretSources` covers loop-generated events too.
+- **T4-4 The post-loop drain is vacuous today (QA Q4-3):** 0 events in 10/10 runs — the login POST lands in the
+  `click` drain; the eval asserts only the marker string. **Absorb:** a case where the POST arrives only via the
+  post-loop drain, and the eval asserts the drain's payload; N's clause narrowed to what is proven.
+- **T4-5 Byte-bearing throw path around the end marker (X4-2).** **Absorb:** explicit marker; any pre-marker throw is
+  wrapped into the fixed-shape diagnostic (no bytes); test with a canary-bearing handler throw.
+- **T4-6 `priorString` accepts non-tool messages (X4-4).** **Absorb:** `role === 'tool'` only; negative test.
+- **T4-7 Browser-lifecycle test is a source regex (QA Q4-4).** **Absorb:** runtime assertion via a `launchChromium` spy.
+- **T4-8 Probe P flakes under full-suite parallel load (QA Q4-5; 3 of 4 `make test` runs on that machine,
+  p=0.0078 at a 35 µs median difference).** **Continuity-owner decision, no threshold change:** probe P is specified
+  for an interleaved measurement on a quiet machine; `make test` will run the timing file **after** and **serially
+  to** the rest of the suite (two vitest invocations in the `test` script). The numbers are still reported; the
+  measurement condition is what changes. Recorded in the Decisions Log.
+
+### P3 (absorbed unless marked)
+`artifacts/eval` never cleared — orphan runs and old key pairs in the bundle (S4-4) → clear at start; the
+`direction === 'internal'` conjunct on the attempt predicate is an undeclared narrowing (Q4-6) → declared and kept;
+redundant `origin === undefined` (Q4-7) → removed; the missing-marker branch is unreachable (Q4-8) → the explicit
+marker (T4-5) makes it real; `Record<string, any>` in the stub (Q4-9) → `unknown`; bodyless requests produce no event
+(S4-3) → **M5 owner**, stated in §10; **plaintext lives in `events.json`, `offline-evidence.json` (the manifest's
+canary — adjudication input) and the fixture's `*.requests` capture — all by design, all inside the artifact
+directory; the earlier "only in events.json" wording (X4-3) was wrong and is corrected here**; commit messages
+carry a Deviations section from now on (S4-5/X4-5).
+**Residuals (restated):** the offline adjudicator is a same-process second pass with the key and registry from
+memory — anti-fabrication rests on re-running; `scorecard.json` is written before the pass gates, so only the
+process exit code is evidence of a pass; fragment steganography below `MIN_FRAGMENT_LENGTH`; capture coverage is
+narrow until M5 (no `browser_snapshot` in the eval tool set; bodyless requests unrecorded); Y2-4 token cloning.
+
+### Disposition
+**Not merge-ready as committed; no leak bypass or fabrication path found.** Fix slice `m4-fix-c4` (Codex, after the
+commit-3 fix slice's write job finishes) implements every absorbed item with a wiring test each; the three channels
+re-run on both fix diffs together; then the post-M4 whole-codebase audit (§9.2, carrying the §9.1 question).
