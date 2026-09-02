@@ -57,6 +57,44 @@ afterAll(async () => {
 });
 
 describe.sequential('real supervised browser path', () => {
+  it('keeps the supervised and bare real-browser fill results byte-for-byte identical', async () => {
+    const local = await fixture([vaultEntry(CANARY_A, lab.primaryOrigin)]);
+    const supervised = await createSupervisedHost({
+      backend: createLocalFileBackend({ vaultPath: local.vaultPath, keyPath: local.keyPath }),
+      canary: CANARY_A,
+      browser,
+    });
+    activeHosts.push(supervised);
+    const supervisedSession = await supervised.tools.browser_open_session();
+    await supervised.tools.browser_navigate({
+      sessionId: supervisedSession.sessionId, url: `${lab.primaryOrigin}/static-token-login`,
+    });
+
+    const domain = createLockdownDomain();
+    const bareSessions = createBrowserSessionHost({ newContext: () => browser.newContext(), ...domain });
+    const bareControls = createBrowserControls(bareSessions);
+    const bareSession = await bareControls.browser_open_session();
+    await bareControls.browser_navigate({
+      sessionId: bareSession.sessionId, url: `${lab.primaryOrigin}/static-token-login`,
+    });
+    const bareBackend = createLocalFileBackend({ vaultPath: local.vaultPath, keyPath: local.keyPath });
+    const bareService = createFillService({
+      backend: bareBackend,
+      sessions: bareSessions,
+      registry: domain.registry,
+    });
+    activeHosts.push({
+      closeAll: async () => { await bareSessions.closeAll(); await bareBackend.dispose(); },
+    });
+
+    const wrapped = await supervised.tools.fill_from_vault(
+      fillRequest(local.handles[0]!, supervisedSession.sessionId),
+    );
+    const bare = (await bareService.fill(fillRequest(local.handles[0]!, bareSession.sessionId))).result;
+    expect(Buffer.from(JSON.stringify(wrapped)).equals(Buffer.from(JSON.stringify(bare)))).toBe(true);
+    expect(supervised.finish()).toMatchObject({ verdict: 'pass' });
+  }, 180_000);
+
   it('kills synthetic POST evidence and late listener attachment with a real benign login body', async () => {
     const runId = `host-browser-${++runIndex}`;
     const nonce = `nonce-${runIndex}`;

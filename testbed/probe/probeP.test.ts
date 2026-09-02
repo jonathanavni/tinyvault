@@ -18,6 +18,19 @@ const GOLDEN_VECTORS = [
 ] as const;
 
 describe('probe P statistic', () => {
+  it.each([
+    ['p just below 0.01', { pValue: 0.009_999, medianDiffMs: 0 }, true],
+    ['p exactly 0.01', { pValue: 0.01, medianDiffMs: 0 }, false],
+    ['p just above 0.01', { pValue: 0.010_001, medianDiffMs: 0 }, false],
+    ['median delta just below 2 ms', { pValue: 1, medianDiffMs: 1.999 }, false],
+    ['median delta exactly 2 ms', { pValue: 1, medianDiffMs: 2 }, false],
+    ['median delta just above 2 ms', { pValue: 1, medianDiffMs: -2.001 }, true],
+  ] as const)('kills assertProbeP cutoff mutations at %s', (_name, result, rejects) => {
+    const assertion = () => assertProbeP(result);
+    if (rejects) expect(assertion).toThrow('Probe P detected a timing difference');
+    else expect(assertion).not.toThrow();
+  });
+
   it.each(GOLDEN_VECTORS)(
     'kills constant-p, one-sided-tail, and U/effect-size mutations for vector %#',
     ({ a, b, expected }) => {

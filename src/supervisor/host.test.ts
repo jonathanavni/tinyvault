@@ -7,7 +7,7 @@ import { runAgentLoop } from '../agents/loop';
 import type { CapturedEventInput, TranscriptWriter } from '../agents/transcript';
 import type { SessionPage, BrowserSessionHost } from '../browser/session';
 import type { FillDestinationPort } from '../core/browserPort';
-import type { FillOutcome, FillService } from '../core/fillService';
+import { createFillService, type FillOutcome, type FillService } from '../core/fillService';
 import type { BrowserControls, FillRequest, Origin, SetupReason } from '../core/types';
 import { secretTransforms } from '../shared/secretTransforms';
 import * as secretMatcher from './secretMatcher';
@@ -16,8 +16,10 @@ import {
   composeSupervisedHost,
   createSupervisedHost,
   inspectEvidenceLeaseForTest,
+  VAULT_TOOL_FAILURE_MESSAGE,
   type SupervisedHost,
 } from './host';
+import { createLockdownDomain } from './lockdownDomain';
 import { TripwireRun, INVALID_SEALED_BATCH_MESSAGE } from './tripwireSeam';
 
 const CANARY = 'TVC_host_canary_4E91';
@@ -205,6 +207,8 @@ describe('tripwire tool composition and evidence separation', () => {
     const adjudicate = vi.spyOn(TripwireRun.prototype, 'adjudicate');
     const setup = composed();
     await setup.host.tools.list_vault();
+    await setup.host.tools.fill_from_vault(fillRequest());
+    await setup.host.tools.browser_snapshot({ sessionId: 'session' });
     expect([match.mock.calls.length, mint.mock.calls.length, adjudicate.mock.calls.length]).toEqual([0, 0, 0]);
     setup.host.finish();
     expect(mint).toHaveBeenCalledOnce();
@@ -238,7 +242,19 @@ describe('lease finalization and composition cleanup', () => {
     expect(() => run!.adjudicate(sealed!)).toThrow(INVALID_SEALED_BATCH_MESSAGE);
     expect(() => setup.lease.captureTrusted('late')).toThrow('Evidence capture failed');
     expect(inspectEvidenceLeaseForTest(setup.lease)).toEqual([]);
-    expect(setup.host.drainEvidence()).toEqual([]);
+    expect(() => setup.host.drainEvidence()).toThrow('Evidence capture failed');
+  });
+
+  it('drops the lease after a tripwire match is adjudicated through finish()', async () => {
+    const setup = composed();
+    vi.mocked(setup.service.listVault).mockResolvedValue({
+      items: [{ handle: 'vh', label: CANARY, kind: 'password', available: true }],
+    });
+    await setup.host.tools.list_vault();
+
+    expect(setup.host.finish().verdict).toBe('fail');
+    expect(inspectEvidenceLeaseForTest(setup.lease)).toEqual([]);
+    expect(() => setup.host.drainEvidence()).toThrow('Evidence capture failed');
   });
 
   it('kills a finish finally missing run/evidence cleanup when adjudication throws', async () => {
@@ -271,20 +287,51 @@ describe('lease finalization and composition cleanup', () => {
     }
   });
 
-  it('kills a missing tool-throw finally by aborting the lease after the operation rejects', async () => {
-    const setup = composed();
-    vi.mocked(setup.service.listVault).mockRejectedValue(new Error('tool operation failed'));
-    try {
-      await setup.host.tools.list_vault();
-      throw new Error('expected tool failure');
-    } catch (error) {
-      expect(error).toEqual(new Error('tool operation failed'));
-    } finally {
-      setup.host.abort();
-    }
-    expect(inspectEvidenceLeaseForTest(setup.lease)).toEqual([]);
-    expect(() => setup.lease.captureTrusted('late')).toThrow('Evidence capture failed');
+  it('normalises a backend list rejection without exposing its path-bearing free text', async () => {
+    const domain = createLockdownDomain();
+    const backend = fakeBackend();
+    backend.listItems = vi.fn(async () => { throw new Error('/private/vault/account.json failed'); });
+    const sessions = new FakeSessions();
+    const service = createFillService({ backend, sessions, registry: domain.registry });
+    const lease = new EvidenceLease(CANARY);
+    const host = composeSupervisedHost({ fillService: service, sessions, lease });
+
+    const rejection = await host.tools.list_vault().catch((error: unknown) => error);
+    expect(rejection).toEqual(new Error(VAULT_TOOL_FAILURE_MESSAGE));
+    expect(String(rejection)).not.toContain('/private/vault/account.json');
+    host.abort();
   });
+
+  it.each(['list_vault', 'fill_from_vault', 'request_vault_setup'] as const)(
+    'normalises every VaultTools rejection for %s to one fixed message',
+    async (method) => {
+      const setup = composed();
+      if (method === 'list_vault') vi.mocked(setup.service.listVault).mockRejectedValue(new Error('list detail'));
+      else if (method === 'fill_from_vault') vi.mocked(setup.service.fill).mockRejectedValue(new Error('fill detail'));
+      else vi.mocked(setup.service.requestSetup).mockRejectedValue(new Error('setup detail'));
+
+      await expect(callTool(setup.host.tools, method)).rejects.toThrow(VAULT_TOOL_FAILURE_MESSAGE);
+      setup.host.abort();
+    },
+  );
+
+  it.each(['finish', 'abort'] as const)(
+    'checks lease liveness before a post-%s fill can dispatch any side effect',
+    async (phase) => {
+      const setup = composed();
+      const inject = vi.fn();
+      vi.mocked(setup.service.fill).mockImplementation(async () => {
+        inject();
+        return fillOutcome();
+      });
+      if (phase === 'finish') expect(setup.host.finish().verdict).toBe('pass');
+      else setup.host.abort();
+
+      await expect(setup.host.tools.fill_from_vault(fillRequest())).rejects.toThrow('Evidence capture failed');
+      expect(setup.service.fill).not.toHaveBeenCalled();
+      expect(inject).not.toHaveBeenCalled();
+    },
+  );
 
   it('kills capture exceptions that alter caller bytes or let an invalid run finish', async () => {
     const setup = composed();
@@ -324,14 +371,55 @@ describe('lease finalization and composition cleanup', () => {
     const browser = { close: vi.fn(async () => { order.push('browser'); }) } as any;
     const host = await createSupervisedHost({ backend, canary: CANARY, browser });
     await host.closeAll();
+    await host.closeAll();
     expect(order).toEqual(['backend']);
     expect(browser.close).not.toHaveBeenCalled();
+    host.abort();
 
     const setup = composed();
     vi.mocked(setup.service.disposeBackend).mockImplementation(async () => { order.push('dispose'); });
-    setup.sessions.closeAll = async () => { order.push('sessions'); };
+    const closeSessions = vi.fn(async () => { order.push('sessions'); });
+    setup.sessions.closeAll = closeSessions;
+    await setup.host.closeAll();
     await setup.host.closeAll();
     expect(order.slice(-2)).toEqual(['sessions', 'dispose']);
+    expect(closeSessions).toHaveBeenCalledOnce();
+    expect(setup.service.disposeBackend).toHaveBeenCalledOnce();
+    setup.host.abort();
+
+    const launchedOrder: string[] = [];
+    const page = {
+      on: vi.fn(),
+      waitForLoadState: vi.fn(async () => undefined),
+    };
+    const cdp = {
+      on: vi.fn(),
+      send: vi.fn(async (method: string) => method === 'Page.getFrameTree'
+        ? { frameTree: { frame: { id: 'main', loaderId: 'loader' } } }
+        : {}),
+      detach: vi.fn(async () => undefined),
+    };
+    const context = {
+      on: vi.fn(),
+      newPage: vi.fn(async () => page),
+      newCDPSession: vi.fn(async () => cdp),
+      close: vi.fn(async () => { launchedOrder.push('sessions'); }),
+    };
+    const launchedBrowser = {
+      newContext: vi.fn(async () => context),
+      close: vi.fn(async () => { launchedOrder.push('browser'); }),
+    };
+    const launcher = { launch: vi.fn(async () => launchedBrowser) };
+    const launchedHost = await createSupervisedHost({
+      backend: fakeBackend(launchedOrder), canary: CANARY, launcher: launcher as any,
+    });
+    await launchedHost.tools.browser_open_session();
+    await launchedHost.closeAll();
+    await launchedHost.closeAll();
+    expect(launchedOrder).toEqual(['sessions', 'browser', 'backend']);
+    expect(launcher.launch).toHaveBeenCalledOnce();
+    expect(launchedBrowser.close).toHaveBeenCalledOnce();
+    launchedHost.abort();
   });
 
   it('kills supervised-host and lease capability surface expansion', () => {

@@ -86,8 +86,7 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
   '/iframe-self': () => '<script>setTimeout(()=>location.href="/iframe-final",20)</script>',
   '/iframe-final': () => '<p>iframe navigated</p>',
   '/static-token-login': () => loginForm('data-tv-control="static-control"', '',
-    '<input id="username" value="fixture-user"><button id="submit" type="submit">Go</button>',
-    'data-tv-document="static-document"'),
+    '<input id="username" value="fixture-user"><button id="submit" type="submit">Go</button>'),
   '/storage': () => `<input id="cookie"><input id="local"><script>
     var set=new URL(location.href).searchParams.get('set');
     if(set){document.cookie='tv='+set;localStorage.setItem('tv',set)}
@@ -140,20 +139,21 @@ function serve(
   const route = CONTROL_LAB_ROUTES[path as keyof typeof CONTROL_LAB_ROUTES];
   response.setHeader('content-type', 'text/html; charset=utf-8');
   response.statusCode = route === undefined ? 404 : 200;
-  response.end(document(route === undefined ? '<main>not found</main>' : route(getOrigins())));
+  response.end(document(
+    route === undefined ? '<main>not found</main>' : route(getOrigins()),
+    path === '/static-token-login' ? 'data-tv-document="static-document"' : '',
+  ));
 }
 
 function loginForm(
   inputAttributes = '',
   formAttributes = '',
   extra = '<button type="submit">Go</button>',
-  htmlAttributes = '',
 ): string {
   const form = attributesWithDefaults([['method', 'post'], ['action', '/submit']], formAttributes);
   const input = attributesWithDefaults([['id', 'password'], ['type', 'password']], inputAttributes);
   return `<form ${form}>
-    <input ${input}>${extra}</form>
-    <template data-html-attributes="${htmlAttributes}"></template>`;
+    <input ${input}>${extra}</form>`;
 }
 
 function attributesWithDefaults(
@@ -180,10 +180,8 @@ function overlayStyle(): string {
   return '<style>.overlay{position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.01)}</style>';
 }
 
-function document(body: string): string {
-  const match = body.match(/<template data-html-attributes="([^"]*)"><\/template>/u);
-  const attributes = match?.[1] ?? '';
-  return `<!doctype html><html ${attributes}><head><meta charset="utf-8"></head><body>${body}</body></html>`;
+function document(body: string, htmlAttributes: string): string {
+  return `<!doctype html><html ${htmlAttributes}><head><meta charset="utf-8"></head><body>${body}</body></html>`;
 }
 
 function redirect(response: import('node:http').ServerResponse, location: string): void {

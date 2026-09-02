@@ -5,7 +5,6 @@ import { INVALID_CONTROL_IDENTITY_MESSAGE } from '../core/lockdown';
 import { Secret } from '../core/redaction';
 import { SessionMutex } from '../core/sessionMutex';
 import { createLockdownDomain } from '../supervisor/lockdownDomain';
-import { assertProbeP } from '../../testbed/probe/probeP';
 import type { BrowserContext, CDPSession, Page } from './playwright';
 import { createBrowserSessionHost } from './session';
 
@@ -289,18 +288,5 @@ describe('browser session lifecycle over the CDP seam', () => {
     expect(host.openSessionCount()).toBe(1);
     expect(lifecycleCalls.filter((call) => call === `close:${sessionId}`)).toHaveLength(1);
     await host.closeAll();
-  });
-});
-
-describe('Probe P locked threshold boundaries', () => {
-  it.each([
-    ['p just below 0.01', { pValue: 0.009_999, medianDiffMs: 0 }, true],
-    ['p just above 0.01', { pValue: 0.010_001, medianDiffMs: 0 }, false],
-    ['median delta just below 2 ms', { pValue: 1, medianDiffMs: 1.999 }, false],
-    ['median delta just above 2 ms', { pValue: 1, medianDiffMs: -2.001 }, true],
-  ] as const)('kills a loosened assertProbeP cutoff at %s', (_name, result, rejects) => {
-    const assertion = () => assertProbeP(result);
-    if (rejects) expect(assertion).toThrow('Probe P detected a timing difference');
-    else expect(assertion).not.toThrow();
   });
 });

@@ -26,8 +26,8 @@ export { VETTED_EXTERNAL_PACKAGES, realpathEndsWith } from './dependency-boundar
 // src/browser has one to the browser driver; within src/browser only playwright.ts imports it, and only the
 // playwright package.
 // Residuals: lockfile v1 fails closed while v2/v3 are accepted; nested/shadow copies are unpinned but held to the
-// general rules; lockfile integrity is recorded, not verified against installed bytes; the two Playwright bundles
-// are opaque, so the gate proves only that no other scanned or resolved path was found through them.
+// general rules; lockfile integrity is recorded, not verified against installed bytes; the three Playwright loader
+// files are opaque, so the gate proves only that no other scanned or resolved path was found through them.
 
 const FLAG_ERROR = 'dependency gate requires --experimental-import-meta-resolve';
 const flagProbe = import.meta.resolve(
@@ -41,7 +41,7 @@ const PROTECTED_DIRECTORIES = ['src/supervisor'];
 const SOURCE_DIRECTORIES = ['src', 'testbed', 'scripts'];
 const BUILTIN_MODULES = new Set(builtinModules.map((specifier) => specifier.replace(/^node:/u, '')));
 const MAX_EXTERNAL_MODULES = 10_000;
-const GATE_MODULE = fs.realpathSync(fileURLToPath(import.meta.url));
+const GATE_DIRECTORY = path.dirname(fs.realpathSync(fileURLToPath(import.meta.url)));
 
 export function checkDependencyBoundary(
   root,
@@ -214,6 +214,11 @@ function classifyEdge(edge, entry, currentFile, dependencyPath, context) {
   violations.push(...classifyVettedReach(
     edge, entry, dependencyPath, context,
   ));
+  if (isForbiddenBrowserZoneEdge(currentFile, edge.target, context)) {
+    violations.push(edgeViolation(
+      entry, edge.target, `data-plane-to-browser ${edge.syntax}`, dependencyPath,
+    ));
+  }
   if (edge.unresolved) {
     if (!toleratesTraversalIssue(entry, currentFile, edge.syntax, context)) {
       violations.push(edgeViolation(
@@ -431,7 +436,7 @@ function dependencies(file, source) {
   const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const edges = [];
   const unsupported = [];
-  const isGateImplementation = realFilePath(file) === GATE_MODULE;
+  const isGateImplementation = isGateImplementationFile(file);
   const addLiteral = (node, syntax) => {
     if (node && ts.isStringLiteralLike(node)) {
       edges.push({ specifier: node.text, syntax });
@@ -470,6 +475,12 @@ function dependencies(file, source) {
   };
   visit(sourceFile);
   return { edges, unsupported };
+}
+function isGateImplementationFile(file) {
+  const real = realFilePath(file);
+  return real !== undefined
+    && path.dirname(real) === GATE_DIRECTORY
+    && /^dependency-boundary.*\.mjs$/u.test(path.basename(real));
 }
 function isCreateRequireImport(node) {
   if (!ts.isStringLiteralLike(node.moduleSpecifier)
@@ -579,9 +590,7 @@ function scanExternalFile(current, fileSet, compilerOptions, visitedCount) {
   return {
     edges,
     pending,
-    unsupported: parsed.unsupported
-      .filter((syntax) => !syntax.startsWith('module loader '))
-      .map((syntax) => `external-package ${syntax}`),
+    unsupported: parsed.unsupported.map((syntax) => `external-package ${syntax}`),
   };
 }
 function unresolvedExternalEdge(current, specifier, syntax, target) {
@@ -625,7 +634,18 @@ function toleratesTraversalIssue(entry, currentFile, syntax, context) {
     return syntax.startsWith('external-package')
       && owner.manifest.opaqueFiles.has(currentFile);
   }
+  if (syntax.startsWith('external-package module loader ')) return false;
   return toleratesToolchainIssue(entry, currentFile, context.scriptsDirectory, syntax);
+}
+
+function isForbiddenBrowserZoneEdge(currentFile, target, context) {
+  const restricted = ['src/core', 'src/backends', 'src/agents', 'src/shared']
+    .map((directory) => path.join(context.absoluteRoot, directory));
+  const browser = path.join(context.absoluteRoot, 'src/browser');
+  const currentLocations = fileLocations(currentFile, context.locationsByRealPath);
+  const targetLocations = fileLocations(target, context.locationsByRealPath);
+  return currentLocations.some((location) => restricted.some((directory) => isWithin(location, directory)))
+    && targetLocations.some((location) => isWithin(location, browser));
 }
 function toleratesToolchainIssue(entry, currentFile, scriptsDirectory, syntax) {
   return isWithin(entry, scriptsDirectory)

@@ -59,6 +59,7 @@ assert.deepEqual(VETTED_EXTERNAL_PACKAGES, [
     opaqueFiles: [
       'playwright-core/lib/coreBundle.js',
       'playwright-core/lib/utilsBundle.js',
+      'playwright-core/lib/bootstrap.js',
     ],
     reason: 'browser driver; the two bundles carry non-literal and optional loads; the plaintext is handed to it by design',
   },
@@ -198,6 +199,35 @@ for (const [name, source] of unsupportedCases) {
     assertCliStatus(root, 1, `${name} mutation did not fail the real dependency-gate CLI`);
   });
 }
+
+withFixture(
+  "const m = await import('node:module'); const load = (m as any)['create' + 'Require'](import.meta.url); load('playwright-core');",
+  (root) => {
+    const result = checkDependencyBoundary(root);
+    assert.deepEqual(
+      result.violations.map((violation) => violation.syntax),
+      ['module loader dynamic import()'],
+      'computed createRequire fixture did not depend exclusively on the module-loader rule',
+    );
+    assertCliStatus(root, 1,
+      'computed createRequire fixture passed after evading the older createRequire detector');
+  },
+);
+
+withFixture("import { load } from 'relay'; load('../supervisor/host.ts');", (root) => {
+  write(root, 'node_modules/relay/package.json', JSON.stringify({
+    name: 'relay', version: '1.0.0', type: 'module', exports: './index.mjs',
+  }));
+  write(root, 'node_modules/relay/index.mjs',
+    "const { createRequire } = await import('node:module'); "
+      + 'export const load = createRequire(import.meta.url);\n');
+  const result = checkDependencyBoundary(root);
+  assert.equal(result.violations.some((violation) =>
+    violation.syntax === 'external-package module loader dynamic import()'
+      && violation.path.some((file) => file.endsWith('node_modules/relay/index.mjs'))), true,
+  'external node:module relay did not retain its module-loader violation');
+  assertCliStatus(root, 1, 'external node:module relay passed the real dependency-gate CLI');
+});
 
 withFixture("export { helper } from './helper';", (root) => {
   write(root, 'src/core/helper.ts', "export { evaluate as helper } from '../supervisor/evaluator';\n");

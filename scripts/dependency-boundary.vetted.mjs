@@ -13,6 +13,7 @@ export const VETTED_EXTERNAL_PACKAGES = [
     opaqueFiles: [
       'playwright-core/lib/coreBundle.js',
       'playwright-core/lib/utilsBundle.js',
+      'playwright-core/lib/bootstrap.js',
     ],
     reason: 'browser driver; the two bundles carry non-literal and optional loads; the plaintext is handed to it by design',
   },

@@ -146,25 +146,28 @@ async function continueWithPolicy(
     return finish('no-password-control', observation);
   }
   if (pinned.kind !== 'pinned') return finish(pinned.kind, observation);
-  return continueWithDestination(options, request, policy, port, epoch0, observation, pinned.destination);
+  return continueWithDestination(
+    options, request, policy, canonicalOrigin, port, epoch0, observation, pinned.destination,
+  );
 }
 
 async function continueWithDestination(
   options: FillServiceOptions,
   request: ValidRequest,
   policy: CredentialPolicy,
+  canonicalOrigin: Origin,
   port: FillDestinationPort,
   epoch0: number,
   observation: MutableObservation,
   destination: PinnedDestination,
 ): Promise<FillOutcome> {
-  if (safeEpoch(port) !== epoch0) return staleOutcome(port, policy.canonicalOrigin, observation);
+  if (safeEpoch(port) !== epoch0) return staleOutcome(port, canonicalOrigin, observation);
   try {
     if (options.registry.isLocked(destination.identity)) return finish('locked-field', observation);
     options.registry.lock(destination.identity);
   } catch (error) {
     return error instanceof InvalidControlIdentityError
-      ? staleOutcome(port, policy.canonicalOrigin, observation)
+      ? staleOutcome(port, canonicalOrigin, observation)
       : finish('no-password-control', observation);
   }
   let secret: Secret;
@@ -178,11 +181,11 @@ async function continueWithDestination(
       if (!options.registry.isLocked(destination.identity)) return finish('no-password-control', observation);
     } catch (error) {
       return error instanceof InvalidControlIdentityError
-        ? staleOutcome(port, policy.canonicalOrigin, observation)
+        ? staleOutcome(port, canonicalOrigin, observation)
         : finish('no-password-control', observation);
     }
     try {
-      const injected = await destination.inject(secret, policy.canonicalOrigin);
+      const injected = await destination.inject(secret, canonicalOrigin);
       return completeInjection(injected, observation);
     } catch {
       return finish('no-password-control', observation);

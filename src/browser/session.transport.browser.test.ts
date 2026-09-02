@@ -123,14 +123,17 @@ describe('constant transport and conservative ambiguous rejection', () => {
 
   it('kills a missing too-long defence-in-depth check without issuing a CDP assignment', async () => {
     let assignCalls = 0;
+    let releaseCalls = 0;
     const setup = decoratedHost(async (method, params, next) => {
       if (method === 'Runtime.callFunctionOn' && params?.functionDeclaration === ASSIGN_SOURCE) assignCalls += 1;
+      if (method === 'Runtime.releaseObject') releaseCalls += 1;
       return next(method, params);
     });
     const { destination } = await openAndPin(setup);
     expect(await destination.inject(new Secret('x'.repeat(MAX_SECRET_CODE_UNITS + 1)), lab.primaryOrigin))
       .toEqual({ assigned: false, reason: 'too-long' });
     expect(assignCalls).toBe(0);
+    expect(releaseCalls).toBe(1);
   });
 
   it('kills taint-after-ack by executing the real setter then rejecting transport', async () => {

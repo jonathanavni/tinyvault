@@ -1,3 +1,5 @@
+import { MAX_SECRET_CODE_UNITS } from '../core/browserPort';
+
 export const DESTINATION_PREDICATES_SOURCE = `function () {
   var el = this;
   var getAttributeDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'getAttribute');
@@ -61,7 +63,7 @@ export const ASSIGN_SOURCE = `function (expectedOrigin, hex, lengthDigits) {
   var documentToken = getAttribute.call(document.documentElement, 'data-tv-document');
   var length = Number(lengthDigits);
   var decoded = '';
-  for (var index = 0; index < 4096; index += 1) {
+  for (var index = 0; index < ${MAX_SECRET_CODE_UNITS}; index += 1) {
     decoded += String.fromCharCode(Number.parseInt(hex.slice(index * 4, index * 4 + 4), 16));
   }
   decoded = decoded.slice(0, length);

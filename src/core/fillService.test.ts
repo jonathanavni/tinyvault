@@ -234,6 +234,31 @@ describe('origin, staleness, and backend mapping', () => {
     expect(setup.backend.resolveSecret).not.toHaveBeenCalled();
   });
 
+  it('kills canonicalOrigin re-reads after the step-1 policy snapshot', async () => {
+    let originReads = 0;
+    const policy = {
+      get canonicalOrigin() {
+        originReads += 1;
+        return originReads === 1 ? ORIGIN_A : ORIGIN_B;
+      },
+      fieldRecipe: ['password'],
+    } as CredentialPolicy;
+    const setup = harness({
+      policy,
+      inject: async (secret, expectedOrigin) => {
+        secret.consume();
+        expect(expectedOrigin).toBe(ORIGIN_A);
+        return {
+          assigned: true, observedOrigin: ORIGIN_A,
+          controlToken: 'control', documentToken: 'document',
+        };
+      },
+    });
+
+    expect((await setup.service.fill(request())).result).toEqual({ ok: true, filled: ['password'] });
+    expect(originReads).toBe(1);
+  });
+
   it.each([
     ['not found', new BackendError('not-found'), 'handle-unavailable'],
     ['locked', new BackendError('locked'), 'backend-error'],
@@ -409,8 +434,12 @@ describe('noninterference, setup, and structural surface', () => {
     expect(new Set(serialized.map(([, observation]) => observation)).size).toBe(1);
   });
 
-  it('kills secret-dependent closed outcomes on every post-consume refusal path', async () => {
+  it('kills secret- or policy-shape-dependent closed outcomes on every post-consume refusal path', async () => {
     const secrets = ['a', 'x'.repeat(16), 'x'.repeat(64), 'x'.repeat(1024), 'x'.repeat(4096), 'é漢字', '"\\'.repeat(64)];
+    const policyShapes: CredentialPolicy['fieldRecipe'][] = [
+      ['password'],
+      ['username', 'password', 'totp'],
+    ];
     for (const injected of [
       { assigned: false, reason: 'origin', observedOrigin: ORIGIN_B },
       { assigned: false, reason: 'identity' },
@@ -418,15 +447,21 @@ describe('noninterference, setup, and structural surface', () => {
       { assigned: false, reason: 'transport' },
     ] as const) {
       const bytes: string[] = [];
-      for (const value of secrets) {
-        const setup = harness({
-          secretValue: value,
-          inject: async (secret) => { expect(secret.consume()).toBe(value); return injected; },
-        });
-        const outcome = await setup.service.fill(request());
-        bytes.push(serializeExact({ result: outcome.result, observation: outcome.observation }));
+      const resultBytes: string[] = [];
+      for (const fieldRecipe of policyShapes) {
+        for (const value of secrets) {
+          const setup = harness({
+            policy: { canonicalOrigin: ORIGIN_A, fieldRecipe },
+            secretValue: value,
+            inject: async (secret) => { expect(secret.consume()).toBe(value); return injected; },
+          });
+          const outcome = await setup.service.fill(request());
+          bytes.push(serializeExact({ result: outcome.result, observation: outcome.observation }));
+          resultBytes.push(serializeExact(outcome.result));
+        }
       }
       expect(new Set(bytes).size, injected.reason).toBe(1);
+      expect(new Set(resultBytes).size, `${injected.reason} result bytes across policy shapes`).toBe(1);
     }
   });
 

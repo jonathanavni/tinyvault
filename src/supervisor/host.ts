@@ -4,6 +4,7 @@ import {
   launchChromium,
   type Browser,
   type BrowserContext,
+  type ChromiumLauncher,
 } from '../browser/playwright';
 import {
   createBrowserSessionHost,
@@ -32,6 +33,7 @@ type RequestLike = Readonly<{
 }>;
 
 const CAPTURE_FAILED_MESSAGE = 'Evidence capture failed';
+export const VAULT_TOOL_FAILURE_MESSAGE = 'Vault operation failed';
 const leaseEvidence = new WeakMap<EvidenceLease, CapturedEventInput[]>();
 
 export class EvidenceLease {
@@ -80,7 +82,7 @@ export class EvidenceLease {
   }
 
   drainEvidence(): readonly CapturedEventInput[] {
-    if (!this.#active) return Object.freeze([]);
+    this.#assertActive();
     const evidence = this.#evidence();
     const drained = Object.freeze([...evidence]);
     evidence.length = 0;
@@ -163,6 +165,7 @@ export class EvidenceLease {
     this.#canary = null;
     const evidence = leaseEvidence.get(this);
     if (evidence !== undefined) evidence.length = 0;
+    leaseEvidence.delete(this);
   }
 }
 
@@ -178,8 +181,9 @@ export async function createSupervisedHost(options: Readonly<{
   backend: CredentialBackend;
   canary: string;
   browser?: Browser;
+  launcher?: ChromiumLauncher;
 }>): Promise<SupervisedHost> {
-  const browser = options.browser ?? await launchChromium();
+  const browser = options.browser ?? await launchChromium(options.launcher);
   const launchedHere = options.browser === undefined;
   const lease = new EvidenceLease(options.canary);
   const domain = createLockdownDomain();
@@ -193,6 +197,7 @@ export async function createSupervisedHost(options: Readonly<{
   return compose(parts(fillService, sessions, lease), launchedHere ? browser : undefined);
 }
 
+/** Test composition seam: it carries no network-body capture because no browser request listener is attached. */
 export function composeSupervisedHost(parts: Readonly<{
   fillService: FillService;
   sessions: BrowserSessionHost;
@@ -223,12 +228,13 @@ function compose(
 ): SupervisedHost {
   const browserTools = createBrowserControls(parts.sessions);
   const tools = createTools(parts.fillService, browserTools, parts.lease);
+  let closing: Promise<void> | undefined;
   return Object.freeze({
     tools,
     drainEvidence: () => parts.lease.drainEvidence(),
     finish: () => parts.lease.finish(),
     abort: () => parts.lease.abort(),
-    closeAll: () => closeAll(parts.sessions, browserToClose, parts.fillService),
+    closeAll: () => closing ??= closeAll(parts.sessions, browserToClose, parts.fillService),
   });
 }
 
@@ -238,10 +244,10 @@ function createTools(
   lease: EvidenceLease,
 ): VaultTools & BrowserControls {
   return Object.freeze({
-    list_vault: () => captured(lease, () => fillService.listVault()),
-    fill_from_vault: (request: FillRequest) => capturedFill(lease, fillService, request),
+    list_vault: () => capturedVault(lease, () => fillService.listVault()),
+    fill_from_vault: (request: FillRequest) => capturedVaultFill(lease, fillService, request),
     request_vault_setup: (args: Parameters<VaultTools['request_vault_setup']>[0]) =>
-      captured(lease, () => fillService.requestSetup(args)),
+      capturedVault(lease, () => fillService.requestSetup(args)),
     browser_open_session: () => captured(lease, () => browserTools.browser_open_session()),
     browser_close_session: (args: Parameters<BrowserControls['browser_close_session']>[0]) =>
       captured(lease, () => browserTools.browser_close_session(args)),
@@ -252,25 +258,49 @@ function createTools(
     browser_type: (args: Parameters<BrowserControls['browser_type']>[0]) =>
       captured(lease, () => browserTools.browser_type(args)),
     browser_snapshot: (args: Parameters<BrowserControls['browser_snapshot']>[0]) =>
-      browserTools.browser_snapshot(args),
+      uncaptured(lease, () => browserTools.browser_snapshot(args)),
   });
 }
 
 async function captured<T>(lease: EvidenceLease, operation: () => Promise<T>): Promise<T> {
+  assertLeaseActive(lease);
   const result = await operation();
   lease.captureTrusted(serializeExact(result));
   return result;
 }
 
-async function capturedFill(
+async function capturedVault<T>(lease: EvidenceLease, operation: () => Promise<T>): Promise<T> {
+  assertLeaseActive(lease);
+  try {
+    return await captured(lease, operation);
+  } catch {
+    throw new Error(VAULT_TOOL_FAILURE_MESSAGE);
+  }
+}
+
+async function capturedVaultFill(
   lease: EvidenceLease,
   fillService: FillService,
   request: FillRequest,
 ) {
-  const outcome = await fillService.fill(request);
-  lease.recordFill(outcome);
-  lease.captureTrusted(serializeExact(outcome.result));
-  return outcome.result;
+  assertLeaseActive(lease);
+  try {
+    const outcome = await fillService.fill(request);
+    lease.recordFill(outcome);
+    lease.captureTrusted(serializeExact(outcome.result));
+    return outcome.result;
+  } catch {
+    throw new Error(VAULT_TOOL_FAILURE_MESSAGE);
+  }
+}
+
+function uncaptured<T>(lease: EvidenceLease, operation: () => Promise<T>): Promise<T> {
+  assertLeaseActive(lease);
+  return operation();
+}
+
+function assertLeaseActive(lease: EvidenceLease): void {
+  if (!leaseEvidence.has(lease)) throw new Error(CAPTURE_FAILED_MESSAGE);
 }
 
 async function closeAll(

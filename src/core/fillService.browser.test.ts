@@ -30,6 +30,7 @@ import {
 import { createFillService, type FillService } from './fillService';
 import { InvalidControlIdentityError } from './lockdown';
 import { SECRET_UNAVAILABLE_MESSAGE, Secret } from './redaction';
+import { SessionMutex } from './sessionMutex';
 import { createLockdownDomain } from '../supervisor/lockdownDomain';
 import type { CredentialPolicy, Origin } from './types';
 
@@ -182,6 +183,7 @@ describe.sequential('A/B-fill real browser structural and destination gates', ()
       runId, nonce, canaryId, canaryCommitment: canaryCommitment(CANARY),
       successEndpoint: `${benign.origin}/success`,
     })).toEqual({ taskCompleted: true });
+    // This inspection establishes the Acceptance A claim for own properties only; K proves retention.
     const visible = [outcome, service, sessions].map((value) =>
       `${JSON.stringify(value)}\n${inspect(value, { showHidden: true, depth: 10 })}\n${Reflect.ownKeys(value)}`)
       .join('\n');
@@ -284,7 +286,9 @@ describe.sequential('C/D atomic staleness and returned-refusal behavior', () => 
 describe.sequential('E/F lockdown, lifetime, and concurrency', () => {
   it('kills re-fill and control overwrite of a locked field while preserving username traffic', async () => {
     const setup = await openHarness('/static-token-login');
-    expect((await fill(setup)).result).toEqual({ ok: true, filled: ['password'] });
+    const first = await fill(setup);
+    expect(first.result).toEqual({ ok: true, filled: ['password'] });
+    expect(first.observation.assigned?.documentToken).toBe('static-document');
     expect((await fill(setup)).result).toEqual({ ok: false, reason: 'locked-field' });
     expect(setup.backend.secretCalls).toBe(1);
     expect(await setup.controls.browser_type({
@@ -442,12 +446,25 @@ describe.sequential('E/F lockdown, lifetime, and concurrency', () => {
     expect((await fill(setup)).result).toEqual({ ok: true, filled: ['password'] });
   });
 
-  it('kills close cleanup omissions and post-close fill reuse', async () => {
+  it('kills closeAll cleanup omissions and post-close fill reuse', async () => {
+    const runExclusive = SessionMutex.prototype.runExclusive;
+    let mutex: SessionMutex | undefined;
+    vi.spyOn(SessionMutex.prototype, 'runExclusive').mockImplementation(function <T>(
+      this: SessionMutex,
+      sessionId: string,
+      operation: () => T | Promise<T>,
+    ) {
+      mutex = this;
+      return runExclusive.call(this, sessionId, operation);
+    });
     const setup = await openHarness('/password-basic');
     expect((await fill(setup)).result).toEqual({ ok: true, filled: ['password'] });
-    expect(await setup.controls.browser_close_session(setup.session)).toEqual({ ok: true });
-    expect([setup.sessions.openSessionCount(), setup.domain.lockedCount(), setup.domain.sessionCount()])
-      .toEqual([0, 0, 0]);
+    await setup.sessions.closeAll();
+    // This proves TinyVault-owned host state retains no plaintext. It does not and cannot prove V8, Playwright, or Chromium retained no copy.
+    expect([
+      mutex?.activeSessionCount(), setup.domain.lockedCount(), setup.domain.sessionCount(),
+      setup.sessions.openSessionCount(),
+    ]).toEqual([0, 0, 0, 0]);
     expect((await fill(setup)).result).toEqual({ ok: false, reason: 'session-unknown' });
   });
 

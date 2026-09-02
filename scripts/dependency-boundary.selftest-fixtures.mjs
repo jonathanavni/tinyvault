@@ -484,6 +484,18 @@ function runTypeImportFixtures() {
 }
 
 function runReachabilityFixtures() {
+  withFixture("import '../browser/controlResults';", (root) => {
+    write(root, 'src/browser/controlResults.ts', 'export const control = true;\n');
+    assertBoundaryViolation(root, undefined, (violation) =>
+      violation.entry.endsWith('src/core/probe.ts')
+        && violation.target.endsWith('src/browser/controlResults.ts')
+        && violation.syntax === 'data-plane-to-browser static import',
+    'driver-free src/core -> src/browser zone edge passed');
+  });
+  withFixture('export const core = true;', (root) => {
+    write(root, 'src/browser/controlResults.ts', "import { core } from '../core/probe'; void core;\n");
+    assertPass(root, undefined, 'reverse src/browser -> src/core zone edge was rejected');
+  });
   withFixture("import '../browser/playwright';", (root) => {
     write(root, 'src/browser/playwright.ts', "import 'playwright';\n");
     assertBoundaryViolation(root, undefined, (violation) =>
@@ -606,6 +618,7 @@ function runSymlinkedNodeModulesFixture() {
     for (const suffix of [
       'node_modules/playwright-core/lib/coreBundle.js',
       'node_modules/playwright-core/lib/utilsBundle.js',
+      'node_modules/playwright-core/lib/bootstrap.js',
     ]) {
       assert.equal(formatted.some((violation) => violation.includes(suffix)), true,
         `formatted symlinked-node_modules violations omitted ${suffix}`);
@@ -624,14 +637,15 @@ function runRealGraphFixture() {
   const expectedSuffixes = [
     'node_modules/playwright-core/lib/coreBundle.js',
     'node_modules/playwright-core/lib/utilsBundle.js',
-  ];
+    'node_modules/playwright-core/lib/bootstrap.js',
+  ].sort();
   const matchingTargets = unvettedResult.violations.filter((violation) =>
     expectedSuffixes.some((suffix) => realpathEndsWith(violation.target, suffix)));
   assert.deepEqual(
     [...new Set(matchingTargets.map((violation) => expectedSuffixes.find((suffix) =>
       realpathEndsWith(violation.target, suffix))))].sort(),
     expectedSuffixes,
-    'empty-manifest real-graph failure did not name exactly the two bundle importers',
+    'empty-manifest real-graph failure did not name exactly the three opaque importers',
   );
   assert.equal(matchingTargets.length, unvettedResult.violations.length,
     'empty-manifest real-graph failure named an unexpected target');

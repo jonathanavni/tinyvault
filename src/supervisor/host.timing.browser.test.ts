@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { CredentialBackend } from '../backends/backend';
 import { createBrowserControls } from '../browser/controls';
@@ -12,9 +12,11 @@ import { assertProbeP, runProbeP, type ProbePResult } from '../../testbed/probe/
 import { startControlsLab, type ControlsLab } from '../../testbed/fixtures/controls-lab';
 import { createLockdownDomain } from './lockdownDomain';
 import { EvidenceLease, composeSupervisedHost, type SupervisedHost } from './host';
+import * as secretMatcher from './secretMatcher';
+import { TripwireRun } from './tripwireSeam';
 
 const CANARY = 'TVC_timing_probe_7B32';
-const NONMATCH = 'X'.repeat(CANARY.length);
+const NONMATCH = rotateFinalCharacter(CANARY);
 const TIMING_PREFIX = 'timing-prefix:';
 const TIMING_SUFFIX = ':timing-suffix';
 let browser: Browser;
@@ -30,6 +32,7 @@ beforeAll(async () => {
 afterEach(async () => {
   for (const host of activeHosts.splice(0)) host.abort();
   await Promise.all(activeSessions.splice(0).map((sessions) => sessions.closeAll()));
+  vi.restoreAllMocks();
 });
 
 afterAll(async () => {
@@ -66,6 +69,7 @@ async function timedFillHarness() {
   return { controls, request, service, session, sessions, setup };
 }
 
+// Honest timing claim: short/long fills differ in logical length beyond transport/decode (padEnd, slice, native assignment), so only the empirical probe-P claim is made.
 describe.sequential('H Probe P timing bounds', () => {
   it('kills secret-length-dependent fill latency after asserting exact result equality', async () => {
     const setup = await timedFillHarness();
@@ -147,12 +151,20 @@ describe.sequential('H Probe P timing bounds', () => {
   }, 180_000);
 
   it('kills match-dependent tripwire timing through composeSupervisedHost', async () => {
+    const match = vi.spyOn(secretMatcher, 'firstMatchingSecretTransform');
+    const mint = vi.spyOn(TripwireRun.prototype, 'mint');
+    const adjudicate = vi.spyOn(TripwireRun.prototype, 'adjudicate');
+    const timedCallDeltas: number[][] = [];
     let hostA!: SupervisedHost;
     let hostB!: SupervisedHost;
     let currentHost: SupervisedHost | undefined;
     const bytesA = JSON.stringify(timingVaultResult(CANARY));
     const bytesB = JSON.stringify(timingVaultResult(NONMATCH));
     expect(bytesA.length).toBe(bytesB.length);
+    // Rotate one same-class character so both conditions use the same mixed-character construction.
+    expect(NONMATCH).toHaveLength(CANARY.length);
+    expect(NONMATCH).not.toBe(CANARY);
+    expect(characterClassShape(NONMATCH)).toBe(characterClassShape(CANARY));
     const setupHost = (payload: string) => {
       currentHost?.finish();
       const service = timingService(payload);
@@ -164,15 +176,26 @@ describe.sequential('H Probe P timing bounds', () => {
       activeHosts.push(currentHost);
       return currentHost;
     };
+    const timedToolCall = async (host: SupervisedHost) => {
+      const before = [match.mock.calls.length, mint.mock.calls.length, adjudicate.mock.calls.length];
+      await host.tools.list_vault();
+      timedCallDeltas.push([
+        match.mock.calls.length - before[0]!,
+        mint.mock.calls.length - before[1]!,
+        adjudicate.mock.calls.length - before[2]!,
+      ]);
+    };
     const result = await runProbeP({
       samplesPerCondition: 200,
       warmup: 20,
       setupA: () => { hostA = setupHost(CANARY); },
       setupB: () => { hostB = setupHost(NONMATCH); },
-      a: () => hostA.tools.list_vault().then(() => undefined),
-      b: () => hostB.tools.list_vault().then(() => undefined),
+      a: () => timedToolCall(hostA),
+      b: () => timedToolCall(hostB),
     });
     currentHost?.finish();
+    expect(timedCallDeltas.length).toBeGreaterThan(0);
+    expect(timedCallDeltas.every((delta) => delta.every((calls) => calls === 0))).toBe(true);
     report('tripwire-match-vs-no-match', result);
     expect(() => assertProbeP(result)).not.toThrow();
   }, 180_000);
@@ -252,6 +275,22 @@ describe.sequential('H Probe P timing bounds', () => {
 function timingLabel(payload: string): string {
   const shaped = `${TIMING_PREFIX}${payload}${TIMING_SUFFIX}`;
   return JSON.parse(JSON.stringify(shaped)) as string;
+}
+
+function rotateFinalCharacter(value: string): string {
+  const final = value.at(-1);
+  if (final === undefined) throw new Error('Timing canary must not be empty');
+  const rotated = final === '9' ? '0' : String.fromCharCode(final.charCodeAt(0) + 1);
+  return `${value.slice(0, -1)}${rotated}`;
+}
+
+function characterClassShape(value: string): string {
+  return [...value].map((character) => {
+    if (/[A-Z]/u.test(character)) return 'U';
+    if (/[a-z]/u.test(character)) return 'L';
+    if (/[0-9]/u.test(character)) return 'D';
+    return 'P';
+  }).join('');
 }
 
 function report(name: string, result: ProbePResult): void {

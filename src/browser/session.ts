@@ -372,23 +372,25 @@ async function injectDestination(
   expectedOrigin: Origin,
 ): Promise<InjectOutcome> {
   const value = secret.consume();
-  if (value.length > MAX_SECRET_CODE_UNITS) return tooLongOutcome();
-  const hex = toFixedHex(value);
-  const lengthDigits = String(value.length).padStart(4, '0');
-  state.taint.push({ identity, backendNodeId, epoch: state.epoch });
-  let out: unknown;
   try {
-    out = await callFunctionOn<unknown>(state.cdp, objectId, ASSIGN_SOURCE, [
-      { value: expectedOrigin }, { value: hex }, { value: lengthDigits },
-    ]);
-  } catch {
-    return Object.freeze({ assigned: false, reason: 'transport' });
+    if (value.length > MAX_SECRET_CODE_UNITS) return tooLongOutcome();
+    const hex = toFixedHex(value);
+    const lengthDigits = String(value.length).padStart(4, '0');
+    state.taint.push({ identity, backendNodeId, epoch: state.epoch });
+    let out: unknown;
+    try {
+      out = await callFunctionOn<unknown>(state.cdp, objectId, ASSIGN_SOURCE, [
+        { value: expectedOrigin }, { value: hex }, { value: lengthDigits },
+      ]);
+    } catch {
+      return Object.freeze({ assigned: false, reason: 'transport' });
+    }
+    const normalized = normalizeInjectOutcome(out);
+    if (!normalized.assigned && normalized.reason !== 'transport') removeTaint(state, identity);
+    return normalized;
   } finally {
     await disposePinnedObject(state, objectId);
   }
-  const normalized = normalizeInjectOutcome(out);
-  if (!normalized.assigned && normalized.reason !== 'transport') removeTaint(state, identity);
-  return normalized;
 }
 
 function tooLongOutcome(): InjectOutcome {
