@@ -36,7 +36,11 @@ three reviews on `5bfc401..b1407cd` and the commit-3 implementation are in fligh
   assertion; honest-claims sentence over-claimed — fixed in spec), Codex NEEDS-ATTENTION (importer rule ignores test
   and `.d.ts` files; symlink re-zoning; `reachableFrom` accepts `..`). All in the register; **fix slice `m4-fix-c1`
   queued to Codex** (packet in the session scratchpad `m4-fix-c1.md`) behind commit 2.
-- **Commit 3 (fill service + supervisor host + every fill-dependent gate)** is implemented but UNCOMMITTED in the main
+- **Commit 3 = `2652104`** (fill service + supervisor host + Acceptance A–L) and the commit-2 fix slice (its parent) are
+  committed and green on the integrator's real-Chromium run: 598 passed, gate PASS 48/43, every probe-P gate passing
+  (numbers in the scratchpad `c3-probe-numbers.txt`; the tripwire equal-work call passes at p=0.054 — marginal, sub-µs op).
+  Three reviews on `b1407cd..2652104` and the commit-4 implementation are in flight. Earlier note kept for history:
+  commit 3 was implemented but UNCOMMITTED in the main
   worktree (integrator run: 576 passed, 3 timing failures — two from the length-dependent in-realm decode T2-2, one a
   sub-microsecond construction artefact in the tripwire timing test). The commit-2 post-impl round (three channels,
   register section written) found a three-way convergent P1 (retention rule non-enforcing) and a gate symlink-directory
