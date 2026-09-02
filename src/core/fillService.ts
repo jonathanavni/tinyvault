@@ -359,6 +359,9 @@ function finish(reason: FillFailureReason, observation: MutableObservation): Fil
 }
 
 function freezeObservation(observation: MutableObservation): FillObservation {
+  if (observation.unobserved && observation.topOrigin !== null) {
+    throw new Error('Unobserved fill cannot have a top origin');
+  }
   return Object.freeze({ ...observation });
 }
 

@@ -22,7 +22,8 @@ const REQUIRED_CASE_ROUTES = [
   '/overlay-after-pin',
   '/push-state-after-pin', '/token-rewrite', '/mirror-span', '/echo-field',
   '/self-navigating-iframe', '/iframe-self', '/iframe-final', '/static-token-login',
-  '/storage', '/controls', '/post-body', '/query-leak',
+  '/storage', '/controls', '/post-body', '/query-leak', '/file-request',
+  '/blob-leak', '/header-leak', '/ws-leak',
 ] as const;
 
 describe('two-origin controls lab manifest', () => {

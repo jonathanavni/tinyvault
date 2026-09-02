@@ -1,53 +1,90 @@
 import { MAX_SECRET_CODE_UNITS } from '../core/browserPort';
 
 export const DESTINATION_PREDICATES_SOURCE = `function () {
+  function readNativeBaseOrigin() {
+    var descriptor = Object.getOwnPropertyDescriptor(Node.prototype, 'baseURI');
+    if (!descriptor || typeof descriptor.get !== 'function') return null;
+    try {
+      var baseURI = descriptor.get.call(document);
+      if (typeof baseURI !== 'string' || new URL(baseURI).origin !== location.origin) return null;
+      return baseURI;
+    } catch {
+      return null;
+    }
+  }
+  function formActionStaysLocal(form, baseURI, getAttribute) {
+    try {
+      var action = getAttribute.call(form, 'action');
+      return new URL(action === null ? '' : action, baseURI).origin === location.origin;
+    } catch {
+      return false;
+    }
+  }
   function imageButtonActionsStayLocal(form, baseURI, getAttribute) {
     var querySelectorAllDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'querySelectorAll');
     var formDescriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'form');
     if (!querySelectorAllDescriptor || typeof querySelectorAllDescriptor.value !== 'function' || !formDescriptor || typeof formDescriptor.get !== 'function') return false;
     try {
       var imageButtons = querySelectorAllDescriptor.value.call(document, 'input[type=image]');
-      for (var imageIndex = 0; imageIndex < imageButtons.length; imageIndex += 1) {
+      for (var imageIndex = 0;
+        imageIndex < imageButtons.length;
+        imageIndex += 1) {
         var imageButton = imageButtons[imageIndex];
         if (formDescriptor.get.call(imageButton) !== form) continue;
         var imageFormaction = getAttribute.call(imageButton, 'formaction');
         if (imageFormaction !== null && new URL(imageFormaction, baseURI).origin !== location.origin) return false;
       }
       return true;
-    } catch { return false; }
+    } catch {
+      return false;
+    }
   }
-  var el = this; var getAttributeDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'getAttribute');
-  if (!getAttributeDescriptor || typeof getAttributeDescriptor.value !== 'function') return false; var getAttribute = getAttributeDescriptor.value;
+  function submitButtonsStayLocal(form, baseURI, getAttribute) {
+    var descriptor = Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, 'elements');
+    if (!descriptor || typeof descriptor.get !== 'function') return false;
+    var controls = descriptor.get.call(form);
+    for (var index = 0;
+      index < controls.length;
+      index += 1) {
+      var control = controls[index];
+      var tag = String(control.tagName || '').toLowerCase();
+      var type = String(getAttribute.call(control, 'type') || '').toLowerCase();
+      var submits = tag === 'button' || (tag === 'input' && (type === 'submit' || type === 'image'));
+      if (!submits) continue;
+      var formaction = getAttribute.call(control, 'formaction');
+      if (formaction !== null && new URL(formaction, baseURI).origin !== location.origin) return false;
+    }
+    return true;
+  }
+  var el = this;
+  var getAttributeDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'getAttribute');
+  if (!getAttributeDescriptor || typeof getAttributeDescriptor.value !== 'function') return false;
+  var getAttribute = getAttributeDescriptor.value;
   if (Object.prototype.toString.call(el) !== '[object HTMLInputElement]') return false;
-  var declaredType = getAttribute.call(el, 'type'); if (typeof declaredType !== 'string' || declaredType.toLowerCase() !== 'password') return false;
+  var declaredType = getAttribute.call(el, 'type');
+  if (typeof declaredType !== 'string' || declaredType.toLowerCase() !== 'password') return false;
   if (el.type !== 'password' || el.disabled || el.readOnly || el.hasAttribute('hidden') || !el.isConnected || window.top !== window || !el.form) return false;
   var form = el.form;
-  var baseURIDescriptor = Object.getOwnPropertyDescriptor(Node.prototype, 'baseURI');
-  if (!baseURIDescriptor || typeof baseURIDescriptor.get !== 'function') return false; var baseURI;
-  try {
-    baseURI = baseURIDescriptor.get.call(document);
-    if (typeof baseURI !== 'string' || new URL(baseURI).origin !== location.origin) return false;
-  } catch { return false; }
-  var action = getAttribute.call(form, 'action'); if (new URL(action === null ? '' : action, baseURI).origin !== location.origin) return false;
-  var descriptor = Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, 'elements');
-  if (!descriptor || typeof descriptor.get !== 'function') return false; var controls = descriptor.get.call(form);
-  for (var index = 0; index < controls.length; index += 1) {
-    var control = controls[index]; var tag = String(control.tagName || '').toLowerCase(); var type = String(getAttribute.call(control, 'type') || '').toLowerCase();
-    var submits = tag === 'button' || (tag === 'input' && (type === 'submit' || type === 'image'));
-    if (!submits) continue;
-    var formaction = getAttribute.call(control, 'formaction');
-    if (formaction !== null && new URL(formaction, baseURI).origin !== location.origin) return false;
-  }
+  var baseURI = readNativeBaseOrigin();
+  if (baseURI === null) return false;
+  if (!formActionStaysLocal(form, baseURI, getAttribute)) return false;
+  if (!submitButtonsStayLocal(form, baseURI, getAttribute)) return false;
   if (!imageButtonActionsStayLocal(form, baseURI, getAttribute)) return false;
   el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
   if (!el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return false;
-  for (var ancestor = el; ancestor; ancestor = ancestor.parentElement) {
+  for (var ancestor = el;
+    ancestor;
+    ancestor = ancestor.parentElement) {
     var filter = window.getComputedStyle(ancestor).filter.replace(/\\s/gu, '');
     if (filter.includes('opacity(0)')) return false;
   }
-  var rect = el.getBoundingClientRect(); if (!(rect.width > 0 && rect.height > 0)) return false;
-  var x = rect.left + rect.width / 2; var y = rect.top + rect.height / 2; if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return false;
-  var hit = document.elementFromPoint(x, y); if (hit === el || (hit !== null && el.contains(hit))) return true;
+  var rect = el.getBoundingClientRect();
+  if (!(rect.width > 0 && rect.height > 0)) return false;
+  var x = rect.left + rect.width / 2;
+  var y = rect.top + rect.height / 2;
+  if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return false;
+  var hit = document.elementFromPoint(x, y);
+  if (hit === el || (hit !== null && el.contains(hit))) return true;
   return Object.prototype.toString.call(hit) === '[object HTMLLabelElement]' && hit.control === el;
 }`;
 

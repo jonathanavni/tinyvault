@@ -120,6 +120,7 @@ function createHostFactory(
     return {
       tools: createHarnessTools(state, behavior, backend, canary),
       drainEvidence: createEvidenceDrain(state, behavior),
+      settleEvidence: async () => {},
       finish: finishHost,
       abort: abortHost,
       closeAll: async () => {
@@ -133,9 +134,10 @@ function createHostFactory(
 function initializeFailedLease(state: HarnessState, canary: string): void {
   state.captureFailedLease = new EvidenceLease(canary);
   state.captureFailedLease.recordRequest({
-    postData: () => 'body',
+    postDataBuffer: () => { throw new Error('forced capture failure'); },
+    headers: () => ({}),
     method: () => 'POST',
-    url: () => 'not a URL',
+    url: () => 'https://example.test/capture',
   });
 }
 

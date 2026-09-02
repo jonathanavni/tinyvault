@@ -96,6 +96,12 @@ describe.sequential('H Probe P timing bounds', () => {
     expect(source).toContain("const CANARY = flatCopy('TVC_timing_probe_7B32');");
     expect(source).toContain('const NONMATCH = flatCopy(rotateFinalCharacter(CANARY));');
     expect(source).not.toMatch(/const\s+NONMATCH\s*=\s*rotateFinalCharacter\(CANARY\)/u);
+    expect(flatCopy.toString()).toContain('String.fromCharCode(...Array.from(');
+    expect(flatCopy.toString()).not.toContain('return value;');
+    const sliced = 'x' + 'TVC_timing_probe_7B32'.slice(1);
+    expect(flatCopy(sliced)).toBe(sliced);
+    expect(isFlatCopyBody(flatCopy.toString())).toBe(true);
+    expect(isFlatCopyBody('function flatCopy(value) { return value; }')).toBe(false);
   });
   it('kills secret-length-dependent fill latency after asserting exact result equality', async () => {
     const setup = await timedFillHarness();
@@ -204,7 +210,7 @@ describe.sequential('H Probe P timing bounds', () => {
     };
     const timedToolCall = async (host: SupervisedHost) => {
       const before = [match.mock.calls.length, mint.mock.calls.length, adjudicate.mock.calls.length];
-      await host.tools.list_vault();
+      for (let index = 0; index < 64; index += 1) await host.tools.list_vault();
       timedCallDeltas.push([
         match.mock.calls.length - before[0]!,
         mint.mock.calls.length - before[1]!,
@@ -305,6 +311,35 @@ describe.sequential('H Probe P timing bounds', () => {
     expect(() => assertProbeFamily(biased, { alpha: 0.01, expected: PROBE_NAMES }))
       .toThrow(`Probe P family rejected: ${name}`);
   }, 180_000);
+
+  it('reports the length-proportional fill-wrapper sensitivity floor', async () => {
+    const setup = await timedFillHarness();
+    const short = 's'.repeat(16);
+    const long = 'l'.repeat(4096);
+    const rejected: number[] = [];
+    for (const microseconds of [4, 8, 16, 32]) {
+      const wrappedFill = async (secret: string) => {
+        await setup.service.fill(setup.request);
+        spinForMicroseconds(microseconds * secret.length / 4096);
+      };
+      const result = await runProbeP({
+        pairs: 500,
+        warmup: 20,
+        setupA: () => setup.setup(short),
+        setupB: () => setup.setup(long),
+        a: () => wrappedFill(short),
+        b: () => wrappedFill(long),
+      });
+      try {
+        assertProbeFamily(new Map([['sensitivity', result]]), { alpha: 0.01, expected: ['sensitivity'] });
+      } catch {
+        rejected.push(microseconds);
+      }
+      console.info(`probe-p-sensitivity-${microseconds}us: p=${result.pValue}`);
+    }
+    console.info(`probe-p-sensitivity-floor-us=${Math.min(...rejected)}`);
+    expect(rejected).toContain(32);
+  }, 180_000);
 });
 
 function timingLabel(payload: string): string {
@@ -314,6 +349,15 @@ function timingLabel(payload: string): string {
 
 function flatCopy(value: string): string {
   return String.fromCharCode(...Array.from(value, (character) => character.charCodeAt(0)));
+}
+
+function isFlatCopyBody(source: string): boolean {
+  return source.includes('String.fromCharCode(...Array.from(') && !source.includes('return value;');
+}
+
+function spinForMicroseconds(microseconds: number): void {
+  const end = performance.now() + microseconds / 1_000;
+  while (performance.now() < end) { /* test-side calibration spin */ }
 }
 
 function rotateFinalCharacter(value: string): string {

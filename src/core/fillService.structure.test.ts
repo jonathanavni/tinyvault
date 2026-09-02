@@ -8,9 +8,11 @@ describe('A/K fill-service structural confinement', () => {
     const files = await sourceFiles('src');
     const production = files.filter((file) => !/\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(file));
     const texts = await Promise.all(production.map(async (file) => [file, await readFile(file, 'utf8')] as const));
-    const valueSites = texts.filter(([file]) => file !== 'src/core/redaction.ts').flatMap(([file, source]) =>
-      inspectSecretValueSites(source, file));
-    expect(valueSites).toEqual(['src/browser/session.ts:.consume()']);
+    const valueSites = texts.flatMap(([file, source]) => inspectSecretValueSites(source, file));
+    expect(valueSites).toEqual([
+      'src/browser/session.ts:.consume()',
+      'src/core/redaction.ts:.expose()',
+    ]);
     expect(texts.flatMap(([file, source]) => source.includes('Secret.prototype') ? [file] : []))
       .toEqual([]);
 
@@ -40,6 +42,7 @@ describe('A/K fill-service structural confinement', () => {
     expect(source).not.toMatch(/from\s+['"][^'"]*(?:\/|^)browser(?:\/|['"])/u);
     expect(source).toMatch(/import\s+type\s+\{\s*Secret\s*\}\s+from\s+['"]\.\/redaction['"]/u);
     expect(source).not.toMatch(/import\s+\{[^}]*Secret[^}]*\}\s+from\s+['"]\.\/redaction['"]/u);
+    expect(source).toContain('observation.unobserved && observation.topOrigin !== null');
   });
 
   it('kills source growth beyond the locked auditability limits', async () => {
@@ -93,6 +96,8 @@ function inspectSecretValueSites(source: string, fileName: string): string[] {
       && ts.isVariableDeclaration(declaration) && declaration.initializer === node
       && list !== undefined && ts.isVariableDeclarationList(list)
       && (list.flags & ts.NodeFlags.Const) !== 0) sites.push(`${fileName}:.consume()`);
+    else if (fileName === 'src/core/redaction.ts' && node.expression.name.text === 'expose'
+      && receiver.kind === ts.SyntaxKind.ThisKeyword) sites.push(`${fileName}:.expose()`);
     else sites.push(`${fileName}:forbidden-${node.expression.name.text}()`);
   });
   return sites;

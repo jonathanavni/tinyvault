@@ -1,8 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
-import { retentionViolations } from './retention.test';
+import { retentionViolations } from '../../scripts/retention/rules';
+
 
 describe('secret-retention named mutant corpus', () => {
   it('keeps the retention rule files and inspectSecretUses within their review budgets', async () => {
@@ -10,15 +12,23 @@ describe('secret-retention named mutant corpus', () => {
       'src/browser/retention.test.ts',
       'src/browser/retention.corpus.test.ts',
       'src/browser/retention.round8.test.ts',
+      'scripts/retention/rules.ts',
+      'scripts/retention/round8.rules.ts',
+      'scripts/retention/allowlists.ts',
     ]) {
       expect((await readFile(resolve(path), 'utf8')).split('\n').length - 1, path).toBeLessThanOrEqual(800);
     }
-    const source = await readFile(resolve('src/browser/retention.test.ts'), 'utf8');
+    const source = await readFile(resolve('scripts/retention/rules.ts'), 'utf8');
     const start = source.indexOf('function inspectSecretUses(');
     const end = source.indexOf('\n}\n\nfunction inspectTaintedUses', start) + 2;
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     expect(source.slice(start, end).split('\n').length).toBeLessThanOrEqual(50);
+    const roundEight = await readFile(resolve('scripts/retention/round8.rules.ts'), 'utf8');
+    const sinkStart = roundEight.indexOf('function inspectCdpSink(');
+    const sinkEnd = roundEight.indexOf('\n}\n\nfunction classifyCdpStatement', sinkStart) + 2;
+    expect(sinkStart).toBeGreaterThanOrEqual(0);
+    expect(roundEight.slice(sinkStart, sinkEnd).split('\n').length).toBeLessThanOrEqual(50);
   });
 
   it('allows only const locals, analysed pure helpers, and the one local CDP sink', async () => {
@@ -106,9 +116,9 @@ describe('secret-retention named mutant corpus', () => {
           + '    const hex = toFixedHex(value);',
       )}`],
       ['S15 local callFunctionOn wrapper', `let stash: unknown;\n${source.replace(
-        '    let out: unknown;',
+        '    const out = await callFunctionOn<unknown>',
         '    const callFunctionOn = (...args: any[]) => { stash = args[1]; return args[0]; };\n'
-          + '    let out: unknown;',
+          + '    const out = await callFunctionOn<unknown>',
       )}`],
     ] as const;
     for (const [name, mutant] of mutants) {
@@ -155,6 +165,77 @@ describe('secret-retention named mutant corpus', () => {
       secretMarker, `      zzStash.push(plaintext);\n${secretMarker}`,
     )}`;
     expect(retentionViolations(localMutant, localName), 'S22 local-file plaintext stash').not.toEqual([]);
+  });
+
+  it('kills final syntactic-round mutants S23 through S27', async () => {
+    const sessionName = 'src/browser/session.ts';
+    const session = await readFile(resolve(sessionName), 'utf8');
+    const injectMarker = "    const lengthDigits = String(value.length).padStart(4, '0');";
+    const returnMarker = '  return response.result?.value as T;';
+    const guard = "  if (response.exceptionDetails !== undefined || !Object.hasOwn(response.result ?? {}, 'value')) {\n"
+      + "    throw new Error('Browser function failed');\n  }\n";
+    const mutants = [
+      ['S23 taint in nested try/finally', session.replace(injectMarker,
+        `${injectMarker}\n    try {\n      if (value.includes('\\n')) return unplaceableOutcome();\n`
+          + '    } finally {\n      void 0;\n    }')],
+      ['S24 CDP return accessor exposes args', session.replace(returnMarker,
+        '  return { get argsForTest() { return args; } } as T;')],
+      ['S26 non-allowlisted includes', session.replace(injectMarker,
+        `${injectMarker}\n    if (value.includes('s')) return unplaceableOutcome();`)],
+      ['S27 length-derived state write', session.replace(injectMarker,
+        `${injectMarker}\n    const n = value.length;\n    state.epoch = n;`)],
+      ['J-Q2 removed CDP guard', session.replace(guard, '')],
+    ] as const;
+    for (const [name, mutant] of mutants) {
+      expect(retentionViolations(mutant, sessionName), name).not.toEqual([]);
+    }
+
+    const localName = 'src/backends/localFile.ts';
+    const local = await readFile(resolve(localName), 'utf8');
+    const construction = "      return new Secret(new TextDecoder('utf-8', { fatal: true }).decode(plaintext));";
+    const localMutant = local.replace(construction,
+      "      const secret = new Secret(new TextDecoder('utf-8', { fatal: true }).decode(plaintext));\n"
+      + "      secret.consume = () => 'overridden';\n      return secret;");
+    expect(retentionViolations(localMutant, localName), 'S25 Secret.consume override').not.toEqual([]);
+  });
+
+  it('kills expanded-file-set mutants S28 through S30', async () => {
+    const localName = 'src/backends/localFile.ts';
+    const local = await readFile(resolve(localName), 'utf8');
+    const keyMarker = '    key = await fs.readFile(keyPath);';
+    const s28 = `const zzStash: Uint8Array[] = [];\n${local.replace(
+      keyMarker, `${keyMarker}\n      zzStash.push(key);`,
+    )}`;
+    expect(retentionViolations(s28, localName), 'S28 openRecordSecret key stash').not.toEqual([]);
+
+    const redactionName = 'src/core/redaction.ts';
+    const redaction = await readFile(resolve(redactionName), 'utf8');
+    const valueMarker = '    const value = this.expose();';
+    const s29 = `let zzStash = '';\n${redaction.replace(
+      valueMarker, `${valueMarker}\n    zzStash = value;`,
+    )}`;
+    expect(retentionViolations(s29, redactionName), 'S29 Secret.consume stash').not.toEqual([]);
+
+    const sodiumName = 'src/backends/localFileSodium.ts';
+    const sodium = await readFile(resolve(sodiumName), 'utf8');
+    const s30 = `const zzStash: Uint8Array[] = [];\n${sodium
+      .replace('    return sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(',
+        '    const plaintext = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(')
+      .replace('      key,\n    );\n  },\n  async memzero',
+        '      key,\n    );\n    zzStash.push(plaintext);\n    return plaintext;\n  },\n  async memzero')}`;
+    expect(retentionViolations(s30, sodiumName), 'S30 sodium open stash').not.toEqual([]);
+  });
+
+  it('kills propertyReadAllowed and fixed-consequent checker mutants by source shape', async () => {
+    const source = await readFile(resolve('scripts/retention/round8.rules.ts'), 'utf8');
+    const start = source.indexOf('function propertyReadAllowed(');
+    const end = source.indexOf('\n}\n\nfunction isStringConstInitializer', start) + 2;
+    const body = source.slice(start, end);
+    expect(body).toContain("access.name.text === 'includes'");
+    expect(body).toContain("argument.text === '\\n' || argument.text === '\\r'");
+    expect(body).toContain('isRoundEightConditionOccurrence(identifier, owner)');
+    expect(body).not.toMatch(/\{\s*return true;\s*\}/u);
+    expect(source).toContain("'tooLongOutcome', 'unplaceableOutcome', 'transportOutcome'");
   });
 
   it('demonstrates that the S8 accessor can recover the source string at runtime', () => {

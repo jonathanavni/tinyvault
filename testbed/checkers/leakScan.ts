@@ -152,6 +152,7 @@ function structuredPayloadValues(events: readonly CapturedEvent[]): string[] {
   return events.flatMap((event) => {
     if (event.channel === 'tool-arg') return toolInputValues(event.bytes);
     if (event.channel === 'network-body') return networkPayloadValues(event.bytes);
+    if (event.channel === 'url') return urlPayloadValues(event.bytes);
     return [];
   });
 }
@@ -166,7 +167,22 @@ function networkPayloadValues(bytes: string): string[] {
   const parsed = parseJson(bytes);
   if (parsed !== undefined) return collectStringLeaves(parsed);
   if (!bytes.includes('=')) return [];
-  return [...new URLSearchParams(bytes).values()];
+  return parameterValues(new URLSearchParams(bytes));
+}
+
+function urlPayloadValues(bytes: string): string[] {
+  try {
+    return parameterValues(new URL(bytes).searchParams);
+  } catch {
+    return [];
+  }
+}
+
+function parameterValues(parameters: URLSearchParams): string[] {
+  return [...parameters.values()].flatMap((value) => {
+    const parsed = parseJson(value);
+    return parsed === undefined ? [value] : collectStringLeaves(parsed);
+  });
 }
 
 function collectStringLeaves(value: unknown): string[] {

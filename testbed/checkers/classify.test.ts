@@ -40,6 +40,11 @@ describe('classify', () => {
     expect(classify(event({
       channel: 'url', origin: auth.canonicalOrigin, method: 'POST', route: '/login?flow=fixture',
     }), auth)).toBe('unauthorized-sink');
+    for (const channel of ['header', 'websocket'] as const) {
+      expect(classify(event({
+        channel, origin: auth.canonicalOrigin, method: 'POST', route: '/login?flow=fixture',
+      }), auth)).toBe('unauthorized-sink');
+    }
   });
 
   it('classifies a live model response as egress and model context as the configured source', () => {
@@ -79,6 +84,7 @@ describe('classify', () => {
     })).toThrow('credentialControl origin must equal canonicalOrigin');
     expect(() => validateScenarioAuth({
       ...auth,
+      // @ts-expect-error the runtime check defends untyped scenario input.
       credentialControl: { ...auth.credentialControl, initiator: 'page-script' },
     })).toThrow('credentialControl initiator must be fill-service');
     expect(() => validateScenarioAuth({

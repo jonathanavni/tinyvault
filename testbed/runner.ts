@@ -15,7 +15,11 @@ import { createLocalFileBackend } from '../src/backends/localFile';
 import { generateLocalVaultKey, writeLocalVault } from '../src/backends/localFileWriter';
 import { launchChromium, type Browser } from '../src/browser/playwright';
 import type { FillRequest } from '../src/core/types';
-import { createSupervisedHost, type SupervisedHost } from '../src/supervisor/host';
+import {
+  CAPTURE_FAILED_MESSAGE,
+  createSupervisedHost,
+  type SupervisedHost,
+} from '../src/supervisor/host';
 import { CanaryGenerator } from './canary';
 import { leakScan } from './checkers/leakScan';
 import { checkLiveFire, runMetaGate } from './checkers/metaGate';
@@ -374,13 +378,21 @@ async function runWithHost(
       handlers: createHostHandlers(host),
       transcript,
       secretSources: config.secretSources,
-      afterLoop: async () => host.drainEvidence(),
+      afterLoop: async () => {
+        await host.settleEvidence();
+        return host.drainEvidence();
+      },
     });
     // The end marker exists only after finish() returns a verdict.
     verdict = host.finish();
-  } catch {
+  } catch (error) {
     try { host.abort(); }
-    finally { throw missingEndMarker(run.runId); }
+    finally {
+      if (error instanceof Error && error.message === CAPTURE_FAILED_MESSAGE) {
+        throw new Error(`${CAPTURE_FAILED_MESSAGE}: ${run.runId}`);
+      }
+      throw missingEndMarker(run.runId);
+    }
   }
   assertHostFinished(verdict, run.runId);
   return loopResult;

@@ -17,6 +17,7 @@ class FakeCdp extends EventEmitter {
   failTaintedResolution = false;
   taintedResolutionsBeforeFailure: number | undefined;
   snapshotValue: unknown = { url: 'https://example.test/login', nodes: [] };
+  callFunctionResponse: unknown;
 
   constructor(readonly order: string[] = []) {
     super();
@@ -47,6 +48,7 @@ class FakeCdp extends EventEmitter {
       return { object: { objectId: `object-${this.calls.length}` } };
     }
     if (method === 'Runtime.callFunctionOn') {
+      if (this.callFunctionResponse !== undefined) return this.callFunctionResponse;
       return { result: { value: params?.functionDeclaration === SNAPSHOT_SOURCE ? this.snapshotValue : true } };
     }
     return {};
@@ -268,6 +270,19 @@ describe('browser session lifecycle over the CDP seam', () => {
     context.page.currentUrl = 'about:blank';
     expect(await host.runExclusive(sessionId, (port) => port.observeTop()))
       .toEqual({ origin: null, path: null });
+    await host.closeAll();
+  });
+
+  it.each([
+    ['exception details', { exceptionDetails: {}, result: { value: false } }],
+    ['missing result value', { result: {} }],
+    ['truthy result alongside exception details', { exceptionDetails: {}, result: { value: 'truthy' } }],
+  ] as const)('fails pinning closed for a CDP response with %s', async (_name, response) => {
+    const { context, host } = setup();
+    const { sessionId } = await host.openSession();
+    context.cdp.callFunctionResponse = response;
+    expect(await host.runExclusive(sessionId, (port) => port.pinPasswordDestination('#password')))
+      .toEqual({ kind: 'no-password-control' });
     await host.closeAll();
   });
 

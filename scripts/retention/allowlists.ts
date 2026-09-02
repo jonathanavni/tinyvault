@@ -1,0 +1,45 @@
+export const FUNCTION_ALLOWLISTS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  'src/browser/session.ts': [
+    'constructor', 'openSession', 'catch#callback0', 'closeSession', 'runExclusive',
+    '#withSession#callback1', 'runControl', '#withSession#callback1', 'openSessionCount', 'closeAll',
+    'map#callback0', 'catch#callback0', '<anonymous>', '<anonymous>', 'runExclusive#callback1',
+    'createBrowserSessionHost', 'newSessionState', 'attachLifecycle', 'on#callback1', 'on#callback1',
+    'on#callback1', 'initializeCdp', 'eventFrame', 'isMainFrame', 'resetDocument', 'closePageState',
+    'sendCloseLifecycle', 'waitForLoad', 'catch#callback0', 'disposeState', 'catch#callback0',
+    'releasePinnedObjects', 'map#callback0', 'createFillPort', 'documentEpoch', 'observeTop',
+    'pinPasswordDestination', 'observeTop', 'pinDestination', 'resolveMainNode', 'reasonFromChildFrames',
+    'frameOrigin', 'evaluate#callback0', 'pinnedOutcome', 'injectDestination', 'catch#callback0',
+    'tooLongOutcome', 'unplaceableOutcome', 'toFixedHex', 'normalizeInjectOutcome', 'originOutcome',
+    'transportOutcome', 'nullableString', 'removeTaint', 'filter#callback0', 'createSessionPage',
+    'navigate', 'click', 'type', 'snapshot', 'navigatePage', 'predicate', 'catch#callback0',
+    'clickOnPage', 'typeOnPage', 'snapshotPage', 'map#callback0', 'map#callback0',
+    'resolveTaintedObjects', 'map#callback0', 'normalizeSnapshot', 'isSnapshotNode', 'every#callback0',
+    'isTainted', 'some#callback0', 'isolatedWorld', 'resolveObject', 'resolveNodeId', 'callFunctionOn',
+    'disposePinnedObject', 'releaseObject', 'catch#callback0', 'isRecord',
+  ],
+  'src/core/fillService.ts': [
+    'createFillService', 'fill', 'listVault', 'requestSetup', 'setupReasonFor', 'disposeBackend',
+    'fill', 'runExclusive#callback1', 'fillExclusive', 'continueWithPolicy', 'continueWithDestination',
+    'completeInjection', 'staleOutcome', 'refusedInjection', 'resolvePolicy', 'setupReasonFor',
+    'validateRequest', 'boundaryFailure', 'readSessionId', 'safeEpoch', 'mapBackendFailure',
+    'mapOuterFailure', 'emptyObservation', 'failedOutcome', 'successfulOutcome', 'finish',
+    'freezeObservation', 'isRecord',
+  ],
+  'src/backends/localFile.ts': [
+    'createLocalFileBackend', 'readVault', 'probeAvailability', 'listItems', 'map#callback0',
+    'resolvePolicy', 'resolveSecret', 'dispose', 'findRecord', 'find#callback0', 'policiesEqual',
+    'every#callback0', 'openRecordSecret', 'decryptRecord', 'isMissingError',
+  ],
+  'src/backends/localFileSodium.ts': [
+    'randomKey', 'randomHandle', 'randomNonce', 'seal', 'open', 'memzero',
+  ],
+  'src/backends/localFileFormat.ts': [
+    'isValidFieldRecipe', 'every#callback0', 'encodeAdditionalData', 'parseLocalVaultBytes',
+    'validateLocalVaultFile', 'map#callback0', 'validateRecord', 'isValidRecordShape',
+    'decodeCanonicalBase64', 'isValidLocalHandle', 'policyFromRecord', 'hasExactKeys',
+    'every#callback0', 'every#callback0', 'isObject', 'invalidVault',
+  ],
+  'src/core/redaction.ts': [
+    'constructor', 'expose', 'consume', 'clear', 'toString', 'toJSON', '<anonymous>',
+  ],
+});

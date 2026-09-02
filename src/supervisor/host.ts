@@ -6,6 +6,7 @@ import {
   type Browser,
   type BrowserContext,
   type ChromiumLauncher,
+  type Page,
 } from '../browser/playwright';
 import {
   createBrowserSessionHost,
@@ -17,7 +18,7 @@ import {
   type FillService,
 } from '../core/fillService';
 import { validateBareOrigin } from '../core/originGuard';
-import type { BrowserControls, FillRequest, VaultTools } from '../core/types';
+import type { BrowserControls, FillRequest, Origin, VaultTools } from '../core/types';
 import type { CapturedEventInput } from '../agents/transcript';
 import { serializeExact } from '../agents/transcript';
 import { createLockdownDomain } from './lockdownDomain';
@@ -28,12 +29,24 @@ import {
 type TripwireVerdict = ReturnType<TripwireRun['adjudicate']>;
 
 type RequestLike = Readonly<{
-  postData(): string | null;
+  postData?(): string | null;
+  postDataBuffer(): Buffer | null;
+  headers(): Record<string, string>;
   method(): string;
   url(): string;
 }>;
 
-const CAPTURE_FAILED_MESSAGE = 'Evidence capture failed';
+/** The subset of CDP `Network.requestWillBeSent` the deferred-body capture reads. */
+type RequestWillBeSentLike = Readonly<{
+  requestId: string;
+  request: Readonly<{ url: string; method: string; hasPostData?: boolean; postData?: string }>;
+}>;
+
+type WebSocketLike = Readonly<{
+  on(event: 'framesent', listener: (event: { payload: string | Buffer }) => void): void;
+}>;
+
+export const CAPTURE_FAILED_MESSAGE = 'Evidence capture failed';
 export const VAULT_TOOL_FAILURE_MESSAGE = 'Vault operation failed';
 const leaseEvidence = new WeakMap<EvidenceLease, CapturedEventInput[]>();
 
@@ -43,29 +56,118 @@ export class EvidenceLease {
   #canary: string | null;
   #captureFailed = false;
   #active = true;
+  readonly #pending = new Set<Promise<void>>();
 
   constructor(canary: string) {
     this.#run = new TripwireRun(canary);
     this.#canary = canary;
     leaseEvidence.set(this, []);
     this.recordRequest = this.recordRequest.bind(this);
+    this.recordWebSocket = this.recordWebSocket.bind(this);
   }
 
   recordRequest(request: RequestLike): void {
+    let rawUrl: string;
     try {
-      const parsed = new URL(request.url());
-      const origin = validateBareOrigin(parsed.origin);
+      rawUrl = request.url();
+    } catch {
+      this.#captureFailed = true;
+      return;
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      return;
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+    let origin: Origin;
+    try {
+      origin = validateBareOrigin(parsed.origin);
+    } catch {
+      this.#record(Object.freeze({
+        channel: 'url', direction: 'outbound',
+        initiator: 'browser', bytes: parsed.href,
+      }));
+      return;
+    }
+    try {
+      const method = request.method();
       this.#record(Object.freeze({
         channel: 'url', direction: 'outbound', origin,
-        method: request.method(), initiator: 'browser', bytes: parsed.href,
+        method, initiator: 'browser', bytes: parsed.href,
       }));
-      const bytes = request.postData();
-      if (bytes === null) return;
+      const body = request.postDataBuffer();
+      if (body !== null) {
+        this.#record(Object.freeze({
+          channel: 'network-body', direction: 'outbound', origin,
+          method, route: `${parsed.pathname}${parsed.search}`,
+          initiator: 'browser', bytes: requestBodyBytes(body),
+        }));
+      }
       this.#record(Object.freeze({
-        channel: 'network-body', direction: 'outbound', origin,
-        method: request.method(), route: `${parsed.pathname}${parsed.search}`,
-        initiator: 'browser', bytes,
+        channel: 'header', direction: 'outbound', origin,
+        method, route: `${parsed.pathname}${parsed.search}`,
+        initiator: 'browser', bytes: JSON.stringify(request.headers()),
       }));
+    } catch {
+      this.#captureFailed = true;
+    }
+  }
+
+  /**
+   * Bodies Playwright's request event omits (Blob and sendBeacon bodies — Chromium reports `hasPostData`
+   * without inline `postData`; register J-S1) are fetched through CDP `Network.getRequestPostData` and
+   * recorded here with the same origin/route shape as `recordRequest`. Interception is NOT used: an active
+   * route suppresses CORS preflights and would change what the page can reach.
+   */
+  recordDeferredBody(rawUrl: string, method: string, postData: string, base64Encoded: boolean): void {
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      return;
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+    let origin: Origin | undefined;
+    try {
+      origin = validateBareOrigin(parsed.origin);
+    } catch {
+      origin = undefined;
+    }
+    const bytes = base64Encoded ? requestBodyBytes(Buffer.from(postData, 'base64')) : postData;
+    this.#record(Object.freeze({
+      channel: 'network-body', direction: 'outbound', ...(origin === undefined ? {} : { origin }),
+      method, route: `${parsed.pathname}${parsed.search}`, initiator: 'browser', bytes,
+    }));
+  }
+
+  markCaptureFailed(): void {
+    this.#captureFailed = true;
+  }
+
+  /** A deferred capture (CDP round trip) in flight; `settle()` awaits every one before a drain. */
+  trackDeferred(capture: Promise<void>): void {
+    this.#pending.add(capture);
+    void capture.finally(() => this.#pending.delete(capture));
+  }
+
+  async settle(): Promise<void> {
+    while (this.#pending.size > 0) await Promise.allSettled([...this.#pending]);
+  }
+
+  recordWebSocket(socket: WebSocketLike): void {
+    try {
+      socket.on('framesent', ({ payload }) => {
+        try {
+          this.#record(Object.freeze({
+            channel: 'websocket', direction: 'outbound', initiator: 'browser',
+            bytes: typeof payload === 'string' ? payload : payload.toString('base64'),
+          }));
+        } catch {
+          this.#captureFailed = true;
+        }
+      });
     } catch {
       this.#captureFailed = true;
     }
@@ -126,7 +228,7 @@ export class EvidenceLease {
       channel: 'url', direction: 'internal', initiator: 'fill-service',
       origin: topOrigin, bytes: topPath ?? '',
     }));
-    if (unobserved) {
+    if (unobserved && topOrigin === null) {
       this.#record(Object.freeze({
         channel: 'url', direction: 'internal', initiator: 'fill-service-unobserved', bytes: '',
       }));
@@ -187,6 +289,8 @@ export class EvidenceLease {
 export type SupervisedHost = Readonly<{
   tools: VaultTools & BrowserControls;
   drainEvidence(): readonly CapturedEventInput[];
+  /** Awaits in-flight deferred captures (Blob bodies via CDP); call before a post-loop drain or finish. */
+  settleEvidence(): Promise<void>;
   finish(): TripwireVerdict;
   abort(): void;
   closeAll(): Promise<void>;
@@ -233,8 +337,42 @@ function capturingContextFactory(browser: Browser, lease: EvidenceLease): () => 
   return async () => {
     const context = await browser.newContext();
     context.on('request', lease.recordRequest);
+    context.on('page', (page) => {
+      page.on('websocket', lease.recordWebSocket);
+      void attachDeferredBodyCapture(context, page, lease);
+    });
     return context;
   };
+}
+
+async function attachDeferredBodyCapture(
+  context: BrowserContext,
+  page: Page,
+  lease: EvidenceLease,
+): Promise<void> {
+  try {
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Network.enable');
+    cdp.on('Network.requestWillBeSent', (event: RequestWillBeSentLike) => {
+      if (event.request.hasPostData !== true || event.request.postData !== undefined) return;
+      const capture = cdp.send('Network.getRequestPostData', { requestId: event.requestId })
+        .then((result) => lease.recordDeferredBody(
+          event.request.url, event.request.method, result.postData, result.base64Encoded === true,
+        ))
+        .catch(() => lease.markCaptureFailed());
+      lease.trackDeferred(capture);
+    });
+  } catch {
+    lease.markCaptureFailed();
+  }
+}
+
+function requestBodyBytes(body: Buffer): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(body);
+  } catch {
+    return body.toString('base64');
+  }
 }
 
 function compose(
@@ -247,6 +385,7 @@ function compose(
   return Object.freeze({
     tools,
     drainEvidence: () => parts.lease.drainEvidence(),
+    settleEvidence: () => parts.lease.settle(),
     finish: () => parts.lease.finish(),
     abort: () => parts.lease.abort(),
     closeAll: () => closing ??= closeAll(parts.sessions, browserToClose, parts.fillService),

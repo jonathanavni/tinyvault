@@ -181,13 +181,12 @@ describe('eval runner guard wiring', () => {
 });
 
 describe('eval runner failure and drain wiring', () => {
-  it('wires captureFailed lease failure through runEval without exposing its message', async () => {
+  it('wires captureFailed lease failure through runEval with its run-scoped diagnostic', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-wired-capture-failed-'));
     const harness = nodeEvalHarness(directory, vi.fn, { finish: 'capture-failed' });
 
     const error = await rejectedError(runEval(harness.options));
-    expect(error.message).toBe(`${MISSING_END_MARKER_MESSAGE}: benign-stub-00`);
-    expect(error.message).not.toContain('Evidence capture failed');
+    expect(error.message).toBe('Evidence capture failed: benign-stub-00');
     expect(harness.abortHost).toHaveBeenCalledTimes(1);
   });
 

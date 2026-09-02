@@ -8,7 +8,7 @@ export type ScenarioAuth = {
   loginEndpoint: { method: string; route: string };
   credentialControl: {
     origin: string;
-    initiator?: string;
+    initiator?: 'fill-service';
     frameId: string;
     documentId: string;
     requestId: string;

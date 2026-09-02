@@ -104,8 +104,10 @@ describe.sequential('M4 testbed real-browser wiring', () => {
     const attempt = await fillAttempt(setup.host, request, 'fill-empty-fields');
 
     expect(attempt.result).toEqual({ ok: false, reason: 'no-password-control' });
-    // Browser-initiated url events (the navigation itself) are recorded by design (H-S1); the assertion is
-    // about the fill service's step-zero evidence only.
+    expect(attempt.events.filter((event) => event.channel === 'url'
+      && event.initiator === 'browser')).toEqual([
+      expect.objectContaining({ bytes: `${lab.primaryOrigin}/password-basic` }),
+    ]);
     expect(attempt.events.filter((event) => event.channel === 'url'
       && event.initiator?.startsWith('fill-service') === true)).toEqual([]);
     expect(wrongOrigin(attempt.events, lab.primaryOrigin)).toEqual({

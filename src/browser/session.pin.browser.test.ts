@@ -101,8 +101,8 @@ describe('B-pin verified destinations through the port', () => {
       await outcome.destination.inject(new Secret('image-button-secret'), lab.primaryOrigin);
       await contexts[0]!.pages()[0]!.locator('input[type=image]').click();
     }
-    expect(await contexts[0]!.pages()[0]!.locator('#password').inputValue()).toBe('');
     expect(lab.secondaryRequests()).toHaveLength(priorRequests);
+    expect(await contexts[0]!.pages()[0]!.locator('#password').inputValue()).toBe('');
     expect(outcome).toEqual({ kind: 'no-password-control' });
   });
 

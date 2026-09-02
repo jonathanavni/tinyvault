@@ -380,14 +380,9 @@ async function injectDestination(
     const hex = toFixedHex(value);
     const lengthDigits = String(value.length).padStart(4, '0');
     state.taint.push({ identity, backendNodeId, epoch: state.epoch });
-    let out: unknown;
-    try {
-      out = await callFunctionOn<unknown>(state.cdp, objectId, ASSIGN_SOURCE, [
-        { value: expectedOrigin }, { value: hex }, { value: lengthDigits },
-      ]);
-    } catch {
-      return Object.freeze({ assigned: false, reason: 'transport' });
-    }
+    const out = await callFunctionOn<unknown>(state.cdp, objectId, ASSIGN_SOURCE, [
+      { value: expectedOrigin }, { value: hex }, { value: lengthDigits },
+    ]).catch(() => undefined);
     const normalized = normalizeInjectOutcome(out);
     if (!normalized.assigned && normalized.reason !== 'transport') removeTaint(state, identity);
     return normalized;
@@ -609,6 +604,9 @@ async function callFunctionOn<T>(
     objectId, functionDeclaration, arguments: [...args],
     returnByValue: true, awaitPromise: false,
   }) as Record<string, any>;
+  if (response.exceptionDetails !== undefined || !Object.hasOwn(response.result ?? {}, 'value')) {
+    throw new Error('Browser function failed');
+  }
   return response.result?.value as T;
 }
 

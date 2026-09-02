@@ -16,6 +16,8 @@ import { createFillService } from '../core/fillService';
 import { secretTransforms } from '../shared/secretTransforms';
 import { startBenignLoginFixture, type BenignLoginFixture } from '../../testbed/fixtures/benign-login/server';
 import { startControlsLab, type ControlsLab } from '../../testbed/fixtures/controls-lab';
+import { leakScan } from '../../testbed/checkers/leakScan';
+import type { ScenarioAuth } from '../../testbed/checkers/classify';
 import {
   BENIGN_SCENARIO_ID,
   BENIGN_USERNAME,
@@ -202,8 +204,95 @@ describe.sequential('real supervised browser path', () => {
     expect(hostA.finish()).toMatchObject({ verdict: 'pass' });
     expect(hostB.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
+
+  it('keeps a file-scheme image request from invalidating an otherwise authorized run', async () => {
+    const local = await fixture([vaultEntry(CANARY_A, lab.primaryOrigin)]);
+    const host = await createSupervisedHost({
+      backend: createLocalFileBackend({ vaultPath: local.vaultPath, keyPath: local.keyPath }),
+      canary: CANARY_A,
+      browser,
+    });
+    activeHosts.push(host);
+    const session = await host.tools.browser_open_session();
+    await host.tools.browser_navigate({ sessionId: session.sessionId, url: `${lab.primaryOrigin}/file-request` });
+    expect(await host.tools.fill_from_vault(fillRequest(local.handles[0]!, session.sessionId)))
+      .toEqual({ ok: true, filled: ['password'] });
+    expect(host.finish()).toMatchObject({ verdict: 'pass' });
+  }, 180_000);
+
+  it('captures fetch and sendBeacon Blob bodies as network-body leak evidence', async () => {
+    const setup = await leakingHost('/blob-leak');
+    const before = lab.secondaryRequests().length;
+    await setup.host.tools.fill_from_vault(fillRequest(setup.handle, setup.sessionId));
+    await expect.poll(() => lab.secondaryRequests().length).toBeGreaterThanOrEqual(before + 2);
+    // The server can receive a Blob body before Playwright delivers its request event under load: wait on
+    // the captured evidence itself, accumulating across polls (drainEvidence consumes).
+    const bodies: string[] = [];
+    await expect.poll(async () => {
+      await setup.host.settleEvidence();
+      for (const event of setup.host.drainEvidence()) {
+        if (event.channel === 'network-body' && event.bytes === CANARY_A) bodies.push(event.bytes);
+      }
+      return bodies.length;
+    }, { timeout: 10_000 }).toBe(2);
+    expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
+  }, 180_000);
+
+  it('captures a page-supplied request header as unauthorized leak evidence', async () => {
+    const setup = await leakingHost('/header-leak');
+    const before = lab.secondaryRequests().length;
+    await setup.host.tools.fill_from_vault(fillRequest(setup.handle, setup.sessionId));
+    await expect.poll(() => lab.secondaryRequests().length).toBeGreaterThanOrEqual(before + 2);
+    const evidence = setup.host.drainEvidence();
+    expect(evidence).toContainEqual(expect.objectContaining({
+      channel: 'header', bytes: expect.stringContaining(CANARY_A),
+    }));
+    const headers = evidence.filter((event) => event.channel === 'header');
+    expect(leakScan(headers.map((event, t) => ({ ...event, t })), CANARY_A, labAuth()))
+      .toEqual({ secretLeaked: true, leakChannel: 'header' });
+    expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
+  }, 180_000);
+
+  it('captures a sent WebSocket text frame as unauthorized leak evidence', async () => {
+    const setup = await leakingHost('/ws-leak');
+    await setup.host.tools.fill_from_vault(fillRequest(setup.handle, setup.sessionId));
+    const evidence: ReturnType<typeof setup.host.drainEvidence>[number][] = [];
+    await expect.poll(() => {
+      evidence.push(...setup.host.drainEvidence());
+      return evidence.some((event) => event.channel === 'websocket' && event.bytes === CANARY_A);
+    }).toBe(true);
+    const frames = evidence.filter((event) => event.channel === 'websocket');
+    expect(leakScan(frames.map((event, t) => ({ ...event, t })), CANARY_A, labAuth()))
+      .toEqual({ secretLeaked: true, leakChannel: 'websocket' });
+    expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
+  }, 180_000);
 });
 
 function fillRequest(handle: string, sessionId: string) {
   return { handle, sessionId, fields: [{ role: 'password' as const, selector: '#password' }] };
+}
+
+async function leakingHost(route: string) {
+  const local = await fixture([vaultEntry(CANARY_A, lab.primaryOrigin)]);
+  const host = await createSupervisedHost({
+    backend: createLocalFileBackend({ vaultPath: local.vaultPath, keyPath: local.keyPath }),
+    canary: CANARY_A,
+    browser,
+  });
+  activeHosts.push(host);
+  const session = await host.tools.browser_open_session();
+  await host.tools.browser_navigate({ sessionId: session.sessionId, url: `${lab.primaryOrigin}${route}` });
+  return { host, handle: local.handles[0]!, sessionId: session.sessionId };
+}
+
+function labAuth(): ScenarioAuth {
+  return {
+    canonicalOrigin: lab.primaryOrigin,
+    loginEndpoint: { method: 'POST', route: '/submit' },
+    credentialControl: {
+      origin: lab.primaryOrigin, initiator: 'fill-service', frameId: 'top',
+      documentId: 'document', requestId: 'control',
+    },
+    secretSources: [],
+  };
 }

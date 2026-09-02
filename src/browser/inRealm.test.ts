@@ -441,8 +441,14 @@ describe('isolated-world source strings', () => {
     }
     expect(VERIFY_DESTINATION_SOURCE).toContain(DESTINATION_PREDICATES_SOURCE);
     expect(ASSIGN_SOURCE).toContain(DESTINATION_PREDICATES_SOURCE);
-    expect(DESTINATION_PREDICATES_SOURCE).toContain('function imageButtonActionsStayLocal(');
-    expect(DESTINATION_PREDICATES_SOURCE.split('\n')).toHaveLength(50);
+    for (const helper of [
+      'readNativeBaseOrigin', 'formActionStaysLocal',
+      'imageButtonActionsStayLocal', 'submitButtonsStayLocal',
+    ]) {
+      expect(DESTINATION_PREDICATES_SOURCE).toContain(`function ${helper}(`);
+    }
+    expect(DESTINATION_PREDICATES_SOURCE.split('\n'))
+      .not.toEqual(expect.arrayContaining([expect.stringMatching(/;[ \t]+(?!(?:\/\/|\/\*))\S/u)]));
   });
 
   it('derives the ASSIGN_SOURCE loop bound from MAX_SECRET_CODE_UNITS', async () => {
