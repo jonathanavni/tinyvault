@@ -6,8 +6,10 @@ import ts from 'typescript';
 
 // The second argument to import.meta.resolve is honored only with --experimental-import-meta-resolve;
 // the load-time probe below makes omitting it fail closed. Every reachable external module is traversed.
-// Only a scripts-rooted BFS may tolerate unsupported/unscanned external-package work inside node_modules;
-// data-plane roots tolerate nothing, and neither tier may reach a protected directory.
+// A scripts-rooted BFS tolerates unsupported, unscanned, or unresolved external-package loads inside
+// node_modules; data-plane roots tolerate nothing; neither tier may reach a protected directory; production
+// modules may not import scripts/ (directly or transitively).
+// Residual: a scripts-rooted BFS cannot see non-literal/unresolved loads inside a toolchain package.
 
 const FLAG_ERROR = 'dependency gate requires --experimental-import-meta-resolve';
 const flagProbe = import.meta.resolve(
@@ -26,131 +28,114 @@ export function checkDependencyBoundary(root) {
   const absoluteRoot = fs.realpathSync(path.resolve(root));
   const { files: configuredFiles, errors, options } = configuredProductionFiles(absoluteRoot);
   const scriptsDirectory = path.join(absoluteRoot, 'scripts');
-  const canonicalConfiguredFiles = configuredFiles.map(canonicalFile);
-  const configuredFileSet = new Set(canonicalConfiguredFiles);
-  const scriptFiles = walk(scriptsDirectory).filter(isProductionModule).map(canonicalFile);
+  const protectedRealPaths = new Set();
+  const canonicalConfiguredFiles = canonicalizeFiles(
+    configuredFiles, absoluteRoot, protectedRealPaths,
+  );
+  const scriptFiles = canonicalizeFiles(
+    walk(scriptsDirectory).filter(isProductionModule), absoluteRoot, protectedRealPaths,
+  );
   const files = [...new Set([...canonicalConfiguredFiles, ...scriptFiles])];
   const fileSet = new Set(files);
-  const graph = new Map();
-  const visitedExternalFiles = new Set();
-
-  for (const file of files) {
-    const parsed = dependencies(file, fs.readFileSync(file, 'utf8'));
-    const edges = parsed.edges.flatMap(({ specifier, syntax }) => {
-      if (isBuiltinSpecifier(specifier)) return [];
-      const target = resolveSpecifier(file, specifier, syntax, fileSet, options);
-      if (target === undefined) {
-        return [{
-          target: path.resolve(path.dirname(file), specifier),
-          syntax,
-          unresolvedSyntax: `${specifier.startsWith('.') ? 'unresolved relative' : 'unresolved'} ${syntax}: ${specifier}`,
-          unresolved: true,
-          unscanned: false,
-        }];
-      }
-      if (!fileSet.has(target)) {
-        addExternalEntry(graph, target, fileSet, options, visitedExternalFiles);
-      }
-      return [{
-        target,
-        syntax,
-        unresolved: false,
-        unscanned: !fileSet.has(target) && !visitedExternalFiles.has(target),
-        productionToTooling: configuredFileSet.has(file) && isWithin(target, scriptsDirectory),
-      }];
-    });
-    graph.set(file, { edges, unsupported: parsed.unsupported });
-  }
-
-  const roots = files.filter((file) => !isProtected(file, absoluteRoot));
+  const graph = buildGraph(files, fileSet, options);
+  const roots = files.filter((file) => !isProtected(file, absoluteRoot, protectedRealPaths));
   const violations = errors.map((message) => configurationViolation(absoluteRoot, message));
+  addConfigurationViolations(
+    violations, absoluteRoot, files, roots, protectedRealPaths,
+  );
 
+  const context = { graph, scriptsDirectory, absoluteRoot, protectedRealPaths };
+  for (const entry of roots) violations.push(...walkEntry(entry, context));
+
+  return { files: files.length, roots: roots.length, violations: dedupeViolations(violations) };
+}
+
+function addConfigurationViolations(violations, root, files, roots, protectedRealPaths) {
   for (const protectedDirectory of PROTECTED_DIRECTORIES) {
-    const absoluteDirectory = path.join(absoluteRoot, protectedDirectory);
-    const protectedFiles = files.filter((file) => isWithin(file, absoluteDirectory));
+    const absoluteDirectory = path.join(root, protectedDirectory);
+    const protectedFiles = files.filter((file) => isProtected(file, root, protectedRealPaths));
     if (!fs.existsSync(absoluteDirectory) || protectedFiles.length === 0) {
       violations.push(configurationViolation(
-        absoluteRoot,
-        `protected directory has no production module: ${protectedDirectory}`,
+        root, `protected directory has no production module: ${protectedDirectory}`,
       ));
     }
   }
   if (files.length === 0) {
-    violations.push(configurationViolation(absoluteRoot, 'production scan resolved zero files'));
+    violations.push(configurationViolation(root, 'production scan resolved zero files'));
   }
   if (roots.length === 0) {
-    violations.push(configurationViolation(absoluteRoot, 'data-plane scan resolved zero roots'));
+    violations.push(configurationViolation(root, 'data-plane scan resolved zero roots'));
   }
+}
 
-  for (const entry of roots) {
-    const queue = [{ file: entry, dependencyPath: [entry] }];
-    const visited = new Set([entry]);
-    while (queue.length > 0) {
-      const current = queue.shift();
-      const node = graph.get(current.file);
-      if (node === undefined) {
-        if (!toleratesToolchainIssue(entry, current.file, scriptsDirectory, 'external-package')) {
-          violations.push({
-            entry,
-            target: current.file,
-            syntax: 'unscanned module',
-            path: current.dependencyPath,
-          });
-        }
-        continue;
+function walkEntry(entry, context) {
+  const { graph, scriptsDirectory } = context;
+  const violations = [];
+  const queue = [{ file: entry, dependencyPath: [entry] }];
+  const visited = new Set([entry]);
+  while (queue.length > 0) {
+    const current = queue.shift();
+    const node = graph.get(current.file);
+    if (node === undefined) {
+      // Unreachable by construction — every external target receives a graph node (see addExternalEntry);
+      // kept fail-closed.
+      if (!toleratesToolchainIssue(entry, current.file, scriptsDirectory, 'external-package')) {
+        violations.push(edgeViolation(entry, current.file, 'unscanned module', current.dependencyPath));
       }
-      for (const syntax of node?.unsupported ?? []) {
-        if (toleratesToolchainIssue(entry, current.file, scriptsDirectory, syntax)) continue;
-        violations.push({
-          entry,
-          target: current.file,
-          syntax,
-          path: current.dependencyPath,
-        });
+      continue;
+    }
+    for (const syntax of node.unsupported) {
+      if (!toleratesToolchainIssue(entry, current.file, scriptsDirectory, syntax)) {
+        violations.push(edgeViolation(entry, current.file, syntax, current.dependencyPath));
       }
-      for (const edge of node?.edges ?? []) {
-        const dependencyPath = [...current.dependencyPath, edge.target];
-        if (edge.productionToTooling) {
-          violations.push({
-            entry,
-            target: edge.target,
-            syntax: `production-to-tooling ${edge.syntax}`,
-            path: dependencyPath,
-          });
-        }
-        if (edge.unresolved) {
-          if (toleratesToolchainIssue(entry, current.file, scriptsDirectory, edge.syntax)) continue;
-          violations.push({
-            entry,
-            target: edge.target,
-            syntax: edge.unresolvedSyntax ?? `unresolved relative ${edge.syntax}`,
-            path: dependencyPath,
-          });
-          continue;
-        }
-        if (edge.unscanned) {
-          if (toleratesToolchainIssue(entry, current.file, scriptsDirectory, edge.syntax)) continue;
-          violations.push({
-            entry,
-            target: edge.target,
-            syntax: `unscanned ${edge.syntax}`,
-            path: dependencyPath,
-          });
-          continue;
-        }
-        if (isProtected(edge.target, absoluteRoot)) {
-          violations.push({ entry, target: edge.target, syntax: edge.syntax, path: dependencyPath });
-          continue;
-        }
-        if (!visited.has(edge.target)) {
-          visited.add(edge.target);
-          queue.push({ file: edge.target, dependencyPath });
-        }
+    }
+    for (const edge of node.edges) {
+      const dependencyPath = [...current.dependencyPath, edge.target];
+      const classification = classifyEdge(edge, entry, current.file, dependencyPath, context);
+      violations.push(...classification.violations);
+      if (classification.traverse && !visited.has(edge.target)) {
+        visited.add(edge.target);
+        queue.push({ file: edge.target, dependencyPath });
       }
     }
   }
+  return violations;
+}
 
-  return { files: files.length, roots: roots.length, violations: dedupeViolations(violations) };
+function classifyEdge(edge, entry, currentFile, dependencyPath, context) {
+  const { scriptsDirectory, absoluteRoot, protectedRealPaths } = context;
+  const violations = [];
+  if (!isWithin(entry, scriptsDirectory) && isWithin(edge.target, scriptsDirectory)) {
+    violations.push(edgeViolation(
+      entry, edge.target, `production-to-tooling ${edge.syntax}`, dependencyPath,
+    ));
+  }
+  if (edge.unresolved) {
+    if (!toleratesToolchainIssue(entry, currentFile, scriptsDirectory, edge.syntax)) {
+      violations.push(edgeViolation(
+        entry,
+        edge.target,
+        edge.unresolvedSyntax ?? `unresolved relative ${edge.syntax}`,
+        dependencyPath,
+      ));
+    }
+    return { violations, traverse: false };
+  }
+  if (edge.unscanned) {
+    if (!toleratesToolchainIssue(entry, currentFile, scriptsDirectory, edge.syntax)) {
+      violations.push(edgeViolation(entry, edge.target, `unscanned ${edge.syntax}`, dependencyPath));
+    }
+    return { violations, traverse: false };
+  }
+  if (isProtected(edge.target, absoluteRoot, protectedRealPaths)) {
+    violations.push(edgeViolation(entry, edge.target, edge.syntax, dependencyPath));
+    return { violations, traverse: false };
+  }
+  return { violations, traverse: true };
+}
+
+function edgeViolation(entry, target, syntax, dependencyPath) {
+  return { entry, target, syntax, path: dependencyPath };
 }
 
 export function formatViolations(root, violations) {
@@ -195,13 +180,57 @@ function isProductionModule(file) {
     && !file.endsWith('.d.ts');
 }
 
-function isProtected(file, root) {
+function canonicalizeFiles(files, root, protectedRealPaths) {
+  return files.map((file) => {
+    const linkPath = path.resolve(file);
+    const realPath = canonicalFile(linkPath);
+    if (isProtected(linkPath, root, new Set())) protectedRealPaths.add(realPath);
+    return realPath;
+  });
+}
+
+function isProtected(file, root, protectedRealPaths) {
+  if (protectedRealPaths.has(file)) return true;
   return PROTECTED_DIRECTORIES.some((directory) => isWithin(file, path.join(root, directory)));
 }
 
 function isWithin(file, directory) {
   const relative = path.relative(directory, file);
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+function buildGraph(files, fileSet, compilerOptions) {
+  const graph = new Map();
+  const visitedExternalFiles = new Set();
+  for (const file of files) {
+    const parsed = dependencies(file, fs.readFileSync(file, 'utf8'));
+    const edges = parsed.edges.flatMap(({ specifier, syntax }) => {
+      if (isBuiltinSpecifier(specifier)) return [];
+      const target = resolveSpecifier(file, specifier, syntax, fileSet, compilerOptions);
+      if (target === undefined) return [unresolvedEdge(file, specifier, syntax)];
+      if (!fileSet.has(target) && !specifier.startsWith('.')) {
+        addExternalEntry(graph, target, fileSet, compilerOptions, visitedExternalFiles);
+      }
+      return [{
+        target,
+        syntax,
+        unresolved: false,
+        unscanned: !fileSet.has(target) && !visitedExternalFiles.has(target),
+      }];
+    });
+    graph.set(file, { edges, unsupported: parsed.unsupported });
+  }
+  return graph;
+}
+
+function unresolvedEdge(file, specifier, syntax) {
+  return {
+    target: path.resolve(path.dirname(file), specifier),
+    syntax,
+    unresolvedSyntax: `${specifier.startsWith('.') ? 'unresolved relative' : 'unresolved'} ${syntax}: ${specifier}`,
+    unresolved: true,
+    unscanned: false,
+  };
 }
 
 function dependencies(file, source) {
@@ -311,66 +340,56 @@ function addExternalEntry(graph, file, fileSet, compilerOptions, visited) {
     if (visited.has(current)) continue;
     visited.add(current);
 
-    if (visited.size > MAX_EXTERNAL_MODULES) {
-      graph.set(current, {
-        edges: [],
-        unsupported: [`external package traversal exceeded ${MAX_EXTERNAL_MODULES} modules`],
-      });
-      continue;
-    }
-
-    if (path.extname(current) === '.json') {
-      graph.set(current, { edges: [], unsupported: [] });
-      continue;
-    }
-
-    let parsed;
-    try {
-      parsed = dependencies(current, fs.readFileSync(current, 'utf8'));
-    } catch (error) {
-      graph.set(current, {
-        edges: [],
-        unsupported: [`unreadable external module: ${error.message}`],
-      });
-      continue;
-    }
-
-    const edges = parsed.edges.flatMap(({ specifier, syntax }) => {
-      if (isBuiltinSpecifier(specifier)) return [];
-      const target = resolveSpecifier(current, specifier, syntax, fileSet, compilerOptions);
-      if (target === undefined) {
-        return [{
-          target: path.resolve(path.dirname(current), specifier),
-          syntax: `external-package ${syntax}`,
-          unresolvedSyntax: `external-package unresolved ${syntax}: ${specifier}`,
-          unresolved: true,
-          unscanned: false,
-        }];
-      }
-
-      const absoluteTarget = realFilePath(target);
-      if (absoluteTarget === undefined) {
-        return [{
-          target: path.resolve(target),
-          syntax: `external-package ${syntax}`,
-          unresolvedSyntax: `external-package unresolved ${syntax}: ${specifier}`,
-          unresolved: true,
-          unscanned: false,
-        }];
-      }
-      if (!fileSet.has(absoluteTarget)) pending.push(absoluteTarget);
-      return [{
-        target: absoluteTarget,
-        syntax: `external-package ${syntax}`,
-        unresolved: false,
-        unscanned: false,
-      }];
-    });
-    graph.set(current, {
-      edges,
-      unsupported: parsed.unsupported.map((syntax) => `external-package ${syntax}`),
-    });
+    const node = scanExternalFile(current, fileSet, compilerOptions, visited.size);
+    graph.set(current, node);
+    pending.push(...node.pending);
   }
+}
+
+function scanExternalFile(current, fileSet, compilerOptions, visitedCount) {
+  if (visitedCount > MAX_EXTERNAL_MODULES) {
+    return {
+      edges: [], pending: [],
+      unsupported: [`external package traversal exceeded ${MAX_EXTERNAL_MODULES} modules`],
+    };
+  }
+  if (path.extname(current) === '.json') return { edges: [], unsupported: [], pending: [] };
+
+  let parsed;
+  try {
+    parsed = dependencies(current, fs.readFileSync(current, 'utf8'));
+  } catch (error) {
+    return { edges: [], pending: [], unsupported: [`unreadable external module: ${error.message}`] };
+  }
+  const pending = [];
+  const edges = parsed.edges.flatMap(({ specifier, syntax }) => {
+    if (isBuiltinSpecifier(specifier)) return [];
+    const target = resolveSpecifier(current, specifier, syntax, fileSet, compilerOptions);
+    const absoluteTarget = target === undefined ? undefined : realFilePath(target);
+    if (absoluteTarget === undefined) return [unresolvedExternalEdge(current, specifier, syntax, target)];
+    if (!fileSet.has(absoluteTarget)) pending.push(absoluteTarget);
+    return [{
+      target: absoluteTarget,
+      syntax: `external-package ${syntax}`,
+      unresolved: false,
+      unscanned: false,
+    }];
+  });
+  return {
+    edges,
+    pending,
+    unsupported: parsed.unsupported.map((syntax) => `external-package ${syntax}`),
+  };
+}
+
+function unresolvedExternalEdge(current, specifier, syntax, target) {
+  return {
+    target: target === undefined ? path.resolve(path.dirname(current), specifier) : path.resolve(target),
+    syntax: `external-package ${syntax}`,
+    unresolvedSyntax: `external-package unresolved ${syntax}: ${specifier}`,
+    unresolved: true,
+    unscanned: false,
+  };
 }
 
 function isBuiltinSpecifier(specifier) {

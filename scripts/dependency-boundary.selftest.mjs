@@ -21,6 +21,17 @@ const { checkDependencyBoundary } = await import('./dependency-boundary.mjs');
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const cli = path.join(scriptDirectory, 'check-dependency-boundary.mjs');
+const selftest = fileURLToPath(import.meta.url);
+
+{
+  const result = spawnSync(process.execPath, [selftest], {
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
+  assert.notEqual(result.status, 0, 'dependency-boundary selftest ran without the required flag');
+  assert.match(`${result.stdout}\n${result.stderr}`, new RegExp(FLAG_ERROR),
+    'unflagged dependency-boundary selftest did not report the fixed flag requirement');
+}
 
 const directCases = [
   ['static import', "import '../supervisor/evaluator';"],
@@ -194,11 +205,11 @@ withFixture("export const safe = 'flag control';", (root) => {
   assertCliStatus(root, 0, 'flagged gate CLI did not run its legitimate-traffic control');
 });
 
-// A2 laundering mutation: removing production-to-tooling and script-root traversal must not hide protected.
+// A2 laundering and entry-root mutation: a data-plane entry gets no package tolerance through scripts/.
 withFixture("import '../../scripts/bridge.mjs';", (root) => {
   write(root, 'scripts/bridge.mjs', "import 'launder-package';\n");
   writeRuntimePackage(root, 'launder-package', { main: './index.js' }, {
-    'index.js': protectedRequire(),
+    'index.js': `const target = 'optional-load'; require(target);\n${protectedRequire()}`,
   });
   const result = checkDependencyBoundary(root);
   assert.equal(result.violations.some((violation) =>
@@ -207,6 +218,10 @@ withFixture("import '../../scripts/bridge.mjs';", (root) => {
   assert.equal(result.violations.some((violation) =>
     violation.path.some((file) => file.endsWith('src/supervisor/marker.ts'))), true,
   'laundering traversal did not independently reach the protected module');
+  assert.equal(result.violations.some((violation) =>
+    violation.entry.endsWith('src/core/probe.ts')
+      && violation.syntax === 'external-package non-literal require-style access'), true,
+  'laundering package tolerance was keyed to the importer instead of the data-plane entry root');
   assertCliStatus(root, 1, 'src -> scripts -> package -> protected laundering passed the CLI');
 });
 
@@ -227,6 +242,76 @@ withFixture("export const safe = true;", (root) => {
   assertCliStatus(root, 1, 'scripts -> package -> protected was mistaken for toolchain tolerance');
 });
 
+// R2-10: tolerating one unsupported package load must not skip a later literal protected edge.
+withFixture("export const safe = true;", (root) => {
+  write(root, 'scripts/tool.mjs', "import 'mixed-script-package';\n");
+  writeRuntimePackage(root, 'mixed-script-package', { main: './index.js' }, {
+    'index.js': `const target = 'optional-load'; require(target);\n${protectedRequire()}`,
+  });
+  const result = checkDependencyBoundary(root);
+  assert.equal(result.violations.some((violation) =>
+    violation.path.some((file) => file.endsWith('src/supervisor/marker.ts'))), true,
+  'tolerated package issue skipped the package\'s literal protected edge');
+  assertCliStatus(root, 1, 'mixed tolerated/protected scripts package passed the CLI');
+});
+
+// R2-3/R2-9: unresolved package loads are tolerated only for scripts-rooted toolchain traversal.
+withFixture("export const safe = true;", (root) => {
+  write(root, 'scripts/tool.mjs', "import 'unresolved-script-package';\n");
+  writeRuntimePackage(root, 'unresolved-script-package', { main: './index.js' }, {
+    'index.js': "require('missing-optional-package');\n",
+  });
+  assertCliStatus(root, 0, 'scripts-rooted unresolved external-package load was not tolerated');
+});
+withFixture("import 'unresolved-data-package';", (root) => {
+  writeRuntimePackage(root, 'unresolved-data-package', { main: './index.js' }, {
+    'index.js': "require('missing-optional-package');\n",
+  });
+  const result = checkDependencyBoundary(root);
+  assert.equal(result.violations.some((violation) =>
+    violation.syntax.startsWith('external-package unresolved')), true,
+  'data-plane unresolved external-package load received scripts-rooted tolerance');
+  assertCliStatus(root, 1, 'data-plane unresolved external-package load passed the CLI');
+});
+
+// R2-6: production-to-tooling is a BFS rule, so package-mediated reaches are rejected too.
+withFixture("import 'tooling-relay-package';", (root) => {
+  write(root, 'scripts/tool.mjs', 'export const clean = true;\n');
+  writeRuntimePackage(root, 'tooling-relay-package', { main: './index.js' }, {
+    'index.js': "require('../../scripts/tool.mjs');\n",
+  });
+  const result = checkDependencyBoundary(root);
+  assert.equal(result.violations.some((violation) =>
+    violation.syntax.startsWith('production-to-tooling')
+      && violation.target.endsWith('scripts/tool.mjs')), true,
+  'indirect production -> package -> scripts edge was not classified as production-to-tooling');
+  assertCliStatus(root, 1, 'indirect production-to-tooling reach passed the CLI');
+});
+
+// R2-8: a path segment named node_modules inside scripts/ is in-repo, not an external package.
+withFixture("export const safe = true;", (root) => {
+  write(root, 'scripts/tool.mjs', "import './node_modules/helper.mjs';\n");
+  write(root, 'scripts/node_modules/helper.mjs',
+    "const target = './clean.mjs'; export const load = () => import(target);\n");
+  const result = checkDependencyBoundary(root);
+  assert.equal(result.violations.some((violation) =>
+    violation.entry.endsWith('scripts/node_modules/helper.mjs')
+      && violation.syntax === 'non-literal dynamic import()'), true,
+  'in-repo scripts/node_modules unsupported load was mistaken for external-package tolerance');
+  assertCliStatus(root, 1, 'in-repo scripts/node_modules unsupported load passed the CLI');
+});
+
+// R2-10: relative targets outside the configured scan are reported exactly as unscanned.
+withFixture("import '../../outside/helper.ts';", (root) => {
+  write(root, 'outside/helper.ts', 'export const outside = true;\n');
+  const result = checkDependencyBoundary(root);
+  assert.equal(result.violations.some((violation) =>
+    violation.syntax === 'unscanned static import'
+      && violation.target.endsWith('outside/helper.ts')), true,
+  'reachable data-plane target outside tsconfig include was not reported as unscanned');
+  assertCliStatus(root, 1, 'unscanned data-plane relative target passed the CLI');
+});
+
 // A2 scoped-tolerance mutation: removing scripts-root-only tolerance makes real TypeScript flip to FAIL.
 withFixture("export const safe = true;", (root) => {
   write(root, 'scripts/tool.mjs', "import ts from 'typescript'; void ts;\n");
@@ -240,7 +325,7 @@ withFixture("import sodium from 'libsodium-wrappers'; void sodium;", (root) => {
   assertCliStatus(root, 0, 'real libsodium-wrappers data-plane traversal did not pass');
 });
 
-// B3 mutation: classifying an in-repo symlink by alias path hides its protected real target.
+// B3 edge-side realpath mutation: resolving an alias edge without realpath hides its protected target.
 withFixture("import './alias';", (root) => {
   fs.symlinkSync('../supervisor/marker.ts', path.join(root, 'src/core/alias.ts'));
   assertCliStatus(root, 1, 'in-repo symlink alias into src/supervisor passed the gate');
@@ -251,6 +336,35 @@ withFixture("import './alias';", (root) => {
   write(root, 'src/core/clean.ts', 'export const clean = true;\n');
   fs.symlinkSync('./clean.ts', path.join(root, 'src/core/alias.ts'));
   assertCliStatus(root, 0, 'in-repo symlink alias to a clean module was rejected');
+});
+
+// R2-1: protection is the union of a configured link location and its outward real target.
+withFixture("import '../supervisor/evil';", (root) => {
+  write(root, 'outside/evil.ts', 'export const evil = true;\n');
+  fs.symlinkSync('../../outside/evil.ts', path.join(root, 'src/supervisor/evil.ts'));
+  const result = checkDependencyBoundary(root);
+  assert.equal(result.violations.some((violation) =>
+    violation.target.endsWith('outside/evil.ts')), true,
+  'protected symlink location pointing outward lost its protected classification');
+  assertCliStatus(root, 1, 'protected alias-out edge passed the CLI');
+});
+
+// R2-1 control: neither a clean alias path nor its clean outward real target is protected.
+withFixture("import './alias';", (root) => {
+  write(root, 'outside/clean.ts', 'export const clean = true;\n');
+  fs.symlinkSync('../../outside/clean.ts', path.join(root, 'src/core/alias.ts'));
+  assertCliStatus(root, 0, 'clean alias-out edge was rejected');
+});
+
+// R2-7: canonicalizing the configured file selects tools/helper; reverting canonicalFile still fails
+// closed earlier as an unresolved/unscanned relative alias edge, so this redundancy is intentional.
+withFixture("import './alias';", (root) => {
+  write(root, 'src/core/helper.ts', 'export const clean = true;\n');
+  write(root, 'tools/real.ts', "export { helper } from './helper.ts';\n");
+  write(root, 'tools/helper.ts',
+    "export { marker as helper } from '../src/supervisor/marker.ts';\n");
+  fs.symlinkSync('../../tools/real.ts', path.join(root, 'src/core/alias.ts'));
+  assertCliStatus(root, 1, 'configured-file canonicalization control did not fail closed');
 });
 
 let runtimeMatrixOutcomes = 0;
