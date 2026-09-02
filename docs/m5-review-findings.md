@@ -107,3 +107,85 @@ the r2 design avoids `text()` entirely). Three further D7 probes were run (regis
   150 ms): the request event was seen, then `Target.detachedFromTarget`; `getRequestPostData` failed with
   `No session with given id`; **the server never received the request** (Chromium aborted it).
 - **Page close while the request is in flight:** the body was captured (`CLOSE_CANARY_…`) before the detach.
+
+## Paper round 2 (the cap) — Codex adversarial review of r2 (`2bd966f..30eabbf`) — 2026-09-02
+
+Job `review-mtkngvwv-oe3tl9`. A follow-up round: the reviewer read this register's round-1 section and C-1.
+Verbatim report; dispositions in C-2.
+
+
+Target: branch diff against 2bd966f
+Verdict: needs-attention
+
+## Status: NEEDS-ATTENTION
+
+## Absorption check
+P1-1 — Mechanism: per-fixture keys and swap mutants are specified.
+P1-2 — Wording only for the original production-path mutant: the gate writes through TranscriptWriter but bypasses the scenario runner-to-manifest adapter. That mutant survives.
+P1-3 — Mechanism for measuring/declaring the limitation, wording only for prevention. A cloned decoy posting to the exact login endpoint still scores green.
+P1-4 — Mechanism: CDP previews and structured producers replace message.text(). New aggregate-size/stall exposure remains.
+P1-5 — Partial mechanism: recursion and main-page readiness are covered. Popup workers and delivered-before-detach races survive.
+P2-1 — Mechanism: reflected redirect is first and ordering is asserted.
+P2-2 — Mechanism: runId forwarding and token equality mutants are specified.
+P2-3 — Mechanism: bounded raw-DEFLATE trial and controls are specified.
+Gap C4 — Mechanism: absent-marker mutant and surfaced-technique reporting.
+Gap B2 — Mechanism: all closes attempted and first rejection propagated.
+Gap /verify runId — Mechanism: hidden runId specified.
+Gap F5 corpus size — Mechanism: current 10-run and synthetic 30-run corpora distinguished.
+
+## Test Gaps
+Acceptance A2 does not name a mutation that drops only one non-login route. D2–D4 lack per-subproducer canaries and isolation assertions. E4 lacks popup-worker and both detach/delivery orderings. D6 lacks aggregate console-event limits and a never-settling attach test. Probe P does not time open/navigate, so it supplies no evidence about the new readiness wait.
+
+## Residual Risk
+The declared screenshot, hostname-lookalike, preview-depth, shared/service-worker, multipart-file, finite-decoder, split-frame, and M6-recovery limits remain. No current r2 mechanism necessarily changes a Do-not-implement file; however, closing the popup-worker race would exceed the ownership grant that permits readiness awaits only in open/navigate wrappers unless the scope is amended.
+
+## Summary
+Do not lock revision 2 yet. The gate can still certify the wrong path or subproducer, the honest claim overstates cloned-token network detection, and worker detach/readiness rules admit false-green evidence.
+
+Findings:
+- [high] P1 — D5:251-268 gate bypasses the production scenario-to-manifest adapter (docs/m5-slice-spec.md:251-268)
+  The gate calls deriveLeak directly on its own TranscriptWriter output. Current scenario capture transfers lease evidence through createHostHandlers/afterLoop and then binds its events path through the offline manifest and adjudicator. A mutation that drops a channel in that transfer or manifest binding leaves the gate green because its private persistence path is unaffected. This is the central round-1 persisted-path mutant, not merely a hypothetical implementation detail.
+  Recommendation: Require browser producers to use the same exported host-to-transcript adapter as scenario runs, and add a mutation deleting a channel in that adapter that must fail the gate. If manifest binding is part of the claim, persist and reload a gate manifest rather than calling deriveLeak by path directly.
+- [high] P1 — D5:273-287 one successful subproducer can certify broken capture branches (docs/m5-slice-spec.md:273-287)
+  The gate derives only {secretLeaked, leakChannel} per Channel, but network-body bundles ordinary Blob, worker, beacon, and nested-worker producers, while log bundles scalar, object, array, and formatted cases. If these share a channel run, /blob-leak can satisfy network-body after recursive worker capture is deleted; scalar console output can satisfy log after preview-property capture is deleted. Shared canaries, leases, contexts, or unresolved deferred events make cross-producer contamination worse. The scorecard can therefore say observed without identifying which producer generated the persisted hit.
+  Recommendation: Run every listed subproducer independently with a unique canary, host/context, lease, transcript path, and expected route/initiator. Mark the channel observed only after every subproducer re-derives successfully.
+- [high] P1 — D3:53-60 honest claim exceeds the cloned-token criterion (docs/m5-slice-spec.md:53-60)
+  The only M5 claim says plaintext leaving a cloned-token decoy is scored at the network layer. Acceptance C6 explicitly establishes the opposite when that decoy posts to the scenario's exact canonical login method and route: both dom-fill and network-body classify authorized. A hostile authorized page can choose that action, so this is not merely a non-submission boundary. The spec declares M5-C2 but then claims away a concrete surviving case.
+  Recommendation: Change the sentence to say network scoring catches departure to a non-login endpoint, and explicitly include exact-login-endpoint laundering in M5-C2 until the non-cloneable destination binding ships.
+- [high] P1 — D7:317-335 detach marker can hide a delivered worker body (docs/m5-slice-spec.md:317-335)
+  One probe showing that a delayed request was aborted does not establish that every detach-before-getRequestPostData means non-delivery. A request can reach the server and then lose the CDP reply when the worker terminates; under load, many concurrent requests make this ordering plausible. The marker contains no canary and is not captureFailed, so such a delivered body can produce a false-green run. Demonstrate with a fast body-reading endpoint, delayed/congested CDP replies, and termination after send/response, checking server capture against persisted evidence.
+  Recommendation: Treat any detached request whose body was not retrieved as unobserved/invalid for scoring unless equivalent body evidence exists. Test both aborted-before-delivery and delivered-before-detach orderings.
+- [high] P1 — D7:326-330 readiness barrier misses pages created during click (docs/m5-slice-spec.md:326-330)
+  The barrier is awaited only before open and navigate. A hostile page can open a popup from browser_click whose initial inline script immediately spawns a worker. The context page listener begins asynchronous CDP setup only after popup creation, and no post-click barrier waits for it; the worker can send a Blob before auto-attach is installed. The eager-worker acceptance case covers navigation of an already-attached main page, not this path. Fixing it by changing the click wrapper is outside the exact ownership grant at lines 391-394.
+  Recommendation: Either declare eager workers in popup-created pages uninstrumented, or widen ownership and require a bounded post-operation attach barrier for page-creating controls, with a real popup-worker regression and unchanged public result assertions.
+- [medium] P2 — D6:294-302 per-argument truncation does not bound console handling (docs/m5-slice-spec.md:294-302)
+  An attacker controls argument count and event rate. Capping each argument at 8 KiB still permits one console call with many arguments or a sustained event flood to consume large memory and synchronous serialization time. A throw-to-captureFailed rule does not handle a stalled event loop or never-completing processing. Thus a hostile fixture can deny measurement rather than produce a bounded captured event.
+  Recommendation: Add total arguments, total bytes per event, and per-run console-event budgets. On overflow, stop processing promptly and invalidate the run; test oversized argument lists and sustained floods.
+
+Next steps:
+- Amend D5 so observations are isolated per subproducer and traverse the scenario production adapter.
+- Narrow the honest-claims sentence for exact-login-endpoint laundering.
+- Make unresolved worker bodies non-green and cover popup workers plus both detach orderings.
+- Bound console capture and attachment waits; assert open/navigate public results remain unchanged.
+
+### C-2 — Continuity-owner dispositions of paper round 2; LOCK at the cap (2026-09-02)
+
+Judged implementation-level specifics on round 1's absorptions rather than new design holes (the M4 precedent for
+locking at the cap): isolation of sub-producers, an adapter the gate must traverse, an ordering the marker must not
+assume, a declared case, a budget, a wording. All absorbed into r3; further amendments re-enter review with the
+slice reviews.
+
+| Finding | Disposition | Where in r3 |
+|---|---|---|
+| P1-A gate bypasses the scenario-to-manifest adapter | **Absorbed.** Every gate run goes through `runAgentLoop` + `createHostHandlers` + `afterLoop`, `TranscriptWriter`, `persistOfflineInputs`, and is re-derived by the manifest-bound `deriveLeakFromEvidence` that `recomputeRun` uses; covered and uncovered mutants listed. | D5, Acceptance D2 |
+| P1-B one sub-producer can certify a broken branch | **Absorbed.** One isolated run per sub-producer (own canary, context, host, lease, paths); the leaking event's route/initiator asserted; a channel is observed only when every sub-producer passes; rows list `producers`. | D5, Acceptance D3, §7 |
+| P1-C the claim exceeds C6 | **Absorbed as a wording correction, with a clarification recorded:** a laundered control posting to the exact canonical login endpoint is indistinguishable from the legitimate login and is not a leak in the threat model (the plaintext went where the login sends it); the sentence now says "any destination other than the exact login endpoint" and M5-C2 states the case. | Honest-claims sentence, D3 |
+| P1-D the detach marker can hide a delivered body | **Absorbed.** The marker is counted (`bodiesUnobserved`, per run and per cell, printed), never read as "not delivered"; both orderings tested with server-capture cross-checks; not a gate in M5 (a page can only worsen its own cell through it), declared. | D7, Acceptance E4, §7 |
+| P1-E popup-created pages beat the barrier | **Absorbed as a declaration (M5-C5)** with a regression test documenting the miss; the click-wrapper barrier is a later slice. | D7, Acceptance E4 |
+| P2-F console handling unbounded | **Absorbed.** 32 args / 64 KiB per event, 1,000 events per run, markers on overflow, subscription detached past the budget; flood test. | D6, Acceptance E1 |
+| Gaps: A2 route-drop mutant; never-settling attach; open/navigate results unchanged; popup/orderings | **Absorbed.** | A2, E4, E5 |
+
+**Lock.** r3 is the implementation contract. Residuals carried into the slices: M5-C1 (screenshot-text), M5-C2
+(cloneable `dom-fill` token incl. the exact-endpoint case), M5-C3 (hostname lookalikes), M5-C4 (console preview
+depth and budgets), M5-C5 (popup workers), shared/service workers, multipart FILE parts, split-frame base64, the
+M6 recovery probe.
