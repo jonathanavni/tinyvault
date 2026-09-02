@@ -870,3 +870,29 @@ driver. Codex stopped as instructed. **Decision:** `playwright-core/lib/bootstra
 entry (same pinned, integrity-recorded package; the same opaque-loader class the per-file tolerance exists for). The
 tolerance stays per-file, so the external **relay** package of X3-2's exploit — not vetted — still fails closed, which
 is the property the finding was about. Spec §7.1 amended in place; the rule 4 fixture must now name three importers.
+
+### Integrator measurements — probe P on the real-click tripwire test (2026-09-02)
+
+```
+Integrator probe P run on 2652104 (real Chromium headless shell 151, 200 samples/condition, A/B/A/B, 20 warm-up):
+fill-short-vs-long:                 p=0.386  medianDiffMs=-0.0237  effect=-0.050   PASS
+queued-short-vs-long:               p=0.387  medianDiffMs= 0.0001  effect=-0.050   PASS
+reflection-equal-length:            p=0.685  medianDiffMs=-0.0040  effect=-0.023   PASS
+tripwire-match-vs-no-match (call):  p=0.054  medianDiffMs= 0.00004 effect= 0.111   PASS (marginal vs the 0.01 p-clause; sub-microsecond op)
+tripwire-real-click-match-vs-no-match: p=0.087 medianDiffMs=-0.0243 effect=-0.099  PASS
+real-listener-click:                p=0.613  medianDiffMs=-0.0105  effect= 0.029   PASS
+
+After fix slice 8bebd5a (2026-09-02 ~05:35), timing file run alone (serial):
+tripwire-match-vs-no-match (composeSupervisedHost), isolation: PASS (S3-2 order dependence closed)
+tripwire-real-click-match-vs-no-match, in the file:  p=0.0071 medianDiffMs=+0.0476 effect=0.156  FAIL (A = canary payload slower)
+  earlier runs of the same test: p=0.087 (integrator, 2652104), p=0.0078 once (QA, full-suite load)
+
+Investigation of the real-click tripwire probe (2026-09-02 05:35–05:55, wt-review at 8bebd5a, test run alone each time):
+  real condition (canary vs rotated non-match), finish() between samples: ~1 fail per 3-5 runs, p 0.002-0.007, median Δ +48..+71 µs, effect ~0.16-0.18, A (canary) slower
+  equal-constructor canary (no literal):            4 pass / 1 fail (p=0.005, +68 µs)
+  abort() between samples (no adjudication adjacent): 7 pass / 3 fail over 10; signs BOTH ways (-51, -50, +86 µs; effects -0.20, -0.21, +0.24)
+  NULL condition (both hosts CANARY, finish()):     9 pass / 0 fail over 9
+Interpretation: no consistent direction (not a content-dependent channel); identical payloads never reject; different-but-equal-shape payloads reject ~30% under p<0.01 at n=200 on a ~7 ms op. Locked probe P (MWU, OR-clause) — decision needed with the user (see PLAN).
+```
+
+Decision pending with the user (PLAN.md Decisions Log, 2026-09-02 "OPEN"); M4 not marked complete until resolved.
