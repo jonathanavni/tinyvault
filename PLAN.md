@@ -12,11 +12,13 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 ## Current State
 
 `2026-09-01-m4` — focus: M4 (fill service end-to-end + all integration security gates, 🔴) through the full Codex ladder; in parallel: absorb A1/A3 + fact-check corrections into `PROJECT-SPEC.md`, prune merged agent branches, schedule the §9.1 LOC-budget question.
-**In progress (2026-09-02, ~08:00 CDT):** the combined fix slice `m4-fix-final` is committed as `530b0cb` on
-`codex/m4-fill-service` (integrator run: 671 tests, gate 49/44, `make eval` 10/10 0 leaks; probe P numbers in the
-scratchpad `c3-probe-numbers.txt` — two non-reproducible rejections under load, old commit 2/2 under the same load);
-**three reviews of `305da22..530b0cb` in flight** (Codex `task-mtk3guoy-61qlqj`, Claude QA in `wt-review`, Claude
-security in `wt-security`). Then: absorb, the user's probe-P decision, merge FF to `main`, `/wrapup`.
+**In progress (2026-09-02, ~08:45 CDT):** `codex/m4-fill-service` at `94508ac`: final fix slice `530b0cb` reviewed by
+three channels (register "Final-fix round": G-S1 `<input type=image>` formaction leak P1 — confirmed in real Chromium;
+retention rule round seven, three channels convergent; G-X2/G-X3 P2s); probe P amended per the user-authorized C-F1
+(spec/PLAN/register `0a9b123`, Codex slice `1cc9b73`; integrator: 27 unit tests, timing file 7/7 ×3, one family
+rejection in a fourth run on the ~2 µs tripwire probe, 12/12 isolated runs clean — evidence in the register);
+**fix slice `m4-fix-final2` running in Codex** (packet in the scratchpad). Then: integrator run, commit, SCHEMA.md
+`unobserved` field, three reviews of `530b0cb..HEAD`, merge FF to `main`, `/wrapup`.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
