@@ -92,3 +92,18 @@ Example:
   stale-token sweep looked clean. Run `file -b <doc>` after every authored write and before any grep sweep; the
   model's own tool calls render escape sequences into raw bytes, so spell the escape out (backslash, u, four
   zeros) or use `perl` to insert it. (2026-09-01)
+- **The Codex companion does NOT serialize `--write` jobs.** `status` listed a second job as `queued` while its log
+  was advancing; the commit-1 fix slice ran concurrently with commit 2 in the same worktree and commit 2's agent
+  noticed commit-1 files changing under it. Never dispatch two `--write` jobs against one worktree; read-only
+  review jobs may overlap a write job because they review a pinned range. Trust a job's log mtime over the list.
+  (2026-09-02)
+- **The Codex sandbox cannot launch Chromium (`Permission denied (1100)` on Mach-port registration) or bind
+  loopback (`listen EPERM 127.0.0.1`).** Every browser suite and live-server test is integrator-run only; a
+  Codex report's "passed" never covers them. Commit 2 shipped six browser-suite failures that only the
+  integrator's run found (three fixture bugs, three product bugs). Budget an integrator run + one fix cycle per
+  browser-heavy commit. (2026-09-02)
+- **Chromium refuses port 1 as `net::ERR_UNSAFE_PORT`, and any failed `page.goto` commits an error page as a
+  pending main-frame navigation that interrupts the next `goto`** ("interrupted by another navigation to
+  chrome-error://chromewebdata/"). `waitForLoadState('load')` does not observe it (the old document is already
+  loaded); waiting for the main-frame `framenavigated` event (or `waitForURL(/chrome-error/)`) does. Use a bound,
+  then released, loopback port for "connection refused" tests. (2026-09-02)

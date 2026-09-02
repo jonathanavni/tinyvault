@@ -12,8 +12,10 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 ## Current State
 
 `2026-09-01-m4` — focus: M4 (fill service end-to-end + all integration security gates, 🔴) through the full Codex ladder; in parallel: absorb A1/A3 + fact-check corrections into `PROJECT-SPEC.md`, prune merged agent branches, schedule the §9.1 LOC-budget question.
-**In progress (2026-09-02, ~00:30 CDT):** M4 spec LOCKED (r5); contract amendments on `main`; Codex implementing on
-`codex/m4-fill-service`; commit 1 landed and reviewed (three channels, fix slice queued); commit 2 in flight.
+**In progress (2026-09-02, ~01:45 CDT):** M4 spec LOCKED (r5); contract amendments on `main`; Codex implementing on
+`codex/m4-fill-service`: commit 1 `5bfc401` + its fix slice `0cbe9d1` (all commit-1 review findings absorbed) and
+commit 2 `b1407cd` are committed and green on the integrator's real-Chromium run (gate PASS 45/41; 442 tests);
+three reviews on `5bfc401..b1407cd` and the commit-3 implementation are in flight.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
@@ -25,14 +27,18 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 - **`main`:** `2672136` carries the pre-authorized contract amendments (`BrowserControls` navigate/click/type/snapshot,
   `MaskedSnapshot`, `LockdownLifecycle` + `InvalidControlIdentityError` in `src/core/lockdown.ts`, new
   `src/core/browserPort.ts`, plan sentences). `make test` green there (339).
-- **Branch `codex/m4-fill-service`:** commit 1 = `5bfc401` (gate vetted tier + evaluator zone + `src/browser/playwright.ts`;
+- **Branch `codex/m4-fill-service`:** commit 1 = `5bfc401`; gate fix slice = `0cbe9d1`; commit 2 = `b1407cd` (session owner,
+  controls, in-realm sources, probe P, controls-lab, loop hooks, writer bound; six browser-suite failures found by the
+  integrator's run and fixed — three fixture bugs, three product bugs; integrator carve-out: `navigatePage` settles a
+  failed `goto` on the main-frame `framenavigated` event). Commit-1 history: (gate vetted tier + evaluator zone + `src/browser/playwright.ts`;
   `playwright@1.62.1` pinned; my run: gate PASS 39/35, selftest PASS, 339 tests). Post-impl round 1 on commit 1: QA
   NEEDS-ATTENTION (1 P1: version-pin test gap), security NEEDS-ATTENTION (no bypass; realpath-fragile rule-4
   assertion; honest-claims sentence over-claimed — fixed in spec), Codex NEEDS-ATTENTION (importer rule ignores test
   and `.d.ts` files; symlink re-zoning; `reachableFrom` accepts `..`). All in the register; **fix slice `m4-fix-c1`
   queued to Codex** (packet in the session scratchpad `m4-fix-c1.md`) behind commit 2.
-- **Commit 2 (session owner, controls, in-realm sources, probe P, controls-lab, `loop.ts` hooks, writer bound)** is
-  being implemented by Codex in the main worktree right now — do not edit `src/`/`testbed/` there until it reports.
+- **Commit 3 (fill service + supervisor host + every fill-dependent gate)** is being implemented by Codex in the main
+  worktree right now (packet `m4-impl-c3.md` in the scratchpad) — do not edit `src/`/`testbed/` there until it reports;
+  reviews of `5bfc401..b1407cd` run in `scratchpad/wt-review` / `wt-security` (Claude) and on the pinned range (Codex).
   Then: integrator `make test` (Chromium is installed at `~/Library/Caches/ms-playwright`, headless shell 1234),
   commit with explicit paths + dual co-author trailer, three reviews (isolated worktrees `scratchpad/wt-review`,
   `wt-security` — recreate the `node_modules` symlink; Codex on the pinned range), then commit 3 (`m4-impl-c3.md`),
