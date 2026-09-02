@@ -12,10 +12,13 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 ## Current State
 
 `2026-09-01-m4` — focus: M4 (fill service end-to-end + all integration security gates, 🔴) through the full Codex ladder; in parallel: absorb A1/A3 + fact-check corrections into `PROJECT-SPEC.md`, prune merged agent branches, schedule the §9.1 LOC-budget question.
-**In progress (2026-09-02, ~01:45 CDT):** M4 spec LOCKED (r5); contract amendments on `main`; Codex implementing on
-`codex/m4-fill-service`: commit 1 `5bfc401` + its fix slice `0cbe9d1` (all commit-1 review findings absorbed) and
-commit 2 `b1407cd` are committed and green on the integrator's real-Chromium run (gate PASS 45/41; 442 tests);
-three reviews on `5bfc401..b1407cd` and the commit-3 implementation are in flight.
+**In progress (2026-09-02, ~07:00 CDT):** all four M4 commits + both fix slices committed on `codex/m4-fill-service`
+(`305da22`); the final three-channel round and the post-M4 whole-codebase audit have reported (register sections
+"Post-M4 whole-codebase audit" and "Final round" in `docs/m4-review-findings.md`); contract amendment `086914b`
+(`InjectOutcome` `unplaceable`); **the combined fix slice `m4-fix-final` (packet in the scratchpad) is running in Codex**
+— A-1 `<base href>` (P1), the retention rule round six (P1, three channels convergent), A-2/A-3, `validateScenarioAuth`
+call sites, the P3s, the §9.1 removals. Then: integrator run, commit, three reviews of that diff, the user's probe-P
+decision, merge FF to `main`.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
@@ -40,9 +43,9 @@ three reviews on `5bfc401..b1407cd` and the commit-3 implementation are in fligh
   committed and green on the integrator's real-Chromium run: 598 passed, gate PASS 48/43, every probe-P gate passing
   (numbers in the scratchpad `c3-probe-numbers.txt`; the tripwire equal-work call passes at p=0.054 — marginal, sub-µs op).
   All four commits and both fix slices are committed (`8bebd5a` commit-3 fix, `305da22` commit-4 fix + runner split):
-  `make test` 640 + 6 timing gates, gate PASS 49/44, `make eval` 10/10, 0 leaks. **Final review round on
-  `76035cc..305da22` in flight** (Codex + two Claude channels). Remaining: absorb its findings, the post-M4 whole-codebase
-  audit (§9.2 + §9.1 question), the user's probe-P decision, merge FF to `main`. Earlier note kept for history:
+  `make test` 640 + 6 timing gates, gate PASS 49/44, `make eval` 10/10, 0 leaks. The final review round on
+  `76035cc..305da22` and the whole-codebase audit have reported (all NEEDS-ATTENTION, no leak bypass; see the register);
+  fix slice `m4-fix-final` in Codex. Remaining: integrator run + commit, reviews of that diff, the user's probe-P decision, merge FF to `main`. Earlier note kept for history:
   commit 3 was implemented but UNCOMMITTED in the main
   worktree (integrator run: 576 passed, 3 timing failures — two from the length-dependent in-realm decode T2-2, one a
   sub-microsecond construction artefact in the tripwire timing test). The commit-2 post-impl round (three channels,
