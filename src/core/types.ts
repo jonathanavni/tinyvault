@@ -43,7 +43,7 @@ export type FillResult =
       | 'handle-unavailable'
       | 'locked-field'
       | 'no-password-control'     // selector didn't resolve to a verified password input in the pinned frame
-      | 'cross-origin-frame'      // target field lives in a cross-origin subframe → refused
+      | 'cross-origin-frame'      // the selector matches only inside a cross-origin subframe → refused (subframes are never filled)
       | 'session-unknown'         // sessionId doesn't exist or was closed (see §3 lifecycle)
       | 'backend-error' };
 
@@ -56,8 +56,33 @@ export interface VaultTools {
   request_vault_setup(args: { reason: SetupReason }): Promise<{ instruction: string }>; // fixed template text only
 }
 
-// Session lifecycle (trusted-side minted; see §3 browser-control group):
+// Browser controls (trusted-side minted sessions; see §3 browser-control group). Amended 2026-09-01 (M4,
+// phase-0-plan §8 M4 row round-3 #9): navigate/click/type/snapshot added. Every result is a closed enum or a
+// provenance-masked structure; no free text and no field whose value depends on a secret.
+export type BrowserOpResult =
+  | { ok: true }
+  | { ok: false; reason:
+      | 'session-unknown'
+      | 'invalid-url'            // not an HTTP(S) URL with a bare-origin-valid origin
+      | 'navigation-failed'
+      | 'no-such-element'
+      | 'locked-field' };        // the target is a TinyVault-filled or locked control
+
+/** Provenance-masked. Masked nodes carry NOTHING but the tag: no value, no name, no role (page free text). */
+export type MaskedSnapshotNode =
+  | { tag: string; masked: true }
+  | { tag: string; masked: false; role?: string; name?: string; value?: string };
+
+/** `url` is origin + pathname only — never query or fragment. */
+export type MaskedSnapshot = { url: string; nodes: MaskedSnapshotNode[] };
+
 export interface BrowserControls {
-  browser_open_session(): Promise<{ sessionId: string }>;
+  browser_open_session(): Promise<{ sessionId: string }>;   // rejects with ONE fixed error if the browser is unavailable
   browser_close_session(args: { sessionId: string }): Promise<{ ok: boolean }>;
+  browser_navigate(args: { sessionId: string; url: string }): Promise<BrowserOpResult>;
+  browser_click(args: { sessionId: string; selector: string }): Promise<BrowserOpResult>;
+  browser_type(args: { sessionId: string; selector: string; text: string }): Promise<BrowserOpResult>;   // non-secret text only
+  browser_snapshot(args: { sessionId: string }): Promise<
+    | { ok: true; snapshot: MaskedSnapshot }
+    | { ok: false; reason: 'session-unknown' }>;
 }

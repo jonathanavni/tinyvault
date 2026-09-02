@@ -59,9 +59,25 @@ interface VaultTools {
   request_vault_setup(args: { reason: SetupReason }): Promise<{ instruction: string }>;
 }
 
+type BrowserOpResult =
+  | { ok: true }
+  | { ok: false; reason: 'session-unknown' | 'invalid-url' | 'navigation-failed' | 'no-such-element' | 'locked-field' };
+
+type MaskedSnapshotNode =
+  | { tag: string; masked: true }
+  | { tag: string; masked: false; role?: string; name?: string; value?: string };
+
+type MaskedSnapshot = { url: string; nodes: MaskedSnapshotNode[] };
+
 interface BrowserControls {
   browser_open_session(): Promise<{ sessionId: string }>;
   browser_close_session(args: { sessionId: string }): Promise<{ ok: boolean }>;
+  browser_navigate(args: { sessionId: string; url: string }): Promise<BrowserOpResult>;
+  browser_click(args: { sessionId: string; selector: string }): Promise<BrowserOpResult>;
+  browser_type(args: { sessionId: string; selector: string; text: string }): Promise<BrowserOpResult>;
+  browser_snapshot(args: { sessionId: string }): Promise<
+    | { ok: true; snapshot: MaskedSnapshot }
+    | { ok: false; reason: 'session-unknown' }>;
 }
 ```
 
@@ -80,6 +96,19 @@ The closed `FillResult` reasons mean:
 - `cross-origin-frame`: the target is in a cross-origin subframe and fill is refused.
 - `session-unknown`: the session does not exist or was closed.
 - `backend-error`: the trusted credential backend failed.
+
+**Browser controls (amended 2026-09-01, M4).** `browser_navigate`, `browser_click`, `browser_type`, and
+`browser_snapshot` run under the page's per-session mutex; `browser_close_session` is the one control that does not
+(it closes the mutex). Every failure is a closed enum: `invalid-url` (not an HTTP(S) URL with a valid bare origin),
+`navigation-failed`, `no-such-element`, `locked-field` (the target is a TinyVault-filled or locked control), and
+`session-unknown`. `browser_type` carries non-secret caller text only and never inspects it. `browser_open_session`
+rejects with one fixed error when the browser is unavailable. **`MaskedSnapshot` masks by provenance, never by
+value:** every `type="password"` input and every element TinyVault filled is emitted as exactly `{ tag, masked: true }`
+— no value, no name, no role — because names and roles are page free text a page could mirror a value into; the
+snapshot `url` is origin + pathname only. Page-derived content the authorized origin chooses to display (unmasked
+values, text, the path) is outside the noninterference invariant: the offline checker measures it, and a hostile
+authorized origin is the stated residual (`docs/phase-0-plan.md` §10). In v0.1 `fill_from_vault` fills exactly one
+`password` field per request; any other `fields` shape is `no-password-control`.
 
 `browser_open_session` returns a trusted-side-minted opaque session ID. `browser_close_session`
 disposes the page and its per-session state; later use of that ID yields `session-unknown`. See

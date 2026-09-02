@@ -1,15 +1,13 @@
 import {
-  INVALID_CONTROL_IDENTITY_MESSAGE,
+  InvalidControlIdentityError,
   type ControlIdentity,
   type ControlIdentityCoordinates,
   type ControlIdentityMintAuthority,
+  type LockdownLifecycle,
   type LockdownRegistry,
 } from '../core/lockdown';
 
-export type LockdownLifecycle = Readonly<{
-  clearOnTrustedTopLevelNavigation(sessionId: string): void;
-  clearOnSessionClose(sessionId: string): void;
-}>;
+export type { LockdownLifecycle } from '../core/lockdown';
 
 type SessionState = { generation: number };
 type DomainState = {
@@ -101,5 +99,5 @@ function equalRecords(left: IdentityRecord, right: IdentityRecord): boolean {
 }
 
 function invalidIdentity(): never {
-  throw new Error(INVALID_CONTROL_IDENTITY_MESSAGE);
+  throw new InvalidControlIdentityError();
 }
