@@ -120,3 +120,22 @@ Example:
   A one-line test narrowing after the integrator run dereferenced an optional field; vitest ran green (no
   typecheck), the commit stanza said "tsc OK" from the earlier run, and `make test` was red on the reviewed commit.
   The `tsc && test` chain must be the last thing before `git commit`. (2026-09-02)
+
+## M5 session (2026-09-02)
+
+- **`codex-companion.mjs adversarial-review --background` can block the calling shell for minutes while the shared
+  runtime starts, and the Bash tool kills it at its timeout — the job is still created.** Symptom: exit 143 with
+  no job id printed; `status --all --json` (run from the REPO root — status is workspace-scoped, and a `cd` to the
+  scratchpad earlier in the session made it report "No jobs recorded") shows the job `running`. Dispatch with the
+  Bash tool's `run_in_background`, then read the id from `status`, rather than waiting on the dispatch call. (2026-09-02)
+- **Chromium worker targets through Playwright's client `CDPSession`:** a page session accepts
+  `Target.setAutoAttach({ flatten: false })` and then `Target.sendMessageToTarget` / `Target.receivedMessageFromTarget`
+  reach the page's dedicated workers (Network events and `getRequestPostData` included). Shared and service workers
+  are browser-level targets; the browser session (`newBrowserCDPSession`) accepts only `flatten: true`, whose child
+  sessions the client API cannot route, and `context.newCDPSession(worker)` is rejected. Probed on 1.62.1. (2026-09-02)
+- **A Codex review job can die silently and stay `running` forever.** The pre-impl M5 review's process (pid in the
+  job JSON) vanished ~95 s in with no error line; `status` reported `running` for 43 minutes and the job JSON
+  never updated. Detect with `ps -p <pid>` (gone) plus the log's mtime (stale > 5 min while "running"); then
+  `cancel` and re-dispatch once with identical arguments. A poll loop must check the pid and log mtime, not
+  only the status string. (2026-09-02)
+
