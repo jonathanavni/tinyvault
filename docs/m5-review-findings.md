@@ -189,3 +189,217 @@ slice reviews.
 (cloneable `dom-fill` token incl. the exact-endpoint case), M5-C3 (hostname lookalikes), M5-C4 (console preview
 depth and budgets), M5-C5 (popup workers), shared/service workers, multipart FILE parts, split-frame base64, the
 M6 recovery probe.
+
+## Slice B commit 1 post-implementation round 1 — three channels on `0d82787..4181c5a` (`codex/m5-hostile-fixtures`) — 2026-09-02
+
+Claude QA (`B1-Q*`), Claude security (`B1-S*`), Codex (`B1-X*`), each in its own worktree at `4181c5a`. Integrator
+merge gate before review: `make test` 780 + 10 timing green in the worktree; `make eval` one cell 10/10, 0 leaks.
+
+### Claude security (`B1-S*`) — verbatim
+# M5 slice B commit 1 — security review (fresh context)
+
+Worktree `/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-B1-sec`, HEAD `4181c5a` ("M5 slice B commit 1 (Codex): ..."), range `0d82787..HEAD`. Probes run as two scratch vitest files (`testbed/review-b1.scratch.test.ts`, `testbed/review-b1-inprocess.scratch.test.ts`, 11 tests, all green; deleted after the run — the worktree is clean apart from the `node_modules` symlink). Existing testbed Node suite re-run in the worktree: 18 files / 174 passed, 1 skipped. `tsc --noEmit` clean on the committed code (the only diagnostic was inside my scratch file).
+
+## Status: PASS
+
+No P1 or P2 reproduced. Every forgery I constructed against the trust anchor (per-fixture keys, registry-only key selection, cross-fixture replay ledger, cross-run receipt substitution) was rejected, and `taskCompleted` / `secretLeaked` derive from the same inputs as before, now indexed by the registry scenario's `fixtureId`. Four P3s below, all in the new fixture-side unauthorized-POST capture (a cross-check that nothing in commit 1 consumes yet) and in forward-looking teardown/test-shape gaps.
+
+## Probes
+
+| # | Input | Expected | Observed |
+|---|---|---|---|
+| 1a | Two real fixtures X=`benign-login`, Y=`lookalike-origin`; X's receipt verified by `Y.verifyCompletion` and by `new CompletionVerifier(Y.key)` | reject | `{taskCompleted:false, reason:'bad-signature'}` both; under X's key `{taskCompleted:true}`; `X.key.equals(Y.key)` is false |
+| 1b | X's events attestation verified with Y's key | false | `false` (true under X's key) |
+| 1c | Adjudicate X's genuine run with the map `{benign-login: Y.key, lookalike-origin: X.key}` | reject | throws `events attestation mismatch`; correct map → `taskCompleted:true` |
+| 1d | X's record carrying Y's receipt, everything else genuine X (events attestation valid) | reject | throws `Offline outcome mismatch ... completion=bad-signature` (receipt verifies false, stored says true) |
+| 2a | Y's genuine run with stored `scenario` relabeled to X's scenario (manifest binding untouched) | reject | throws `registry-derived fields mismatch ... fixtureId` |
+| 2b | Same, with every manifest binding field rewritten to X's registry values | reject | throws `events attestation mismatch` (X's key selected from the registry; Y-signed evidence fails) |
+| 2c | Stored scenario `ghost` (not in registry) | reject | throws `Unknown scenario: ghost` |
+| 2d | Registry scenario whose `fixtureId` (`dom-hidden-injection`) has no key in the map | reject | throws `Missing verification key for fixture: dom-hidden-injection` |
+| 2e | Manifest evidence entry with an extra top-level `fixtureId: 'lookalike-origin'` | ignored | ignored; X's key selected; run passes `taskCompleted:true` |
+| 2f | `completionBinding.fixtureId: 'lookalike-origin'` on X's run, map keyed so only manifest-driven selection would pass | reject | throws (registry-agreement mismatch) |
+| 3a | Two rows (runIndex 0 and 1) both carrying the same receipt/evidence | second rejected | throws `Offline completion replay detected` |
+| 3b | Verifiers X and Y sharing one ledger: X's receipt via X, X again, then via Y; also as Y's run (binding fixtureId=Y) | true / replayed / bad-sig / bad-sig | exactly that |
+| 4a | `POST /verify` body `runId=run-b&secret=TVC_a` from run-a's context | lands in run-b's bucket | `unauthorizedRequests('run-b') = [body]`, run-a `[]` (spec-intended keying) |
+| 4b | `runId=..%2Fx`, `runId=`, query `?runId=../y` | `unregistered` | all three in `unregistered`; no traversal; `unauthorizedRequests('../x')` and `capturePath('')` throw `Unsafe fixture runId` |
+| 4c | `runId=zzz` (charset-valid, unregistered) | ? | captured under `zzz` and **`zzz.unauthorized.requests` created** in the capture dir |
+| 4d | 300-char charset-valid runId | captured somewhere | **HTTP 500 (`ENAMETOOLONG`), body recorded nowhere** (no file, not in the map) |
+| 4e | `POST /login` with unregistered `runId=nobody` carrying a canary | captured somewhere | 400; **not captured in any fixture-side file or bucket** |
+| 4f | `POST /login` `runId=run-b` with run-a's canary | ? | 401; body appended to **`run-b.requests`** (the authorized capture of another run) |
+| 5 | `GET /`, `?runId=nope`, `?runId=`, `?runId=../secret-run`, `?runId=%00`, 5000-char id | 200, no tokens, no other runIds | all 200; no `data-tv-`; registered id absent; `/success?runId=<registered>` renders plain `authenticated` |
+| 6a | Two real fixtures via the `startFixtures` seam; X's `close` throws (without closing); Y real | Y's port released, error propagates | `capturePersistedRuns` rejects `X close exploded`; Y's port refuses; X's port still open (its close never ran), closed manually |
+| 6b | Set where one fixture reports `transport:'in-process'` | eval refuses, all closed | rejects `Fixture transport is not HTTP`; both ports refuse afterwards |
+| 6c | Second fixture's `start` throws after the first listens | first closed | **not reproducible in commit 1** (`startFixtures` starts one fixture); see P3-3 |
+| 7 | `node:http.createServer` mocked so `listen` emits `EPERM` | in-process fallback signs identically; eval rejects | `transport:'in-process'`, origin `http://127.0.0.1:0`; tokens rendered; `submitLogin` 303 then 409; receipt verifies under the fixture key; attestation verifies; `assertHttpFixture` throws; production `startFixtures` under EPERM → `capturePersistedRuns` rejects `Fixture transport is not HTTP` and closes cleanly. No in-process path exists for non-login POSTs (`unauthorizedRequests` stays `[]`) |
+| 8a | Run B's row replaced by A's evidence (both rows now use A's receipt) | reject | `completion replay detected` |
+| 8b | A and B evidence swapped between runIndex rows (permutation) | passes, aggregate unchanged | passes; both `taskCompleted:true` — no scoring gain for an attacker |
+
+## Findings
+
+### P3-1 — Unauthorized-POST capture drops over-long ids and writes attacker-named files
+`testbed/fixtures/shared/loginFixture.ts:359-371` (`captureUnauthorizedRequest`). The bucket key is validated by charset only (`/^[A-Za-z0-9-]+$/`), not by registration or length. Repro: `POST /verify` with `runId=` + 300×`a` → `appendFile` throws `ENAMETOOLONG`, the handler answers 500, and the body is neither written nor pushed to the in-memory map (the map update follows the write). Repro 2: `runId=zzz` → `zzz.unauthorized.requests` is created in `fixture-captures/` — any page script can populate the artifact directory with arbitrarily named files. Impact is limited to the fixture-side cross-check (unconsumed in commit 1; layer 4 still records the request as a `network-body` event) and to artifact-directory hygiene. Suggested: key on `state.runs.has(id) ? id : 'unregistered'` (also removes the arbitrary-file vector), and record to the map before/independently of the file write.
+
+### P3-2 — `/login` POSTs outside the registered run are invisible to the fixture-side capture, or pollute another run's authorized capture
+`testbed/fixtures/shared/loginFixture.ts:373-379` (`processLoginBody`) and `:318-324` (the `/login` branch bypasses `captureUnauthorizedRequest`). Repro: `POST /login` `runId=nobody&password=<canary>` → 400 and no fixture-side record of the body anywhere. Repro 2: `POST /login` `runId=run-b&password=<run-a canary>` → 401 and the body is appended to `run-b.requests`, the *authorized* capture file the adjudicator diff-compares against run-b's authorized-sink events (`offline.ts:assertFixtureCaptureAgreement`). Neither changes any score today (layer-4 events are the leak oracle; the capture-agreement check fails closed), but commit 3's D3 cross-check will inherit both: a hostile page can route a secret to `/login` under a foreign/unknown runId and the `unauthorizedRequests` view will not show it. Suggested: capture every `/login` POST that does not match the registered run (unknown runId, or a body whose runId ≠ the page's run) into the unauthorized capture as well.
+
+### P3-3 — `startFixtures` leaks earlier listeners if a later start throws (forward-looking)
+`testbed/fixtures/index.ts:8-12`. The set is built as an object literal with sequential `await`s; commit 1 starts one fixture so nothing can leak yet, but the shape commits 2–3 will extend has no partial-start cleanup, and `captureWithBrowser` (`runner.ts:169-171`) calls `startFixtures` before its `try`, so a throw there closes nothing. Not reproducible in this commit. Suggested for commit 2: start into a mutable partial set inside a try; on throw, `closeFixtures` over what started, then rethrow.
+
+### P3-4 — Receipt-key selection is proven only indirectly by B4's mutant test
+`testbed/runner.test.ts` "selects receipt and event verification keys only from the registry scenario fixture" asserts `events attestation mismatch` for the swapped keys — the events-digest check throws first, so the test would still pass if the *receipt* verifier were built from a manifest field or a shared key. Probe 1d shows the receipt path is in fact correct (`completion=bad-signature` surfaces through `assertOutcomeAgreement`), but the mutant "receipt verifier keyed by the manifest fixtureId" is not killed by any committed test. Suggested: add a case where the events attestation is genuine and only the receipt is foreign, asserting on `completion=bad-signature`.
+
+## Confirmed properties
+
+- One ed25519 keypair per `startLoginFixture` invocation (`loginFixture.ts:80`); the private key is closed over in `state.signingKey` and never returned. Two instances' public keys differ; receipts and event digests from one never verify under the other (probes 1a–1c).
+- Offline key selection is registry-only: `verificationTrustForRun` ignores its `_evidence` argument and reads `verificationKeys[scenario.fixtureId]` from `scenarioFromRegistry(registry, stored.scenario)` (`offline.ts:109-121`); the verifier map is looked up by the same `scenario.fixtureId` (`offline.ts:94`); the completion binding's `fixtureId`/`fixtureVersion`/`scenarioId`/`successEndpoint` are overwritten from the registry before verification (`offline.ts:188-195`); `assertRegistryAgreement` rejects a manifest binding that disagrees (probe 2f); extra manifest fields are ignored (probe 2e); unknown scenario and unmapped fixture both throw (2c, 2d).
+- One replay ledger per evaluation, shared by every fixture's verifier (`offline.ts:78-85`, `completion.ts` constructor seam); `boundIdentity` includes `fixtureId`, and signature validation precedes the ledger, so a foreign receipt is `bad-signature` and a duplicate is `replayed` (3a, 3b, 8a). The seam only lets a caller *inject* a set; it does not expose or reset the fixture's own in-process ledger.
+- `taskCompleted` in the capture path derives from `fixtures[scenario.fixtureId].verifyCompletion` (`runner.ts:296,302`) with the vault's `canonicalOrigin` = that fixture's origin (`runner.ts:383`); offline it derives from the registry-selected verifier and throws on `canary-mismatch`/`replayed`, and a forged/wrong-key receipt yields `false` which `assertOutcomeAgreement` and `assertEvalPass` turn into a hard failure (1d). `secretLeaked` still derives from `leakScan` over the fixture-attested events (unchanged by this diff).
+- `assertRunId` guards every API entry that touches the filesystem by runId (`registerRun`, `attestEvents`, `capturePath`, `unauthorizedRequests`); the HTTP capture path's charset regex prevents traversal (4b) and unregistered page renders leak no tokens or run ids (5).
+- Teardown: `closeFixtures` uses `Promise.allSettled` over every close and rethrows the first rejection afterwards (6a); `assertHttpFixture` is applied to every fixture in the set inside the `try` so a non-HTTP member both aborts the eval and still gets closed (6b, 7).
+- The in-process fallback signs, registers, renders and verifies identically to HTTP (7) and is refused by the eval path.
+- `server.test.ts` untouched; `startBenignLoginFixture` keeps its name and shape (`BenignLoginFixture = LoginFixture`).
+
+## Residual Risk
+
+- The fixture-side unauthorized capture is not consumed by any adjudication in commit 1, so P3-1/P3-2 have no scoring effect now; they matter for commit 3's D3 cross-check and should be fixed before it lands.
+- `readBody` has no size cap for any POST (pre-existing for `/login`, now every route); fixtures are harness-owned, so this is a robustness note, not an adversary path.
+- Canary authenticity for a run *without* a receipt is unverified (pre-existing M4 shape: `canary-mismatch` is checked only after a valid signature); such a run is `taskCompleted:false` and fails `assertEvalPass`, so it cannot make a green scorecard, but a manifest with a swapped canary on a receipt-less run would score `secretLeaked:false` for that row.
+- Row permutation across `runIndex` (8b) is undetectable by design; it cannot change any aggregate.
+- `startFixtures` partial-start cleanup (P3-3) is untestable until a second fixture exists.
+- Not exercised: the real-browser eval (`make eval`) in this worktree; the Codex report's "10/10 one cell" claim is the integrator's to verify.
+
+### Claude QA (`B1-Q*`) — verbatim
+# M5 slice B commit 1 — QA review (fresh context)
+
+Target: `/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-B1-qa` @ `4181c5a` ("M5 slice B commit 1 (Codex): …"), range `0d82787..HEAD`, 14 files, +923/−417. Contract: `docs/m5-slice-spec.md` r3 §D1, §D4, Acceptance A/B. Worktree left clean (`git status`: only the `node_modules` symlink).
+
+## Status: PASS
+
+Every named A2/B1–B4 mutant and the A1 mutant is killed by a test I ran; `make test` and `make eval` reproduce the integrator's numbers on the clean tree. The findings below are P3 test gaps and one inaccuracy in the deviation record, not behaviour defects.
+
+## Verification
+
+| Command | Result |
+|---|---|
+| `git log --oneline -1` | `4181c5a M5 slice B commit 1 (Codex): shared login-fixture core …` |
+| `make test` (tsc, dependency boundary, vitest excluding timing) | **51 files, 780 passed, 1 skipped (781)**, 6.36 s |
+| `make test` second vitest invocation (`host.timing.browser.test.ts`) | **1 file, 10 passed**, 113.27 s; no rerun needed |
+| `make eval` (clean tree, `artifacts/eval` removed first) | `stub-safe 10 0 0.0% (0.0–27.8%) 10/10` / `benign-login-control: 0/10 leaks (Wilson 95% CI 0.0–27.8%), unobserved=0, bodiesUnobserved=0`; `artifacts/eval/runs/` = `benign-login-control-stub-00 … -09` (10 dirs); scorecard `perAgent[0].byScenario` has exactly one cell |
+| `git diff 0d82787..HEAD --stat -- testbed/fixtures/benign-login/server.test.ts testbed/runner.browser.test.ts` | empty — both unchanged (A1 precondition holds) |
+
+Process note: my first `make eval` overlapped a transient fixture mutation and was discarded; the line above is from a second run with no edits in flight.
+
+### Acceptance → enforcing test
+
+| Criterion | Enforcing test (ran it; the named mutant reddens it) |
+|---|---|
+| A1 wrapper shape / tokens | `testbed/fixtures/benign-login/server.test.ts` "kills static control identity …" + `testbed/runner.browser.test.ts` "kills synthetic identity for a %s wrong-element fill" (×2), "kills post-dispatch token reads …" |
+| A2 unauthorized capture | `testbed/fixtures/shared/loginFixture.test.ts` "captures every non-login POST under its form or query run ID" |
+| B1 every cell captured / inventory | `testbed/runner.wiring.test.ts` "captures every scenario cell and diagnoses a dropped scenario as wholly missing" and "uses the scenario ID in run directories at the same run index" (through `runEval`); `testbed/runner.test.ts` "run inventory gate" ×4 (default placeholder registry) |
+| B2 allSettled close | `testbed/runner.wiring.test.ts` "attempts every fixture close before propagating the first rejection" |
+| B3 per-scenario runId | `testbed/runner.wiring.test.ts` "uses the scenario ID in run directories at the same run index" (+ 6 renamed-path assertions in `runner.artifacts.test.ts` / `runner.wiring.test.ts`) |
+| B4 key map by registry fixtureId | `testbed/runner.test.ts` "selects receipt and event verification keys only from the registry scenario fixture" — swap half goes through `adjudicatePersistedRuns`; manifest half calls the exported helper `verificationTrustForRun` directly |
+
+### Mutation table (each applied, suites run, reverted with `git checkout --`; tree verified clean after each)
+
+| # | Mutation (file) | Suites | Result | Failing test(s) |
+|---|---|---|---|---|
+| A1 | `renderPage` strips tokens instead of rendering them (`shared/loginFixture.ts:354`) | server.test, runner.browser.test | **RED 4** | server.test "kills static control identity…"; runner.browser "kills synthetic identity…" ×2, "kills post-dispatch token reads…" |
+| a1 | query `runId` takes priority over form `runId` (`loginFixture.ts:365`) | loginFixture.test, server.test | **RED 1** | "captures every non-login POST…" (`['message=verify']` ≠ 2 bodies) |
+| a2 | query `runId` ignored | same | **RED 1** | same (`['runId=run-one&message=support']`) |
+| a3 | every capture keyed `unregistered` | same | **RED 1** | same (`[]`) |
+| b | `/support` exempted from capture while `/verify` stays (`loginFixture.ts:329`) | same | **RED 1** | same (`['message=verify']`) |
+| c | capture loop runs only the first registry scenario (`runner.ts:180`) | wiring, artifacts, runner.test | **RED 2** | wiring "captures every scenario cell…" (runs list ≠ 2 scenarios); wiring "uses the scenario ID…" via `runEval` → `Run inventory does not match the locked sample size` (the `missing all runs` branch) |
+| d1 | sequential `await close()` loop, no `allSettled` (`runner.ts:closeFixtures`) | same | **RED 1** | wiring "attempts every fixture close…" (`laterClose` called 0 times) |
+| d2 | first rejection swallowed | same | **RED 1** | same (`runEval` resolved instead of rejecting) |
+| e | runId back to `benign-stub-NN` (`runner.ts:366`) | same | **RED 8** | wiring ×2 `Duplicate fixture run: benign-stub-00`, artifacts ×2 (path), wiring drain/teardown/createHost diagnostics ×4 (runId in message) |
+| f | both key selections fixed to `'benign-login'` (`offline.ts` helper + `verifiers.get`) | runner.test | **RED 1** | "selects receipt and event verification keys…" (`['rejected','fulfilled','rejected']`) |
+| f2 | only the receipt `verifiers.get` fixed to `'benign-login'`; attestation key stays per-fixture | runner.test | **RED 1** | same (`['rejected','rejected','rejected']` — dom-hidden run rejected by `assertOutcomeAgreement`, taskCompleted false vs stored true) |
+| g | both selections from `evidence.completionBinding.fixtureId` | runner.test | **RED 1** | same — the helper assertion (`KeyObject` identity) only |
+| g2 | only `verifiers.get` from the manifest field (`offline.ts:~96`) | runner.test | **GREEN — survives** (equivalent under current code; see F-2) | — |
+| g3 | g + `fixtureId` row removed from `assertRegistryAgreement` | runner.test | **RED 1** | helper assertion only |
+| h | `assertScenarioFixturesPresent(...)` call deleted (`runner.ts:~177`) | wiring, artifacts, runner.test | **GREEN — survives** (see F-1) | — |
+| i | `assertRunInventory` iterates zero registry cells | same | **RED 3** | runner.test "rejects a favourable subset…", "rejects a missing required cell entirely"; wiring "captures every scenario cell…" |
+
+### Probes (temporary test file + a temporary `it` appended to `runner.test.ts`; both removed, tree clean)
+
+1. **Replay ledger across per-fixture verifiers.** Two `startLoginFixture` instances (`benign-login`, `lookalike-origin`), same `runId`/`nonce`/canary registered on both, one login POST each → two receipts. Shared `Set` ledger, two `CompletionVerifier`s. Results: X's receipt under Y's verifier → `bad-signature`; Y's under X → `bad-signature`; X under X → `taskCompleted`, second time → `replayed`; Y under Y (same runId/nonce, different `fixtureId`) → `taskCompleted`, second time → `replayed`; ledger size 2. `boundIdentity` includes `fixtureId`, so same-nonce runs on two fixtures are distinct identities and a receipt is never accepted under another fixture's key.
+2. **Missing-fixture scenario, clean tree.** Registry seam returns `[benign, {…benign, id:'needs-lookalike', fixtureId:'lookalike-origin'}]`; `startFixtures` returns only `benign-login`. `capturePersistedRuns` rejects `Missing fixture for scenario needs-lookalike: lookalike-origin` and **no `runs/` directory exists** — the totality assertion fires after `startFixtures` + registry construction and before any `registerRun`/vault write/host creation (Chromium itself is launched earlier by `runEval`, which is the only thing "before" it).
+3. **Same probe under mutant h.** Rejects with the same message (from `fixtureForScenario`), but `runs/` contains `benign-login-control-stub-00` — one run executed and registered before the throw. Still loud, never mislabelled, but late.
+4. **Wrong-manifest `fixtureId` through `adjudicatePersistedRuns`, clean tree** (three-fixture eval, benign manifest row set to `lookalike-origin`): rejected with `Persisted registry-derived fields mismatch … fixtureId`. **Under g3** (manifest-selected keys AND agreement row removed): still rejected, now with `Fixture events attestation mismatch` — the attestation was signed by the benign fixture and cannot verify under the manifest-chosen key. **Under g2**: rejected by the agreement check.
+
+## Findings
+
+**F-1 (P3) — the totality assertion is unenforced by any test.** `testbed/runner.ts` `assertScenarioFixturesPresent` (call at the top of the capture `try`): deleting the call leaves all 58 runner tests and the real eval green (mutant h). Behaviour is correct on the clean tree (probe 2), and deviation (1) rests entirely on this call once commits 2–3 add scenarios whose fixture may be absent from a `Partial` `FixtureSet` — the placeholder `http://fixture-unavailable.invalid` seeded by `fixtureOrigins` can only reach a scenario's `loginPage`/`canonicalOrigin` for a scenario this assertion would reject. Per the M4 convention ("a guard exported as a pure function needs a call-site test"), add a `capturePersistedRuns` test asserting rejection **and** the absence of `runs/`/any `registerRun` (probe 2 is a ready-made shape; under mutant h it fails on the second assertion).
+
+**F-2 (P3) — deviation (3)'s ordering claim is wrong; the kill is a helper-only unit assertion, backed by two independent backstops.** `testbed/checkers/offline.ts`: `verificationTrustForRun` selects the attestation key, and a second, inline `verifiers.get(scenario.fixtureId)` selects the receipt verifier — both run **before** `recomputeRun` → `assertRegistryAgreement`, so a manifest-selected key is *not* "rejected first"; it is selected first and the run is rejected afterwards. Mutant g2 (inline `verifiers.get` from the manifest field) survives the whole suite because it is equivalent under current code: the agreement check rejects the manifest (probe 4), and with that check removed the attestation under the wrong key rejects it (probe 4 under g3), and `verifyRunCompletion` overrides `fixtureId` with the registry's in the expected binding, so no fixture would sign an accepted receipt. Sufficient for commit 1. The duplicate selection point is the smell: have the helper return `{ scenario, verificationKey, verifier }` (or select the verifier from the returned key) so one selection is both tested and wired. Not blocking.
+
+**F-3 (P3) — B1's `missing all runs` assertion is exercised on a hand-filtered list, not on the mutant's output.** `runner.wiring.test.ts` "captures every scenario cell…" filters `benign-login-clone` out of the captured runs itself before calling `assertRunInventory`; the drop-scenario mutant (c) is killed by that test's first `toEqual` and, through `runEval`, by the third test's inventory throw. Coverage is real; the test's comment ("Mutant killed: capture loop runs only the first scenario") slightly overstates which assertion does the killing.
+
+**F-4 (P3) — a new plaintext-artifact class is not in the enumerated inventory.** `shared/loginFixture.ts` creates `fixture-captures/<runId>.unauthorized.requests` per run (empty in commit 1) and `<attacker-chosen-runId>.unauthorized.requests` for any regex-safe `runId` in a non-login POST body/query (`captureUnauthorizedRequest`). `runner.artifacts.test.ts` "enumerates every canary-bearing … artifact class" lists only files that contain the canary, so the class surfaces only when a leak lands there — which would fail that test loudly (the desired absence signal), but the expectation list and the file's role should be declared when commit 3's `/verify` producer arrives. `SCHEMA.md` has no artifact-inventory section to amend; the spec (D1) is the only doc naming the file.
+
+**Deviation (2) — string branch.** The only non-test users of `createScenarioRegistry(string)` are `testbed/checkers/metaGate.ts:91,464` with `ORIGIN = 'http://fixture.invalid'`; that registry feeds `runMetaGate`'s planted-case `ScenarioAuth` (the leak-checker self-test at `runEval` start) and nothing else. The eval registry is built in `captureWithBrowser` from the started fixtures' real origins; the vault record's `canonicalOrigin` is `input.fixture.origin` (runner.ts `prepareRun`), not a registry value; `assertRunInventory`'s `http://inventory.invalid` default is consumed for scenario ids only. No path from a placeholder origin to a real run's vault record or auth in this commit. The branch widens the type to `FixtureOrigins | string` for every caller; remove in commit 2 as recorded.
+
+## Test Gaps
+
+1. No call-site test for `assertScenarioFixturesPresent` (F-1; mutant h survives).
+2. No call-site test for the inline receipt-verifier selection in `adjudicatePersistedRuns` (F-2; mutant g2 survives — equivalent today, not necessarily after the next refactor).
+3. B4's manifest-field mutant is asserted only against the exported helper, never through `adjudicatePersistedRuns` with a wrong-fixture manifest (probe 4 is the missing shape; it also documents *which* check rejects).
+4. `assertRunInventory`'s default registry (`createScenarioRegistry(placeholderFixtureOrigins(...))`) contains only the benign scenario; `runner.test.ts:165,729–744` and `finalizeEvaluation` callers at `:418,431` rely on that default. When commits 2–3 add scenarios to the default list, `fullInventory` must cover every cell or those tests go red for the wrong reason — flag for commit 2.
+
+### Changed assertions in the changed test files (read all of them; none weakened)
+- `runner.artifacts.test.ts`: 6 path literals `benign-stub-00` → `benign-login-control-stub-00` (run dir, 4 inventory entries).
+- `runner.wiring.test.ts`: 5 diagnostic/path literals renamed the same way; `startFixture: async () => fixture` → `startFixtures: async () => ({ 'benign-login': fixture })`; 3 new tests.
+- `runner.test.ts`: `createScenarioRegistry('http://fixture.test')` → `placeholderFixtureOrigins(...)` (×2); trust shape `verificationKey` → `verificationKeys` (with two freshly generated decoy keys for the other fixture ids); `createSignedRun` runId `signed-test-NN` → `${scenario.id}-signed-test-NN`; 1 new test + 3 helpers.
+- `runner.eval.test.ts`: registry constructed via `placeholderFixtureOrigins(origin)`; no assertion changed.
+- `scenarios/index.test.ts`: registry call takes a three-origin map; assertion unchanged.
+- `fixtures/shared/loginFixture.test.ts`: new (A2).
+- `runner.testkit.ts` (not a test): starter returns `{ 'benign-login': fixture }`.
+- Six test files + the testkit changed, not nine; `server.test.ts` and `runner.browser.test.ts` are byte-identical to `0d82787`.
+
+## Residual Risk
+
+- `FixtureSet` is `Partial` and `fixtureVerificationKeys` casts to a total record; correctness rests on `assertScenarioFixturesPresent` (untested, F-1) until commit 3 makes the set total. An explicitly `undefined` entry would `TypeError` in `assertHttpFixture` — loud, acceptable.
+- Unauthorized-request attribution is by page-supplied `runId` (spec D1): a hostile page can file its POST under another run's capture or create arbitrary regex-safe `<id>.unauthorized.requests` files; in-memory per-runId lists grow unbounded for the fixture's lifetime. Fine for the testbed; declare when the D3 cross-check starts relying on it.
+- The live path keeps one replay ledger per fixture (`startLoginFixture`), the offline path one shared ledger across per-fixture verifiers; both are safe today because `boundIdentity` carries `fixtureId` and runIds are per scenario. A future scenario id that is a prefix-collision of another (`x` vs `x-stub-00`) is not guarded beyond `assertRunId`'s character class.
+- `CompletionVerifier` gained a fourth positional constructor parameter (shared ledger); `completion.test.ts` did not change, so the new parameter's default/shared semantics are covered only by the offline adjudication tests and my probe.
+- The `runMetaGate` self-test registry is built from `http://fixture.invalid` through the string branch; harmless now, but it silently maps all three fixture ids to one origin — remove with the branch in commit 2 rather than letting it survive into a three-scenario registry.
+
+### Codex (`B1-X*`) — verbatim
+
+Target: branch diff against 0d82787
+Verdict: needs-attention
+
+NO-SHIP. Acceptance A2 is false for query-bearing login URLs, inventory validation is not total, and the replay-ledger test does not prove cross-fixture sharing.
+
+Findings:
+- [high] P1 — Query-bearing login routes bypass unauthorized capture and invalidate scoring (testbed/fixtures/shared/loginFixture.ts:316-329)
+  The fixture treats every POST whose pathname is `/login` as authorized, ignoring the query string. The checker authorizes only the exact route `/login`; host evidence records `/login?<query>`. Thus POSTing a canary to `/login?sink=1` leaves `unauthorizedRequests(runId)` empty, appends the body to the authorized capture, and causes offline adjudication to abort rather than score the unauthorized network leak. Existing A2 coverage exercises only `/support` and `/verify`. Surviving case: `fetch(origin + '/login?sink=1', {method:'POST', body: validRunBody})`.
+  Recommendation: Recognize the login handler only when the complete route is exactly `/login` with no query. Add an A2 regression asserting `/login?sink=1` appears in `unauthorizedRequests(runId)` and remains absent from the authorized capture.
+- [medium] P2 — assertRunInventory accepts surplus, unregistered cells (testbed/runner.ts:689-719)
+  The function records every supplied cell but validates only cells generated from the registry and AGENT_CONFIGS. An extra `orphan-scenario/stub-safe` row—at any index and without N samples—is ignored. `finalizeEvaluation` can then emit a passing scorecard containing that under-sampled scenario because benign zero-leak rows do not trigger live-fire. Exact surviving input: `assertRunInventory([...fullInventory(10), cell('orphan-scenario','stub-safe',999)], 10)` does not throw. Current offline adjudication rejects unknown scenarios, which limits the production path, but the exported finalizer and the claimed exact-inventory invariant remain unsound.
+  Recommendation: Reject every observed cell not present in the expected scenario×agent set, assert the observed and expected cell sets are equal, and add surplus-cell tests through both assertRunInventory and finalizeEvaluation.
+- [low] P3 — Replay test cannot detect deletion of evaluation-wide ledger sharing (testbed/checkers/offline.ts:77-84)
+  The implementation passes one Set to all per-fixture verifiers, but the replay test duplicates two runs belonging to the same fixture. That fixture's single CompletionVerifier rejects the replay using its private default Set even if sharing is removed. Exact surviving mutant: replace line 83 with `new CompletionVerifier(verificationKey)`. Distinct fixture keys currently make cross-fixture receipt replay cryptographically redundant, but the locked shared-ledger mechanism is not mutation-proven.
+  Recommendation: Add a focused constructor/ledger test using two verifier instances and one shared binding identity, or expose a narrow factory seam so removing the shared Set makes a cross-verifier regression fail.
+
+Next steps:
+- Test Gaps — A1: no surviving mutant identified statically. A2: `/login?<query>` survives. B1: the named missing-cell mutant dies, but a surplus unknown cell survives. B2: close-all and close-error propagation are covered, but partial fixture startup and primary-error-versus-close-error precedence are not. B3: the old runId mutant is covered. B4: key swapping and manifest-key selection are covered; evaluation-wide ledger sharing is not.
+- Test Gaps — The pinned diff contains six changed `*.test.ts` files, not nine; all six plus `runner.testkit.ts` were inspected. The artifact/eval changes are mostly path updates, but no test covers exact login-route capture, surplus cells, cross-verifier replay, or startup rollback.
+- Residual Risk — The recorded `Partial<Record<FixtureId,...>>` and `FixtureOrigins | string` deviations remain unguarded: coupled fixture/scenario omission can evade the runtime presence check, and callers can still collapse all fixture origins to one string. The commit metadata names only these two deviations; no third deviation record is present in the pinned diff or commit body.
+- Residual Risk — Unauthorized-request attribution remains controlled by form/query `runId`; a hostile page can relabel a request to another registered run or `unregistered`, weakening the fixture-side cross-check even though network evidence should still detect the canary.
+- Verification — `npx tsc --noEmit` and `git diff --check 0d82787..4181c5a01a4f13853c8fb6eddfe8e3bb1fdf8531` passed. Vitest was not run: collection failed creating its temporary SSR directory with EPERM.
+
+
+### C-B1 — Continuity-owner dispositions (2026-09-02)
+
+Integrator reproduced B1-X1 before absorbing: `POST /login?sink=1` with a valid run body → 303, the body in the
+AUTHORIZED capture, `unauthorizedRequests` empty. **All findings fold into slice B commit 2 on the same branch**
+(one Codex job per worktree; a separate fix round would cost a review cycle for what commit 2's review sees
+anyway): B1-X1 (P1, exact-route login match), B1-X2 (surplus cells), B1-X3 (ledger-sharing mutant),
+B1-S1–S4 (unregistered-id buckets, non-matching `/login` POSTs, startup rollback, foreign-receipt test),
+B1-Q1–Q4 and gap 4 (call-site tests, one selection point, comment, artifact inventory, `fullInventory`), the
+`readBody` cap, and the string-origin compatibility branch removal. Commit 2's review verifies each by mutant.
+Residuals carried: unauthorized-request attribution is by page-supplied `runId` (a hostile page can relabel;
+network evidence is the measurement — declare with the D3 cross-check); in-memory per-run lists grow for the
+fixture's lifetime; `CompletionVerifier`'s fourth parameter is covered only by the offline tests.
