@@ -73,3 +73,9 @@ Example:
   sign-flipped padding fix (JSON escapes NUL to six characters) and settled `document.open()`, `checkVisibility`,
   and form-state restoration behaviour that reviewers had reasoned about from memory. A scratch worktree with the
   real dependency costs minutes and turns a paper argument into evidence.
+- **A guard exported as a pure function needs a call-site test.** M4 commit 4 shipped two runner guards whose
+  deletion at the call site left the whole suite and the real eval green while their unit tests stayed green. Test
+  the behaviour through the caller (`runEval`, `capturePersistedRuns`), not only the exported helper. (2026-09-02)
+- **Probe P is measured serially.** The p<0.01 clause at n=200 detects sub-microsecond systematic bias, so any
+  timing gate must run on a quiet machine: the timing file runs after the rest of the suite in its own vitest
+  invocation. Never loosen thresholds or samples; change the measurement condition and report the numbers. (2026-09-02)
