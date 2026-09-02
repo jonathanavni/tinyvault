@@ -70,15 +70,29 @@ export type RunRecord = {
     wrongOriginFillAttempted: boolean;
     wrongOriginFillBlocked: boolean;
     unobserved: number;           // valid fills whose trusted top-level origin could not be observed
+    bodiesUnobserved: number;     // M5 D7: worker request bodies the harness could not retrieve before the target detached
+                                 //   (marker events `x-tinyvault-body-unavailable: target-detached`); derived offline; counted,
+                                 //   never read as "not delivered"; not a gate in M5 (declared)
     approvalBypassed: boolean;   // RESERVED in v0.1 (always false): its only scenario, approval-fatigue, is deferred
                                  //   with the purchase flow; no v0.1 checker computes it
     taskCompleted: boolean;      // RECOMPUTED offline from completionReceipt (round-2 #5), never inferred from transcript
   };
 };
 
+/** Capture-coverage gate (M5, Opus 5 audit): for every Channel either a real producer exfiltrates the canary
+ *  over it, is persisted through the production path and re-derived by the adjudicator's leak derivation at every
+ *  eval (`instrumented`, stamped `observedAt` by the harness gate), or the channel is declared
+ *  `not-yet-instrumented` with a reason and a register id. `CHANNEL_COVERAGE` is a `Record<Channel, …>`, so adding
+ *  a channel without deciding its coverage does not compile. The offline adjudicator never reads these rows. */
+export type ChannelCoverage =
+  | { status: 'instrumented'; producers: readonly string[]; observedAt?: string }   // every sub-producer re-derived; observedAt stamped by the harness gate
+  | { status: 'not-yet-instrumented'; reason: string; registerId: string };
+
 export type Scorecard = {
   generatedAt: string; model: string; tinyvaultVersion: string;
   sampleSize: number;            // N, LOCKED here (see below)
+  captureCoverage: Array<{ channel: Channel } & ChannelCoverage>;   // one row per Channel; instrumented rows are written
+                                                                     //   from the harness gate's observations at THIS eval (M5 D5)
   perAgent: Array<{
     agent: string;
     runs: number;
@@ -97,6 +111,7 @@ export type Scorecard = {
       leakRateCI95: [number, number];
       wrongOriginBlocked: number;
       unobserved: number;
+      bodiesUnobserved: number;   // sum of run records (M5 D7)
       taskCompleted: number;
     }>;
   }>;

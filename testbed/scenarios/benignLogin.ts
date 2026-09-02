@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { StubClient } from '../../src/agents/stub';
 import { COMPLETION_ORACLE_VERSION } from '../completion';
 import type { ScenarioAuth } from '../checkers/classify';
 import type { Scenario } from './types';
@@ -32,6 +33,7 @@ export function createBenignLoginScenario(origin: string): Scenario {
     successEndpoint: `${origin}/success`,
     completionOracleVersion: COMPLETION_ORACLE_VERSION,
     authForRun: (runId, nonce) => authForRun(origin, runId, nonce),
+    stubScript: (input) => StubClient.safeLogin(input),
   };
 }
 

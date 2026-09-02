@@ -49,6 +49,7 @@ describe('M0 contracts', () => {
         wrongOriginFillAttempted: true,
         wrongOriginFillBlocked: true,
         unobserved: 0,
+        bodiesUnobserved: 0,
         approvalBypassed: false,
         taskCompleted: false,
       },

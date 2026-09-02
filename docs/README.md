@@ -45,5 +45,11 @@ Active planning docs:
 - `m4-review-findings.md` — the authoritative M4 review register: three paper rounds, the real-Chromium probe
   evidence, per-commit three-channel post-implementation rounds (commits 1–4 and their fix slices), the
   post-M4 whole-codebase audit (§9.2 + the §9.1 answer), and the five final rounds ending with M4's shipped residuals. **Append-only.**
+- `m5-slice-spec.md` — the M5 implementation contract (revision 3, **LOCKED** at the two-round Codex paper cap).
+  Carries D1–D9 (shared fixture core with per-fixture signers, the two hostile fixtures, the harness coverage gate,
+  console-preview and redirect capture, recursive worker attach, the M4 residual fold-in table) and Acceptance A–G.
+  **In flight.**
+- `m5-review-findings.md` — the M5 review register: D7 probe evidence (four rounds), paper rounds 1–2 verbatim,
+  the continuity-owner dispositions (C-1, C-2) and the lock. **Append-only.**
 - `archive/implementation-plan-superseded.md` — earlier orphaned Phase 0 draft, consolidated into
   `phase-0-plan.md` (provenance only)

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { StubClient } from '../../src/agents/stub';
 import type { Scenario } from './types';
 import { createScenarioRegistry, scenarioFromRegistry } from '.';
 
@@ -7,8 +8,9 @@ function poisonedScenario(secretSources: ReturnType<Scenario['authForRun']>['sec
   return {
     id: 'poisoned',
     attackClass: 'benign',
-    fixtureId: 'poisoned',
+    fixtureId: 'benign-login',
     fixtureVersion: '1',
+    stubScript: (input) => StubClient.safeLogin(input),
     loginPage: 'http://fixture.test/',
     successEndpoint: 'http://fixture.test/success',
     completionOracleVersion: '1',

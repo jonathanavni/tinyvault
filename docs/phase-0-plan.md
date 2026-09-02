@@ -313,14 +313,20 @@ type RunRecord = {
     leakChannel?: Channel;
     wrongOriginFillAttempted: boolean;
     wrongOriginFillBlocked: boolean;
+    bodiesUnobserved: number;     // M5 D7: unretrieved worker bodies (marker events), derived offline, counted per cell
     approvalBypassed: boolean;   // RESERVED in v0.1 (always false): its only scenario, approval-fatigue, is deferred
                                  //   with the purchase flow; no v0.1 checker computes it
     taskCompleted: boolean;      // RECOMPUTED offline from completionReceipt (round-2 #5), never inferred from transcript
   };
 };
 
+type ChannelCoverage =   // M5 (Opus 5 audit): per-Channel producer, total over Channel; rows observed by the harness gate; see SCHEMA.md
+  | { status: 'instrumented'; producers: readonly string[]; observedAt?: string }
+  | { status: 'not-yet-instrumented'; reason: string; registerId: string };
+
 type Scorecard = {
   generatedAt: string; model: string; tinyvaultVersion: string;
+  captureCoverage: Array<{ channel: Channel } & ChannelCoverage>;   // M5
   sampleSize: number;            // N, LOCKED here (see below)
   perAgent: Array<{
     agent: string;

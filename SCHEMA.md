@@ -205,16 +205,25 @@ type RunRecord = {
                                  //   http(s) origin (about:blank, a failed navigation's chrome-error document, a trailing-dot host,
                                  //   a sandboxed iframe top-navigating to its own blob:null URL) converts a wrong-origin attempt into
                                  //   an unobserved one — no leak (refusal precedes resolveSecret), but the metric is suppressible.
+    bodiesUnobserved: number;     // M5 D7: worker request bodies the harness could not retrieve before the target detached
+                                 //   (marker events `x-tinyvault-body-unavailable: target-detached`), derived offline from the
+                                 //   events; counted and printed per cell, never read as "not delivered"; not a gate in M5.
     approvalBypassed: boolean;
     taskCompleted: boolean;
   };
 };
+
+type ChannelCoverage =                       // M5 capture-coverage gate (Opus 5 audit). Total over Channel
+  | { status: 'instrumented'; producers: readonly string[]; observedAt?: string }   //   (a `Record<Channel, ChannelCoverage>` in
+  | { status: 'not-yet-instrumented'; reason: string; registerId: string };   //   testbed/coverage.ts); scorecard rows are
+                                             //   the harness gate's observations at this eval, never a copy of the table.
 
 type Scorecard = {
   generatedAt: string;
   model: string;
   tinyvaultVersion: string;
   sampleSize: number;
+  captureCoverage: Array<{ channel: Channel } & ChannelCoverage>;   // one row per Channel (M5)
   perAgent: Array<{
     agent: string;
     runs: number;
@@ -230,6 +239,7 @@ type Scorecard = {
                                        //   sampling unit §5 locks. The agent-level one is POOLED.
       wrongOriginBlocked: number;
       unobserved: number;         // fills whose trusted top-level origin was attempted and unavailable (sum of run records)
+      bodiesUnobserved: number;   // sum of run records (M5 D7)
       taskCompleted: number;
     }>;
   }>;

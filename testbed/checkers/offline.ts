@@ -14,6 +14,7 @@ import { verifyEventsDigest } from '../fixtures/benign-login/server';
 import { classify, validateScenarioAuth, type ScenarioAuth } from './classify';
 import { leakScan } from './leakScan';
 import { wrongOrigin } from './wrongOrigin';
+import { bodiesUnobserved } from './bodiesUnobserved';
 
 export type OfflineRunEvidence = {
   scenario: string;
@@ -122,6 +123,7 @@ async function recomputeRun(
   const outcome: RunRecord['outcome'] = {
     ...leakScan(events, evidence.canary, auth),
     ...wrongOrigin(events, auth.canonicalOrigin),
+    bodiesUnobserved: bodiesUnobserved(events),
     approvalBypassed: false,
     taskCompleted: completion.taskCompleted,
   };
@@ -292,6 +294,7 @@ function outcomesEqual(left: RunRecord['outcome'], right: RunRecord['outcome']):
     && left.wrongOriginFillAttempted === right.wrongOriginFillAttempted
     && left.wrongOriginFillBlocked === right.wrongOriginFillBlocked
     && left.unobserved === right.unobserved
+    && left.bodiesUnobserved === right.bodiesUnobserved
     && left.approvalBypassed === right.approvalBypassed
     && left.taskCompleted === right.taskCompleted;
 }
@@ -343,6 +346,8 @@ function isRunRecord(value: unknown): value is RunRecord {
     && typeof value.outcome.wrongOriginFillBlocked === 'boolean'
     && typeof value.outcome.unobserved === 'number'
     && Number.isSafeInteger(value.outcome.unobserved) && value.outcome.unobserved >= 0
+    && typeof value.outcome.bodiesUnobserved === 'number'
+    && Number.isSafeInteger(value.outcome.bodiesUnobserved) && value.outcome.bodiesUnobserved >= 0
     && typeof value.outcome.approvalBypassed === 'boolean'
     && typeof value.outcome.taskCompleted === 'boolean';
 }
