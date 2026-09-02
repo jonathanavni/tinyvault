@@ -143,7 +143,7 @@ export const MAX_SECRET_CODE_UNITS = 4096;             // the ONE home; localFil
 export type InjectOutcome =
   | Readonly<{ assigned: true; observedOrigin: Origin; controlToken: string | null; documentToken: string | null }>
   | Readonly<{ assigned: false; reason: 'origin'; observedOrigin: Origin | null }>    // W3-3: the origin the realm saw
-  | Readonly<{ assigned: false; reason: 'identity' | 'too-long' | 'transport' }>;    // W3-1: 'transport' = rejected call; node tainted
+  | Readonly<{ assigned: false; reason: 'identity' | 'too-long' | 'unplaceable' | 'transport' }>;  // W3-1: 'transport' = rejected call; node tainted. A-8: 'unplaceable' = CR/LF in the value, refused before any CDP call
 
 export type PinnedDestination = Readonly<{
   identity: ControlIdentity;
@@ -259,7 +259,7 @@ Order, inside `sessions.runExclusive(req.sessionId, port => …)`:
 6. `resolveSecret(handle, policy)` (errors as step 1). **The `Secret` is bound in a `try` that opens immediately
    after it returns and whose `finally` calls `clear()` on every exit path, the staleness rule included (Z3-10).**
 7. `inject(secret, canonicalOrigin)`: `origin` → `origin-not-authorized` **and `reobservedOrigin` = the realm's
-   observed origin**; `identity`/`transport` → `no-password-control`; `too-long` → `backend-error`; `assigned: true` →
+   observed origin**; `identity`/`transport` → `no-password-control`; `too-long`/`unplaceable` → `backend-error`; `assigned: true` →
    `createFilledResult({ requestedRoles: ['password'] })`.
 8. **Constant-shape completion.**
 
@@ -552,7 +552,7 @@ result at the tool layer.
 
 **Secret axis:** lengths `1, 16, 64, 1024, 4096`, every JSON-escapable character, non-ASCII, a string of `"`/`\`.
 **Policy axis:** `fieldRecipe` × `canonicalOrigin` short/long. Paths: success (**static-token lab login page**, page at
-the policy origin); every pre-secret refusal; every post-`consume()` path (`origin`, `identity`, `too-long`,
+the policy origin); every pre-secret refusal; every post-`consume()` path (`origin`, `identity`, `too-long`, `unplaceable`,
 `transport`). `serializeExact(result)` byte-identical across both axes per path; `serializeExact(observation)`
 byte-identical across the secret axis per (path, policy); mismatching-policy refusal rows: `observation.topOrigin` =
 the **page's** origin. 4097 → `backend-error` (record precondition; stated).

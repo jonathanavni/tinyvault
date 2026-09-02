@@ -12,7 +12,8 @@ export const MAX_SECRET_CODE_UNITS = 4096;
 export type InjectOutcome =
   | Readonly<{ assigned: true; observedOrigin: Origin; controlToken: string | null; documentToken: string | null }>
   | Readonly<{ assigned: false; reason: 'origin'; observedOrigin: Origin | null }>   // the origin the realm saw at decision time
-  | Readonly<{ assigned: false; reason: 'identity' | 'too-long' | 'transport' }>;  // 'transport': the call rejected; node stays tainted
+  | Readonly<{ assigned: false; reason: 'identity' | 'too-long' | 'unplaceable' | 'transport' }>;  // 'transport': the call rejected; node stays tainted
+  // 'unplaceable': the value carries U+000A or U+000D (HTML value sanitisation would alter it); refused before any CDP call, like 'too-long'.
 
 export type PinnedDestination = Readonly<{
   identity: ControlIdentity;
