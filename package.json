@@ -6,6 +6,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "tsc --noEmit && node --experimental-import-meta-resolve scripts/check-dependency-boundary.mjs && node --experimental-import-meta-resolve scripts/dependency-boundary.selftest.mjs && vitest run",
+    "browsers": "playwright install chromium",
     "eval": "TINYVAULT_EVAL=1 vitest run testbed/runner.eval.test.ts --reporter=verbose",
     "baseline": "node -e \"console.error('not implemented until M6'); process.exit(1)\"",
     "demo": "node -e \"console.error('not implemented until M10'); process.exit(1)\""
@@ -16,6 +17,7 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
-    "libsodium-wrappers": "0.8.4"
+    "libsodium-wrappers": "0.8.4",
+    "playwright": "1.62.1"
   }
 }

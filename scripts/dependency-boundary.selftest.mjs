@@ -6,7 +6,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -18,10 +17,34 @@ const flagProbe = import.meta.resolve(
 if (!flagProbe.startsWith('file:///tinyvault-flag-probe/')) throw new Error(FLAG_ERROR);
 
 const { checkDependencyBoundary } = await import('./dependency-boundary.mjs');
+const {
+  assertCliStatus,
+  assertEdgeOutcomes,
+  assertViolation,
+  cleanModule,
+  configureFixtureHarness,
+  getRuntimeMatrixOutcomes,
+  installDefaultVettedConfiguration,
+  linkInstalledPackage,
+  protectedImport,
+  protectedRequire,
+  runM4Fixtures,
+  withFixture,
+  withRuntimeFixture,
+  withTemporaryRoot,
+  write,
+  writeConfig,
+  writePackage,
+  writeRuntimePackage,
+} = await import('./dependency-boundary.selftest-fixtures.mjs');
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(scriptDirectory, '..');
 const cli = path.join(scriptDirectory, 'check-dependency-boundary.mjs');
 const selftest = fileURLToPath(import.meta.url);
+const projectLock = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package-lock.json'), 'utf8'));
+
+configureFixtureHarness({ cli, projectLock, projectRoot });
 
 {
   const result = spawnSync(process.execPath, [selftest], {
@@ -190,6 +213,7 @@ withTemporaryRoot((root) => {
 
 withTemporaryRoot((root) => {
   writeConfig(root);
+  installDefaultVettedConfiguration(root);
   write(root, 'src/core/probe.ts', "export const safe = true;\n");
   assertCliStatus(root, 1, 'missing protected directory silently disarmed the real CLI');
 });
@@ -366,8 +390,6 @@ withFixture("import './alias';", (root) => {
   fs.symlinkSync('../../tools/real.ts', path.join(root, 'src/core/alias.ts'));
   assertCliStatus(root, 1, 'configured-file canonicalization control did not fail closed');
 });
-
-let runtimeMatrixOutcomes = 0;
 
 // Fixture 1 kills the declaration-file traversal mutant: runtime `main`, not `types`, reaches protected.
 for (const protectedBranch of [true, false]) {
@@ -563,120 +585,12 @@ withRuntimeFixture((root) => {
   }, 'import-first condition order');
 });
 
+runM4Fixtures();
+
 console.log(
   'dependency boundary mutation tests PASS '
   + '(real CLI exit 1 violations incl. data-plane secret-matcher import; '
   + 'recursive external packages and unsupported loads; exit 0 clean and package cycle; '
-  + `runtime resolver matrix: 11 fixtures, ${runtimeMatrixOutcomes} import/require outcomes)`,
+  + `runtime resolver matrix: 11 fixtures, ${getRuntimeMatrixOutcomes()} import/require outcomes; `
+  + 'M4 vetted/importer/reachability/evaluator/real-graph fixtures)',
 );
-
-function assertViolation(root, name) {
-  const result = checkDependencyBoundary(root);
-  assert.notEqual(result.violations.length, 0, `${name} mutation did not fail the dependency gate`);
-}
-
-function assertCliStatus(root, expected, message) {
-  const result = spawnSync(process.execPath, [
-    '--experimental-import-meta-resolve', cli, '--root', root,
-  ], {
-    encoding: 'utf8',
-    timeout: 10_000,
-  });
-  assert.equal(result.status, expected,
-    `${message}\nerror: ${result.error?.message ?? 'none'}\nstdout: ${result.stdout}\nstderr: ${result.stderr}`);
-}
-
-function assertEdgeOutcomes(root, specifier, expectations, name) {
-  for (const syntax of ['import', 'require']) {
-    write(root, 'src/core/probe.ts', syntax === 'import'
-      ? `import '${specifier}';\n`
-      : `const loaded = require('${specifier}'); void loaded;\n`);
-    assertCliStatus(
-      root,
-      expectations[syntax] ? 1 : 0,
-      `${name} ${syntax} edge had the wrong protected/clean outcome`,
-    );
-    runtimeMatrixOutcomes += 1;
-  }
-}
-
-function withRuntimeFixture(assertion) {
-  withFixture('export const initial = true;', (root) => {
-    write(root, 'src/supervisor/marker.ts', "export const marker = 'protected';\n");
-    assertion(root);
-  });
-}
-
-function withFixture(probeSource, assertion, compilerOptions = {}) {
-  withTemporaryRoot((root) => {
-    writeConfig(root, compilerOptions);
-    write(root, 'src/core/probe.ts', `${probeSource}\n`);
-    write(root, 'src/supervisor/evaluator.ts', "export const evaluate = () => 'protected';\n");
-    write(root, 'src/supervisor/tripwire.ts', "export const detect = () => 'protected';\n");
-    write(root, 'src/supervisor/secretMatcher.ts', "export const match = () => 'protected';\n");
-    write(root, 'src/supervisor/marker.ts', "export const marker = 'protected';\n");
-    assertion(root);
-  });
-}
-
-function withTemporaryRoot(assertion) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tinyvault-dependency-gate-'));
-  try {
-    assertion(root);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-}
-
-function writeConfig(root, compilerOptions = {}) {
-  write(root, 'tsconfig.json', JSON.stringify({
-    compilerOptions: { module: 'ESNext', moduleResolution: 'Bundler', ...compilerOptions },
-    include: ['src/**/*.ts', 'testbed/**/*.ts'],
-  }));
-}
-
-function write(root, relative, contents) {
-  const target = path.join(root, relative);
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(target, contents);
-}
-
-function writePackage(root, name, source) {
-  write(root, `node_modules/${name}/package.json`, JSON.stringify({
-    name,
-    version: '1.0.0',
-    type: 'module',
-    exports: './index.ts',
-  }));
-  write(root, `node_modules/${name}/index.ts`, source);
-}
-
-function writeRuntimePackage(root, name, manifest, files) {
-  write(root, `node_modules/${name}/package.json`, JSON.stringify({
-    name,
-    version: '1.0.0',
-    ...manifest,
-  }));
-  for (const [relative, contents] of Object.entries(files)) {
-    write(root, `node_modules/${name}/${relative}`, contents);
-  }
-}
-
-function linkInstalledPackage(root, name) {
-  const installed = path.join(scriptDirectory, '..', 'node_modules', name);
-  const target = path.join(root, 'node_modules', name);
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.symlinkSync(installed, target, 'dir');
-}
-
-function protectedRequire() {
-  return "require('../../src/supervisor/marker.ts');\n";
-}
-
-function protectedImport() {
-  return "import '../../src/supervisor/marker.ts';\n";
-}
-
-function cleanModule() {
-  return 'export const clean = true;\n';
-}

@@ -1,7 +1,10 @@
-.PHONY: test eval baseline demo
+.PHONY: test browsers eval baseline demo
 
 test:
 	npm run test
+
+browsers:
+	npm run browsers
 
 eval:
 	npm run eval
