@@ -112,3 +112,7 @@ Example:
   observations pass. Three reviews and a Codex job were running concurrently — the serial-last invocation quiets the
   test process, not the machine. Report every number with its load context; never treat one channel's red as a code
   defect without the other channel's numbers. (2026-09-02)
+- **Never gate a commit on a hard-coded test count.** A `grep -q "7 passed"` guard silently skipped the fix-final3
+  commit when the slice added an eighth timing test; the worktrees, review packets and a Codex review were then
+  built on the wrong (docs-only) range and had to be cancelled. Gate on the exit code, and print the resulting
+  HEAD hash before anything downstream uses it. (2026-09-02)
