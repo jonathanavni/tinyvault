@@ -132,3 +132,86 @@ contract drift                   git diff main HEAD -- src/core/types.ts SCHEMA.
 
 **NOT merge-ready.** A1 and A2 block. Fix slice: `docs/m3-fix-slice-spec.md` (Codex implements on the same
 branch; the three channels re-run on the fix diff).
+
+---
+
+# Round 2 — the fix diff `4f1b5be..d771bdf` (`1b15831` gate set, `d771bdf` backend set)
+
+| Channel | Family | Verdict |
+|---|---|---|
+| Claude `/review` (QA, isolated worktree) | different | **NEEDS-ATTENTION** — A1/A2/B1–B8 all **CLOSED**; 21 mutations applied, 18 killed, 2 survived (test gaps), 1 equivalent; 12-case A2 CLI matrix all as required; 2 new P2, 3 P3 |
+| Claude security review (isolated worktree) | different | **PASS** — A1/A2/B2/B3/B8 **CLOSED** with re-run probes (23 backend cases, 31 gate fixtures, 14 source mutations); 3 P3 |
+| Codex adversarial diff (retry; first attempt died on model capacity) | same | **NO-SHIP** — A1 CLOSED, B1–B4/B6–B8 CLOSED, B5 MOVED, A2 held OPEN on two points (below); its sandbox again ran **zero** vitest/selftest tests |
+
+**Register cross-walk (both Claude channels agree):** A1 CLOSED (`localFile.ts:196` `encodeAdditionalData(handle, record)`;
+`policiesEqual` reads each field once; mutation "AD from argument" fails four tests `localFile.test.ts:446/475/509/536`;
+the security probes — getter origin B-then-A, recipe `Proxy` `toJSON` — now yield `integrity` with 0 releases, and a
+full-`Proxy` trap log across `resolveSecret` is exactly `['canonicalOrigin','fieldRecipe']` + `['length','0','1']`).
+A2 CLOSED (traverse from every importer `dependency-boundary.mjs:51-53`; `production-to-tooling` `:59`; tolerance keyed
+on the **entry root** `:406-410` — confirmed by the same package reached from a script and a data-plane root producing
+one violation with `entry = src/core/probe.ts`). B1–B8 CLOSED with the killing tests named in the QA report.
+
+## Round-2 findings (new, from the fixes)
+
+- **R2-1 [P2] B3 moved a hole (QA, reproduced).** Files are classified by realpath only, so a symlink *inside*
+  `src/supervisor` pointing outside (`src/supervisor/evil.ts → ../../outside/evil.ts`) is now unprotected; the
+  pre-fix gate FAILED that fixture. Fix: protected = union of link path and real path; alias-out fixture + clean mirror.
+- **R2-2 [P2] `src/backends/localFile.test.ts` is 843 lines (hard max 800) (QA).** The B7 fix created a breach of the
+  same rule set. Fix: split `describe('policy binding and error ordering')` into a sibling file; shared helpers into a
+  testkit module.
+- **R2-3 [P3] Header/spec drift on the tolerance (QA).** The code also tolerates **unresolved** external-package
+  edges, and that is load-bearing (`source-map-support` is unresolved, not unsupported); header and
+  `m3-fix-slice-spec.md` §A2.4 say "unsupported/unscanned"; the header omits the production→`scripts/` rule.
+- **R2-4 [P3] Gate nesting/length (QA).** `checkDependencyBoundary` 130 lines, 5 levels at `:122/:132`;
+  `addExternalEntry` 69 lines (pre-existing). Fix: extract `walkEntry()` and `classifyEdge()`.
+- **R2-5 [P3] `localFileWriter.test.ts:170` vacuous `stat` assertion survives** (QA) — delete.
+- **R2-6 [P3] `production-to-tooling` is a direct-edge rule (security F1, reproduced).** An indirect reach
+  `src → node_modules/p → scripts/tool.mjs` is not named as such; the BFS still continues through `scripts/` with zero
+  tolerance so every protected reach is caught — rule text vs behavior only. Fix: move the check into the BFS edge loop
+  (entry not under `scripts/`, target under `scripts/`) + indirect fixture.
+- **R2-7 [P3] The B3 selftest fixture is killed by the edge-side realpath, not by `canonicalFile`** (security F2) —
+  mutation "revert `canonicalFile` to `path.resolve`" survives; the comment over-attributes. Fix: reword, and add the
+  alias-relative-import control that only file canonicalization distinguishes.
+- **R2-8 [P3] `syntax.startsWith('external-package')` guard in `toleratesToolchainIssue` has no killing test**
+  (security F3, reproduced): an in-repo `scripts/node_modules/helper.mjs` with a non-literal `import()` FAILS today and
+  would be swallowed without the guard. Fix: that fixture.
+- **Test gaps (both channels):** entry-root keying not pinned independently of the production-to-tooling rule (QA G2b
+  survives: laundering fixture with a non-literal require must report an `external-package non-literal` violation whose
+  `entry` is the data-plane root); writer recipe validation only exercises `[]` (duplicate/unknown roles untested;
+  K5d survives); the selftest's own unflagged refusal has no automated check; `memzero` throwing on the **key** with the
+  plaintext memzero succeeding is not pinned (ordering mutant); no test asserts the recipe compare reads only
+  `length` + indices.
+- **Equivalent mutants (accepted, defensive code):** the `node === undefined` fail-closed branch is unreachable by
+  construction (every external target receives a graph node); `handle` vs `record.handle` at `localFile.ts:196` are
+  `===` after `findRecord`.
+
+- **R2-9 [P2→rule amendment] Unresolved external edges are tolerated for scripts-rooted entries (Codex).** Same
+  observation as R2-3, framed as a violation of the two-tier rule as written ("unsupported/unscanned"). **Continuity-owner
+  decision:** the tolerance is load-bearing (`typescript`'s optional `source-map-support` edge is *unresolved*, not
+  unsupported), "unresolved" is one more kind of unfollowable toolchain load, and the data plane still tolerates nothing —
+  so the **rule text is amended to "unsupported, unscanned, or unresolved external-package loads inside `node_modules`"**
+  rather than adding a per-package exemption (fix the class, not the instance). Recorded in `m3-fix-slice-spec.md`
+  round 3 and the gate header; a `scripts → package with unresolved import` fixture pins that the tolerance is scoped
+  (PASS) and the data-plane mirror FAILS.
+- **R2-10 [P2] A2 closure fixtures incomplete (Codex).** The scripts-rooted protected fixture never first triggers a
+  tolerated issue, so an implementation that skips the rest of a tolerated package node passes; no fixture produces a
+  reachable `unscanned` data-plane target. Fix: a scripts-rooted package combining a non-literal `require` **and** a
+  literal protected edge (assert the protected violation specifically — QA matrix case 4 and the security probe both
+  ran this by hand; it must live in the selftest); a data-plane fixture importing a file outside the tsconfig include
+  (reachable, not in `fileSet`, not `node_modules`) asserting the exact `unscanned` violation.
+- **R2-11 [P3] B5 moved (Codex).** The failure trace asserts only "no `open`/`rename`"; a direct `fs.writeFile` of
+  partial output would pass. Fix: assert the exact failure trace (`['readFile']`).
+
+## Round-2 residuals (state in the gate header)
+
+A scripts-rooted BFS cannot see non-literal or unresolved loads *inside* a toolchain package — a malicious
+`typescript`-shaped devDependency could reach protected code at build time undetected. Scripts are not the data plane;
+accepted by the fix-slice contract (§A2 step 4). `walk` does not descend symlinked directories under `scripts/`
+(pre-existing, tooling only). `isNodeModulesFile` is a path-segment heuristic.
+
+## Round-2 status
+
+**A1 is closed on every channel; A2 is closed on both different-family channels and held open by the same-family
+channel on fixture completeness (R2-10) and rule wording (R2-9, amended). Not yet merge-ready:** R2-1 (regression),
+R2-2 (hard rule), R2-10 block. Round 3 is the cap: one fix slice for R2-1…R2-11 + the test gaps, then a
+confirmation pass by the integrator (suite + the named mutations), no fourth paper round.

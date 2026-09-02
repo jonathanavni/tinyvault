@@ -21,11 +21,12 @@ before reporting and paste the output; if any step runs zero tests in your sandb
 2. A BFS edge whose target has **no graph node** is an `unscanned` violation, never a silent stop.
 3. **New rule: a production module (tsconfig-configured file) must not import anything under `scripts/`.**
    Violation syntax: `production-to-tooling <syntax>`.
-4. **Scripts-rooted entries only** (entry file under `scripts/`): `unscanned` and `unsupported` results
-   that occur **inside `node_modules`** are tolerated (the toolchain — `typescript` has a non-literal
-   `require` and an unresolvable `source-map-support` edge); any reach into a protected directory, and any
-   in-repo unsupported syntax, is still reported. Data-plane-rooted entries tolerate nothing. Document the
-   two-tier rule in the script header, replacing the current comment at lines 47-48.
+4. **Scripts-rooted entries only** (entry file under `scripts/`): `unscanned`, `unsupported`, **and
+   `unresolved`** results that occur **inside `node_modules`** are tolerated (the toolchain — `typescript`
+   has a non-literal `require` and an *unresolved* optional `source-map-support` edge; *"unresolved" added
+   by continuity-owner amendment in round 3, register R2-9*); any reach into a protected directory, and any
+   in-repo unsupported/unresolved syntax, is still reported. Data-plane-rooted entries tolerate nothing.
+   Document the two-tier rule **and the production→scripts rule** in the script header.
 5. Selftest fixtures, each with the required outcome: laundering chain `src/core → scripts/x.mjs →
    node_modules/pkg → protected` → **FAIL** (`production-to-tooling` and/or protected reach — assert at
    least the protected reach is reported when the production→scripts rule is mutated away); the direct
@@ -100,3 +101,78 @@ not — the flag is already on both invocations).
 ## Report
 `handoff-pattern.md` §13 headings, plus a **register cross-walk**: one line per item A1, A2, B1–B8 with
 `file:line` of the change and the test that kills its mutation.
+
+
+---
+
+# Round 3 (the cap) — closing register R2-1 … R2-11 and the round-2 test gaps
+
+One fix commit per set again: **(1) gate** — R2-1, R2-3, R2-4, R2-6, R2-7, R2-8, R2-9 (header), R2-10, and the
+gate test gaps; **(2) backend** — R2-2, R2-5, R2-11, and the backend test gaps. Leave uncommitted/unstaged; the
+integrator commits. `npm test` before reporting. After this slice the integrator runs a confirmation pass
+(suite + the named mutations) and there is **no fourth review round** — so every item below must carry the
+test that kills its mutation, or say why it cannot.
+
+## Set 1 — gate (`scripts/dependency-boundary.mjs`, `scripts/dependency-boundary.selftest.mjs`)
+
+- **R2-1 (P2, regression):** protected classification = **union** of link path and real path. Collect
+  `protectedRealPaths` from every configured/walked file whose *pre-realpath* location is protected;
+  `isProtected(target)` checks the real-path directory rule **or** membership in that set. Fixtures:
+  `src/supervisor/evil.ts → ../../outside/evil.ts` imported from a data-plane file → **FAIL**; the same alias
+  pointing at a clean module inside `src/supervisor`... no — mirror: `src/core/alias.ts → ../../outside/clean.ts`
+  imported → **PASS**.
+- **R2-3 + R2-9:** header states the two-tier rule verbatim: *"A scripts-rooted BFS tolerates unsupported,
+  unscanned, or unresolved external-package loads inside node_modules; data-plane roots tolerate nothing; neither
+  tier may reach a protected directory; production modules may not import scripts/ (directly or transitively)."*
+  Plus the residual: a scripts-rooted BFS cannot see non-literal/unresolved loads inside a toolchain package.
+  Fixture: `scripts/tool.mjs → node_modules/pkg` whose `index.js` has an unresolved bare import → **PASS**
+  (scoped tolerance); the same package imported from `src/core` → **FAIL** `external-package unresolved`.
+- **R2-4:** extract `walkEntry(entry, …)` and `classifyEdge(edge, …)` so `checkDependencyBoundary` is under
+  50 lines and nesting ≤ 4; extract from `addExternalEntry` likewise if it stays over 50. Behavior-preserving —
+  the whole selftest matrix must pass unchanged before and after.
+- **R2-6:** production→scripts becomes a BFS-loop rule: for an entry not under `scripts/`, any edge whose
+  target is under `scripts/` is a `production-to-tooling` violation (direct or transitive). Fixture:
+  `src/core → node_modules/p → scripts/tool.mjs` (clean tool) → **FAIL** `production-to-tooling`.
+- **R2-7:** reword the B3 fixture comment to attribute the kill to the edge-side realpath; add the control only
+  file canonicalization distinguishes (`src/core/alias.ts → ../../tools/real.ts` where `./helper.ts` resolves to a
+  clean file from the alias path but to a supervisor re-export from the real path) → **FAIL**, and assert that
+  reverting `canonicalFile` to `path.resolve` still fails closed (as `unresolved relative`) — i.e. the file
+  canonicalization is redundant-but-fail-closed; say so in the comment.
+- **R2-8:** fixture `scripts/node_modules/helper.mjs` with a non-literal `import()` reached from a scripts root →
+  **FAIL** (in-repo path with a `node_modules` segment is not toolchain; the `external-package` prefix guard is
+  what makes this fail — mutation: drop the guard → the fixture passes → test fails).
+- **R2-10:** (a) scripts-rooted package whose `index.js` has a non-literal `require` **and** a literal
+  `require('../../src/supervisor/marker.ts')` → **FAIL** with the protected violation specifically (assert its
+  text); mutation: "skip the rest of a tolerated package node" must be killed. (b) data-plane file importing a
+  relative file **outside the tsconfig include** (e.g. `../../outside/helper.ts`, existing, not in `fileSet`, not
+  `node_modules`) → **FAIL** `unscanned static import`; mutation: drop the `edge.unscanned` violation branch →
+  killed. (c) The `node === undefined` branch: keep as defensive code; comment "unreachable by construction —
+  every external target receives a graph node (see addExternalEntry); kept fail-closed".
+- **Gate test gaps:** entry-root keying pinned independently of production-to-tooling — in the laundering
+  fixture use a package with a non-literal `require` and assert an `external-package non-literal` violation whose
+  `entry` ends with `src/core/probe.ts` (mutation G2b: importer-keyed tolerance → killed). The selftest's own
+  unflagged refusal: spawn the selftest without the flag → exit 1 with the fixed message.
+
+## Set 2 — backend (`src/backends/**`)
+
+- **R2-2 (P2, hard rule):** split `src/backends/localFile.test.ts` (843 lines): move `describe('policy binding
+  and error ordering')` to `src/backends/localFile.policy.test.ts`; shared helpers into
+  `src/backends/localFile.testkit.ts` (a test-only module: name it so the dependency gate's `isProductionModule`
+  excludes it, e.g. `localFile.test-kit.ts` is NOT excluded — use `localFile.testkit.test.ts`? No: it exports
+  helpers, not tests. **Use `src/backends/testkit/localFile.ts` and add `src/backends/testkit/**` to nothing —
+  it will be scanned as a production module by the gate and by tsc; that is acceptable only if it imports no
+  test framework.** Simplest compliant option: keep helpers in a file named `localFile.helpers.test.ts` that
+  exports helpers and contains one trivial `describe` so vitest and the gate both treat it as a test file.
+  Pick one, state it in Deviations.) Both files stay under 400 lines.
+- **R2-5:** delete the vacuous `stat` assertion at `localFileWriter.test.ts:170`.
+- **R2-11:** the writer failure trace asserts the **exact** sequence `['readFile']` (and, for the nth-record
+  case, still exactly `['readFile']` — sealing happens before any mutating fs call).
+- **Backend test gaps:** writer recipe validation `it.each([[], ['password','password'], ['secret']])` refused
+  before any fs call; `memzero` throwing on the **key** with the plaintext memzero succeeding → `unavailable`,
+  plaintext all-zero (pins the ordering mutant "swap the two finally scopes"); the policy compare reads the recipe
+  via `length` + indices only (full-`Proxy` trap log equals `['canonicalOrigin','fieldRecipe']` and
+  `['length','0','1']`; mutation: `JSON.stringify(fieldRecipe)` in the compare → killed).
+
+## Report
+§13 headings + register cross-walk for R2-1 … R2-11 and each test gap (file:line + killing test). Any
+deviation from a locked sentence goes under Deviations From Handoff.
