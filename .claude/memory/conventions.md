@@ -79,3 +79,9 @@ Example:
 - **Probe P is measured serially.** The p<0.01 clause at n=200 detects sub-microsecond systematic bias, so any
   timing gate must run on a quiet machine: the timing file runs after the rest of the suite in its own vitest
   invocation. Never loosen thresholds or samples; change the measurement condition and report the numbers. (2026-09-02)
+- **An AST allowlist rule must end with a positive pass over every occurrence, not an enumeration of forbidden
+  shapes.** The M4 retention rule went six rounds: each round's fix enumerated the newly reported shape (module-level
+  assignment, computed keys, `String(...)`) and the next channel found another (laundering callbacks on the tainted
+  receiver, `throw value`, a shadowed module-local `String`, `for…of`, a `String.prototype` accessor). The Secret-object
+  rule, which lists the permitted occurrences and rejects everything else, never needed a second round. Write the
+  allowlist first; name the killed mutants; make three channels attack it. (2026-09-02)

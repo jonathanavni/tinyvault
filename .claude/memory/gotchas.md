@@ -107,3 +107,8 @@ Example:
   chrome-error://chromewebdata/"). `waitForLoadState('load')` does not observe it (the old document is already
   loaded); waiting for the main-frame `framenavigated` event (or `waitForURL(/chrome-error/)`) does. Use a bound,
   then released, loopback port for "connection refused" tests. (2026-09-02)
+- **Same machine, same commit, different verdicts on probe P.** The final M4 security channel saw `npm test` red in
+  2 of 3 runs (three timing rejections at |Δ| ≤ 0.17 ms) while the QA channel, minutes apart, saw 10/10 gate
+  observations pass. Three reviews and a Codex job were running concurrently — the serial-last invocation quiets the
+  test process, not the machine. Report every number with its load context; never treat one channel's red as a code
+  defect without the other channel's numbers. (2026-09-02)
