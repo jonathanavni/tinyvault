@@ -8,7 +8,12 @@ import type { FillDestinationPort } from '../core/browserPort';
 import { createFillService, type FillOutcome, type FillService } from '../core/fillService';
 import { Secret } from '../core/redaction';
 import type { BrowserControls, Origin } from '../core/types';
-import { assertProbeP, runProbeP, type ProbePResult } from '../../testbed/probe/probeP';
+import {
+  assertProbeFamily,
+  assertProbeHardClause,
+  runProbeP,
+  type ProbePResult,
+} from '../../testbed/probe/probeP';
 import { startControlsLab, type ControlsLab } from '../../testbed/fixtures/controls-lab';
 import { createLockdownDomain } from './lockdownDomain';
 import { EvidenceLease, composeSupervisedHost, type SupervisedHost } from './host';
@@ -19,12 +24,22 @@ const CANARY = 'TVC_timing_probe_7B32';
 const NONMATCH = rotateFinalCharacter(CANARY);
 const TIMING_PREFIX = 'timing-prefix:';
 const TIMING_SUFFIX = ':timing-suffix';
+const PROBE_NAMES = [
+  'fill-short-vs-long',
+  'queued-short-vs-long',
+  'reflection-equal-length',
+  'tripwire-match-vs-no-match',
+  'tripwire-real-click-match-vs-no-match',
+  'real-listener-click',
+] as const;
+const probeResults = new Map<string, ProbePResult>();
 let browser: Browser;
 let lab: ControlsLab;
 let activeSessions: BrowserSessionHost[] = [];
 let activeHosts: SupervisedHost[] = [];
 
 beforeAll(async () => {
+  probeResults.clear();
   browser = await launchChromium();
   lab = await startControlsLab();
 });
@@ -83,7 +98,7 @@ describe.sequential('H Probe P timing bounds', () => {
     expect(JSON.stringify(shortResult.observation)).toBe(JSON.stringify(longResult.observation));
 
     const result = await runProbeP({
-      samplesPerCondition: 200,
+      pairs: 500,
       warmup: 20,
       setupA: () => setup.setup(short),
       setupB: () => setup.setup(long),
@@ -91,7 +106,7 @@ describe.sequential('H Probe P timing bounds', () => {
       b: () => setup.service.fill(setup.request).then(() => undefined),
     });
     report('fill-short-vs-long', result);
-    expect(() => assertProbeP(result)).not.toThrow();
+    expect(() => assertProbeHardClause(result)).not.toThrow();
   }, 180_000);
 
   it('kills secret-length-dependent mutex occupancy with an immediately queued control', async () => {
@@ -111,7 +126,7 @@ describe.sequential('H Probe P timing bounds', () => {
     expect(JSON.stringify(shortResult.result)).toBe(JSON.stringify(longResult.result));
 
     const result = await runProbeP({
-      samplesPerCondition: 200,
+      pairs: 500,
       warmup: 20,
       setupA: () => setup.setup(short),
       setupB: () => setup.setup(long),
@@ -119,7 +134,7 @@ describe.sequential('H Probe P timing bounds', () => {
       b: queuedFill,
     });
     report('queued-short-vs-long', result);
-    expect(() => assertProbeP(result)).not.toThrow();
+    expect(() => assertProbeHardClause(result)).not.toThrow();
   }, 180_000);
 
   it('kills a content-dependent reflection oracle with equal-length caller traffic', async () => {
@@ -139,7 +154,7 @@ describe.sequential('H Probe P timing bounds', () => {
     expect(JSON.stringify(equal).length).toBe(JSON.stringify(unequal).length);
 
     const result = await runProbeP({
-      samplesPerCondition: 200,
+      pairs: 500,
       warmup: 20,
       setupA: () => prepare(CANARY),
       setupB: () => prepare(NONMATCH),
@@ -147,7 +162,7 @@ describe.sequential('H Probe P timing bounds', () => {
       b: () => controls.browser_snapshot(session).then(() => undefined),
     });
     report('reflection-equal-length', result);
-    expect(() => assertProbeP(result)).not.toThrow();
+    expect(() => assertProbeHardClause(result)).not.toThrow();
   }, 180_000);
 
   it('kills match-dependent tripwire timing through composeSupervisedHost', async () => {
@@ -186,7 +201,7 @@ describe.sequential('H Probe P timing bounds', () => {
       ]);
     };
     const result = await runProbeP({
-      samplesPerCondition: 200,
+      pairs: 500,
       warmup: 20,
       setupA: () => { hostA = setupHost(CANARY); },
       setupB: () => { hostB = setupHost(NONMATCH); },
@@ -197,7 +212,7 @@ describe.sequential('H Probe P timing bounds', () => {
     expect(timedCallDeltas.length).toBeGreaterThan(0);
     expect(timedCallDeltas.every((delta) => delta.every((calls) => calls === 0))).toBe(true);
     report('tripwire-match-vs-no-match', result);
-    expect(() => assertProbeP(result)).not.toThrow();
+    expect(() => assertProbeHardClause(result)).not.toThrow();
   }, 180_000);
 
   it('kills match-dependent tripwire timing on a real supervised browser fill call', async () => {
@@ -230,7 +245,7 @@ describe.sequential('H Probe P timing bounds', () => {
       fields: [{ role: 'password' as const, selector: '#password' }],
     };
     const result = await runProbeP({
-      samplesPerCondition: 200,
+      pairs: 500,
       warmup: 20,
       setupA: () => { hostA = setupHost(CANARY); },
       setupB: () => { hostB = setupHost(NONMATCH); },
@@ -239,7 +254,7 @@ describe.sequential('H Probe P timing bounds', () => {
     });
     currentHost?.finish();
     report('tripwire-real-click-match-vs-no-match', result);
-    expect(() => assertProbeP(result)).not.toThrow();
+    expect(() => assertProbeHardClause(result)).not.toThrow();
   }, 180_000);
 
   it('kills content-dependent request-listener work on the real supervised click path', async () => {
@@ -260,7 +275,7 @@ describe.sequential('H Probe P timing bounds', () => {
     expect(JSON.stringify(first)).toBe(JSON.stringify(second));
 
     const result = await runProbeP({
-      samplesPerCondition: 200,
+      pairs: 500,
       warmup: 20,
       setupA: () => prepare(CANARY),
       setupB: () => prepare(NONMATCH),
@@ -268,7 +283,11 @@ describe.sequential('H Probe P timing bounds', () => {
       b: () => host.tools.browser_click({ sessionId: session.sessionId, selector: 'button' }).then(() => undefined),
     });
     report('real-listener-click', result);
-    expect(() => assertProbeP(result)).not.toThrow();
+    expect(() => assertProbeHardClause(result)).not.toThrow();
+  }, 180_000);
+
+  it('applies the Holm–Bonferroni family gate over the six probes', () => {
+    expect(() => assertProbeFamily(probeResults, { alpha: 0.01, expected: PROBE_NAMES })).not.toThrow();
   }, 180_000);
 });
 
@@ -294,7 +313,11 @@ function characterClassShape(value: string): string {
 }
 
 function report(name: string, result: ProbePResult): void {
-  console.info(`${name}: p=${result.pValue} medianDiffMs=${result.medianDiffMs} effect=${result.effectSize}`);
+  probeResults.set(name, result);
+  console.info(
+    `${name}: p=${result.pValue} z=${result.z} effect=${result.effectSize} `
+    + `medianDiffMs=${result.medianDiffMs} p95A=${result.p95AMs} p95B=${result.p95BMs}`,
+  );
 }
 
 function timingBackend(origin: Origin): CredentialBackend {

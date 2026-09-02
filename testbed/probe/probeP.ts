@@ -1,18 +1,28 @@
-export type MannWhitneyResult = Readonly<{
-  u: number;
+export type WilcoxonResult = Readonly<{
+  nonZero: number;
+  wPlus: number;
+  wMinus: number;
+  variance: number;
   z: number;
   pValue: number;
   effectSize: number;
+  medianDiffMs: number;
 }>;
 
-export type ProbePResult = MannWhitneyResult & Readonly<{
+export type ProbePResult = Readonly<{
+  pValue: number;
+  z: number;
+  effectSize: number;
   medianDiffMs: number;
+  p95AMs: number;
+  p95BMs: number;
+  differencesMs: readonly number[];
   aSamplesMs: readonly number[];
   bSamplesMs: readonly number[];
 }>;
 
 export type ProbePOptions = Readonly<{
-  samplesPerCondition?: number;
+  pairs?: number;
   warmup?: number;
   a: () => void | Promise<void>;
   b: () => void | Promise<void>;
@@ -20,74 +30,159 @@ export type ProbePOptions = Readonly<{
   setupB?: () => void | Promise<void>;
 }>;
 
-export function mannWhitneyU(a: readonly number[], b: readonly number[]): MannWhitneyResult {
-  if (a.length === 0 || b.length === 0) throw new Error('Probe P requires two non-empty samples');
-  const ranked = rankSamples(a, b);
-  const rankSumA = ranked.filter((entry) => entry.sample === 'a')
-    .reduce((sum, entry) => sum + entry.rank, 0);
-  const n = a.length;
-  const m = b.length;
-  const u = rankSumA - n * (n + 1) / 2;
-  const mean = n * m / 2;
-  const variance = tieCorrectedVariance(n, m, ranked);
-  const z = variance === 0 ? 0 : continuityCorrectedZ(u - mean, Math.sqrt(variance));
-  const pValue = Math.min(1, 2 * (1 - normalCdf(Math.abs(z))));
-  return Object.freeze({ u, z, pValue, effectSize: 1 - 2 * u / (n * m) });
-}
+type FamilyEntry = Readonly<{ name: string; pValue: number }>;
+type RankedDifference = Readonly<{ difference: number; absolute: number; rank: number }>;
 
-export async function runProbeP(options: ProbePOptions): Promise<ProbePResult> {
-  const samplesPerCondition = options.samplesPerCondition ?? 200;
-  const warmup = options.warmup ?? 20;
-  assertEvenCount(samplesPerCondition);
-  assertEvenCount(warmup);
-  await collectBlocks(warmup, options, undefined, undefined);
-  const aSamples: number[] = [];
-  const bSamples: number[] = [];
-  await collectBlocks(samplesPerCondition, options, aSamples, bSamples);
-  const statistic = mannWhitneyU(aSamples, bSamples);
+export function wilcoxonSignedRank(differences: readonly number[]): WilcoxonResult {
+  if (differences.some((difference) => !Number.isFinite(difference))) {
+    throw new Error('Probe P differences must be finite');
+  }
+  const { ranked, tieCorrection } = rankAbsoluteDifferences(differences);
+  const nonZero = ranked.length;
+  const wPlus = ranked.reduce(
+    (sum, entry) => sum + (entry.difference > 0 ? entry.rank : 0),
+    0,
+  );
+  const rankTotal = nonZero * (nonZero + 1) / 2;
+  const wMinus = rankTotal - wPlus;
+  const variance = nonZero * (nonZero + 1) * (2 * nonZero + 1) / 24 - tieCorrection / 48;
+  const mean = rankTotal / 2;
+  const z = variance === 0 ? 0 : continuityCorrectedZ(wPlus - mean, Math.sqrt(variance));
+  const pValue = Math.min(1, 2 * (1 - normalCdf(Math.abs(z))));
   return Object.freeze({
-    ...statistic,
-    medianDiffMs: median(bSamples) - median(aSamples),
-    aSamplesMs: Object.freeze(aSamples),
-    bSamplesMs: Object.freeze(bSamples),
+    nonZero,
+    wPlus,
+    wMinus,
+    variance,
+    z,
+    pValue: nonZero === 0 ? 1 : pValue,
+    effectSize: rankTotal === 0 ? 0 : (wPlus - wMinus) / rankTotal,
+    medianDiffMs: median(differences),
   });
 }
 
-export function assertProbeP(result: Pick<ProbePResult, 'pValue' | 'medianDiffMs'>): void {
-  if (result.pValue < 0.01 || Math.abs(result.medianDiffMs) > 2) {
-    throw new Error('Probe P detected a timing difference');
+export async function runProbeP(options: ProbePOptions): Promise<ProbePResult> {
+  const pairs = options.pairs ?? 500;
+  const warmup = options.warmup ?? 20;
+  assertCount('pairs', pairs);
+  assertCount('warmup', warmup);
+  await warmUp(warmup, options);
+  const aSamplesMs: number[] = [];
+  const bSamplesMs: number[] = [];
+  await collectPairs(pairs, options, aSamplesMs, bSamplesMs);
+  const differencesMs = bSamplesMs.map((sample, index) => sample - aSamplesMs[index]!);
+  const statistic = wilcoxonSignedRank(differencesMs);
+  return Object.freeze({
+    pValue: statistic.pValue,
+    z: statistic.z,
+    effectSize: statistic.effectSize,
+    medianDiffMs: statistic.medianDiffMs,
+    p95AMs: percentile95(aSamplesMs),
+    p95BMs: percentile95(bSamplesMs),
+    differencesMs: Object.freeze(differencesMs),
+    aSamplesMs: Object.freeze(aSamplesMs),
+    bSamplesMs: Object.freeze(bSamplesMs),
+  });
+}
+
+export function assertProbeHardClause(result: Pick<ProbePResult, 'medianDiffMs'>): void {
+  if (Math.abs(result.medianDiffMs) > 2) {
+    throw new Error('Probe P hard clause detected a timing difference');
   }
 }
 
-type RankedEntry = { value: number; sample: 'a' | 'b'; rank: number; tieSize: number };
+export function assertProbeFamily(
+  results: ReadonlyMap<string, ProbePResult> | readonly FamilyEntry[],
+  options: Readonly<{ alpha?: number; expected: readonly string[] }>,
+): void {
+  const alpha = options.alpha ?? 0.01;
+  if (!(alpha > 0 && alpha <= 1)) throw new Error('Probe P family alpha must be in (0, 1]');
+  const entries = Array.isArray(results)
+    ? [...results] as FamilyEntry[]
+    : Array.from(
+      results as ReadonlyMap<string, ProbePResult>,
+      ([name, result]) => ({ name, pValue: result.pValue }),
+    );
+  assertExpectedNames(entries, options.expected);
+  if (entries.some(({ pValue }) => !Number.isFinite(pValue) || pValue < 0 || pValue > 1)) {
+    throw new Error('Probe P family p-values must be finite values in [0, 1]');
+  }
+  const ordered = [...entries].sort(
+    (left, right) => left.pValue - right.pValue || left.name.localeCompare(right.name),
+  );
+  const rejected: string[] = [];
+  for (let index = 0; index < ordered.length; index += 1) {
+    if (ordered[index]!.pValue > alpha / (ordered.length - index)) break;
+    rejected.push(ordered[index]!.name);
+  }
+  if (rejected.length > 0) throw new Error(`Probe P family rejected: ${rejected.join(', ')}`);
+}
 
-function rankSamples(a: readonly number[], b: readonly number[]): RankedEntry[] {
-  const entries: RankedEntry[] = [
-    ...a.map((value) => ({ value, sample: 'a' as const, rank: 0, tieSize: 0 })),
-    ...b.map((value) => ({ value, sample: 'b' as const, rank: 0, tieSize: 0 })),
-  ].sort((left, right) => left.value - right.value);
-  for (let start = 0; start < entries.length;) {
+function assertExpectedNames(entries: readonly FamilyEntry[], expected: readonly string[]): void {
+  const actualNames = entries.map(({ name }) => name);
+  const actualSet = new Set(actualNames);
+  const expectedSet = new Set(expected);
+  const exact = actualNames.length === expected.length
+    && actualSet.size === actualNames.length
+    && expectedSet.size === expected.length
+    && expected.every((name) => actualSet.has(name));
+  if (!exact) {
+    throw new Error(`Probe P family names mismatch: expected [${expected.join(', ')}], got [${actualNames.join(', ')}]`);
+  }
+}
+
+function rankAbsoluteDifferences(
+  differences: readonly number[],
+): Readonly<{ ranked: readonly RankedDifference[]; tieCorrection: number }> {
+  const ranked = differences
+    .filter((difference) => difference !== 0)
+    .map((difference) => ({ difference, absolute: Math.abs(difference), rank: 0 }))
+    .sort((left, right) => left.absolute - right.absolute);
+  let tieCorrection = 0;
+  for (let start = 0; start < ranked.length;) {
     let end = start + 1;
-    while (end < entries.length && entries[end]!.value === entries[start]!.value) end += 1;
+    while (end < ranked.length && ranked[end]!.absolute === ranked[start]!.absolute) end += 1;
     const rank = (start + 1 + end) / 2;
-    for (let index = start; index < end; index += 1) {
-      entries[index]!.rank = rank;
-      entries[index]!.tieSize = end - start;
-    }
+    const tieSize = end - start;
+    tieCorrection += tieSize ** 3 - tieSize;
+    for (let index = start; index < end; index += 1) ranked[index]!.rank = rank;
     start = end;
   }
-  return entries;
+  return { ranked, tieCorrection };
 }
 
-function tieCorrectedVariance(n: number, m: number, entries: readonly RankedEntry[]): number {
-  const total = n + m;
-  let correction = 0;
-  for (let index = 0; index < entries.length;) {
-    const size = entries[index]!.tieSize;
-    correction += size ** 3 - size;
-    index += size;
+async function warmUp(count: number, options: ProbePOptions): Promise<void> {
+  for (let index = 0; index < count; index += 1) {
+    await measure(options.setupA, options.a);
+    await measure(options.setupB, options.b);
   }
-  return n * m / 12 * (total + 1 - correction / (total * (total - 1)));
+}
+
+async function collectPairs(
+  pairs: number,
+  options: ProbePOptions,
+  aSamplesMs: number[],
+  bSamplesMs: number[],
+): Promise<void> {
+  for (let index = 0; index < pairs; index += 1) {
+    if (index % 2 === 0) {
+      aSamplesMs.push(await measure(options.setupA, options.a));
+      bSamplesMs.push(await measure(options.setupB, options.b));
+    } else {
+      bSamplesMs.push(await measure(options.setupB, options.b));
+      aSamplesMs.push(await measure(options.setupA, options.a));
+    }
+  }
+}
+
+async function measure(
+  setup: (() => void | Promise<void>) | undefined,
+  operation: () => void | Promise<void>,
+): Promise<number> {
+  await setup?.();
+  const start = performance.now();
+  await operation();
+  return performance.now() - start;
 }
 
 function continuityCorrectedZ(difference: number, standardDeviation: number): number {
@@ -96,50 +191,43 @@ function continuityCorrectedZ(difference: number, standardDeviation: number): nu
 }
 
 function normalCdf(value: number): number {
-  const sign = value < 0 ? -1 : 1;
-  const x = Math.abs(value) / Math.sqrt(2);
-  const t = 1 / (1 + 0.3275911 * x);
-  const coefficients = [1.061405429, -1.453152027, 1.421413741, -0.284496736, 0.254829592];
-  let polynomial = coefficients[0]!;
-  for (let index = 1; index < coefficients.length; index += 1) polynomial = polynomial * t + coefficients[index]!;
-  const erf = sign * (1 - polynomial * t * Math.exp(-x * x));
-  return (1 + erf) / 2;
+  const upperTail = standardNormalUpperTail(Math.abs(value));
+  return value < 0 ? upperTail : 1 - upperTail;
 }
 
-async function collectBlocks(
-  count: number,
-  options: ProbePOptions,
-  aSamples: number[] | undefined,
-  bSamples: number[] | undefined,
-): Promise<void> {
-  for (let index = 0; index < count / 2; index += 1) {
-    await measure(options.setupA, options.a, aSamples);
-    await measure(options.setupB, options.b, bSamples);
-    await measure(options.setupA, options.a, aSamples);
-    await measure(options.setupB, options.b, bSamples);
+function standardNormalUpperTail(value: number): number {
+  if (value > 37) return 0;
+  const exponential = Math.exp(-value * value / 2);
+  if (value >= 7.07106781186547) {
+    return exponential / (value + 1 / (value + 2 / (value + 3 / (value + 4 / (value + 0.65)))));
+  }
+  let numerator = 0.0352624965998911 * value + 0.700383064443688;
+  for (const coefficient of [6.37396220353165, 33.912866078383, 112.079291497871,
+    221.213596169931, 220.206867912376]) numerator = numerator * value + coefficient;
+  let denominator = 0.0883883476483184 * value + 1.75566716318264;
+  for (const coefficient of [16.064177579207, 86.7807322029461, 296.564248779674,
+    637.333633378831, 793.826512519948, 440.413735824752]) denominator = denominator * value + coefficient;
+  return exponential * numerator / denominator;
+}
+
+function assertCount(name: string, value: number): void {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`Probe P ${name} must be a non-negative integer`);
   }
 }
 
-async function measure(
-  setup: (() => void | Promise<void>) | undefined,
-  operation: () => void | Promise<void>,
-  samples: number[] | undefined,
-): Promise<void> {
-  await setup?.();
-  const start = performance.now();
-  await operation();
-  if (samples !== undefined) samples.push(performance.now() - start);
-}
-
-function assertEvenCount(value: number): void {
-  if (!Number.isSafeInteger(value) || value < 0 || value % 2 !== 0) {
-    throw new Error('Probe P sample counts must be non-negative even integers');
-  }
+function percentile95(values: readonly number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.ceil(sorted.length * 0.95) - 1]!;
 }
 
 function median(values: readonly number[]): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0 ? (sorted[middle - 1]! + sorted[middle]!) / 2 : sorted[middle]!;
+  const result = sorted.length % 2 === 0
+    ? (sorted[middle - 1]! + sorted[middle]!) / 2
+    : sorted[middle]!;
+  return result === 0 ? 0 : result;
 }

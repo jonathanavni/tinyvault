@@ -1,92 +1,317 @@
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 
-import { assertProbeP, mannWhitneyU, runProbeP } from './probeP';
+import { describe, expect, it, vi } from 'vitest';
 
-const GOLDEN_VECTORS = [
-  {
-    a: [1, 2, 3], b: [4, 5, 6],
-    expected: { u: 0, z: -1.7457431218879391, pValue: 0.08085559837005224, effectSize: 1 },
-  },
-  {
-    a: [1, 2, 5, 7], b: [3, 4, 6, 8],
-    expected: { u: 5, z: -0.7216878364870323, pValue: 0.47048642205878966, effectSize: 0.375 },
-  },
-  {
-    a: [1, 1, 2, 3], b: [1, 2, 2, 4],
-    expected: { u: 6, z: -0.455232734000163, pValue: 0.6489418131874136, effectSize: 0.25 },
-  },
-] as const;
+import {
+  assertProbeFamily,
+  assertProbeHardClause,
+  runProbeP,
+  wilcoxonSignedRank,
+  type ProbePResult,
+} from './probeP';
 
-describe('probe P statistic', () => {
-  it.each([
-    ['p just below 0.01', { pValue: 0.009_999, medianDiffMs: 0 }, true],
-    ['p exactly 0.01', { pValue: 0.01, medianDiffMs: 0 }, false],
-    ['p just above 0.01', { pValue: 0.010_001, medianDiffMs: 0 }, false],
-    ['median delta just below 2 ms', { pValue: 1, medianDiffMs: 1.999 }, false],
-    ['median delta exactly 2 ms', { pValue: 1, medianDiffMs: 2 }, false],
-    ['median delta just above 2 ms', { pValue: 1, medianDiffMs: -2.001 }, true],
-  ] as const)('kills assertProbeP cutoff mutations at %s', (_name, result, rejects) => {
-    const assertion = () => assertProbeP(result);
-    if (rejects) expect(assertion).toThrow('Probe P detected a timing difference');
-    else expect(assertion).not.toThrow();
-  });
+type GoldenVector = Readonly<{
+  differences: readonly number[];
+  nonZero: number;
+  wPlus: number;
+  wMinus: number;
+  variance: number;
+  z: number;
+  pValue: number;
+  effectSize: number;
+  medianDiffMs: number;
+  scipyPValue: number;
+  scipyZ: number;
+}>;
 
-  it.each(GOLDEN_VECTORS)(
-    'kills constant-p, one-sided-tail, and U/effect-size mutations for vector %#',
-    ({ a, b, expected }) => {
-      // Golden U/z/p values were independently computed with scipy.stats and the stated variance formula.
-      const result = mannWhitneyU(a, b);
-      expect(result.u).toBe(expected.u);
-      expect(result.z).toBeCloseTo(expected.z, 12);
-      expect(result.pValue).toBeCloseTo(expected.pValue, 6);
-      expect(result.effectSize).toBeCloseTo(expected.effectSize, 12);
+type HolmVector = Readonly<{
+  alpha: number;
+  pValues: Readonly<Record<string, number>>;
+  thresholdsInOrder?: readonly number[];
+  rejected: readonly string[];
+}>;
+
+type GoldenFile = Readonly<{
+  vectors: Readonly<Record<string, GoldenVector>>;
+  holm: readonly HolmVector[];
+}>;
+
+const GOLDEN = JSON.parse(readFileSync(
+  new URL('../../docs/m4-probe-p-golden.json', import.meta.url),
+  'utf8',
+)) as GoldenFile;
+const FAMILY_NAMES = Object.freeze(Object.keys(GOLDEN.holm[0]!.pValues));
+
+/*
+ * D10 mutant map (the quoted text is the named assertion below):
+ * - one-sided tail, zero retention, and constant p: "matches every independently computed paired golden vector"
+ * - unpaired MWU restored: "uses paired differences rather than pooled samples in the runner"
+ * - missing tie correction / continuity correction: the same assertion's ties/plain cases
+ * - wrong d sign: "detects a synthetic five-millisecond shift with the hard clause"
+ * - AB-only and A/B/A/B-block ordering: "counterbalances four pairs as ABBAABBA exactly"
+ * - pairs != 500 / warmup != 20: the two "keeps the ... default" assertions
+ * - family alpha != 0.01: "keeps the family alpha default at 0.01"
+ * - per-probe uncorrected alpha: "stops when the smallest p is above alpha/6"
+ * - missing/extra/duplicate tolerance: "rejects an inexact family name set"
+ */
+describe('probe P paired statistic', () => {
+  it.each(Object.entries(GOLDEN.vectors))(
+    'matches every independently computed paired golden vector: %s',
+    (_name, vector) => {
+      const result = wilcoxonSignedRank(vector.differences);
+      expect(result.nonZero).toBe(vector.nonZero);
+      expectWithin1e9(result.wPlus, vector.wPlus);
+      expectWithin1e9(result.wMinus, vector.wMinus);
+      expectWithin1e9(result.variance, vector.variance);
+      expectWithin1e9(result.z, vector.z);
+      expectWithin1e9(result.pValue, vector.pValue);
+      expectWithin1e9(result.effectSize, vector.effectSize);
+      expectWithin1e9(result.medianDiffMs, vector.medianDiffMs);
+      expectWithin1e9(result.pValue, vector.scipyPValue);
+      expectWithin1e9(Math.abs(result.z), Math.abs(vector.scipyZ));
     },
   );
 
-  it('kills the no-tie-correction mutant with the independently computed tied vector', () => {
-    const result = mannWhitneyU([1, 1, 2, 3], [1, 2, 2, 4]);
-    expect(result.z).toBeCloseTo(-0.455232734000163, 12);
-    expect(result.pValue).toBeCloseTo(0.6489418131874136, 6);
+  it('returns the pinned neutral result when every paired difference is zero', () => {
+    expect(wilcoxonSignedRank([0, -0, 0])).toEqual({
+      nonZero: 0,
+      wPlus: 0,
+      wMinus: 0,
+      variance: 0,
+      z: 0,
+      pValue: 1,
+      effectSize: 0,
+      medianDiffMs: 0,
+    });
   });
 
-  it('retains identical-distribution traffic while rejecting a five-millisecond shift', () => {
-    const identical = Array.from({ length: 200 }, (_, index) => index / 10);
-    const same = mannWhitneyU(identical, identical);
-    expect(() => assertProbeP({ ...same, medianDiffMs: 0 })).not.toThrow();
-
-    const shifted = identical.map((value) => value + 5);
-    const different = mannWhitneyU(identical, shifted);
-    expect(() => assertProbeP({ ...different, medianDiffMs: 5 }))
-      .toThrow('Probe P detected a timing difference');
+  it.each([
+    ['just below positive limit', 1.999, false],
+    ['at positive limit', 2, false],
+    ['at negative limit', -2, false],
+    ['just beyond negative limit', -2.001, true],
+  ] as const)('keeps the two-millisecond hard clause: %s', (_name, medianDiffMs, rejects) => {
+    const assertion = () => assertProbeHardClause({ medianDiffMs });
+    if (rejects) expect(assertion).toThrow('Probe P hard clause detected a timing difference');
+    else expect(assertion).not.toThrow();
   });
 
-  it('kills ABBA/random ordering and wrong sample-count defaults with A/B/A/B and 200 each', async () => {
-    const order: string[] = [];
+  it('detects a synthetic five-millisecond shift with the hard clause', async () => {
+    const result = await runWithDifferences(Array.from({ length: 12 }, () => 5));
+    expect(result.medianDiffMs).toBe(5);
+    expect(() => assertProbeHardClause(result)).toThrow('Probe P hard clause detected a timing difference');
+  });
+
+  it('uses paired differences rather than pooled samples in the runner', async () => {
+    const vector = GOLDEN.vectors.plain!;
+    const result = await runWithDifferences(vector.differences);
+    expectWithin1e9(result.z, vector.z);
+    expectWithin1e9(result.pValue, vector.pValue);
+    expectWithin1e9(result.effectSize, vector.effectSize);
+    expectWithin1e9(result.medianDiffMs, vector.medianDiffMs);
+  });
+});
+
+describe('probe P Holm-Bonferroni family gate', () => {
+  it.each(GOLDEN.holm)('rejects exactly the pinned Holm vector %#', (vector) => {
+    const entries = Object.entries(vector.pValues).map(([name, pValue]) => ({ name, pValue }));
+    const message = familyError(entries, { alpha: vector.alpha, expected: Object.keys(vector.pValues) });
+    expect(message).toBe(`Probe P family rejected: ${vector.rejected.join(', ')}`);
+    vector.thresholdsInOrder?.forEach((threshold, index) => {
+      expectWithin1e9(vector.alpha / (entries.length - index), threshold);
+    });
+  });
+
+  it('keeps the family alpha default at 0.01', () => {
+    const vector = GOLDEN.holm[0]!;
+    const entries = Object.entries(vector.pValues).map(([name, pValue]) => ({ name, pValue }));
+    expect(familyError(entries, { expected: Object.keys(vector.pValues) }))
+      .toBe(`Probe P family rejected: ${vector.rejected.join(', ')}`);
+  });
+
+  it('passes a seeded identical-condition null control for all six probes', () => {
+    const random = seededRandom(0x5eedc0de);
+    const entries = FAMILY_NAMES.map((name) => {
+      const differences: number[] = [];
+      for (let index = 0; index < 250; index += 1) {
+        const a = random();
+        const b = random();
+        differences.push(b - a, a - b);
+      }
+      return { name, pValue: wilcoxonSignedRank(differences).pValue };
+    });
+    expect(entries.every(({ pValue }) => pValue === 1)).toBe(true);
+    expect(() => assertProbeFamily(entries, { alpha: 0.01, expected: FAMILY_NAMES })).not.toThrow();
+  });
+
+  it('rejects a consistent +0.25 ms bias on a synthetic one-millisecond operation', async () => {
     const result = await runProbeP({
+      pairs: 64,
+      warmup: 4,
+      a: () => busyWait(1),
+      b: () => busyWait(1.25),
+    });
+    expect(result.medianDiffMs).toBeGreaterThan(0);
+    expect(familyError(new Map([['biased-operation', result]]), {
+      alpha: 0.01,
+      expected: ['biased-operation'],
+    })).toBe('Probe P family rejected: biased-operation');
+  });
+
+  it.each([
+    ['below', 0.01 / 6 - 1e-8],
+    ['equal to', 0.01 / 6],
+  ] as const)('rejects one p %s alpha/6', (_name, pValue) => {
+    const results = familyMap({ [FAMILY_NAMES[0]!]: pValue });
+    expect(familyError(results, { alpha: 0.01, expected: FAMILY_NAMES }))
+      .toBe(`Probe P family rejected: ${FAMILY_NAMES[0]}`);
+  });
+
+  it('stops when the smallest p is above alpha/6 even though it is below alpha/5', () => {
+    const between = (0.01 / 6 + 0.01 / 5) / 2;
+    const results = familyMap({ [FAMILY_NAMES[0]!]: between });
+    expect(() => assertProbeFamily(results, { alpha: 0.01, expected: FAMILY_NAMES })).not.toThrow();
+  });
+
+  it.each([
+    ['missing', FAMILY_NAMES.slice(0, 5)],
+    ['extra', [...FAMILY_NAMES, 'unexpected-probe']],
+    ['duplicate', [...FAMILY_NAMES, FAMILY_NAMES[0]!]],
+  ] as const)('rejects an inexact family name set: %s', (_name, names) => {
+    const entries = names.map((name) => ({ name, pValue: 1 }));
+    expect(() => assertProbeFamily(entries, { alpha: 0.01, expected: FAMILY_NAMES }))
+      .toThrow('Probe P family names mismatch');
+  });
+});
+
+describe('probe P paired runner', () => {
+  it('counterbalances four pairs as ABBAABBA exactly', async () => {
+    const order: string[] = [];
+    await runProbeP({
+      pairs: 4,
       warmup: 0,
       a: () => { order.push('A'); },
       b: () => { order.push('B'); },
     });
-    expect(result.aSamplesMs).toHaveLength(200);
-    expect(result.bSamplesMs).toHaveLength(200);
-    for (let index = 0; index < order.length; index += 4) {
-      expect(order.slice(index, index + 4)).toEqual(['A', 'B', 'A', 'B']);
-    }
+    expect(order.join('')).toBe('ABBAABBA');
   });
 
-  it('kills setup-inside-the-window and missing-warmup mutations', async () => {
+  it('keeps the pairs default at 500', async () => {
+    const result = await runProbeP({ warmup: 0, a: () => undefined, b: () => undefined });
+    expect(result.aSamplesMs).toHaveLength(500);
+    expect(result.bSamplesMs).toHaveLength(500);
+    expect(result.differencesMs).toHaveLength(500);
+  });
+
+  it('keeps the warmup default at 20 samples per side', async () => {
     const order: string[] = [];
     await runProbeP({
-      samplesPerCondition: 2,
-      warmup: 2,
-      setupA: () => { order.push('setupA'); },
-      setupB: () => { order.push('setupB'); },
+      pairs: 0,
       a: () => { order.push('A'); },
       b: () => { order.push('B'); },
     });
-    const phase = [
-      'setupA', 'A', 'setupB', 'B', 'setupA', 'A', 'setupB', 'B',
-    ];
+    expect(order).toEqual(Array.from({ length: 20 }, () => ['A', 'B']).flat());
+  });
+
+  it('keeps setup outside the timed window for warmup and measured pairs', async () => {
+    const order: string[] = [];
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => {
+      order.push('now');
+      return 0;
+    });
+    try {
+      await runProbeP({
+        pairs: 1,
+        warmup: 1,
+        setupA: () => { order.push('setupA'); },
+        setupB: () => { order.push('setupB'); },
+        a: () => { order.push('A'); },
+        b: () => { order.push('B'); },
+      });
+    } finally {
+      now.mockRestore();
+    }
+    const phase = ['setupA', 'now', 'A', 'now', 'setupB', 'now', 'B', 'now'];
     expect(order).toEqual([...phase, ...phase]);
   });
+
+  it('reports paired differences and nearest-rank p95 for both conditions', async () => {
+    const result = await runWithDifferences([0, 1, 2, 3]);
+    expect(result.aSamplesMs).toEqual([1, 1, 1, 1]);
+    expect(result.bSamplesMs).toEqual([1, 2, 3, 4]);
+    expect(result.differencesMs).toEqual([0, 1, 2, 3]);
+    expect(result.p95AMs).toBe(1);
+    expect(result.p95BMs).toBe(4);
+  });
 });
+
+function expectWithin1e9(actual: number, expected: number): void {
+  expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1e-9);
+}
+
+function familyError(
+  results: Parameters<typeof assertProbeFamily>[0],
+  options: Parameters<typeof assertProbeFamily>[1],
+): string | undefined {
+  try {
+    assertProbeFamily(results, options);
+    return undefined;
+  } catch (error) {
+    if (!(error instanceof Error)) throw error;
+    return error.message;
+  }
+}
+
+function familyMap(overrides: Readonly<Record<string, number>>): Map<string, ProbePResult> {
+  return new Map(FAMILY_NAMES.map((name) => [name, probeResult(overrides[name] ?? 1)]));
+}
+
+function probeResult(pValue: number): ProbePResult {
+  return {
+    pValue,
+    z: 0,
+    effectSize: 0,
+    medianDiffMs: 0,
+    p95AMs: 0,
+    p95BMs: 0,
+    differencesMs: [],
+    aSamplesMs: [],
+    bSamplesMs: [],
+  };
+}
+
+function seededRandom(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state += 0x6d2b79f5;
+    let value = state;
+    value = Math.imul(value ^ value >>> 15, value | 1);
+    value ^= value + Math.imul(value ^ value >>> 7, value | 61);
+    return ((value ^ value >>> 14) >>> 0) / 4_294_967_296;
+  };
+}
+
+function busyWait(durationMs: number): void {
+  const start = performance.now();
+  while (performance.now() - start < durationMs) {
+    // Deliberately occupy the measured operation for the synthetic positive control.
+  }
+}
+
+async function runWithDifferences(differences: readonly number[]): Promise<ProbePResult> {
+  const timings: number[] = [];
+  differences.forEach((difference, index) => {
+    const order = index % 2 === 0 ? [1, 1 + difference] : [1 + difference, 1];
+    for (const duration of order) timings.push(0, duration);
+  });
+  const now = vi.spyOn(performance, 'now').mockImplementation(() => {
+    const value = timings.shift();
+    if (value === undefined) throw new Error('Synthetic timer exhausted');
+    return value;
+  });
+  try {
+    return await runProbeP({ pairs: differences.length, warmup: 0, a: () => undefined, b: () => undefined });
+  } finally {
+    now.mockRestore();
+  }
+}
