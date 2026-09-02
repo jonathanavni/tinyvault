@@ -12,13 +12,11 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 ## Current State
 
 `2026-09-01-m4` — focus: M4 (fill service end-to-end + all integration security gates, 🔴) through the full Codex ladder; in parallel: absorb A1/A3 + fact-check corrections into `PROJECT-SPEC.md`, prune merged agent branches, schedule the §9.1 LOC-budget question.
-**In progress (2026-09-02, ~07:00 CDT):** all four M4 commits + both fix slices committed on `codex/m4-fill-service`
-(`305da22`); the final three-channel round and the post-M4 whole-codebase audit have reported (register sections
-"Post-M4 whole-codebase audit" and "Final round" in `docs/m4-review-findings.md`); contract amendment `086914b`
-(`InjectOutcome` `unplaceable`); **the combined fix slice `m4-fix-final` (packet in the scratchpad) is running in Codex**
-— A-1 `<base href>` (P1), the retention rule round six (P1, three channels convergent), A-2/A-3, `validateScenarioAuth`
-call sites, the P3s, the §9.1 removals. Then: integrator run, commit, three reviews of that diff, the user's probe-P
-decision, merge FF to `main`.
+**In progress (2026-09-02, ~08:00 CDT):** the combined fix slice `m4-fix-final` is committed as `530b0cb` on
+`codex/m4-fill-service` (integrator run: 671 tests, gate 49/44, `make eval` 10/10 0 leaks; probe P numbers in the
+scratchpad `c3-probe-numbers.txt` — two non-reproducible rejections under load, old commit 2/2 under the same load);
+**three reviews of `305da22..530b0cb` in flight** (Codex `task-mtk3guoy-61qlqj`, Claude QA in `wt-review`, Claude
+security in `wt-security`). Then: absorb, the user's probe-P decision, merge FF to `main`, `/wrapup`.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
