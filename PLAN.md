@@ -12,12 +12,12 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 ## Current State
 
 `2026-09-01-m4` — focus: M4 (fill service end-to-end + all integration security gates, 🔴) through the full Codex ladder; in parallel: absorb A1/A3 + fact-check corrections into `PROJECT-SPEC.md`, prune merged agent branches, schedule the §9.1 LOC-budget question.
-**In progress (2026-09-02, ~12:30 CDT):** `codex/m4-fill-service` at `79c6557`: `cd152a2` (fix-final3) reviewed by
-three channels (register "Final3 round": integrator tsc slip fixed `3e74854`; Blob bodies + headers + WebSocket
-frames invisible to layer 4; retention file-set scope; CDP guard removed to satisfy the rule; url-event change moved a
-capture hole; unobserved masking understated; probe P floor ~5–10 µs). Continuity amendments: honest-claims sentence
-names the retention rule's scope and probe P's floor; D10 batches the sub-µs probe; SCHEMA channels + residual.
-**Fix slice `m4-fix-final4` running in Codex.** Then: integrator run (tsc last), commit, three reviews, merge FF, `/wrapup`.
+**In progress (2026-09-02, ~12:45 CDT):** `codex/m4-fill-service` at `58ca087` = fix slice `m4-fix-final4` (Blob/header/
+WebSocket capture; retention rule over the full plaintext file set, S23–S30 — the CAP round; CDP guard restored;
+capture-hole closed; batched sub-µs probe + sensitivity calibration; retention support modules in `scripts/retention`).
+Integrator: 751 tests + 9-test timing family, gate 52/47, `make eval` 10/10 0 leaks, tsc last. **Three reviews of
+`cd152a2..58ca087` in flight** (Codex, QA `wt-review`, security `wt-security`). Then: absorb P1/P2 only (retention
+shapes become residuals), merge FF to `main`, `/wrapup`.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
