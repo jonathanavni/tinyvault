@@ -765,7 +765,7 @@ CDP isolated world that re-verifies origin and element identity through native, 
 turn as the native-setter assignment (probed against a poisoned page); on every returned refusal nothing is written
 to the DOM, and on a transport rejection the element is masked and locked; TinyVault-owned data-plane state retains
 no plaintext, no secret-derived material, and no evidence after the fill on every path, **shown by a structural
-taint rule over a fixed file set and a named mutant corpus (S1–S30 and the earlier eleven), applied by mutation —
+taint rule over a fixed file set and a named mutant corpus (S1–S35 and the earlier eleven), applied by mutation —
 an allowlist of syntactic shapes, not an interprocedural escape analysis; its residual is any retention shape
 outside the corpus, named in the rule's scope note, and the cross-model review is the check on a malicious
 implementer (amended 2026-09-02, register J-*)**; filled and password-type controls are masked by provenance, masked nodes carry only their tag,

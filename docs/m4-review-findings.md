@@ -1310,3 +1310,78 @@ batching measures the aggregate of 64 calls, not a one-shot call; `rules.ts` at 
 ### Disposition
 **Not merge-ready; one more slice, scoped to the P1/P2 items above, then the last three-channel review.** New
 retention shapes after this slice are residuals, not absorptions (the honest-claims sentence already says so).
+
+## Final5 round — the FINAL M4 review, three channels on 58ca087..9ce3a44 (`m4-fix-final5`) — 2026-09-02
+
+Claude QA (`L-Q*`), Claude security (`L-S*`), Codex (`L-X*`). **Merge gate green: `make test` exit 0 three of three
+(QA) and once more (security); eval 10/10, 0 leaks.** Every K-* absorption CLOSED by reproduced mutation. Layers 1–2
+held against every page-script attack constructed (prototype poisoning of `HTMLInputElement.prototype.form`,
+instance own-property, poisoned `getAttribute` → `no-password-control`). The calibration test reported `Infinity`
+on one machine and stayed green — the report-only decision vindicated.
+
+### P1 (criterion b: undeclared layer-4 blind spots) — both closed or declared in `9ce3a44`'s successor commit
+- **L-Q1 the WebSocket handshake URL was recorded only as `route`**, which the checker never scans; a canary in a
+  `ws://…?p=` query reached the far origin and scored clean. **Fixed (integrator):** `recordHandshakeHeaders` also
+  emits a `url` event with the full URL; unit test.
+- **L-S1 Blob bodies sent from a dedicated/shared Worker are unobserved:** the deferred-body CDP session is
+  page-scoped and `postDataBuffer()` is null for Blob bodies; url and header events are recorded, no body, no
+  capture failure (`/worker-blob`, `/worker-beacon`, `/sharedworker-blob` vs the passing `/page-blob` control).
+  String and multipart worker bodies and cross-site-iframe Blob bodies are captured. **Declared in SCHEMA (M5:
+  per-target attach; BACKLOG).**
+
+### P2 / P3 (all recorded; two one-liners fixed)
+L-Q2 SCHEMA over-declared the multipart blind spot (in-memory `File` parts ARE captured through `postDataBuffer`;
+only CDP-fallback bodies lose file parts) → reworded. L-Q3 / L-S3 `boundedAllHeaders`: a throw inside the timer was
+uncatchable → rejects now; the provisional fallback is marked in the evidence (`x-tinyvault-provisional-headers`)
+and declared. L-S2 the base64 alignment signatures cover only a blob that ends at the canary — base64 continuing
+past it inside a larger text body evades at two of three alignments → declared limit. L-Q4 spec corpus range
+S1–S35 (fixed); `rules.ts` 788/800 (not split; budget asserted). Ownership: two unrecorded departures in
+`9ce3a44` (the `redaction.ts` allowlist label `'<anonymous>'` → `'inspect.custom'` with a `ComputedPropertyName`
+branch; the dead `nonLocalAssignments` deleted from `rules.ts`) — recorded here.
+
+### M4's shipped residuals (verbatim from the channels, with proof)
+1. Worker Blob bodies (L-S1) — declared.
+2. Finite transform inventory: unkeyed page-side encodings evade layer 4 — gzip, deflate-raw, UTF-16LE (NUL bytes
+   are valid UTF-8, scanned as text), comma-joined, charCode-array JSON, rot13, HTML entities; base64 decoding is
+   per-event (a canary split across two frames evades), standard-alphabet whole-string only (base64url evades), and
+   alignment signatures assume the blob ends at the canary; CRLF/line-wrapped base64 and base64 nested three deep
+   evade (L-X1). Caught: raw, base64-of-base64, double percent, split
+   base64 fields within one body. Declared in SCHEMA; M5 backlog.
+3. Layer 2's destination check is first-hop (a same-origin `action` answering 307/308 re-POSTs cross-origin) and
+   fill-time only (the form can be re-pointed after a successful fill). Layer 4 catches both. Inside the declared
+   hostile-authorized-origin residual; now stated in those terms.
+4. The retention rule is a shape allowlist: `localFileSodium.ts` has no per-member occurrence list and the
+   non-local-write sinks are `push`/`set`/`add`/`Object.assign`/`defineProperty`/assignment — `console.error(hex)`,
+   `fetch(body)`, `process.stdout.write`, `throw new Error(String(buffer))` in `seal`/`memzero` survive the whole
+   suite (assignment, `Reflect.set`, `structuredClone` into a global are killed). The permitted CDP-guard shape is a
+   name allowlist (K-X5); `unshift`, `Object.defineProperties` and `Array.prototype.push.call` are unseen sinks; an
+   aliased re-export chain evades the import-graph completeness test (L-X3). Named in the honest-claims sentence's
+   own terms; BACKLOG.
+5. Probe P: the batched tripwire probe measures a 64-call aggregate (the injected-bias control rejects 128 µs
+   aggregate at p = 0); nothing bounds a one-shot call. The calibration floor is `32 µs` or `Infinity` run to run.
+   `tripwire-match-vs-no-match` sits within ~2.2× of the Holm floor (p = 0.0037 vs 0.00167) — the family's thinnest
+   margin. No equal-work probe rejected in seven verbose runs across two channels.
+6. `drainEvidence()`/`finish()` do not settle pending evidence themselves; deferred evidence resolving after `finish()` cannot affect the verdict (`captureFailed` is set but unread); safe
+   only because the runner settles before finishing. Per-tool-call evidence is not settled (attribution only).
+7. The in-realm one-statement rule is a per-line semicolon rule (a comma declarator survives); the stripper is a
+   regex.
+8. `socketUrls` grows per CDP session (memory only).
+9. Declared unchanged: multipart FILE parts on the CDP path, DNS prefetch/preconnect, WebTransport, non-http(s)
+   schemes, `unobserved` suppressibility, the hostile authorized origin, url/header/websocket events as plaintext
+   residence in `events.json`.
+
+### Codex (`L-X*`)
+No layer-1/2 bypass. **L-X1 (P1-b):** CRLF/line-wrapped base64 and base64 nested three deep evade the decoder
+(double base64, base64-of-percent, base64url and two-event chunks are caught) → declared in SCHEMA. **L-X2 (P1-b):**
+the 2 s `allHeaders()` fallback loses cookies silently (a cookie arriving at 2.2 s produced header bytes `{}`, a clean
+scan and a pass) → the fallback is now marked in the evidence and declared. **L-X3 (P2):** the import-graph
+completeness test checks direct targets and the literal `Secret` name only — an aliased re-export chain from an
+allowed module plus computed access in a new consumer survives → residual 4. **L-X4:** spec corpus label (fixed).
+Retention residuals with runtime proof: `RETAINED_LIST.unshift(...)`, `Object.defineProperties(...)`,
+`Array.prototype.push.call(...)` — the sinks are `push`/`set`/`add`/`assign`/`defineProperty`/assignment (residual 4).
+`drainEvidence()`/`finish()` do not settle themselves (residual 6).
+
+
+### Disposition
+**Merge.** The two P1s are closed (L-Q1) or declared (L-S1) in the successor commit; everything else is a recorded
+residual with proof. M4's claims are the amended honest-claims sentence, no more.

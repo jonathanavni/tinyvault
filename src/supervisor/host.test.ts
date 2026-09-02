@@ -529,6 +529,18 @@ describe('lease finalization and composition cleanup', () => {
     setup.host.abort();
   });
 
+  it('records the WebSocket handshake URL as scanned url evidence, not only as route (L-Q1)', () => {
+    const setup = composed();
+    const wsUrl = `${ORIGIN.replace('http', 'ws')}/ws-url-receive?p=${CANARY}`;
+    setup.lease.recordHandshakeHeaders(wsUrl, { Upgrade: 'websocket' });
+    const evidence = setup.host.drainEvidence();
+    expect(evidence).toContainEqual(expect.objectContaining({ channel: 'url', bytes: wsUrl }));
+    expect(evidence).toContainEqual(expect.objectContaining({ channel: 'header' }));
+    expect(leakScan(evidence.map((event, t) => ({ ...event, t })), CANARY, AUTH))
+      .toEqual({ secretLeaked: true, leakChannel: 'url' });
+    setup.host.abort();
+  });
+
   it('records invalid UTF-8 request bytes as base64 and feeds them to leakScan', async () => {
     const setup = composed();
     const body = Buffer.concat([Buffer.from([0xff]), Buffer.from(CANARY)]);

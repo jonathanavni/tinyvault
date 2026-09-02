@@ -41,7 +41,12 @@ const ALL_HEADERS_TIMEOUT_MS = 2_000;
 
 function boundedAllHeaders(request: RequestLike): Promise<Record<string, string>> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => resolve(request.headers()), ALL_HEADERS_TIMEOUT_MS);
+    const timer = setTimeout(() => {
+      // Provisional fallback (no cookies): marked in the evidence so a reader can tell it from allHeaders().
+      try {
+        resolve({ ...request.headers(), 'x-tinyvault-provisional-headers': 'true' });
+      } catch (error: unknown) { reject(error); }
+    }, ALL_HEADERS_TIMEOUT_MS);
     request.allHeaders().then((headers) => { clearTimeout(timer); resolve(headers); },
       (error: unknown) => { clearTimeout(timer); reject(error); });
   });
@@ -173,6 +178,11 @@ export class EvidenceLease {
     } catch {
       origin = undefined;
     }
+    // The handshake URL (query string included) is evidence too: `route` is never scanned (register L-Q1).
+    this.#record(Object.freeze({
+      channel: 'url', direction: 'outbound', ...(origin === undefined ? {} : { origin }),
+      method: 'GET', route: `${parsed.pathname}${parsed.search}`, initiator: 'browser', bytes: parsed.href,
+    }));
     this.#record(Object.freeze({
       channel: 'header', direction: 'outbound', ...(origin === undefined ? {} : { origin }),
       method: 'GET', route: `${parsed.pathname}${parsed.search}`, initiator: 'browser',

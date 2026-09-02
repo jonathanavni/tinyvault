@@ -131,8 +131,21 @@ type Channel =
   // with `origin` omitted (K-S1). DECLARED BLIND SPOTS (M5): hostname-encoded exfiltration through DNS prefetch /
   // preconnect / dns-prefetch hints produces no HTTP request and is unobservable through CDP Network; WebTransport
   // (HTTP/3) is not surfaced by Playwright's request events; non-http(s) schemes (file:, data:) are dropped;
-  // multipart/form-data FILE parts are omitted by CDP Network.getRequestPostData (text fields are captured) —
-  // a full-byte capture path is M5 work (register K-X4). Request headers come from allHeaders() (cookies included).
+  // multipart/form-data: text fields and in-memory File parts are captured through postDataBuffer(); only bodies
+  // that reach the CDP fallback (Network.getRequestPostData — bodies Playwright does not hold inline, e.g.
+  // disk-backed file inputs) lose their FILE parts (register K-X4/L-Q2). Request headers come from allHeaders()
+  // (cookies included, bounded at 2 s; on timeout the provisional cookie-less headers are recorded with the marker
+  // header `x-tinyvault-provisional-headers: true`); WebSocket handshakes record their URL (query included) and
+  // handshake headers from CDP (register L-Q1).
+  // DECLARED BLIND SPOT (M5, register L-S1): Blob (non-inlinable) request bodies sent from a dedicated or shared
+  // Worker are NOT captured — the deferred-body CDP session is page-scoped and postDataBuffer() is null for Blob
+  // bodies; the url and header events are still recorded. String and multipart worker bodies and Blob bodies
+  // from cross-site iframes are captured. Per-target CDP attach is M5 work.
+  // DECLARED LIMIT (register L-S3): leakScan's transform inventory is finite — unkeyed page-side encodings outside
+  // it (gzip/deflate, UTF-16, charCode arrays, rot13, HTML entities, non-whitespace separators, base64 that
+  // continues past the canary inside a larger text body, CRLF/line-wrapped base64, base64 nested more than
+  // twice) are not detected; base64 decoding is per event (a canary split across frames evades). Extending the
+  // inventory is M5 work (register L-S2/L-X1).
   // The controls lab answers every route with permissive CORS headers so hostile pages can reach the second origin.
   // so layer 4 scans query-string exfiltration (register H-S1). leakScan scans `bytes` only; requestId/documentId/
   // route/origin are never scanned — a field that could carry plaintext must be put in `bytes`.
