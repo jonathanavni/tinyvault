@@ -653,7 +653,7 @@ const VETTED_EXTERNAL_PACKAGES = [
 3. **Importer file rule:** a repo-file edge into any of `packages` must originate from an `importerFiles` entry and
    target a `directImportOnly` package. **Reachability rule:** a vetted package may appear in an entry root's BFS only
    if the entry is under `reachableFrom` or is protected/evaluator by zone.
-4. **Load-bearing on the real graph:** `{ vetted: [] }` → FAIL naming exactly the two bundles; real manifest → PASS;
+4. **Load-bearing on the real graph:** `{ vetted: [] }` → FAIL naming exactly the three opaque files (the two bundles and `bootstrap.js`, per the T3-1 follow-up); real manifest → PASS;
    no entry names an uninstalled package or a missing `opaqueFiles`/`importerFiles` path.
 
 ### 7.2 The evaluator zone
