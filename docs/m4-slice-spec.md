@@ -46,8 +46,11 @@ Register ids: Z3-* (Claude round 3), W3-* (Codex round 3).
 7. **The fill service receives a frozen three-method façade (Z3-7/W3-6)**, asserted at runtime.
 8. **One importer file (W3-7):** only `src/browser/playwright.ts` may import `playwright`; nothing imports
    `playwright-core` directly.
-9. **Probe P is pinned (W3-8, Z3 P3):** A/B/A/B per §4 (ABBA declined), two-sided MWU with tie-corrected variance
-   and continuity correction, rank-biserial effect size, independently computed golden vectors.
+9. **Probe P is pinned (W3-8, Z3 P3; AMENDED 2026-09-02 — see D10 and register C-F1):** ~~A/B/A/B per §4 (ABBA
+   declined), two-sided MWU with tie-corrected variance and continuity correction, rank-biserial effect size~~ →
+   **500 counterbalanced interleaved pairs (AB/BA), two-sided Wilcoxon signed-rank on the per-pair differences,
+   matched-pairs rank-biserial effect size, Holm–Bonferroni at α = 0.01 over the six-probe family plus the per-probe
+   2 ms hard clause**; independently computed golden vectors (`docs/m4-probe-p-golden.json`).
 10. **Masking is value-independent by source rule and sentinel (W3-10); matching before `finish()` is excluded by a
     matcher spy and an import rule (W3-11).**
 11. **Tokens read before `dispatchEvent` (Z3-5/W3-12); `scrollIntoView` instant with a smooth-scroll control (Z3-6);
@@ -408,14 +411,40 @@ export type SupervisedHost = Readonly<{
 
 ### D10 — Probe P is a shared, pinned, tested statistic
 
-`testbed/probe/probeP.ts`: `mannWhitneyU(a, b)` — **two-sided, normal approximation with tie-corrected variance and
-continuity correction; effect size = rank-biserial correlation `1 − 2U/(n·m)`** (W3-8); `runProbeP({ samplesPerCondition:
-200, warmup: 20, a, b, setupA?, setupB? })` — **A/B/A/B interleaving** (§4's locked sentence; ABBA declined),
-`setup*` outside the window, `performance.now()`; `assertProbeP` fails if `pValue < 0.01 || |medianDiffMs| > 2`. **Unit
-tests:** three golden vectors (one with ties) with **independently computed** U, z, p; identical distributions pass; a
-5 ms shift fails; mutants: constant `p`, one-sided tail, no tie correction. Occupancy = start time of a trivial
-`runControl` enqueued right after the measured call. Timing tests: 180 s per-test timeout, ≤ 6 min total on the
-reference machine; numbers reported, never loosened; **only equal-work conditions are timed**.
+**Amended 2026-09-02 (continuity owner; user-authorized on Codex's recommendation; register C-F1). The original
+wording follows, struck, as history.**
+
+`testbed/probe/probeP.ts`: `runProbeP({ pairs: 500, warmup: 20, a, b, setupA?, setupB? })` collects **500
+interleaved pairs** after the 20-sample warm-up; **pair *i* executes A then B when *i* is even and B then A when *i*
+is odd** (deterministic AB/BA counterbalancing, so condition is never confounded with first-versus-second execution);
+`setup*` stays outside the timed window; `performance.now()`. The statistic is `wilcoxonSignedRank(d)` on the
+**per-pair differences `d_i = t_B,i − t_A,i` (ms)**: zero differences discarded; ties among `|d|` given average ranks;
+normal approximation with **tie-corrected variance `n(n+1)(2n+1)/24 − Σ(t³−t)/48`** over the non-zero `n`;
+**continuity correction** of 0.5 toward the mean; `z` computed from `W⁺` (sign = direction); `pValue = 2·(1 − Φ(|z|))`.
+**Effect size = matched-pairs rank-biserial `r = (W⁺ − W⁻)/(W⁺ + W⁻)`**. `medianDiffMs` = **median of all `d_i`**
+(zeros included). Reported per probe: `pValue`, `z`, `effectSize`, `medianDiffMs`, and **p95 of each condition**.
+Two clauses: **(1) per-probe hard failure** — `assertProbeHardClause(result)` throws when `|medianDiffMs| > 2`;
+**(2) family-wise gate** — the six probes of `host.timing.browser.test.ts` are one family; `assertProbeFamily(results,
+{ alpha: 0.01 })` applies **Holm–Bonferroni** (sort `p` ascending; reject `p_(k)` iff `p_(k) ≤ α/(m − k + 1)` and every
+earlier hypothesis was rejected; stop at the first non-rejection), throws naming every rejected probe, and **also throws
+when the family does not contain exactly the six named probes** (a crashed or skipped probe cannot pass silently).
+**Unit tests:** the four paired golden vectors and the two Holm vectors in `docs/m4-probe-p-golden.json`, **independently
+computed** (scipy 1.13.1 `wilcoxon(d, zero_method='wilcox', correction=True, alternative='two-sided', method='approx')`
+and a stdlib re-derivation agreeing to 1e-9; scipy's `zstatistic` is sign-flipped because it is built on `min(W⁺, W⁻)`);
+an identical-condition null control passes the family gate; positive controls: **a consistent +0.25 ms bias on a
+synthetic 1 ms operation is rejected by the family gate**, and **a 5 ms shift fails the hard clause**; mutants: unpaired
+MWU restored, counterbalancing removed (AB only), no tie correction, no continuity correction, per-probe uncorrected
+α, missing-probe tolerance, wrong sign of `d`, wrong `pairs` default. Occupancy = start time of a trivial `runControl`
+enqueued right after the measured call. Timing tests: 180 s per-test timeout, ≤ 10 min total on the reference machine;
+numbers reported, never loosened; **only equal-work conditions are timed**. Every real-browser timing mutant recorded
+in the register (length-dependent decode, tripwire construction, `NONMATCH` shape) must still be killed.
+
+~~`testbed/probe/probeP.ts`: `mannWhitneyU(a, b)` — two-sided, normal approximation with tie-corrected variance and
+continuity correction; effect size = rank-biserial correlation `1 − 2U/(n·m)` (W3-8); `runProbeP({ samplesPerCondition:
+200, warmup: 20, a, b, setupA?, setupB? })` — A/B/A/B interleaving (§4's locked sentence; ABBA declined), `setup*`
+outside the window, `performance.now()`; `assertProbeP` fails if `pValue < 0.01 || |medianDiffMs| > 2`. Unit tests:
+three golden vectors (one with ties) with independently computed U, z, p; identical distributions pass; a 5 ms shift
+fails; mutants: constant `p`, one-sided tail, no tie correction.~~
 
 ## Scope
 
@@ -561,7 +590,8 @@ the **page's** origin. 4097 → `backend-error` (record precondition; stated).
 
 Short vs long (16 vs 4096, any content — transport is content-blind); queued probe; reflection oracle; tripwire
 equal-work (leaky vs same-length non-matching, via `composeSupervisedHost`); real supervised path with the lease
-listener (canary vs same-length non-canary POST body: `browser_click` latency). Each `assertProbeP`; numbers reported.
+listener (canary vs same-length non-canary POST body: `browser_click` latency). Each probe asserts the hard clause and
+registers its result; a final family test applies Holm–Bonferroni (D10 as amended); numbers reported.
 
 ### I. Tripwire wiring (3)
 

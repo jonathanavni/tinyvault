@@ -1,0 +1,157 @@
+{
+ "pinned": "two-sided Wilcoxon signed-rank on d_i = t_B,i - t_A,i; zeros discarded; average ranks; tie-corrected variance n(n+1)(2n+1)/24 - sum(t^3-t)/48; continuity correction 0.5 toward the mean; z from W+; p = 2(1-Phi(|z|)); effect = (W+ - W-)/(W+ + W-); medianDiffMs = median of ALL d_i (zeros included)",
+ "scipy": "scipy 1.13.1 wilcoxon(d, zero_method=\"wilcox\", correction=True, alternative=\"two-sided\", method=\"approx\") \u2014 its zstatistic is sign-flipped (built on min(W+,W-)); |z| and p are identical",
+ "vectors": {
+  "plain": {
+   "differences": [
+    0.31,
+    -0.12,
+    0.45,
+    0.08,
+    -0.27,
+    0.52,
+    0.19,
+    -0.05,
+    0.38,
+    0.11,
+    0.24,
+    -0.16
+   ],
+   "nonZero": 12,
+   "wPlus": 60.0,
+   "wMinus": 18.0,
+   "variance": 162.5,
+   "z": 1.608152308133109,
+   "pValue": 0.10780182537536609,
+   "effectSize": 0.5384615384615384,
+   "medianDiffMs": 0.15,
+   "scipyPValue": 0.10780182537536617,
+   "scipyZ": -1.6081523081331088
+  },
+  "ties": {
+   "differences": [
+    0.3,
+    -0.3,
+    0.1,
+    0.1,
+    0.1,
+    -0.2,
+    0.4,
+    0.2,
+    -0.1,
+    0.5,
+    0.2,
+    0.3
+   ],
+   "nonZero": 12,
+   "wPlus": 60.5,
+   "wMinus": 17.5,
+   "variance": 160.25,
+   "z": 1.658900261620065,
+   "pValue": 0.0971358919331351,
+   "effectSize": 0.5512820512820513,
+   "medianDiffMs": 0.15000000000000002,
+   "scipyPValue": 0.09713589193313517,
+   "scipyZ": -1.658900261620065
+  },
+  "zeros": {
+   "differences": [
+    0.0,
+    0.25,
+    -0.15,
+    0.0,
+    0.35,
+    0.05,
+    -0.2,
+    0.3,
+    0.0,
+    0.15,
+    0.1,
+    -0.05,
+    0.45
+   ],
+   "nonZero": 10,
+   "wPlus": 43.0,
+   "wMinus": 12.0,
+   "variance": 96.0,
+   "z": 1.5309310892394865,
+   "pValue": 0.12578642463893996,
+   "effectSize": 0.5636363636363636,
+   "medianDiffMs": 0.05,
+   "scipyPValue": 0.12578642463894,
+   "scipyZ": -1.5309310892394865
+  },
+  "significant": {
+   "differences": [
+    0.21,
+    0.34,
+    0.12,
+    -0.04,
+    0.27,
+    0.19,
+    0.41,
+    0.08,
+    0.15,
+    0.3,
+    0.22,
+    -0.02,
+    0.37,
+    0.11,
+    0.26,
+    0.09,
+    0.33,
+    0.18
+   ],
+   "nonZero": 18,
+   "wPlus": 168.0,
+   "wMinus": 3.0,
+   "variance": 527.25,
+   "z": 3.571129161736606,
+   "pValue": 0.00035544554613697876,
+   "effectSize": 0.9649122807017544,
+   "medianDiffMs": 0.2,
+   "scipyPValue": 0.0003554455461370895,
+   "scipyZ": -3.571129161736606
+  }
+ },
+ "holm": [
+  {
+   "alpha": 0.01,
+   "pValues": {
+    "fill-short-vs-long": 0.0009,
+    "queued-short-vs-long": 0.003,
+    "reflection-equal-length": 0.004,
+    "tripwire-match-vs-no-match": 0.02,
+    "tripwire-real-click-match-vs-no-match": 0.2,
+    "real-listener-click": 0.9
+   },
+   "thresholdsInOrder": [
+    0.0016666666666666668,
+    0.002,
+    0.0025,
+    0.0033333333333333335,
+    0.005,
+    0.01
+   ],
+   "rejected": [
+    "fill-short-vs-long"
+   ]
+  },
+  {
+   "alpha": 0.01,
+   "pValues": {
+    "fill-short-vs-long": 0.0009,
+    "queued-short-vs-long": 0.0015,
+    "reflection-equal-length": 0.0021,
+    "tripwire-match-vs-no-match": 0.02,
+    "tripwire-real-click-match-vs-no-match": 0.2,
+    "real-listener-click": 0.9
+   },
+   "rejected": [
+    "fill-short-vs-long",
+    "queued-short-vs-long",
+    "reflection-equal-length"
+   ]
+  }
+ ]
+}

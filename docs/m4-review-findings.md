@@ -1015,3 +1015,18 @@ rule's file set (`session.ts`, `fillService.ts`) is an assumption.
 Codex) implements A-1..A-8, the §9.1 removals, and F-S1/F-Q1/F-X1, F-S3/F-Q2, the P3s above, each with its killing
 test; the integrator runs the browser suites and `make eval`; the three channels review that diff (security core
 changed: `inRealm.ts`, the retention rule); probe P's p-clause stays a user decision.
+
+### C-F1 — continuity-owner amendment to probe P (2026-09-02, user-authorized on Codex's recommendation)
+The OPEN p-clause decision closes. Evidence: across the commit-3, commit-4 and final-fix rounds the unpaired MWU
+p-clause rejected a *different* probe on each of five occasions (real-click tripwire ×3, queued occupancy, reflection),
+never reproducibly, with signs in both directions and |median Δ| ≤ 0.3 ms against a 2 ms clause; the identical-payload
+null never rejected; the previous commit alternated under the same load passed 4/4 (`c3-probe-numbers.txt`).
+**Amendment (D10, spec §4 item 9, Acceptance H):** 500 counterbalanced interleaved pairs (AB/BA by pair parity);
+two-sided Wilcoxon signed-rank on `d_i = t_B,i − t_A,i` (zeros discarded, average ranks, tie-corrected variance,
+continuity correction, z from W⁺); matched-pairs rank-biserial effect; `medianDiffMs` = median of all `d_i`; p95 per
+condition reported; per-probe hard clause |median Δ| > 2 ms kept; **Holm–Bonferroni at α = 0.01 over the six-probe
+family**, failing on a missing probe. Golden vectors independently computed (scipy 1.13.1 + stdlib re-derivation) in
+`docs/m4-probe-p-golden.json`. Required evidence before M4 is marked complete: null control passes; a +0.25 ms
+consistent synthetic bias and a 5 ms shift are detected; the recorded real-browser timing mutants are still killed;
+repeated quiet and loaded observations recorded here. Implemented by Codex as slice `m4-probe-p`, reviewed by the
+three channels with the final-fix review's absorptions.
