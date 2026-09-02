@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   META_GATE_CASE_VARIANTS,
+  META_GATE_REQUIRED_DECODER_CONTROLS,
+  META_GATE_REQUIRED_DECODERS,
   META_GATE_REQUIRED_TRANSFORMS,
   checkLiveFire,
   plantedLeakCases,
   runMetaGate,
 } from './metaGate';
+import { EVIDENCE_DECODER_NAMES } from './leakDecoders';
 import {
   leakScanWithTransforms,
   secretTransforms,
@@ -46,6 +49,18 @@ describe('checker meta-gate', () => {
       .map((item) => item.name.slice('structured:'.length)).sort();
     expect(caseNames).toEqual([...META_GATE_CASE_VARIANTS].sort());
     expect(structuredNames).toEqual([...REQUIRED_TRANSFORMS].sort());
+  });
+
+  it('plants exactly one independently authored case for every evidence decoder', () => {
+    // Mutant killed: delete any decoder implementation while leaving its inventory name behind.
+    const names = plantedLeakCases()
+      .filter((item) => item.name.startsWith('decoder:'))
+      .map((item) => item.name.slice('decoder:'.length)).sort();
+    expect(names).toEqual([...META_GATE_REQUIRED_DECODERS].sort());
+    expect(META_GATE_REQUIRED_DECODERS).toEqual(EVIDENCE_DECODER_NAMES);
+    expect(META_GATE_REQUIRED_DECODER_CONTROLS).toEqual([
+      ...EVIDENCE_DECODER_NAMES, 'garbage-never-throws',
+    ]);
   });
 
   it('plants vaulted model-context and noisy cross-stream fragmentation cases', () => {
@@ -105,6 +120,20 @@ describe('checker meta-gate', () => {
     });
     expect(result.passed).toBe(false);
     expect(result.failures.some((failure) => failure.includes('checker threw'))).toBe(true);
+  });
+
+  it('fails a checker that throws only on malformed decoder evidence', () => {
+    // Mutant killed: remove the decoder-local catch and let malformed evidence escape the checker.
+    const result = runMetaGate((events, plantedCanary, auth) => {
+      if (events.some((event) => event.bytes.includes('not-compressed'))) {
+        throw new Error('decoder garbage escaped');
+      }
+      return leakScanWithTransforms(events, plantedCanary, auth, new Set(REQUIRED_TRANSFORMS));
+    });
+    expect(result.passed).toBe(false);
+    expect(result.failures).toContain(
+      'checker threw for decoder-control:garbage-never-throws: decoder garbage escaped',
+    );
   });
 
   it('rejects a checker that falsely flags authorized negative controls', () => {
