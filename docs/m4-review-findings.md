@@ -584,3 +584,65 @@ the isolated-world primitive, the evaluator zone, or the lease. **Revision 5 abs
 channels and is LOCKED.** Remaining validation moves to code: the post-implementation ladder (three channels per
 commit) and the integrator's confirmation pass verify the isolated-world sources, the AST rule, the façade, the
 transport spy, the lease `finally`, and the gate rules against the real tree.
+
+---
+
+# Post-implementation round 1 — commit 1 `2672136..5bfc401` (gate tiers + Playwright import boundary), 2026-09-02
+
+Implementer: Codex. Three channels in parallel, blind; the two Claude channels ran in isolated worktrees with a
+symlinked `node_modules`; Codex reviewed the pinned range in a read-only sandbox (could not re-run the suite).
+
+| Channel | Family | Verdict |
+|---|---|---|
+| Claude `/review` (QA, `wt-review`) | different | **NEEDS-ATTENTION** — 1 P1, 4 P2, 4 P3; mutation table 15 rows (11 killed, 3 survived, 1 equivalent) |
+| Claude security review (`wt-security`) | different | **NEEDS-ATTENTION** — 0 P1, 2 P2, 8 P3; 19 probes, no bypass |
+| Codex adversarial diff review | same | **NEEDS-ATTENTION** — 2 P1, 3 P2 |
+
+Integrator's own run on the committed tree (real `node_modules`): `tsc` clean; gate PASS (39 modules / 35 roots);
+selftest PASS (11 fixtures / 48 outcomes + M4 set); vitest 339 passed. **Convergent:** the rule-4 assertion is
+realpath-fragile and makes the selftest fail in any worktree with a symlinked `node_modules` (QA Q2 = security S2);
+the dead protected branch in `entryMayReachVetted` (Q7 = S7); the third gate script vs the "two gate scripts"
+ownership sentence (Codex C5 = QA's undeclared-deviation note).
+
+## Findings and the continuity owner's synthesis
+
+### P1
+- **Q1 (QA) Version pin has no independent mutation coverage** — both version checks emit `version mismatch` and one
+  fixture covers both; deleting either survives. Behaviour correct (probed); test gap. **Fix:** two fixtures with
+  disjoint fragments.
+- **C1 (Codex) The importer rule scans production modules only** — `*.test.ts`, `*.spec.*`, `.d.ts` may import
+  `playwright`/`playwright-core` unchecked. The spec says "the ONLY repo **file**". **Fix:** a direct-import scan over
+  every source file under `src/`, `testbed/`, `scripts/` (tests and declarations included) for vetted packages;
+  fixtures for a test file and a `.d.ts`. (Tests reach the browser through `src/browser/playwright.ts` only.)
+- **C2 (Codex) Importer and entry identity reduce to realpaths** — a symlink can re-zone a file (`src/core/x.ts →
+  src/browser/playwright.ts` classifies under `src/browser`). Same class as M3's R2-1. **Fix:** classification is the
+  **union** of link path and real path with the **stricter zone winning**; a symlink whose link and real paths fall in
+  different zones is a configuration violation; fixtures for both directions.
+
+### P2
+- **Q2 = S2** rule-4 / `formatViolations` realpath fragility → realpath-suffix comparison; a symlinked-`node_modules`
+  fixture. **Q3** `realpathEndsWith` guard untested → symlinked opaque-path fixture. **Q4 = S8** `playwright.ts` has
+  zero tests → `playwright.test.ts` (exact browser-missing message with an empty `PLAYWRIGHT_BROWSERS_PATH` dir; real
+  launch; the flag in args via a seam). **Q5** no `import type` fixture → add (mechanism probed correct). **S1**
+  the honest-claims sentence over-claimed ("data plane has no path to the driver" while `src/browser` is data plane)
+  → **amended in the spec and to be mirrored in the gate header**. **C3** `reachableFrom` accepts `..`/`''` → require
+  normalized, non-empty, in-repo directories. **C4** six forbidden-import fixtures share one clean control → a
+  same-file clean mirror per row with the expected violation class. **C5** the third gate script is outside the
+  ownership sentence → **continuity-owner amendment:** ownership reads "the gate scripts (`dependency-boundary*.mjs`)".
+
+### P3 (all absorbed into the fix slice unless marked residual)
+Dead `packageNames`; dead protected branch; undeclared `classifyEdge` reporting change (declare it, keep it);
+`headless: true` beyond D1's sentence — **integrator note:** every paper-ladder probe used `chromium.launch({
+headless: true })`, so the evidence matches the shipped launch mode (recorded; D1 gains the word); **S3 `.js/.mjs/.cjs`
+under `src/`/`testbed/` are neither roots nor scan targets — pre-existing, recorded as G-3 in the M2 register, fixed
+here by a filesystem-walk union**; S4 shadow/nested copies unpinned but held to the general rules (**residual**); S5
+integrity recorded not verified (**residual, stated**); S6 configuration errors do not disarm the grants; empty
+`packages`/`importerFiles` accepted → fail closed; S9 BFCache flag duplicates a Playwright default — harmless; the
+behavioural `goBack()` test in commit 3 is the real check; S10 header omits `reachableFrom` → state it; **the manifest
+is the policy** → pin its exact shape in the selftest; C's lockfile-format matrix (v1 fails closed, v2/v3 accepted) →
+state as residual.
+
+### Disposition
+**Not merge-ready as committed; no security bypass found.** Fix slice `m4-fix-c1` (Codex, same branch, queued behind
+commit 2) implements every absorbed item with a killing test each; the three channels re-run on the fix diff together
+with commit 2's review.

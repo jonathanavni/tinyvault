@@ -516,3 +516,12 @@ round-4 closure row is read with this limit. Disposition: the gate's threat mode
 data-plane→supervisor reachability, not hostile in-repo code (spec §4 — "arbitrary hostile code already
 executing inside the trusted host is outside the threat model"); left open, revisit if the gate's scope ever
 widens to untrusted contributions.
+
+### Addendum G-3 (found 2026-09-02 by the M4 commit-1 security channel; pre-existing on `main` since M2)
+
+`src/` and `testbed/` entry roots come only from `tsconfig.json`'s `include` (`**/*.ts`), while `isProductionModule`
+accepts `.js/.mjs/.cjs`; only `scripts/` is filesystem-walked. An orphan `src/core/evil.mjs` importing `playwright`
+**and** `src/supervisor/lockdownDomain.ts` makes the gate PASS; it fails closed (`unscanned static import`) the moment
+any `.ts` file imports it, so exploitation needs an all-`.mjs` data-plane chain loaded outside the TypeScript graph.
+Identical at `2672136` (pre-M4). **Fix (M4 commit-1 fix slice):** union the tsconfig set with a filesystem walk of
+`src/` and `testbed/` filtered by `isProductionModule`, exactly as `scripts/` already is, with a fixture.

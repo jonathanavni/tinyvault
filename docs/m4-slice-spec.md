@@ -124,8 +124,8 @@ could not run as "Not run: <reason>" — never as passing. Never `git add -A`.
 
 ### D1 — Playwright + Chromium, pinned; one import file; core-owned port types
 
-`playwright@1.62.1` (exact); `playwright-core@1.62.1` holds the bundle; Chromium only; launch args include
-`--disable-back-forward-cache`. `npm run browsers` / `make browsers` is the one-time setup; a missing browser fails
+`playwright@1.62.1` (exact); `playwright-core@1.62.1` holds the bundle; Chromium only, **headless** (the paper-ladder
+probes used the same launch mode); launch args include `--disable-back-forward-cache`. `npm run browsers` / `make browsers` is the one-time setup; a missing browser fails
 tests with the fixed message `Chromium is not installed; run make browsers` — **never `skipIf`**.
 
 **`src/browser/playwright.ts` is the only file in the repo that imports `playwright`; no file imports
@@ -450,7 +450,7 @@ Every test file **under 800 lines**.
 Codex owns: `src/browser/**`, `src/core/fillService*.ts`, `src/supervisor/host*.ts`, `src/core/sessionMutex.ts` and
 `src/supervisor/lockdownDomain.ts` (**introspection getters only**), `src/backends/localFileWriter.ts` (**the length
 precondition only**), `src/agents/stub.ts` (`StubStep`), `src/agents/loop.ts` (**`afterLoop` hook and duplicate-id
-rejection only**), `testbed/**`, the two gate scripts (§7 only), `package.json` + lockfile, `Makefile` (`browsers`).
+rejection only**), `testbed/**`, the gate scripts (`scripts/dependency-boundary*.mjs`, §7 only — three files after the commit-1 split), `package.json` + lockfile, `Makefile` (`browsers`).
 
 Must avoid: `PLAN.md`, `.claude/memory/*`, `docs/*`, `README.md`, `SCHEMA.md`, `src/core/types.ts`,
 `src/core/browserPort.ts`, `src/core/lockdown.ts`, `src/core/{redaction,originGuard,results}.ts`,
@@ -730,8 +730,10 @@ rule and by mutation; filled and password-type controls are masked by provenance
 and the mask decision reads no value; caller-visible bytes and error paths are independent of the secret's value and
 length for every secret a conforming backend can hold and of the policy's shape, on pre- and post-secret paths; the
 CDP transport is content-blind by construction; the fill's latency and mutex occupancy show no detectable difference
-under probe P; the tripwire changes nothing caller-visible and matches only in `finish()`; the data-plane module
-graph has no scanned or resolved path to the supervisor or the browser driver; the eval scores the real fill, the real
+under probe P; the tripwire changes nothing caller-visible and matches only in `finish()`; no data-plane module has a scanned or
+resolved path to the supervisor, and none outside `src/browser` has one to the browser driver — within `src/browser`
+only `playwright.ts` imports it, and only the `playwright` package (post-impl S1: `src/browser` is a data-plane zone
+with a sanctioned path; the earlier sentence over-claimed); the eval scores the real fill, the real
 element, the real observed origin (including a mid-fill origin change), and its positive control is the browser's own
 login POST.* Not claimed: memory zeroization; copies inside V8, Playwright, or Chromium; protection against a
 compromised authorized origin, including anything the authorized page displays to the model or mirrors; absence of a
