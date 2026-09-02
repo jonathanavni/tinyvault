@@ -33,7 +33,8 @@ credential fill service itself is not built yet.
 | M0 — contracts, threat model | done |
 | M1 — eval spine (leak checkers, meta-gate, offline adjudicator, scorecard) | done |
 | M2 — security primitives (`Secret<string>`, origin validator, lockdown, mutex, results, tripwire detector + dependency boundary) | done (`6a6b67c`) |
-| M3–M4 — backend interface, then the fill service and its integration gates | **not started** |
+| M3 — backend interface + libsodium local-file backend (never-cache contract, policy-bound sealing) | **done** — three pre-impl and three post-impl review rounds; the dependency gate now scans runtime modules, not `.d.ts` |
+| M4 — the fill service and its integration gates | **not started** |
 | M5–M7 — hostile fixtures, reference + naive agents | not started |
 | M8–M10 — MCP adapter, 1Password backend, demo | not started |
 

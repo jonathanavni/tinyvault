@@ -215,3 +215,39 @@ accepted by the fix-slice contract (§A2 step 4). `walk` does not descend symlin
 channel on fixture completeness (R2-10) and rule wording (R2-9, amended). Not yet merge-ready:** R2-1 (regression),
 R2-2 (hard rule), R2-10 block. Round 3 is the cap: one fix slice for R2-1…R2-11 + the test gaps, then a
 confirmation pass by the integrator (suite + the named mutations), no fourth paper round.
+
+---
+
+# Round 3 (the cap) — fix diff `ab92688..6de0ad7` (`bf2001d` gate set, `6de0ad7` backend set)
+
+Codex closed R2-1 … R2-11 and every listed test gap (its report cross-walks each to `file:line` + killing
+test; this time its sandbox ran the suite: 339 passed). Per the cap there was no fourth review round;
+instead the integrator ran the prescribed **confirmation pass on the committed tree** (mutation → suite →
+revert, tree clean after each):
+
+```
+KILLED   R2-1  drop protectedRealPaths membership            (selftest exit 1)
+KILLED   R2-6  disable transitive production-to-tooling      (selftest exit 1)
+KILLED   R2-8  drop the external-package prefix guard        (selftest exit 1)
+KILLED   R2-10b drop the edge.unscanned violation            (selftest exit 1)
+KILLED   entry keying → blanket tolerance                    (selftest exit 1)
+KILLED   A1    AD from the authorized policy (threaded through openRecordSecret/decryptRecord)
+               → 5 tests fail in localFile.policy.test.ts (changing-policy AD, getter origin edit,
+                 Proxy recipe edit, second read, JSON/string recipe compare)
+KILLED   policy compare via JSON.stringify(fieldRecipe)      (vitest exit 1)
+KILLED   writer constant nonce                               (vitest exit 1)
+equivalent: `arguments[1]` inside decryptRecord IS the record — the policy is structurally out of scope
+            there, which is the design working, not a gap
+flag     gate unflagged exit 1; selftest unflagged exit 1
+repro    laundering chain (src → scripts → package → supervisor) gate exit 1
+repro    alias-out symlink (src/supervisor/evil.ts → ../../outside) gate exit 1
+suite    tsc clean; gate PASS (36 modules, 32 roots); selftest PASS; vitest 339 passed, 1 skipped
+limits   largest files: selftest 682, gate 456, localFile.test 385, policy.test 347 — all under 800
+```
+
+## Status
+
+**M3 is merge-ready at `6de0ad7` plus this documentation commit.** `main` is an ancestor of the branch, so
+the merge fast-forwards. `src/core/types.ts` and `SCHEMA.md` are untouched across every commit on the branch
+(`git diff main..HEAD -- src/core/types.ts SCHEMA.md` is empty). Residuals stand as recorded in §D and the
+round-2 residuals; none is load-bearing for M4.
