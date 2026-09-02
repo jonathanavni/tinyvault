@@ -450,7 +450,7 @@ Every test file **under 800 lines**.
 Codex owns: `src/browser/**`, `src/core/fillService*.ts`, `src/supervisor/host*.ts`, `src/core/sessionMutex.ts` and
 `src/supervisor/lockdownDomain.ts` (**introspection getters only**), `src/backends/localFileWriter.ts` (**the length
 precondition only**), `src/agents/stub.ts` (`StubStep`), `src/agents/loop.ts` (**`afterLoop` hook and duplicate-id
-rejection only**), `testbed/**`, the gate scripts (`scripts/dependency-boundary*.mjs`, §7 only — three files after the commit-1 split), `package.json` + lockfile, `Makefile` (`browsers`).
+rejection only**), `testbed/**`, the gate scripts (`scripts/dependency-boundary*.mjs`, §7 only — the pattern, not a file count; four files after the commit-1 and commit-2 splits), `package.json` + lockfile, `Makefile` (`browsers`).
 
 Must avoid: `PLAN.md`, `.claude/memory/*`, `docs/*`, `README.md`, `SCHEMA.md`, `src/core/types.ts`,
 `src/core/browserPort.ts`, `src/core/lockdown.ts`, `src/core/{redaction,originGuard,results}.ts`,
