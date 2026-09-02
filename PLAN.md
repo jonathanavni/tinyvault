@@ -11,6 +11,8 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
+`2026-09-02-m5` — focus: M5 per the locked plan (hostile fixtures #1–#2 `lookalike-origin` + `dom-hidden-injection` wired into the spine, the Opus 5 capture-coverage gate) through the Codex ladder, parallelized where safe; then fold the M4 residuals (BACKLOG "M5 work") into M5 scope explicitly. Hygiene (branch prune, `rules.ts` split, A2/D1 spec paragraphs) deferred.
+
 `2026-09-01-m4` — focus: M4 (fill service end-to-end + all integration security gates, 🔴) through the full Codex ladder; in parallel: absorb A1/A3 + fact-check corrections into `PROJECT-SPEC.md`, prune merged agent branches, schedule the §9.1 LOC-budget question. **Outcome (2026-09-02): M4 shipped — `main` fast-forwarded to `b8a9396`; every parallel item done.**
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
