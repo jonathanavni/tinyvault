@@ -39,7 +39,10 @@ three reviews on `5bfc401..b1407cd` and the commit-3 implementation are in fligh
 - **Commit 3 = `2652104`** (fill service + supervisor host + Acceptance A–L) and the commit-2 fix slice (its parent) are
   committed and green on the integrator's real-Chromium run: 598 passed, gate PASS 48/43, every probe-P gate passing
   (numbers in the scratchpad `c3-probe-numbers.txt`; the tripwire equal-work call passes at p=0.054 — marginal, sub-µs op).
-  Three reviews on `b1407cd..2652104` and the commit-4 implementation are in flight. Earlier note kept for history:
+  Commit 3's three reviews are in (register: retention rule round four, node:module prohibition, order-dependent
+  tripwire test); fix slice `m4-fix-c3b` dispatched. **Commit 4 is committed** (testbed wiring): `make test` 620 passed,
+  `make eval` 10/10 completed, 0/10 leaks with real-browser evidence. Reviews of commit 4 in flight. Remaining: absorb
+  the commit-3 and commit-4 review findings, the post-M4 whole-codebase audit (§9.2 + §9.1 question), merge FF. Earlier note kept for history:
   commit 3 was implemented but UNCOMMITTED in the main
   worktree (integrator run: 576 passed, 3 timing failures — two from the length-dependent in-realm decode T2-2, one a
   sub-microsecond construction artefact in the tripwire timing test). The commit-2 post-impl round (three channels,
