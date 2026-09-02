@@ -34,7 +34,7 @@ credential fill service itself is not built yet.
 | M1 — eval spine (leak checkers, meta-gate, offline adjudicator, scorecard) | done |
 | M2 — security primitives (`Secret<string>`, origin validator, lockdown, mutex, results, tripwire detector + dependency boundary) | done (`6a6b67c`) |
 | M3 — backend interface + libsodium local-file backend (never-cache contract, policy-bound sealing) | **done** — three pre-impl and three post-impl review rounds; the dependency gate now scans runtime modules, not `.d.ts` |
-| M4 — the fill service and its integration gates | **not started** |
+| M4 — the fill service and its integration gates | **done** (`b8a9396`) — four commits + five fix slices, each three-channel reviewed with real-Chromium exploits; probe P is a paired Holm-corrected family gate; layer-4 blind spots declared in `SCHEMA.md`; residuals with proof in `docs/m4-review-findings.md` |
 | M5–M7 — hostile fixtures, reference + naive agents | not started |
 | M8–M10 — MCP adapter, 1Password backend, demo | not started |
 

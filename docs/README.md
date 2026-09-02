@@ -40,10 +40,10 @@ Active planning docs:
 - `m4-slice-spec.md` — the M4 implementation contract (revision 5, **LOCKED** after a three-round two-channel
   blind paper ladder; amended post-lock where the register's C-sections say so). Carries D1–D10 (CDP isolated world,
   `backendNodeId` identity, epoch signals, constant-size hex transport, the single `consume()` site, probe P, the
-  four-zone dependency gate with the vetted Playwright tier) and Acceptance A–N. **In progress** on
-  `codex/m4-fill-service`.
+  four-zone dependency gate with the vetted Playwright tier) and Acceptance A–N. **Shipped** (`b8a9396`);
+  amended post-lock (C-F1 probe P, J-S7, the honest-claims sentence) where the register says so.
 - `m4-review-findings.md` — the authoritative M4 review register: three paper rounds, the real-Chromium probe
   evidence, per-commit three-channel post-implementation rounds (commits 1–4 and their fix slices), the
-  post-M4 whole-codebase audit (§9.2 + the §9.1 answer), and the final round. **Append-only.**
+  post-M4 whole-codebase audit (§9.2 + the §9.1 answer), and the five final rounds ending with M4's shipped residuals. **Append-only.**
 - `archive/implementation-plan-superseded.md` — earlier orphaned Phase 0 draft, consolidated into
   `phase-0-plan.md` (provenance only)

@@ -11,62 +11,30 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-01-m4` — focus: M4 (fill service end-to-end + all integration security gates, 🔴) through the full Codex ladder; in parallel: absorb A1/A3 + fact-check corrections into `PROJECT-SPEC.md`, prune merged agent branches, schedule the §9.1 LOC-budget question.
-**In progress (2026-09-02, ~15:00 CDT):** `codex/m4-fill-service` at `9ce3a44` = the last fix slice `m4-fix-final5`
-(invalid-origin evidence kept; base64 decoded before scanning; allHeaders incl. cookies, bounded, plus WebSocket
-handshake headers via CDP; calibration report-only; nonLocalAssignments over every function, S31–S35; import-graph
-completeness; batch pin). Integrator: 772 tests + 10-test timing family, gate 53/48, `make eval` 10/10 0 leaks, tsc
-last. **The FINAL three-channel review of `58ca087..9ce3a44` is in flight** (Codex, QA `wt-review`, security
-`wt-security`). Its residuals go verbatim into the register; P1 only for a layers-1–2 leak, an undeclared layer-4
-blind spot, or a red `make test`. Then: merge FF to `main`, `/wrapup`.
+`2026-09-01-m4` — focus: M4 (fill service end-to-end + all integration security gates, 🔴) through the full Codex ladder; in parallel: absorb A1/A3 + fact-check corrections into `PROJECT-SPEC.md`, prune merged agent branches, schedule the §9.1 LOC-budget question. **Outcome (2026-09-02): M4 shipped — `main` fast-forwarded to `b8a9396`; every parallel item done.**
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
-**M4 in progress.**
+**M4 ✅** (`b8a9396`, 2026-09-02).
 
-**Where M4 actually is (read this first after a compaction):**
-- **Spec:** `docs/m4-slice-spec.md` r5, LOCKED after a three-round, two-channel blind paper ladder; register with
-  every finding and the real-Chromium probe evidence in `docs/m4-review-findings.md`. Four commits planned.
-- **`main`:** `2672136` carries the pre-authorized contract amendments (`BrowserControls` navigate/click/type/snapshot,
-  `MaskedSnapshot`, `LockdownLifecycle` + `InvalidControlIdentityError` in `src/core/lockdown.ts`, new
-  `src/core/browserPort.ts`, plan sentences). `make test` green there (339).
-- **Branch `codex/m4-fill-service`:** commit 1 = `5bfc401`; gate fix slice = `0cbe9d1`; commit 2 = `b1407cd` (session owner,
-  controls, in-realm sources, probe P, controls-lab, loop hooks, writer bound; six browser-suite failures found by the
-  integrator's run and fixed — three fixture bugs, three product bugs; integrator carve-out: `navigatePage` settles a
-  failed `goto` on the main-frame `framenavigated` event). Commit-1 history: (gate vetted tier + evaluator zone + `src/browser/playwright.ts`;
-  `playwright@1.62.1` pinned; my run: gate PASS 39/35, selftest PASS, 339 tests). Post-impl round 1 on commit 1: QA
-  NEEDS-ATTENTION (1 P1: version-pin test gap), security NEEDS-ATTENTION (no bypass; realpath-fragile rule-4
-  assertion; honest-claims sentence over-claimed — fixed in spec), Codex NEEDS-ATTENTION (importer rule ignores test
-  and `.d.ts` files; symlink re-zoning; `reachableFrom` accepts `..`). All in the register; **fix slice `m4-fix-c1`
-  queued to Codex** (packet in the session scratchpad `m4-fix-c1.md`) behind commit 2.
-- **Commit 3 = `2652104`** (fill service + supervisor host + Acceptance A–L) and the commit-2 fix slice (its parent) are
-  committed and green on the integrator's real-Chromium run: 598 passed, gate PASS 48/43, every probe-P gate passing
-  (numbers in the scratchpad `c3-probe-numbers.txt`; the tripwire equal-work call passes at p=0.054 — marginal, sub-µs op).
-  All four commits and both fix slices are committed (`8bebd5a` commit-3 fix, `305da22` commit-4 fix + runner split):
-  `make test` 640 + 6 timing gates, gate PASS 49/44, `make eval` 10/10, 0 leaks. The final review round on
-  `76035cc..305da22` and the whole-codebase audit have reported (all NEEDS-ATTENTION, no leak bypass; see the register);
-  fix slice `m4-fix-final` in Codex. Remaining: integrator run + commit, reviews of that diff, the user's probe-P decision, merge FF to `main`. Earlier note kept for history:
-  commit 3 was implemented but UNCOMMITTED in the main
-  worktree (integrator run: 576 passed, 3 timing failures — two from the length-dependent in-realm decode T2-2, one a
-  sub-microsecond construction artefact in the tripwire timing test). The commit-2 post-impl round (three channels,
-  register section written) found a three-way convergent P1 (retention rule non-enforcing) and a gate symlink-directory
-  bypass; **fix slice `m4-fix-c2b` (packet in the scratchpad) is running in Codex now** and covers commit-2 findings + the
-  decode + the timing-test construction. Next: integrator run → commit the fix + commit 3 (explicit paths) → three
-  reviews on the new range → commit 4 (`m4-impl-c4.md`) → post-M4 audit → merge FF.
-  Then: integrator `make test` (Chromium is installed at `~/Library/Caches/ms-playwright`, headless shell 1234),
-  commit with explicit paths + dual co-author trailer, three reviews (isolated worktrees `scratchpad/wt-review`,
-  `wt-security` — recreate the `node_modules` symlink; Codex on the pinned range), then commit 3 (`m4-impl-c3.md`),
-  commit 4 (`m4-impl-c4.md`), the post-M4 whole-codebase audit (§9.2, carrying the §9.1 simplification question),
-  merge FF to `main`.
-- **Codex runtime quirks this session:** jobs serialize (a second dispatch shows `queued` in `status` even while it is
-  actually running — trust the job log's mtime, not the list); `gpt-5.6-sol` capacity errors within a minute → retry
-  once; `status --json` nests under `.job`.
+**M4 as shipped (one paragraph; the register `docs/m4-review-findings.md` holds everything else):** four commits plus
+five fix slices on `codex/m4-fill-service`, each reviewed by three channels (Claude QA, Claude security, Codex) with
+real-Chromium probes; a whole-codebase audit; a user-authorized probe P amendment (paired counterbalanced Wilcoxon,
+500 pairs, Holm–Bonferroni family gate, report-only calibration). Final state on `main`: `make test` green (773 tests
++ 10-test timing family, gate 53/48, selftest), `make eval` 10/10 with 0 leaks. **Claims = the amended honest-claims
+sentence in `docs/m4-slice-spec.md`, no more.** Shipped residuals with proof: register section "Final5 round"
+(worker Blob bodies, the finite transform inventory, first-hop/fill-time destination check, the retention rule as a
+shape allowlist, the batched timing probe, ordered-use evidence settlement) — all declared in `SCHEMA.md`, M5 items
+in `BACKLOG.md`.
 
-**Also done this session:** A1/A3 absorbed into `PROJECT-SPEC.md` with fact-check corrections (`6eca987`); three merged
-`worktree-agent-*` branches deleted; §9.1 LOC-budget question scheduled into the post-M4 audit (Decisions Log).
+**Next session:** `/start`; M5 per `docs/phase-0-plan.md` §8 (evaluator breadth — per-target CDP capture, transform
+inventory, `browser_snapshot` end-to-end, the BACKLOG residuals) through the same ladder. Hygiene first: the docs
+index (`docs/README.md`) M4 entries flipped to shipped; `docs/m4-review-findings.md` is 1,400+ lines and
+append-only — leave it.
 
 **Blocked / needs attention:** nothing blocking. Threads: A2 (payments non-goal) still not written into the spec
-(triaged accept); D1's spec half not written; deferred M2/M3 residuals unchanged (`docs/m3-review-findings.md` §D).
+(triaged accept); D1's spec half not written; deferred M2/M3 residuals unchanged (`docs/m3-review-findings.md` §D);
+`scripts/retention/rules.ts` is at 788/800 lines (split before adding a rule).
 
 ## Decisions Log
 
@@ -386,3 +354,7 @@ blind spot, or a red `make test`. Then: merge FF to `main`, `/wrapup`.
 - **2026-09-02** — **A guard exported as a pure function needs a call-site test.** Commit 4 shipped `assertHostFinished` and `assertHttpFixture` fully unit-tested and unwired-testable: deleting either call left 620 tests and the real-browser eval green. Same failure class as R1-6's vacuous positive control, one level up. Convention recorded; the fix slice adds wiring tests for every runner guard.
 - **2026-09-02** — **CLOSED (user-authorized, on Codex's recommendation): probe P becomes a paired, counterbalanced, family-corrected gate.** Continuity-owner amendment of D10 (spec) and register C-F1: 500 interleaved pairs per probe with deterministic AB/BA counterbalancing; two-sided Wilcoxon signed-rank on per-pair differences (zeros discarded, tie-corrected variance, continuity correction); matched-pairs rank-biserial effect; Holm–Bonferroni at family-wise α = 0.01 over the six probes; the per-probe |median Δ| > 2 ms hard clause, p95 and effect-size reporting and the warm-up are kept. Over the unpaired MWU because pairing absorbs autocorrelated drift, counterbalancing removes order bias, and multiplicity correction makes `make test` a suite-level completion signal; over "raise n only" because n alone makes tiny environmental biases more significant; over "drop the p-clause" because that abandons small-bias detection. Pinned in the docs before code; independently computed golden vectors in `docs/m4-probe-p-golden.json`; null and positive controls required; quiet and loaded observations recorded before M4 is marked complete.
   - *Superseded entry (history):* **2026-09-02** — **OPEN, needs the user: probe P's p-clause on the real-click tripwire test.** After the commit-3 fix slice, the "match-dependent tripwire timing on a real supervised browser fill call" test rejects in roughly 3 of 10 runs *alone on a quiet machine* (p 0.0003–0.007, median Δ ±50–90 µs on a ~7 ms op, effect ±0.2, **signs in both directions**), while the identical-payload null condition passes 9/9 and the sibling `composeSupervisedHost` test passes in isolation and in the file. Removing the asymmetric adjudication between samples (abort instead of finish) did not change the rate; building both payloads through one constructor did not either. Reading: not a content-dependent channel (no consistent direction), not plain false positives (null never rejects); most likely the locked Mann–Whitney OR-clause is not the right statistic for paired interleaved samples on a browser op whose noise is autocorrelated — the 2 ms median clause passes with a 20× margin every time. D10 forbids loosening and the continuity owner will not amend a locked §4 sentence unilaterally. **Options for the user:** (a) amend §4 to a paired statistic on the interleaved pairs (Wilcoxon signed-rank or a sign test on per-pair differences), same thresholds, which respects the A/B/A/B design MWU ignores; (b) raise samples (allowed) and re-measure; (c) keep the gate and accept an intermittent red on M4's completion signal. A later serial run (after the commit-4 fix slice) rejected a *different* gate, the queued mutex-occupancy probe, on one run of two — so this is a property of the p-clause on real-browser operations, not of one test. Until decided, M4 is **not** marked complete (§8: every gate must pass). Measurements in the session scratchpad `c3-probe-numbers.txt` and the register.
+- **2026-09-02** — **The retention rule is capped as a shape allowlist over a fixed file set with a named corpus (S1–S35 + eleven), not an escape analysis.** Nine adversarial rounds each found a new syntactic shape; the alternative (an interprocedural escape analysis in a test file) is over-engineering for a rule whose job is to catch accidental retention and the reported adversarial shapes. The honest-claims sentence says exactly this; the cross-model review is the check on a malicious implementer; further shapes are residuals (register "Final5 round", BACKLOG).
+- **2026-09-02** — **Layer-4 blind spots are declared, not made into capture failures**, because failing capture on a hostile page's request shape (multipart file part, worker Blob body, unvalidatable origin) hands the page a denial-of-measurement lever — the exact failure the final4 round found when scheme validation was routed through `captureFailed`. Every declared blind spot lives next to the `Channel` enum in `SCHEMA.md` with its register id; per-target CDP capture and the transform inventory are M5.
+- **2026-09-02** — **Any production change made to satisfy the retention rule is a mandatory Deviations entry**, after Codex silently removed the CDP call's fail-closed guard to satisfy the sink rule (a thrown primitive would have counted as a verified destination). A test-only rule must never dictate security-core shape without a record.
+- **2026-09-02** — **M4 shipped with recorded residuals instead of a tenth review round**: after five fix slices the final round found no layers-1–2 bypass and only layer-4 declaration gaps; the two P1s by the round's own criteria were closed (WebSocket handshake URL as scanned evidence) or declared (worker Blob bodies) in the successor commit, and the ladder stopped. Over "one more round" because each round was finding shapes inside declared residual classes, at ~2 hours per round.
