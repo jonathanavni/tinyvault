@@ -353,21 +353,29 @@ type Scorecard = {
 ## 6. Backend interface (from research)
 
 ```ts
-// src/backends/backend.ts
+// src/backends/backend.ts — AS LANDED IN M3 (amended 2026-09-01 from the research sketch; see m3-slice-spec.md D5)
 interface CredentialBackend {
-  probeAvailability(): Promise<BackendStatus>;   // { available; reason?: 'not_installed'|'not_authenticated'|'locked'|'error' } — never throws for "unavailable"
-  listItems(): Promise<ItemMeta[]>;              // METADATA ONLY — contract: no secret value anywhere in the return
-  resolvePolicy(handle: Handle): Promise<CredentialPolicy>;  // trusted-side: canonicalOrigin + fieldRecipe (NO secret); used by the fill gate step 1
-  resolveSecret(handle: Handle): Promise<ResolvedSecret>;    // trusted-side, called ONLY after the origin gate passes; typed errors NotFound|Locked|AuthExpired
-  dispose?(): Promise<void>;                     // drop cached sessions/keys (lockdown hook)
+  probeAvailability(): Promise<BackendStatus>;   // { available: true } | { available: false; reason: 'not_installed'|'not_authenticated'|'locked'|'error' } — never rejects
+  listItems(): Promise<readonly ItemMeta[]>;     // METADATA ONLY — contract: no secret value anywhere in the return
+  resolvePolicy(handle: Handle): Promise<CredentialPolicy>;  // trusted-side, deep-frozen; used by the fill gate step 1
+  resolveSecret(handle: Handle, authorizedPolicy: CredentialPolicy): Promise<Secret>;
+      // trusted-side, called ONLY after the origin gate passes, and ONLY for the policy the gate authorized:
+      // the backend compares the record's current policy to `authorizedPolicy` before decrypting (mismatch →
+      // 'integrity', no decrypt) — closes the policy/secret TOCTOU between the two calls. Returns the core
+      // `Secret`; typed `BackendError.kind`: 'not-found'|'locked'|'auth-expired'|'unavailable'|'integrity'.
+  dispose(): Promise<void>;                      // REQUIRED. Drops backend AUTH-SESSION material only (an op/bw token) —
+                                                 // never a secret, which no conforming backend retains between calls (B1 slice 2/3).
+                                                 // A backend with nothing to drop implements it as a documented no-op (local-file).
 }
 ```
 
-- `localFile` (libsodium sealed file) — first; each record carries `{secret, canonicalOrigin, fieldRecipe, label, account}`.
+- `localFile` (libsodium sealed file) — **landed M3**: per-record XChaCha20-Poly1305-IETF sealing with
+  additional data binding each ciphertext to `[handle, canonicalOrigin, fieldRecipe]`; metadata cleartext
+  at rest (stated tradeoff); 32-byte raw key file read per call, never cached; no KDF in v0.1.
 - `onepassword` — `@1password/sdk` (`op read` equivalent); `canonicalOrigin` derived from the item's stored URL; `handle` maps to an `op://vault/item/field` reference held trusted-side.
 - `bitwarden` — later; adapter MUST strip plaintext from `bw list items` output and a test MUST assert the stripped metadata carries no secret.
 
-**BackendStatus → SetupReason mapping (one place, alignment-review #13):** the fill service maps backend probe reasons to the caller-visible setup enum as `not_installed | error → backend_unavailable`; `not_authenticated | locked → backend_locked`; item-level `NotFound → missing_item`. The two enums stay separate on purpose — backend detail is trusted-side; the caller sees only the coarser closed enum.
+**BackendStatus → SetupReason mapping (one place, alignment-review #13):** the fill service maps backend probe reasons to the caller-visible setup enum as `not_installed | error → backend_unavailable`; `not_authenticated | locked → backend_locked`; item-level `not-found → missing_item`. **`BackendError.kind → FillResult.reason` (M4):** `not-found → handle-unavailable`; every other kind, including `integrity`, → `backend-error` (never an unlock instruction — m3 register B/#8). The two enums stay separate on purpose — backend detail is trusted-side; the caller sees only the coarser closed enum.
 
 ---
 
