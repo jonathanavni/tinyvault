@@ -4,8 +4,17 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
 
-// The second argument to import.meta.resolve is honored only when Node is launched with
-// --experimental-import-meta-resolve. Both package.json gate invocations carry that flag.
+// The second argument to import.meta.resolve is honored only with --experimental-import-meta-resolve;
+// the load-time probe below makes omitting it fail closed. Every reachable external module is traversed.
+// Only a scripts-rooted BFS may tolerate unsupported/unscanned external-package work inside node_modules;
+// data-plane roots tolerate nothing, and neither tier may reach a protected directory.
+
+const FLAG_ERROR = 'dependency gate requires --experimental-import-meta-resolve';
+const flagProbe = import.meta.resolve(
+  './probe.mjs',
+  'file:///tinyvault-flag-probe/parent.mjs',
+);
+if (!flagProbe.startsWith('file:///tinyvault-flag-probe/')) throw new Error(FLAG_ERROR);
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs'];
 const PROTECTED_DIRECTORIES = ['src/supervisor'];
@@ -16,9 +25,11 @@ const GATE_MODULE = fs.realpathSync(fileURLToPath(import.meta.url));
 export function checkDependencyBoundary(root) {
   const absoluteRoot = fs.realpathSync(path.resolve(root));
   const { files: configuredFiles, errors, options } = configuredProductionFiles(absoluteRoot);
-  const configuredFileSet = new Set(configuredFiles.map((file) => path.resolve(file)));
-  const scriptFiles = walk(path.join(absoluteRoot, 'scripts')).filter(isProductionModule);
-  const files = [...new Set([...configuredFiles, ...scriptFiles].map((file) => path.resolve(file)))];
+  const scriptsDirectory = path.join(absoluteRoot, 'scripts');
+  const canonicalConfiguredFiles = configuredFiles.map(canonicalFile);
+  const configuredFileSet = new Set(canonicalConfiguredFiles);
+  const scriptFiles = walk(scriptsDirectory).filter(isProductionModule).map(canonicalFile);
+  const files = [...new Set([...canonicalConfiguredFiles, ...scriptFiles])];
   const fileSet = new Set(files);
   const graph = new Map();
   const visitedExternalFiles = new Set();
@@ -37,18 +48,15 @@ export function checkDependencyBoundary(root) {
           unscanned: false,
         }];
       }
-      if (!fileSet.has(target) && configuredFileSet.has(file)) {
+      if (!fileSet.has(target)) {
         addExternalEntry(graph, target, fileSet, options, visitedExternalFiles);
       }
       return [{
         target,
         syntax,
         unresolved: false,
-        // Tooling scripts are checked for direct protected imports, but their own toolchain packages are
-        // not part of the production data-plane graph. External traversal begins only from tsconfig files.
-        unscanned: configuredFileSet.has(file)
-          && !fileSet.has(target)
-          && !visitedExternalFiles.has(target),
+        unscanned: !fileSet.has(target) && !visitedExternalFiles.has(target),
+        productionToTooling: configuredFileSet.has(file) && isWithin(target, scriptsDirectory),
       }];
     });
     graph.set(file, { edges, unsupported: parsed.unsupported });
@@ -80,7 +88,19 @@ export function checkDependencyBoundary(root) {
     while (queue.length > 0) {
       const current = queue.shift();
       const node = graph.get(current.file);
+      if (node === undefined) {
+        if (!toleratesToolchainIssue(entry, current.file, scriptsDirectory, 'external-package')) {
+          violations.push({
+            entry,
+            target: current.file,
+            syntax: 'unscanned module',
+            path: current.dependencyPath,
+          });
+        }
+        continue;
+      }
       for (const syntax of node?.unsupported ?? []) {
+        if (toleratesToolchainIssue(entry, current.file, scriptsDirectory, syntax)) continue;
         violations.push({
           entry,
           target: current.file,
@@ -90,7 +110,16 @@ export function checkDependencyBoundary(root) {
       }
       for (const edge of node?.edges ?? []) {
         const dependencyPath = [...current.dependencyPath, edge.target];
+        if (edge.productionToTooling) {
+          violations.push({
+            entry,
+            target: edge.target,
+            syntax: `production-to-tooling ${edge.syntax}`,
+            path: dependencyPath,
+          });
+        }
         if (edge.unresolved) {
+          if (toleratesToolchainIssue(entry, current.file, scriptsDirectory, edge.syntax)) continue;
           violations.push({
             entry,
             target: edge.target,
@@ -100,6 +129,7 @@ export function checkDependencyBoundary(root) {
           continue;
         }
         if (edge.unscanned) {
+          if (toleratesToolchainIssue(entry, current.file, scriptsDirectory, edge.syntax)) continue;
           violations.push({
             entry,
             target: edge.target,
@@ -249,8 +279,8 @@ function resolveSpecifier(importer, specifier, syntax, fileSet, compilerOptions)
     ts.sys,
   ).resolvedModule?.resolvedFileName;
   if (compilerResolved !== undefined) {
-    const target = path.resolve(compilerResolved);
-    if (!isDeclarationFile(target) && fileSet.has(target) && isRealFile(target)) return target;
+    const target = realFilePath(compilerResolved);
+    if (target !== undefined && !isDeclarationFile(target) && fileSet.has(target)) return target;
   }
 
   if (fileSet.has(path.resolve(importer)) && specifier.startsWith('.')) {
@@ -263,8 +293,10 @@ function resolveSpecifier(importer, specifier, syntax, fileSet, compilerOptions)
     }
     for (const extension of SOURCE_EXTENSIONS) candidates.push(path.join(unresolved, `index${extension}`));
     const inRepoTarget = candidates
-      .map((candidate) => path.resolve(candidate))
-      .find((candidate) => fileSet.has(candidate) && !isDeclarationFile(candidate));
+      .map((candidate) => realFilePath(candidate))
+      .find((candidate) => candidate !== undefined
+        && fileSet.has(candidate)
+        && !isDeclarationFile(candidate));
     if (inRepoTarget !== undefined) return inRepoTarget;
   }
 
@@ -367,20 +399,26 @@ function isDeclarationFile(file) {
   return /\.d\.(?:ts|mts|cts)$/u.test(file);
 }
 
+function canonicalFile(file) {
+  return fs.realpathSync(path.resolve(file));
+}
+
+function toleratesToolchainIssue(entry, currentFile, scriptsDirectory, syntax) {
+  return isWithin(entry, scriptsDirectory)
+    && isNodeModulesFile(currentFile)
+    && syntax.startsWith('external-package');
+}
+
+function isNodeModulesFile(file) {
+  return path.resolve(file).split(path.sep).includes('node_modules');
+}
+
 function realFilePath(file) {
   try {
     const target = fs.realpathSync(path.resolve(file));
     return fs.statSync(target).isFile() ? target : undefined;
   } catch {
     return undefined;
-  }
-}
-
-function isRealFile(file) {
-  try {
-    return fs.statSync(file).isFile();
-  } catch {
-    return false;
   }
 }
 

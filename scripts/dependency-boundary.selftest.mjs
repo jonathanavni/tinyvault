@@ -10,7 +10,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { checkDependencyBoundary } from './dependency-boundary.mjs';
+const FLAG_ERROR = 'dependency gate requires --experimental-import-meta-resolve';
+const flagProbe = import.meta.resolve(
+  './probe.mjs',
+  'file:///tinyvault-flag-probe/parent.mjs',
+);
+if (!flagProbe.startsWith('file:///tinyvault-flag-probe/')) throw new Error(FLAG_ERROR);
+
+const { checkDependencyBoundary } = await import('./dependency-boundary.mjs');
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const cli = path.join(scriptDirectory, 'check-dependency-boundary.mjs');
@@ -174,6 +181,76 @@ withTemporaryRoot((root) => {
   writeConfig(root);
   write(root, 'src/core/probe.ts', "export const safe = true;\n");
   assertCliStatus(root, 1, 'missing protected directory silently disarmed the real CLI');
+});
+
+withFixture("export const safe = 'flag control';", (root) => {
+  const result = spawnSync(process.execPath, [cli, '--root', root], {
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
+  assert.notEqual(result.status, 0, 'gate CLI ran without --experimental-import-meta-resolve');
+  assert.match(`${result.stdout}\n${result.stderr}`, new RegExp(FLAG_ERROR),
+    'unflagged gate CLI did not report the fixed flag requirement');
+  assertCliStatus(root, 0, 'flagged gate CLI did not run its legitimate-traffic control');
+});
+
+// A2 laundering mutation: removing production-to-tooling and script-root traversal must not hide protected.
+withFixture("import '../../scripts/bridge.mjs';", (root) => {
+  write(root, 'scripts/bridge.mjs', "import 'launder-package';\n");
+  writeRuntimePackage(root, 'launder-package', { main: './index.js' }, {
+    'index.js': protectedRequire(),
+  });
+  const result = checkDependencyBoundary(root);
+  assert.equal(result.violations.some((violation) =>
+    violation.syntax.startsWith('production-to-tooling')), true,
+  'production module import of scripts/ was not rejected');
+  assert.equal(result.violations.some((violation) =>
+    violation.path.some((file) => file.endsWith('src/supervisor/marker.ts'))), true,
+  'laundering traversal did not independently reach the protected module');
+  assertCliStatus(root, 1, 'src -> scripts -> package -> protected laundering passed the CLI');
+});
+
+// A2 direct control: data-plane-rooted external packages tolerate no protected or unsupported path.
+withFixture("import 'direct-protected-package';", (root) => {
+  writeRuntimePackage(root, 'direct-protected-package', { main: './index.js' }, {
+    'index.js': protectedRequire(),
+  });
+  assertCliStatus(root, 1, 'src -> package -> protected direct control passed the CLI');
+});
+
+// A2 security fixture B: script-root tolerance must never tolerate a protected reach.
+withFixture("export const safe = true;", (root) => {
+  write(root, 'scripts/tool.mjs', "import 'script-protected-package';\n");
+  writeRuntimePackage(root, 'script-protected-package', { main: './index.js' }, {
+    'index.js': protectedRequire(),
+  });
+  assertCliStatus(root, 1, 'scripts -> package -> protected was mistaken for toolchain tolerance');
+});
+
+// A2 scoped-tolerance mutation: removing scripts-root-only tolerance makes real TypeScript flip to FAIL.
+withFixture("export const safe = true;", (root) => {
+  write(root, 'scripts/tool.mjs', "import ts from 'typescript'; void ts;\n");
+  linkInstalledPackage(root, 'typescript');
+  assertCliStatus(root, 0, 'scripts-rooted real TypeScript toolchain did not receive scoped tolerance');
+});
+
+// A2 legitimate traffic: a real data-plane runtime package must be fully traversed and pass.
+withFixture("import sodium from 'libsodium-wrappers'; void sodium;", (root) => {
+  linkInstalledPackage(root, 'libsodium-wrappers');
+  assertCliStatus(root, 0, 'real libsodium-wrappers data-plane traversal did not pass');
+});
+
+// B3 mutation: classifying an in-repo symlink by alias path hides its protected real target.
+withFixture("import './alias';", (root) => {
+  fs.symlinkSync('../supervisor/marker.ts', path.join(root, 'src/core/alias.ts'));
+  assertCliStatus(root, 1, 'in-repo symlink alias into src/supervisor passed the gate');
+});
+
+// B3 legitimate control: canonicalizing an alias must not reject a clean real target.
+withFixture("import './alias';", (root) => {
+  write(root, 'src/core/clean.ts', 'export const clean = true;\n');
+  fs.symlinkSync('./clean.ts', path.join(root, 'src/core/alias.ts'));
+  assertCliStatus(root, 0, 'in-repo symlink alias to a clean module was rejected');
 });
 
 let runtimeMatrixOutcomes = 0;
@@ -423,6 +500,7 @@ function withFixture(probeSource, assertion, compilerOptions = {}) {
     write(root, 'src/supervisor/evaluator.ts', "export const evaluate = () => 'protected';\n");
     write(root, 'src/supervisor/tripwire.ts', "export const detect = () => 'protected';\n");
     write(root, 'src/supervisor/secretMatcher.ts', "export const match = () => 'protected';\n");
+    write(root, 'src/supervisor/marker.ts', "export const marker = 'protected';\n");
     assertion(root);
   });
 }
@@ -468,6 +546,13 @@ function writeRuntimePackage(root, name, manifest, files) {
   for (const [relative, contents] of Object.entries(files)) {
     write(root, `node_modules/${name}/${relative}`, contents);
   }
+}
+
+function linkInstalledPackage(root, name) {
+  const installed = path.join(scriptDirectory, '..', 'node_modules', name);
+  const target = path.join(root, 'node_modules', name);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.symlinkSync(installed, target, 'dir');
 }
 
 function protectedRequire() {
