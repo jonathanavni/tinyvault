@@ -116,3 +116,7 @@ Example:
   commit when the slice added an eighth timing test; the worktrees, review packets and a Codex review were then
   built on the wrong (docs-only) range and had to be cancelled. Gate on the exit code, and print the resulting
   HEAD hash before anything downstream uses it. (2026-09-02)
+- **Every integrator edit re-runs `tsc` before the commit, and the run stanza is measured on the final tree.**
+  A one-line test narrowing after the integrator run dereferenced an optional field; vitest ran green (no
+  typecheck), the commit stanza said "tsc OK" from the earlier run, and `make test` was red on the reviewed commit.
+  The `tsc && test` chain must be the last thing before `git commit`. (2026-09-02)
