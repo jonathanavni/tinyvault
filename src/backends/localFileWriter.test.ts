@@ -165,9 +165,7 @@ describe('local vault writer', () => {
     )).rejects.toThrow('injected seal failure');
     expect([...key]).toEqual(new Array(32).fill(0));
     for (const plaintext of plaintexts) expect([...plaintext]).toEqual(new Array(plaintext.length).fill(0));
-    expect(trace).not.toContain('open');
-    expect(trace).not.toContain('rename');
-    await expect(stat(vaultPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(trace).toEqual(['readFile']);
   });
 
   it('kills rejecting or persisting explicit account undefined', async () => {
@@ -225,15 +223,19 @@ describe('local vault writer', () => {
     },
   );
 
-  it('kills validation after disk access', async () => {
-    // Mutation killed: invalid input reads the key, opens a temp, or otherwise touches disk first.
+  it.each([
+    [[]],
+    [['password', 'password']],
+    [['secret']],
+  ] as const)('kills validation after disk access for recipe %#', async (fieldRecipe) => {
+    // Mutation killed: empty, duplicate, or unknown recipe roles reach key/temp-file fs operations.
     const touched: string[] = [];
     const fs = new Proxy({} as LocalFileWriterFs, {
       get: (_target, property) => async () => { touched.push(String(property)); },
     });
     await expect(writeLocalVault('/vault', '/key', [{
       ...entry('bad'),
-      fieldRecipe: [],
+      fieldRecipe: fieldRecipe as unknown as LocalVaultEntry['fieldRecipe'],
     }], { fs })).rejects.toThrow('Invalid local vault entry');
     expect(touched).toEqual([]);
   });
