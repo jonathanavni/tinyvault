@@ -24,6 +24,14 @@ const PADDED_STANDARD_BASE64_PATTERN
   = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
 const FIELD_ROLES = new Set<FieldRole>(['username', 'password', 'totp']);
 
+export function isValidFieldRecipe(value: unknown): value is FieldRole[] {
+  return Array.isArray(value)
+    && value.length > 0
+    && value.every((role): role is FieldRole =>
+      typeof role === 'string' && FIELD_ROLES.has(role as FieldRole))
+    && new Set(value).size === value.length;
+}
+
 export function encodeAdditionalData(
   handle: Handle,
   policy: Readonly<{ canonicalOrigin: Origin; fieldRecipe: readonly FieldRole[] }>,
@@ -52,31 +60,7 @@ export function validateLocalVaultFile(input: unknown): LocalVaultFile {
 }
 
 function validateRecord(input: unknown, handles: Set<string>): LocalVaultRecord {
-  if (!isObject(input)
-    || !hasExactKeys(input, [
-      'handle',
-      'label',
-      'kind',
-      'canonicalOrigin',
-      'fieldRecipe',
-      'sealed',
-    ], ['account'])
-    || typeof input.handle !== 'string'
-    || !HANDLE_PATTERN.test(input.handle)
-    || handles.has(input.handle)
-    || typeof input.label !== 'string'
-    || input.kind !== 'password'
-    || (Object.hasOwn(input, 'account') && typeof input.account !== 'string')
-    || typeof input.canonicalOrigin !== 'string'
-    || !Array.isArray(input.fieldRecipe)
-    || input.fieldRecipe.length === 0
-    || !input.fieldRecipe.every((role): role is FieldRole =>
-      typeof role === 'string' && FIELD_ROLES.has(role as FieldRole))
-    || new Set(input.fieldRecipe).size !== input.fieldRecipe.length
-    || !isObject(input.sealed)
-    || !hasExactKeys(input.sealed, ['nonce', 'ciphertext'])
-    || typeof input.sealed.nonce !== 'string'
-    || typeof input.sealed.ciphertext !== 'string') return invalidVault();
+  if (!isValidRecordShape(input) || handles.has(input.handle)) return invalidVault();
 
   let normalizedOrigin: Origin;
   try {
@@ -91,21 +75,44 @@ function validateRecord(input: unknown, handles: Set<string>): LocalVaultRecord 
   if (nonce.length !== LOCAL_NONCE_BYTES || ciphertext.length < LOCAL_TAG_BYTES) return invalidVault();
 
   handles.add(input.handle);
-  const recipe = Object.freeze([...input.fieldRecipe]);
-  const sealed = Object.freeze({
-    nonce: input.sealed.nonce,
-    ciphertext: input.sealed.ciphertext,
-  });
-  const record = {
+  return Object.freeze({
     handle: input.handle,
     label: input.label,
     kind: 'password' as const,
-    ...(Object.hasOwn(input, 'account') ? { account: input.account as string } : {}),
+    ...(input.account === undefined ? {} : { account: input.account }),
     canonicalOrigin: normalizedOrigin,
-    fieldRecipe: recipe,
-    sealed,
-  };
-  return Object.freeze(record);
+    fieldRecipe: Object.freeze([...input.fieldRecipe]),
+    sealed: Object.freeze({
+      nonce: input.sealed.nonce,
+      ciphertext: input.sealed.ciphertext,
+    }),
+  });
+}
+
+function isValidRecordShape(input: unknown): input is Record<string, unknown> & {
+  handle: Handle;
+  label: string;
+  kind: 'password';
+  account?: string;
+  canonicalOrigin: string;
+  fieldRecipe: FieldRole[];
+  sealed: { nonce: string; ciphertext: string };
+} {
+  return isObject(input)
+    && hasExactKeys(input, [
+      'handle', 'label', 'kind', 'canonicalOrigin', 'fieldRecipe', 'sealed',
+    ], ['account'])
+    && typeof input.handle === 'string'
+    && HANDLE_PATTERN.test(input.handle)
+    && typeof input.label === 'string'
+    && input.kind === 'password'
+    && (!Object.hasOwn(input, 'account') || typeof input.account === 'string')
+    && typeof input.canonicalOrigin === 'string'
+    && isValidFieldRecipe(input.fieldRecipe)
+    && isObject(input.sealed)
+    && hasExactKeys(input.sealed, ['nonce', 'ciphertext'])
+    && typeof input.sealed.nonce === 'string'
+    && typeof input.sealed.ciphertext === 'string';
 }
 
 export function decodeCanonicalBase64(value: string): Uint8Array {

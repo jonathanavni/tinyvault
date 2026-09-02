@@ -61,4 +61,10 @@ describe('closed backend errors', () => {
     expect(kinds.map((kind) => new BackendError(kind).message)).toHaveLength(5);
     expect(new Set(kinds.map((kind) => new BackendError(kind).message)).size).toBe(5);
   });
+
+  it('kills runtime construction with an unknown error kind', () => {
+    // Mutation killed: an untyped caller creates a BackendError with an undefined or attacker-chosen message.
+    expect(() => new BackendError('unknown' as BackendErrorKind))
+      .toThrow(new Error('Invalid backend error kind'));
+  });
 });

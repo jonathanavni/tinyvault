@@ -23,10 +23,9 @@ import {
 import {
   defaultSealingPrimitives,
   LOCAL_KEY_BYTES,
+  type Awaitable,
   type SealingPrimitives,
 } from './localFileSodium';
-
-type Awaitable<T> = T | Promise<T>;
 
 export interface LocalFileBackendFs {
   readFile(filePath: string): Awaitable<Uint8Array>;
@@ -125,42 +124,7 @@ export function createLocalFileBackend({
       const vault = await readVault();
       const record = findRecord(vault, handle);
       if (!policiesEqual(record, authorizedPolicy)) throw new BackendError('integrity');
-
-      let key: Uint8Array | undefined;
-      try {
-        try {
-          key = await fs.readFile(keyPath);
-        } catch {
-          throw new BackendError('locked');
-        }
-        if (key.length !== LOCAL_KEY_BYTES) throw new BackendError('locked');
-
-        let plaintext: Uint8Array | undefined;
-        try {
-          try {
-            plaintext = await primitives.open(
-              decodeCanonicalBase64(record.sealed.ciphertext),
-              encodeAdditionalData(handle, authorizedPolicy),
-              decodeCanonicalBase64(record.sealed.nonce),
-              key,
-            );
-          } catch {
-            throw new BackendError('integrity');
-          }
-
-          let decoded: string;
-          try {
-            decoded = new TextDecoder('utf-8', { fatal: true }).decode(plaintext);
-          } catch {
-            throw new BackendError('unavailable');
-          }
-          return new Secret(decoded);
-        } finally {
-          if (plaintext !== undefined) await primitives.memzero(plaintext);
-        }
-      } finally {
-        if (key !== undefined) await primitives.memzero(key);
-      }
+      return await openRecordSecret(handle, record, keyPath, fs, primitives);
     } catch (error) {
       if (error instanceof BackendError) throw error;
       throw new BackendError('unavailable');
@@ -186,12 +150,63 @@ function findRecord(vault: LocalVaultFile, handle: Handle): LocalVaultRecord {
 
 function policiesEqual(record: LocalVaultRecord, policy: CredentialPolicy): boolean {
   try {
-    return record.canonicalOrigin === policy.canonicalOrigin
-      && Array.isArray(policy.fieldRecipe)
-      && record.fieldRecipe.length === policy.fieldRecipe.length
-      && record.fieldRecipe.every((role, index) => role === policy.fieldRecipe[index]);
+    const canonicalOrigin = policy.canonicalOrigin;
+    const fieldRecipe = policy.fieldRecipe;
+    return record.canonicalOrigin === canonicalOrigin
+      && Array.isArray(fieldRecipe)
+      && record.fieldRecipe.length === fieldRecipe.length
+      && record.fieldRecipe.every((role, index) => role === fieldRecipe[index]);
   } catch {
     return false;
+  }
+}
+
+async function openRecordSecret(
+  handle: Handle,
+  record: LocalVaultRecord,
+  keyPath: string,
+  fs: LocalFileBackendFs,
+  primitives: SealingPrimitives,
+): Promise<Secret> {
+  let key: Uint8Array | undefined;
+  try {
+    try {
+      key = await fs.readFile(keyPath);
+    } catch {
+      throw new BackendError('locked');
+    }
+    if (key.length !== LOCAL_KEY_BYTES) throw new BackendError('locked');
+    return await decryptRecord(handle, record, key, primitives);
+  } finally {
+    if (key !== undefined) await primitives.memzero(key);
+  }
+}
+
+async function decryptRecord(
+  handle: Handle,
+  record: LocalVaultRecord,
+  key: Uint8Array,
+  primitives: SealingPrimitives,
+): Promise<Secret> {
+  let plaintext: Uint8Array | undefined;
+  try {
+    try {
+      plaintext = await primitives.open(
+        decodeCanonicalBase64(record.sealed.ciphertext),
+        encodeAdditionalData(handle, record),
+        decodeCanonicalBase64(record.sealed.nonce),
+        key,
+      );
+    } catch {
+      throw new BackendError('integrity');
+    }
+    try {
+      return new Secret(new TextDecoder('utf-8', { fatal: true }).decode(plaintext));
+    } catch {
+      throw new BackendError('unavailable');
+    }
+  } finally {
+    if (plaintext !== undefined) await primitives.memzero(plaintext);
   }
 }
 

@@ -58,7 +58,15 @@ function vaultEntry(secret: string, origin = 'https://example.com'): LocalVaultE
 describe('local-file metadata and policy boundary', () => {
   it('kills sealed/plaintext copying and secret-derived metadata smuggling', async () => {
     // Mutation killed: {...record}, secret length/hash, sealed bytes, or policy fields escape in ItemMeta.
-    const { vaultPath, keyPath, handles } = await fixture();
+    const root = await mkdtemp(path.join(os.tmpdir(), 'tinyvault-backend-meta-'));
+    roots.push(root);
+    const vaultPath = path.join(root, 'vault.json');
+    const keyPath = path.join(root, 'vault.key');
+    const fixedHandle = 'vh_2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a';
+    await generateLocalVaultKey(keyPath);
+    await writeLocalVault(vaultPath, keyPath, [vaultEntry(canary)], {
+      primitives: wrapPrimitives({ randomHandle: () => new Uint8Array(16).fill(0x2a) }),
+    });
     let opens = 0;
     const primitives = wrapPrimitives({
       open: async (...args) => {
@@ -69,9 +77,9 @@ describe('local-file metadata and policy boundary', () => {
     const backend = createLocalFileBackend({ vaultPath, keyPath, primitives });
     await backend.probeAvailability();
     const items = await backend.listItems();
-    const policy = await backend.resolvePolicy(handles[0]!);
+    const policy = await backend.resolvePolicy(fixedHandle);
     expect(items).toEqual([{
-      handle: handles[0],
+      handle: 'vh_2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a',
       label: 'Example account',
       kind: 'password',
       account: 'person@example.com',
@@ -164,6 +172,35 @@ describe('never-cache contract and cleanup', () => {
     expect((await backend.resolveSecret(handle, policy)).expose()).toBe('cleanup-success');
     expectZero(key);
     expectZero(plaintext);
+  });
+
+  it('kills replacing real sodium.memzero with a no-op on successful resolution', async () => {
+    // Mutation killed: defaultSealingPrimitives.memzero leaves either the fs-owned key or opened plaintext nonzero.
+    const { vaultPath, keyPath, handles } = await fixture([vaultEntry('real-memzero-success')]);
+    let retainedKey: Uint8Array | undefined;
+    let retainedPlaintext: Uint8Array | undefined;
+    const fs: LocalFileBackendFs = {
+      readFile: async (filePath) => {
+        const bytes = await readFile(filePath);
+        if (filePath === keyPath) retainedKey = bytes;
+        return bytes;
+      },
+      stat,
+    };
+    const primitives: SealingPrimitives = {
+      ...defaultSealingPrimitives,
+      open: async (...args) => {
+        retainedPlaintext = await defaultSealingPrimitives.open(...args);
+        return retainedPlaintext;
+      },
+    };
+    const backend = createLocalFileBackend({ vaultPath, keyPath, fs, primitives });
+    const policy = await backend.resolvePolicy(handles[0]!);
+    expect((await backend.resolveSecret(handles[0]!, policy)).expose()).toBe('real-memzero-success');
+    expect(retainedKey).toBeDefined();
+    expect(retainedPlaintext).toBeDefined();
+    expectZero(retainedKey!);
+    expectZero(retainedPlaintext!);
   });
 
   it('kills a key finally that begins after open', async () => {
@@ -406,8 +443,8 @@ describe('policy binding and error ordering', () => {
     expect(vaultReads).toBe(1);
   });
 
-  it('kills deriving AEAD additional data from the record instead of the policy argument', async () => {
-    // Mutation killed: encodeAdditionalData(handle, recordPolicy) replaces the mandated argument source.
+  it('kills deriving AEAD additional data from a changing policy argument', async () => {
+    // Mutation killed: encodeAdditionalData(handle, authorizedPolicy) re-reads a getter after comparison.
     let originReads = 0;
     const changingPolicy = {
       get canonicalOrigin(): string {
@@ -430,8 +467,88 @@ describe('policy binding and error ordering', () => {
     });
     expect((await backend.resolveSecret(validHandle, changingPolicy)).expose()).toBe('argument-bound');
     expect(observed).toBe(JSON.stringify([
-      validHandle, 'https://argument.example', ['password'],
+      validHandle, 'https://example.com', ['password'],
     ]));
+    expect(originReads).toBe(1);
+  });
+
+  it('kills metadata-only origin edits released through a changing policy getter', async () => {
+    // Mutation killed: argument-derived AD lets getter read B for compare, then sealed origin A for open.
+    const { vaultPath, keyPath, handles } = await fixture([vaultEntry('origin-getter-secret')]);
+    await editVault(vaultPath, (file) => {
+      file.records[0].canonicalOrigin = 'https://edited.example';
+    });
+    let originReads = 0;
+    let opens = 0;
+    let releases = 0;
+    const policy = {
+      get canonicalOrigin(): string {
+        originReads += 1;
+        return originReads === 1 ? 'https://edited.example' : 'https://example.com';
+      },
+      fieldRecipe: ['username', 'password'],
+    } as CredentialPolicy;
+    const backend = createLocalFileBackend({
+      vaultPath,
+      keyPath,
+      primitives: wrapPrimitives({
+        open: async (...args) => {
+          opens += 1;
+          return defaultSealingPrimitives.open(...args);
+        },
+      }),
+    });
+    const attempt = backend.resolveSecret(handles[0]!, policy).then((secret) => {
+      releases += 1;
+      return secret;
+    });
+    await expectKind(attempt, 'integrity');
+    expect({ originReads, opens, releases }).toEqual({ originReads: 1, opens: 1, releases: 0 });
+  });
+
+  it('kills metadata-only recipe edits released through Proxy toJSON', async () => {
+    // Mutation killed: argument-derived AD invokes Proxy.toJSON and authenticates the pre-edit recipe.
+    const { vaultPath, keyPath, handles } = await fixture([vaultEntry('recipe-proxy-secret')]);
+    await editVault(vaultPath, (file) => { file.records[0].fieldRecipe = ['password']; });
+    let toJsonReads = 0;
+    let releases = 0;
+    const fieldRecipe = new Proxy(['password'] as CredentialPolicy['fieldRecipe'], {
+      get(target, property, receiver) {
+        if (property === 'toJSON') {
+          toJsonReads += 1;
+          return () => ['username', 'password'];
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const backend = createLocalFileBackend({ vaultPath, keyPath });
+    const attempt = backend.resolveSecret(handles[0]!, {
+      canonicalOrigin: 'https://example.com',
+      fieldRecipe,
+    }).then((secret) => {
+      releases += 1;
+      return secret;
+    });
+    await expectKind(attempt, 'integrity');
+    expect({ toJsonReads, releases }).toEqual({ toJsonReads: 0, releases: 0 });
+  });
+
+  it('kills any second read of either authorized-policy field', async () => {
+    // Mutation killed: comparison or decryption reads canonicalOrigin or fieldRecipe more than once.
+    let originReads = 0;
+    let recipeReads = 0;
+    const policy = {
+      get canonicalOrigin(): string { originReads += 1; return 'https://example.com'; },
+      get fieldRecipe(): CredentialPolicy['fieldRecipe'] { recipeReads += 1; return ['password']; },
+    } as CredentialPolicy;
+    const backend = createLocalFileBackend({
+      vaultPath: '/vault',
+      keyPath: '/key',
+      fs: memoryBackendFs(validVaultBytes(), new Uint8Array(32).fill(1)),
+      primitives: wrapPrimitives({ open: () => new TextEncoder().encode('read-once') }),
+    });
+    expect((await backend.resolveSecret(validHandle, policy)).expose()).toBe('read-once');
+    expect({ originReads, recipeReads }).toEqual({ originReads: 1, recipeReads: 1 });
   });
 });
 

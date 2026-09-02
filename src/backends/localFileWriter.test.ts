@@ -143,7 +143,7 @@ describe('local vault writer', () => {
   });
 
   it.each([1, 2])('kills missing writer cleanup when seal call %i throws', async (throwAt) => {
-    // Mutation killed: first/nth seal failure escapes either the inner plaintext or outer key finally.
+    // Mutation killed: seal failure escapes cleanup or proceeds to temp-file open/rename.
     const { vaultPath, keyPath } = await paths();
     const key = new Uint8Array(32).fill(6);
     const plaintexts: Uint8Array[] = [];
@@ -156,15 +156,34 @@ describe('local vault writer', () => {
         return new Uint8Array(16).fill(3);
       },
     });
+    const trace: string[] = [];
     await expect(writeLocalVault(
       vaultPath,
       keyPath,
       [entry('first'), entry('second')],
-      { primitives, fs: writerFsWithKey(key) },
+      { primitives, fs: writerFsWithKey(key, trace) },
     )).rejects.toThrow('injected seal failure');
     expect([...key]).toEqual(new Array(32).fill(0));
     for (const plaintext of plaintexts) expect([...plaintext]).toEqual(new Array(plaintext.length).fill(0));
+    expect(trace).not.toContain('open');
+    expect(trace).not.toContain('rename');
     await expect(stat(vaultPath)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('kills rejecting or persisting explicit account undefined', async () => {
+    // Mutation killed: own account: undefined is rejected or serialized instead of treated as absent.
+    const { vaultPath, keyPath } = await paths();
+    await generateLocalVaultKey(keyPath);
+    const { account: _ignored, ...withoutAccount } = entry('absent-account');
+    const withUndefined: LocalVaultEntry = {
+      ...withoutAccount,
+      secret: 'undefined-account',
+      account: undefined,
+    };
+    const items = await writeLocalVault(vaultPath, keyPath, [withoutAccount, withUndefined]);
+    const file = JSON.parse(await readFile(vaultPath, 'utf8')) as any;
+    expect(file.records.map((record: any) => Object.hasOwn(record, 'account'))).toEqual([false, false]);
+    expect(items.map((item) => Object.hasOwn(item, 'account'))).toEqual([false, false]);
   });
 
   it('kills direct-overwrite, non-exclusive-temp, missing-fsync, and rename-before-close mutations', async () => {
@@ -240,13 +259,16 @@ function wrappingPrimitives(overrides: Partial<SealingPrimitives>): SealingPrimi
   };
 }
 
-function writerFsWithKey(key: Uint8Array): LocalFileWriterFs {
+function writerFsWithKey(key: Uint8Array, trace?: string[]): LocalFileWriterFs {
   return {
-    readFile: async () => key,
-    writeFile: async () => {},
-    open: async () => ({ writeFile: async () => {}, sync: async () => {}, close: async () => {} }),
-    rename: async () => {},
-    unlink: async () => {},
+    readFile: async () => { trace?.push('readFile'); return key; },
+    writeFile: async () => { trace?.push('writeFile'); },
+    open: async () => {
+      trace?.push('open');
+      return { writeFile: async () => {}, sync: async () => {}, close: async () => {} };
+    },
+    rename: async () => { trace?.push('rename'); },
+    unlink: async () => { trace?.push('unlink'); },
   };
 }
 

@@ -5,7 +5,7 @@ export const LOCAL_HANDLE_BYTES = 16;
 export const LOCAL_NONCE_BYTES = 24;
 export const LOCAL_TAG_BYTES = 16;
 
-type Awaitable<T> = T | Promise<T>;
+export type Awaitable<T> = T | Promise<T>;
 
 /** The single injectable seam through which this slice accesses libsodium. */
 export interface SealingPrimitives {

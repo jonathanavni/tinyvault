@@ -1,20 +1,29 @@
+/**
+ * Local-file provisioning helpers.
+ *
+ * A non-EEXIST failure during exclusive key creation can leave a partial key file behind. Operators
+ * must inspect or remove that path before retrying; the writer never overwrites an existing key file.
+ */
 import { randomUUID } from 'node:crypto';
 import type { FileHandle } from 'node:fs/promises';
 import { open, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { validateBareOrigin } from '../core/originGuard';
 import type { FieldRole, ItemMeta, Origin } from '../core/types';
-import { encodeAdditionalData, type LocalVaultRecord } from './localFileFormat';
+import { validateBareOrigin } from '../core/originGuard';
+import {
+  encodeAdditionalData,
+  isValidFieldRecipe,
+  type LocalVaultRecord,
+} from './localFileFormat';
 import {
   defaultSealingPrimitives,
   LOCAL_HANDLE_BYTES,
   LOCAL_KEY_BYTES,
   LOCAL_NONCE_BYTES,
+  type Awaitable,
   type SealingPrimitives,
 } from './localFileSodium';
-
-type Awaitable<T> = T | Promise<T>;
 
 export type LocalVaultEntry = Readonly<{
   label: string;
@@ -57,7 +66,6 @@ const defaultWriterFs: LocalFileWriterFs = Object.freeze({
   unlink,
 });
 
-const FIELD_ROLES = new Set<FieldRole>(['username', 'password', 'totp']);
 const INVALID_ENTRY_MESSAGE = 'Invalid local vault entry';
 const INVALID_KEY_MESSAGE = 'Invalid local vault key';
 const INVALID_RANDOM_MESSAGE = 'Invalid random output';
@@ -93,59 +101,7 @@ export async function writeLocalVault(
   try {
     key = await fs.readFile(keyPath);
     if (key.length !== LOCAL_KEY_BYTES) throw new Error(INVALID_KEY_MESSAGE);
-
-    const records: LocalVaultRecord[] = [];
-    const metadata: ItemMeta[] = [];
-    const handles = new Set<string>();
-
-    for (const entry of validatedEntries) {
-      const handleBytes = await primitives.randomHandle();
-      if (handleBytes.length !== LOCAL_HANDLE_BYTES) throw new Error(INVALID_RANDOM_MESSAGE);
-      const handle = `vh_${Buffer.from(handleBytes).toString('hex')}`;
-      if (handles.has(handle)) throw new Error(INVALID_RANDOM_MESSAGE);
-      handles.add(handle);
-
-      const nonce = await primitives.randomNonce();
-      if (nonce.length !== LOCAL_NONCE_BYTES) throw new Error(INVALID_RANDOM_MESSAGE);
-
-      let plaintext: Uint8Array | undefined;
-      try {
-        plaintext = new TextEncoder().encode(entry.secret);
-        const policy = Object.freeze({
-          canonicalOrigin: entry.canonicalOrigin,
-          fieldRecipe: entry.fieldRecipe,
-        });
-        const ciphertext = await primitives.seal(
-          plaintext,
-          encodeAdditionalData(handle, policy),
-          nonce,
-          key,
-        );
-        const record = Object.freeze({
-          handle,
-          label: entry.label,
-          kind: 'password' as const,
-          ...(entry.account === undefined ? {} : { account: entry.account }),
-          canonicalOrigin: entry.canonicalOrigin,
-          fieldRecipe: entry.fieldRecipe,
-          sealed: Object.freeze({
-            nonce: Buffer.from(nonce).toString('base64'),
-            ciphertext: Buffer.from(ciphertext).toString('base64'),
-          }),
-        });
-        records.push(record);
-        metadata.push(Object.freeze({
-          handle,
-          label: entry.label,
-          kind: 'password',
-          ...(entry.account === undefined ? {} : { account: entry.account }),
-          available: true,
-        }));
-      } finally {
-        if (plaintext !== undefined) await primitives.memzero(plaintext);
-      }
-    }
-
+    const { records, metadata } = await sealEntries(validatedEntries, key, primitives);
     const bytes = new TextEncoder().encode(JSON.stringify({ version: 1, records }));
     await replaceAtomically(vaultPath, bytes, fs);
     return Object.freeze(metadata);
@@ -154,25 +110,98 @@ export async function writeLocalVault(
   }
 }
 
-function validateEntry(input: LocalVaultEntry): Readonly<{
+type ValidatedEntry = Readonly<{
   label: string;
   kind: 'password';
   account?: string;
   canonicalOrigin: Origin;
   fieldRecipe: readonly FieldRole[];
   secret: string;
-}> {
+}>;
+
+async function sealEntries(
+  entries: readonly ValidatedEntry[],
+  key: Uint8Array,
+  primitives: SealingPrimitives,
+): Promise<{ records: LocalVaultRecord[]; metadata: ItemMeta[] }> {
+  const records: LocalVaultRecord[] = [];
+  const metadata: ItemMeta[] = [];
+  const handles = new Set<string>();
+  for (const entry of entries) {
+    const sealed = await sealEntry(entry, key, handles, primitives);
+    records.push(sealed.record);
+    metadata.push(sealed.metadata);
+  }
+  return { records, metadata };
+}
+
+async function sealEntry(
+  entry: ValidatedEntry,
+  key: Uint8Array,
+  handles: Set<string>,
+  primitives: SealingPrimitives,
+): Promise<{ record: LocalVaultRecord; metadata: ItemMeta }> {
+  const handleBytes = await primitives.randomHandle();
+  if (handleBytes.length !== LOCAL_HANDLE_BYTES) throw new Error(INVALID_RANDOM_MESSAGE);
+  const handle: `vh_${string}` = `vh_${Buffer.from(handleBytes).toString('hex')}`;
+  if (handles.has(handle)) throw new Error(INVALID_RANDOM_MESSAGE);
+  handles.add(handle);
+  const nonce = await primitives.randomNonce();
+  if (nonce.length !== LOCAL_NONCE_BYTES) throw new Error(INVALID_RANDOM_MESSAGE);
+
+  let plaintext: Uint8Array | undefined;
+  try {
+    plaintext = new TextEncoder().encode(entry.secret);
+    const ciphertext = await primitives.seal(
+      plaintext,
+      encodeAdditionalData(handle, entry),
+      nonce,
+      key,
+    );
+    return buildSealedEntry(entry, handle, nonce, ciphertext);
+  } finally {
+    if (plaintext !== undefined) await primitives.memzero(plaintext);
+  }
+}
+
+function buildSealedEntry(
+  entry: ValidatedEntry,
+  handle: `vh_${string}`,
+  nonce: Uint8Array,
+  ciphertext: Uint8Array,
+): { record: LocalVaultRecord; metadata: ItemMeta } {
+  const account = entry.account === undefined ? {} : { account: entry.account };
+  return {
+    record: Object.freeze({
+      handle,
+      label: entry.label,
+      kind: 'password',
+      ...account,
+      canonicalOrigin: entry.canonicalOrigin,
+      fieldRecipe: entry.fieldRecipe,
+      sealed: Object.freeze({
+        nonce: Buffer.from(nonce).toString('base64'),
+        ciphertext: Buffer.from(ciphertext).toString('base64'),
+      }),
+    }),
+    metadata: Object.freeze({
+      handle,
+      label: entry.label,
+      kind: 'password',
+      ...account,
+      available: true,
+    }),
+  };
+}
+
+function validateEntry(input: LocalVaultEntry): ValidatedEntry {
   if (input === null
     || typeof input !== 'object'
     || typeof input.label !== 'string'
     || input.kind !== 'password'
-    || (Object.hasOwn(input, 'account') && typeof input.account !== 'string')
+    || (input.account !== undefined && typeof input.account !== 'string')
     || typeof input.canonicalOrigin !== 'string'
-    || !Array.isArray(input.fieldRecipe)
-    || input.fieldRecipe.length === 0
-    || !input.fieldRecipe.every((role): role is FieldRole =>
-      typeof role === 'string' && FIELD_ROLES.has(role as FieldRole))
-    || new Set(input.fieldRecipe).size !== input.fieldRecipe.length
+    || !isValidFieldRecipe(input.fieldRecipe)
     || typeof input.secret !== 'string') throw new Error(INVALID_ENTRY_MESSAGE);
 
   let canonicalOrigin: Origin;
