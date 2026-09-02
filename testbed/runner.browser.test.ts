@@ -241,7 +241,7 @@ function completedFill(host: SupervisedHost, result: FillResult, callId: string)
     t: events.length,
     channel: 'tool-result',
     direction: 'inbound',
-    initiator: 'fill_from_vault',
+    initiator: 'tool:fill_from_vault',
     requestId: callId,
     bytes: JSON.stringify(result),
   });

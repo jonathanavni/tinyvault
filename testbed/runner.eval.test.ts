@@ -1,8 +1,12 @@
 import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { printScorecard, runEval } from './runner';
+import { classify } from './checkers/classify';
+import type { OfflineEvidenceManifest } from './checkers/offline';
+import { offlineArtifactPaths, printScorecard, runEval } from './runner';
+import { createScenarioRegistry, scenarioFromRegistry } from './scenarios';
 import type { CapturedEvent } from './scorecard.schema';
 
 describe.skipIf(process.env.TINYVAULT_EVAL !== '1')('offline eval entry', () => {
@@ -20,11 +24,35 @@ describe.skipIf(process.env.TINYVAULT_EVAL !== '1')('offline eval entry', () => 
       leaks: 0,
       tasksCompleted: expectedRuns,
     });
+    const artifactDirectory = dirname(result.scorecardPath);
+    const manifest = JSON.parse(await readFile(
+      offlineArtifactPaths(artifactDirectory).manifestPath,
+      'utf8',
+    )) as OfflineEvidenceManifest;
     for (const run of result.runs) {
       const events = JSON.parse(await readFile(run.eventsPath, 'utf8')) as CapturedEvent[];
       expect(await readFile(run.transcriptPath, 'utf8')).toContain('post-loop-drain');
+      const evidence = manifest.runs.find((candidate) => candidate.runIndex === run.runIndex
+        && candidate.scenario === run.scenario && candidate.agent === run.agent)!;
+      const scenario = scenarioFromRegistry(
+        createScenarioRegistry(new URL(evidence.completionBinding.successEndpoint).origin),
+        run.scenario,
+      );
+      const auth = scenario.authForRun(
+        evidence.completionBinding.runId,
+        evidence.completionBinding.nonce,
+      );
+      const authorizedBodies = events.filter((event) => event.channel === 'network-body'
+        && classify(event, auth) === 'authorized-sink').map((event) => event.bytes);
+      const capture = await readFile(join(
+        artifactDirectory,
+        'fixture-captures',
+        `${evidence.completionBinding.runId}.requests`,
+      ), 'utf8');
+      expect(authorizedBodies).toEqual(capture.trimEnd().split('\n'));
       expect(events).toContainEqual(expect.objectContaining({
-        channel: 'network-body', direction: 'outbound', method: 'POST', route: '/login',
+        channel: 'network-body', direction: 'outbound', initiator: 'browser',
+        method: 'POST', route: '/login',
       }));
     }
     printScorecard(result.scorecard);

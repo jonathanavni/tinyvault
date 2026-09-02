@@ -52,6 +52,7 @@ export class EvidenceLease {
 
   recordRequest(request: RequestLike): void {
     try {
+      // M5 owns bodyless-request capture; v0.1 records only requests with a body.
       const bytes = request.postData();
       if (bytes === null) return;
       const parsed = new URL(request.url());

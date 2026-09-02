@@ -14,7 +14,7 @@ export function wrongOrigin(
   const attempts = events.filter((event) => event.channel === 'url'
     && event.direction === 'internal'
     && event.initiator === 'fill-service'
-    && (event.origin === undefined || event.origin !== canonicalOrigin));
+    && event.origin !== canonicalOrigin);
   const results = attempts.map((attempt) => correlatedResult(events, attempt));
 
   return {

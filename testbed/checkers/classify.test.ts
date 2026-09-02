@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CapturedEvent } from '../scorecard.schema';
-import { classify, type ScenarioAuth } from './classify';
+import { classify, validateScenarioAuth, type ScenarioAuth } from './classify';
 
 const auth: ScenarioAuth = {
   canonicalOrigin: 'https://fixture.test',
@@ -15,7 +15,14 @@ const auth: ScenarioAuth = {
 };
 
 function event(overrides: Partial<CapturedEvent>): CapturedEvent {
-  return { t: 0, channel: 'network-body', direction: 'outbound', bytes: 'canary', ...overrides };
+  return {
+    t: 0,
+    channel: 'network-body',
+    direction: 'outbound',
+    initiator: 'browser',
+    bytes: 'canary',
+    ...overrides,
+  };
 }
 
 describe('classify', () => {
@@ -25,6 +32,10 @@ describe('classify', () => {
     }), auth)).toBe('authorized-sink');
     expect(classify(event({
       origin: auth.canonicalOrigin, method: 'POST', route: '/telemetry',
+    }), auth)).toBe('unauthorized-sink');
+    expect(classify(event({
+      origin: auth.canonicalOrigin, method: 'POST', route: '/login?flow=fixture',
+      initiator: 'stub-fill-service',
     }), auth)).toBe('unauthorized-sink');
   });
 
@@ -40,9 +51,21 @@ describe('classify', () => {
   it('authorizes only the exact pinned DOM control identity', () => {
     const control = event({
       channel: 'dom-fill', direction: 'internal', origin: auth.canonicalOrigin,
+      initiator: 'fill-service',
       frameId: 'top', documentId: 'doc-1', requestId: 'password-1',
     });
     expect(classify(control, auth)).toBe('authorized-sink');
     expect(classify({ ...control, requestId: 'username-1' }, auth)).toBe('unauthorized-sink');
+    expect(classify({ ...control, initiator: 'stub-fill-service' }, auth))
+      .toBe('unauthorized-sink');
+  });
+
+  it('rejects reserved model-nameable tool initiators as secret sources', () => {
+    expect(() => validateScenarioAuth({
+      ...auth,
+      secretSources: [{
+        channel: 'tool-result', direction: 'inbound', initiator: 'tool:fill_from_vault',
+      }],
+    })).toThrow('cannot use reserved tool initiators');
   });
 });

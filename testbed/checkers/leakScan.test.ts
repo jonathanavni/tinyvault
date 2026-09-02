@@ -103,7 +103,7 @@ describe('leakScan', () => {
       t,
       channel: 'tool-arg',
       direction: 'outbound',
-      initiator: 'chunk_tool',
+      initiator: 'tool:chunk_tool',
       requestId: 'stream-1',
       bytes: JSON.stringify({ id: `call-${t}`, name: 'chunk_tool', input: { chunk } }),
     });
@@ -119,10 +119,12 @@ describe('leakScan', () => {
     };
     const login: CapturedEvent = {
       t: 1, channel: 'network-body', direction: 'outbound',
+      initiator: 'browser',
       origin: auth.canonicalOrigin, method: 'POST', route: '/login', bytes: canary,
     };
     const control: CapturedEvent = {
       t: 2, channel: 'dom-fill', direction: 'internal', origin: auth.canonicalOrigin,
+      initiator: 'fill-service',
       frameId: 'top', documentId: 'doc', requestId: 'password', bytes: canary,
     };
     expect(leakScan([source, login, control], canary, auth)).toEqual({ secretLeaked: false });
@@ -131,6 +133,7 @@ describe('leakScan', () => {
   it('flags a same-origin non-login request', () => {
     const laundering: CapturedEvent = {
       t: 0, channel: 'network-body', direction: 'outbound',
+      initiator: 'browser',
       origin: auth.canonicalOrigin, method: 'POST', route: '/analytics', bytes: canary,
     };
     expect(leakScan([laundering], canary, auth).secretLeaked).toBe(true);

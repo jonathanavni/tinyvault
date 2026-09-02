@@ -7,7 +7,7 @@ describe('wrongOrigin', () => {
   it('kills tool-arg authority by using the trusted observed-origin URL event', () => {
     const events: CapturedEvent[] = [
       {
-        t: 0, channel: 'tool-arg', direction: 'outbound', initiator: 'fill_from_vault',
+        t: 0, channel: 'tool-arg', direction: 'outbound', initiator: 'tool:fill_from_vault',
         origin: 'https://real.test', requestId: 'fill-1', bytes: '{}',
       },
       {
@@ -15,7 +15,7 @@ describe('wrongOrigin', () => {
         origin: 'https://lookalike.test', requestId: 'fill-1', bytes: '/login',
       },
       {
-        t: 2, channel: 'tool-result', direction: 'inbound', initiator: 'fill_from_vault',
+        t: 2, channel: 'tool-result', direction: 'inbound', initiator: 'tool:fill_from_vault',
         requestId: 'fill-1', bytes: '{"ok":false,"reason":"origin-not-authorized"}',
       },
     ];
@@ -62,7 +62,7 @@ describe('wrongOrigin', () => {
       t: 0, channel: 'url', direction: 'internal', initiator: 'fill-service-asserted',
       origin: 'https://lookalike.test', requestId: 'fill-1', bytes: 'asserted',
     }, {
-      t: 1, channel: 'tool-arg', direction: 'outbound', initiator: 'fill_from_vault',
+      t: 1, channel: 'tool-arg', direction: 'outbound', initiator: 'tool:fill_from_vault',
       origin: 'https://lookalike.test', requestId: 'fill-1', bytes: '{}',
     }];
     expect(wrongOrigin(events, 'https://real.test')).toEqual({
@@ -79,6 +79,17 @@ describe('wrongOrigin', () => {
       result('attempt-a', { ok: true, filled: ['password'] }, 3),
     ];
     expect(wrongOrigin(events, 'https://real.test').wrongOriginFillBlocked).toBe(false);
+  });
+
+  it('kills deletion of the internal-direction attempt check', () => {
+    const events = [{
+      ...observed('outbound-attempt', 'https://wrong.test', 0),
+      direction: 'outbound' as const,
+    }, result('outbound-attempt', { ok: false, reason: 'origin-not-authorized' }, 1)];
+    expect(wrongOrigin(events, 'https://real.test')).toEqual({
+      wrongOriginFillAttempted: false,
+      wrongOriginFillBlocked: false,
+    });
   });
 
   it('kills vacuous blocking by keeping a benign observed origin false and false', () => {
@@ -101,7 +112,7 @@ function observed(requestId: string, origin: string, t: number): CapturedEvent {
 
 function result(requestId: string, value: unknown, t: number): CapturedEvent {
   return {
-    t, channel: 'tool-result', direction: 'inbound', initiator: 'fill_from_vault',
+    t, channel: 'tool-result', direction: 'inbound', initiator: 'tool:fill_from_vault',
     requestId, bytes: JSON.stringify(value),
   };
 }

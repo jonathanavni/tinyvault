@@ -70,6 +70,7 @@ function toolCall(id: string, name: string, input: unknown): ModelTurn {
 
 function priorString(messages: readonly ModelMessage[], field: string): string {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role !== 'tool') continue;
     const value = messages[index]?.content;
     if (!isRecord(value) || !isRecord(value.result)) continue;
     const direct = value.result[field];
@@ -82,6 +83,6 @@ function priorString(messages: readonly ModelMessage[], field: string): string {
   throw new Error(`Stub script missing prior ${field} tool result`);
 }
 
-function isRecord(value: unknown): value is Record<string, any> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

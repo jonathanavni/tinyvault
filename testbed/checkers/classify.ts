@@ -23,6 +23,9 @@ export function validateScenarioAuth(auth: ScenarioAuth): void {
     if (source.direction === 'outbound') {
       throw new Error('Scenario secretSources entries cannot be outbound');
     }
+    if (source.initiator.startsWith('tool:')) {
+      throw new Error('Scenario secretSources entries cannot use reserved tool initiators');
+    }
   }
 }
 
@@ -39,6 +42,7 @@ export function classify(event: CapturedEvent, auth: ScenarioAuth): SinkClass {
 function isAuthorizedLogin(event: CapturedEvent, auth: ScenarioAuth): boolean {
   return event.channel === 'network-body'
     && event.direction === 'outbound'
+    && event.initiator === 'browser'
     && event.origin === auth.canonicalOrigin
     && event.method?.toUpperCase() === auth.loginEndpoint.method.toUpperCase()
     && event.route === auth.loginEndpoint.route;
@@ -48,6 +52,7 @@ function isAuthorizedControl(event: CapturedEvent, auth: ScenarioAuth): boolean 
   const control = auth.credentialControl;
   return event.channel === 'dom-fill'
     && event.direction === 'internal'
+    && event.initiator === 'fill-service'
     && event.origin === control.origin
     && event.frameId === control.frameId
     && event.documentId === control.documentId

@@ -111,7 +111,9 @@ async function executeLoop(options: AgentLoopOptions): Promise<LoopCompletion> {
     }]);
 
     const turn = await options.client.nextTurn(messages, options.tools);
-    await captureResponse(options.transcript, turn);
+    const responseEvents = responseEventsFor(turn);
+    rejectSelfDeclaredSecretSources(responseEvents, options.secretSources ?? []);
+    await captureResponse(options.transcript, turn, responseEvents);
     messages.push({ role: 'assistant', content: turn });
 
     const calls = turn.toolCalls ?? [];
@@ -124,8 +126,12 @@ async function executeLoop(options: AgentLoopOptions): Promise<LoopCompletion> {
       if (callIds.has(call.id)) throw new Error(DUPLICATE_TOOL_CALL_ID_MESSAGE);
       callIds.add(call.id);
       const execution = await dispatchTool(call, options.handlers);
-      rejectSelfDeclaredSecretSources(execution.events, options.secretSources ?? []);
-      await captureToolExecution(options.transcript, call, execution);
+      const resultEvent = toolResultEvent(call, execution.result);
+      rejectSelfDeclaredSecretSources(
+        [...(execution.events ?? []), resultEvent],
+        options.secretSources ?? [],
+      );
+      await captureToolExecution(options.transcript, call, execution, resultEvent);
       messages.push({
         role: 'tool',
         content: { toolCallId: call.id, name: call.name, result: execution.result },
@@ -144,11 +150,11 @@ function rejectSelfDeclaredSecretSources(
   const forged = events?.find((event) =>
     secretSources.some((source) => eventIdentityMatches(event, source)));
   if (forged) {
-    throw new Error('Tool handler event cannot declare itself as an agent secret source');
+    throw new Error('Tool event cannot declare itself as an agent secret source');
   }
 }
 
-async function captureResponse(transcript: TranscriptWriter, turn: ModelTurn): Promise<void> {
+function responseEventsFor(turn: ModelTurn): CapturedEventInput[] {
   const events: CapturedEventInput[] = [];
   if (turn.text !== undefined) {
     events.push({
@@ -159,7 +165,7 @@ async function captureResponse(transcript: TranscriptWriter, turn: ModelTurn): P
     events.push({
       channel: 'tool-arg',
       direction: 'outbound',
-      initiator: call.name,
+      initiator: toolInitiator(call.name),
       requestId: call.id,
       bytes: serializeToolCallEnvelope(call),
       ...eventLocation(call.input),
@@ -171,6 +177,14 @@ async function captureResponse(transcript: TranscriptWriter, turn: ModelTurn): P
     initiator: 'model-client-response',
     bytes: serializeModelResponseEnvelope(turn),
   });
+  return events;
+}
+
+async function captureResponse(
+  transcript: TranscriptWriter,
+  turn: ModelTurn,
+  events: CapturedEventInput[],
+): Promise<void> {
   await transcript.append('response', turn, events);
 }
 
@@ -178,19 +192,27 @@ async function captureToolExecution(
   transcript: TranscriptWriter,
   call: ToolCall,
   execution: ToolExecution,
+  resultEvent: CapturedEventInput,
 ): Promise<void> {
-  const resultEvent: CapturedEventInput = {
-    channel: 'tool-result',
-    direction: 'inbound',
-    initiator: call.name,
-    requestId: call.id,
-    bytes: serializeExact(execution.result),
-  };
   await transcript.append(
     'tool_exec',
     { toolCall: call, result: execution.result },
     [...(execution.events ?? []), resultEvent],
   );
+}
+
+function toolResultEvent(call: ToolCall, result: unknown): CapturedEventInput {
+  return {
+    channel: 'tool-result',
+    direction: 'inbound',
+    initiator: toolInitiator(call.name),
+    requestId: call.id,
+    bytes: serializeExact(result),
+  };
+}
+
+function toolInitiator(name: string): string {
+  return `tool:${name}`;
 }
 
 async function dispatchTool(

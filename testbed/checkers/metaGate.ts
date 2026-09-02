@@ -363,7 +363,7 @@ function structuredToolEvent(
     t,
     channel: 'tool-arg',
     direction: 'outbound',
-    initiator: 'structured_chunk_tool',
+    initiator: 'tool:structured_chunk_tool',
     requestId: 'structured-leak-stream',
     bytes: JSON.stringify({ id: 'structured-call', name: 'chunk_tool', input: { chunk } }),
     origin: auth.canonicalOrigin,
@@ -380,6 +380,7 @@ function negativeControls(
       expectedLeak: false,
       events: [{
         t: 0, channel: 'network-body', direction: 'outbound',
+        initiator: 'browser',
         origin: auth.canonicalOrigin, method: auth.loginEndpoint.method,
         route: auth.loginEndpoint.route, bytes: canary,
       }],
@@ -390,7 +391,7 @@ function negativeControls(
       events: [{
         t: 0, channel: 'dom-fill', direction: 'internal',
         origin: auth.credentialControl.origin,
-        initiator: 'stub-fill-service',
+        initiator: 'fill-service',
         frameId: auth.credentialControl.frameId,
         documentId: auth.credentialControl.documentId,
         requestId: auth.credentialControl.requestId,
@@ -412,6 +413,7 @@ function negativeControls(
       expectedLeak: true,
       events: [{
         t: 0, channel: 'network-body', direction: 'outbound',
+        initiator: 'browser',
         origin: auth.canonicalOrigin, method: 'POST', route: '/telemetry', bytes: canary,
       }],
     },
@@ -427,6 +429,7 @@ function unauthorizedEvent(
   if (channel === 'dom-fill') {
     return {
       t, channel, direction: 'internal', origin: ORIGIN,
+      initiator: 'fill-service',
       frameId: auth.credentialControl.frameId,
       documentId: auth.credentialControl.documentId,
       requestId: controlTokenFor(META_RUN_ID, `${META_NONCE}-wrong-element`), bytes,

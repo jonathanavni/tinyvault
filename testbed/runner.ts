@@ -1,5 +1,5 @@
 import { randomBytes, type KeyObject } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import {
@@ -45,7 +45,7 @@ const MODEL_ID = 'stub-scripted-v1';
 const AGENT_ID = 'stub-safe';
 const CHECKER_VERSION = 'm4-v1';
 export const FIXTURE_TRANSPORT_MESSAGE = 'Fixture transport is not HTTP';
-export const MISSING_END_MARKER_MESSAGE = 'Supervised run missing end marker';
+export const MISSING_END_MARKER_MESSAGE = 'Run ended without an end marker';
 
 export type AgentConfig = {
   id: string;
@@ -71,7 +71,18 @@ export type EvalOptions = {
   sampleSize?: number;
   artifactDirectory?: string;
   generatedAt?: string;
+  /** Runtime lifecycle seam: production uses the imported launcher; tests inject a spy. */
+  launchChromium?: typeof launchChromium;
+  /** Test seam for proving fixture guards are wired through the capture path. */
+  startFixture?: typeof startBenignLoginFixture;
+  /** Test seam for proving supervised-host guards are wired through the eval path. */
+  createHost?: typeof createSupervisedHost;
 };
+
+export type CaptureOptions = Pick<
+  EvalOptions,
+  'launchChromium' | 'startFixture' | 'createHost'
+>;
 
 export type EvalResult = { scorecard: Scorecard; runs: RunRecord[]; scorecardPath: string };
 
@@ -83,20 +94,22 @@ export function offlineArtifactPaths(artifactDirectory: string) {
 }
 
 export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
-  const metaGate = runMetaGate();
-  if (!metaGate.passed) {
-    throw new Error(`Checker meta-gate failed:\n${metaGate.failures.join('\n')}`);
-  }
-
   const sampleSize = options.sampleSize ?? DEFAULT_SAMPLE_SIZE;
   if (!Number.isInteger(sampleSize) || sampleSize < 1) {
     throw new Error('sampleSize must be a positive integer');
   }
   const artifactDirectory = resolve(options.artifactDirectory ?? 'artifacts/eval');
+  await rm(artifactDirectory, { recursive: true, force: true });
   await mkdir(artifactDirectory, { recursive: true });
-  const browser = await launchChromium();
+
+  const metaGate = runMetaGate();
+  if (!metaGate.passed) {
+    throw new Error(`Checker meta-gate failed:\n${metaGate.failures.join('\n')}`);
+  }
+
+  const browser = await (options.launchChromium ?? launchChromium)();
   try {
-    const trust = await capturePersistedRuns(artifactDirectory, sampleSize, browser);
+    const trust = await capturePersistedRuns(artifactDirectory, sampleSize, browser, options);
     const paths = offlineArtifactPaths(artifactDirectory);
     const runs = await adjudicatePersistedRuns({
       runsPath: paths.capturedRunsPath,
@@ -121,11 +134,14 @@ export async function capturePersistedRuns(
   artifactDirectory: string,
   sampleSize: number,
   browser?: Browser,
+  options: CaptureOptions = {},
 ): Promise<EvalTrust> {
-  if (browser !== undefined) return captureWithBrowser(artifactDirectory, sampleSize, browser);
-  const launched = await launchChromium();
+  if (browser !== undefined) {
+    return captureWithBrowser(artifactDirectory, sampleSize, browser, options);
+  }
+  const launched = await (options.launchChromium ?? launchChromium)();
   try {
-    return await captureWithBrowser(artifactDirectory, sampleSize, launched);
+    return await captureWithBrowser(artifactDirectory, sampleSize, launched, options);
   } finally {
     await launched.close();
   }
@@ -135,8 +151,11 @@ async function captureWithBrowser(
   artifactDirectory: string,
   sampleSize: number,
   browser: Browser,
+  options: CaptureOptions,
 ): Promise<EvalTrust> {
-  const fixture = await startBenignLoginFixture(resolve(artifactDirectory, 'fixture-captures'));
+  const fixture = await (options.startFixture ?? startBenignLoginFixture)(
+    resolve(artifactDirectory, 'fixture-captures'),
+  );
   const capturedRuns: RunRecord[] = [];
   const evidenceRuns: OfflineRunEvidence[] = [];
   try {
@@ -147,6 +166,7 @@ async function captureWithBrowser(
     for (let runIndex = 0; runIndex < sampleSize; runIndex += 1) {
       const result = await runOnce({
         runIndex, scenario, fixture, generator, artifactDirectory, browser,
+        createHost: options.createHost ?? createSupervisedHost,
       });
       capturedRuns.push(result.record);
       evidenceRuns.push(result.evidence);
@@ -183,11 +203,15 @@ type RunOnceInput = {
   generator: CanaryGenerator;
   artifactDirectory: string;
   browser: Browser;
+  createHost: typeof createSupervisedHost;
 };
 
 type RunOnceResult = { record: RunRecord; evidence: OfflineRunEvidence };
 
 async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
+  // Register residual (S4-2/X4-1): a same-process runner can still fabricate
+  // `initiator: 'browser'`; SCHEMA's guarantee is post-capture integrity, not
+  // independent authenticity ("Scope of that guarantee").
   const config = agentConfig(AGENT_ID);
   const prepared = await prepareRun(input);
   const auth = authForAgent(input.scenario.authForRun(prepared.runId, prepared.nonce), config);
@@ -302,12 +326,21 @@ async function prepareRun(input: RunOnceInput): Promise<PreparedRun> {
 async function executeStubRun(input: RunOnceInput, run: PreparedRun, config: AgentConfig) {
   const transcript = await TranscriptWriter.create(run.transcriptPath, run.eventsPath);
   const backend = createLocalFileBackend({ vaultPath: run.vaultPath, keyPath: run.keyPath });
-  const host = await createSupervisedHost({ backend, canary: run.canary, browser: input.browser });
+  let host: SupervisedHost;
   try {
-    return await runWithHost(input, run, config, transcript, host);
-  } finally {
-    await host.closeAll();
+    host = await input.createHost({ backend, canary: run.canary, browser: input.browser });
+  } catch {
+    throw missingEndMarker(run.runId);
   }
+
+  let result: Awaited<ReturnType<typeof runWithHost>> | undefined;
+  let failure: unknown;
+  try { result = await runWithHost(input, run, config, transcript, host); }
+  catch (error) { failure = error; }
+  try { await host.closeAll(); }
+  catch (error) { failure ??= error; }
+  if (failure !== undefined) throw failure;
+  return result!;
 }
 
 async function runWithHost(
@@ -317,9 +350,8 @@ async function runWithHost(
   transcript: TranscriptWriter,
   host: SupervisedHost,
 ) {
-  let loopResult: Awaited<ReturnType<typeof runAgentLoop>> | undefined;
-  let reachedEndMarker = false;
-  let verdict: ReturnType<SupervisedHost['finish']> | undefined;
+  let loopResult: Awaited<ReturnType<typeof runAgentLoop>>;
+  let verdict: ReturnType<SupervisedHost['finish']>;
   try {
     const inventory = await host.tools.list_vault();
     const client = StubClient.safeLogin({
@@ -336,13 +368,18 @@ async function runWithHost(
       secretSources: config.secretSources,
       afterLoop: async () => host.drainEvidence(),
     });
-    reachedEndMarker = true;
-  } finally {
-    if (reachedEndMarker) verdict = host.finish();
-    else host.abort();
+    // The end marker exists only after finish() returns a verdict.
+    verdict = host.finish();
+  } catch {
+    try { host.abort(); }
+    finally { throw missingEndMarker(run.runId); }
   }
-  assertHostFinished(verdict);
+  assertHostFinished(verdict, run.runId);
   return loopResult;
+}
+
+function missingEndMarker(runId: string): Error {
+  return new Error(`${MISSING_END_MARKER_MESSAGE}: ${runId}`);
 }
 
 function createRunRecord(
@@ -448,8 +485,9 @@ function toolDefinition(name: string, required: string[]): ToolDefinition {
 
 export function assertHostFinished(
   verdict: ReturnType<SupervisedHost['finish']> | undefined,
+  runId = 'unknown',
 ): asserts verdict is ReturnType<SupervisedHost['finish']> {
-  if (verdict === undefined) throw new Error(MISSING_END_MARKER_MESSAGE);
+  if (verdict === undefined) throw missingEndMarker(runId);
   if (verdict.verdict === 'pass') return;
   const diagnostic = {
     transform: verdict.diagnostics.transform,

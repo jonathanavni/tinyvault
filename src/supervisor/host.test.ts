@@ -175,7 +175,7 @@ describe('tripwire tool composition and evidence separation', () => {
       transcript,
     });
     const event = result.events.find((candidate) => candidate.channel === 'tool-result'
-      && candidate.initiator === 'browser_snapshot');
+      && candidate.initiator === 'tool:browser_snapshot');
     expect(event?.bytes).toContain(CANARY);
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   });
