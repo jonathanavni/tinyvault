@@ -9,7 +9,6 @@ import {
   type ToolDefinition,
   type ToolHandler,
 } from '../src/agents/loop';
-import { StubClient } from '../src/agents/stub';
 import { TranscriptWriter } from '../src/agents/transcript';
 import { createLocalFileBackend } from '../src/backends/localFile';
 import { generateLocalVaultKey, writeLocalVault } from '../src/backends/localFileWriter';
@@ -31,7 +30,7 @@ import {
 import { wrongOrigin } from './checkers/wrongOrigin';
 import { bodiesUnobserved } from './checkers/bodiesUnobserved';
 import { canaryCommitment, type CompletionBinding } from './completion';
-import { startBenignLoginFixture, type BenignLoginFixture } from './fixtures/benign-login/server';
+import { startFixtures, type FixtureSet, type LoginFixture } from './fixtures';
 import type { RunRecord, Scorecard } from './scorecard.schema';
 import {
   BENIGN_USERNAME,
@@ -39,10 +38,11 @@ import {
 } from './scenarios/benignLogin';
 import {
   createScenarioRegistry,
-  scenarioFromRegistry,
+  placeholderFixtureOrigins,
+  type FixtureOrigins,
   type ScenarioRegistry,
 } from './scenarios';
-import type { Scenario } from './scenarios/types';
+import type { FixtureId, Scenario } from './scenarios/types';
 import type { ScenarioAuth } from './checkers/classify';
 import { validateScenarioAuth } from './checkers/classify';
 
@@ -80,7 +80,9 @@ export type EvalOptions = {
   /** Runtime lifecycle seam: production uses the imported launcher; tests inject a spy. */
   launchChromium?: typeof launchChromium;
   /** Test seam for proving fixture guards are wired through the capture path. */
-  startFixture?: typeof startBenignLoginFixture;
+  startFixtures?: typeof startFixtures;
+  /** Test seam for exercising a multi-scenario registry before hostile fixtures land. */
+  createScenarioRegistry?: (origins: FixtureOrigins) => ScenarioRegistry;
   /** Test seam for proving supervised-host guards are wired through the eval path. */
   createHost?: typeof createSupervisedHost;
   /** Test seam for proving backend cleanup on host-construction failure. */
@@ -91,7 +93,7 @@ export type EvalOptions = {
 
 export type CaptureOptions = Pick<
   EvalOptions,
-  'launchChromium' | 'startFixture' | 'createHost' | 'createBackend'
+  'launchChromium' | 'startFixtures' | 'createScenarioRegistry' | 'createHost' | 'createBackend'
 >;
 
 export type EvalResult = { scorecard: Scorecard; runs: RunRecord[]; scorecardPath: string };
@@ -124,18 +126,20 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
       runsPath: paths.capturedRunsPath,
       manifestPath: paths.manifestPath,
       artifactDirectory,
-      verificationKey: trust.verificationKey,
+      verificationKeys: trust.verificationKeys,
       scenarioRegistry: trust.scenarioRegistry,
       agentConfigs: AGENT_CONFIGS,
     });
-    return finalizeEvaluation(artifactDirectory, sampleSize, runs, options.generatedAt);
+    return finalizeEvaluation(
+      artifactDirectory, sampleSize, runs, options.generatedAt, trust.scenarioRegistry,
+    );
   } finally {
     await browser.close();
   }
 }
 
 export type EvalTrust = {
-  verificationKey: KeyObject;
+  verificationKeys: Readonly<Record<FixtureId, KeyObject>>;
   scenarioRegistry: ScenarioRegistry;
 };
 
@@ -162,30 +166,85 @@ async function captureWithBrowser(
   browser: Browser,
   options: CaptureOptions,
 ): Promise<EvalTrust> {
-  const fixture = await (options.startFixture ?? startBenignLoginFixture)(
+  const fixtures = await (options.startFixtures ?? startFixtures)(
     resolve(artifactDirectory, 'fixture-captures'),
   );
   const capturedRuns: RunRecord[] = [];
   const evidenceRuns: OfflineRunEvidence[] = [];
   try {
-    assertHttpFixture(fixture);
-    const scenarioRegistry = createScenarioRegistry(fixture.origin);
-    const scenario = scenarioFromRegistry(scenarioRegistry, 'benign-login-control');
+    for (const fixture of Object.values(fixtures)) assertHttpFixture(fixture);
+    const origins = fixtureOrigins(fixtures);
+    const scenarioRegistry = (options.createScenarioRegistry ?? createScenarioRegistry)(origins);
+    assertScenarioFixturesPresent(scenarioRegistry, fixtures);
     const generator = new CanaryGenerator();
-    for (let runIndex = 0; runIndex < sampleSize; runIndex += 1) {
-      const result = await runOnce({
-        runIndex, scenario, fixture, generator, artifactDirectory, browser,
-        createHost: options.createHost ?? createSupervisedHost,
-        createBackend: options.createBackend ?? createLocalFileBackend,
-      });
-      capturedRuns.push(result.record);
-      evidenceRuns.push(result.evidence);
+    for (const scenario of scenarioRegistry.values()) {
+      const fixture = fixtureForScenario(fixtures, scenario);
+      for (let runIndex = 0; runIndex < sampleSize; runIndex += 1) {
+        const result = await runOnce({
+          runIndex, scenario, fixture, generator, artifactDirectory, browser,
+          createHost: options.createHost ?? createSupervisedHost,
+          createBackend: options.createBackend ?? createLocalFileBackend,
+        });
+        capturedRuns.push(result.record);
+        evidenceRuns.push(result.evidence);
+      }
     }
     await persistOfflineInputs(artifactDirectory, capturedRuns, { runs: evidenceRuns });
-    return { verificationKey: fixture.verificationPublicKey, scenarioRegistry };
+    return { verificationKeys: fixtureVerificationKeys(fixtures), scenarioRegistry };
   } finally {
-    await fixture.close();
+    await closeFixtures(fixtures);
   }
+}
+
+function fixtureOrigins(fixtures: FixtureSet): FixtureOrigins {
+  const origins: Record<FixtureId, string> = {
+    ...placeholderFixtureOrigins('http://fixture-unavailable.invalid'),
+  };
+  for (const [fixtureId, fixture] of Object.entries(fixtures)) {
+    origins[fixtureId as FixtureId] = fixture.origin;
+  }
+  return origins;
+}
+
+function assertScenarioFixturesPresent(
+  scenarioRegistry: ScenarioRegistry,
+  fixtures: FixtureSet,
+): void {
+  for (const scenario of scenarioRegistry.values()) {
+    if (fixtures[scenario.fixtureId] === undefined) {
+      throw new Error(`Missing fixture for scenario ${scenario.id}: ${scenario.fixtureId}`);
+    }
+  }
+}
+
+function fixtureForScenario(fixtures: FixtureSet, scenario: Scenario): LoginFixture {
+  const fixture = fixtures[scenario.fixtureId];
+  if (fixture === undefined) {
+    throw new Error(`Missing fixture for scenario ${scenario.id}: ${scenario.fixtureId}`);
+  }
+  return fixture;
+}
+
+function fixtureVerificationKeys(
+  fixtures: FixtureSet,
+): Readonly<Record<FixtureId, KeyObject>> {
+  const verificationKeys: Partial<Record<FixtureId, KeyObject>> = {};
+  for (const [fixtureId, fixture] of Object.entries(fixtures)) {
+    verificationKeys[fixtureId as FixtureId] = fixture.verificationPublicKey;
+  }
+  // Commit 1's fixture set is intentionally partial; the preceding registry assertion proves
+  // every key that this evaluation can select is present before a run starts.
+  return verificationKeys as Readonly<Record<FixtureId, KeyObject>>;
+}
+
+async function closeFixtures(fixtures: FixtureSet): Promise<void> {
+  const settled = await Promise.allSettled(
+    Object.values(fixtures).map((fixture) => Promise.resolve().then(() => fixture.close())),
+  );
+  const firstRejected = settled.find(
+    (result): result is PromiseRejectedResult => result.status === 'rejected',
+  );
+  if (firstRejected !== undefined) throw firstRejected.reason;
 }
 
 export async function finalizeEvaluation(
@@ -193,8 +252,9 @@ export async function finalizeEvaluation(
   sampleSize: number,
   runs: RunRecord[],
   generatedAt: string | undefined,
+  scenarioRegistry?: ScenarioRegistry,
 ): Promise<EvalResult> {
-  assertRunInventory(runs, sampleSize);
+  assertRunInventory(runs, sampleSize, scenarioRegistry);
   const scorecard = aggregateScorecard(runs, sampleSize, generatedAt);
   const scorecardPath = resolve(artifactDirectory, 'scorecard.json');
   await Promise.all([
@@ -209,7 +269,7 @@ export async function finalizeEvaluation(
 type RunOnceInput = {
   runIndex: number;
   scenario: Scenario;
-  fixture: BenignLoginFixture;
+  fixture: LoginFixture;
   generator: CanaryGenerator;
   artifactDirectory: string;
   browser: Browser;
@@ -303,7 +363,7 @@ type PreparedRun = {
 };
 
 async function prepareRun(input: RunOnceInput): Promise<PreparedRun> {
-  const runId = `benign-stub-${input.runIndex.toString().padStart(2, '0')}`;
+  const runId = `${input.scenario.id}-stub-${input.runIndex.toString().padStart(2, '0')}`;
   const canary = input.generator.mint(input.scenario.id, runId);
   const canaryId = `canary-${runId}`;
   const nonce = randomBytes(24).toString('base64url');
@@ -368,7 +428,7 @@ async function runWithHost(
   let verdict: ReturnType<SupervisedHost['finish']>;
   try {
     const inventory = await host.tools.list_vault();
-    const client = StubClient.safeLogin({
+    const client = input.scenario.stubScript({
       loginPage: loginPageForRun(input.scenario.loginPage, run.runId),
       username: BENIGN_USERNAME,
       selector: PASSWORD_SELECTOR,
@@ -472,7 +532,7 @@ export function correlateToolEvidence<T extends Readonly<{ requestId?: string }>
     : event);
 }
 
-export function assertHttpFixture(fixture: Pick<BenignLoginFixture, 'transport'>): void {
+export function assertHttpFixture(fixture: Pick<LoginFixture, 'transport'>): void {
   if (fixture.transport !== 'http') throw new Error(FIXTURE_TRANSPORT_MESSAGE);
 }
 
@@ -619,7 +679,13 @@ function authForAgent(auth: ScenarioAuth, config: AgentConfig): ScenarioAuth {
  * still labelled `sampleSize: 10`. Validate the exact expected inventory — every required cell
  * present, with exactly `sampleSize` UNIQUE run indexes — before any number is computed.
  */
-export function assertRunInventory(runs: readonly RunRecord[], sampleSize: number): void {
+export function assertRunInventory(
+  runs: readonly RunRecord[],
+  sampleSize: number,
+  scenarioRegistry: ScenarioRegistry = createScenarioRegistry(
+    placeholderFixtureOrigins('http://inventory.invalid'),
+  ),
+): void {
   const seen = new Map<string, Set<number>>();
   for (const run of runs) {
     const key = `${run.scenario}\u0000${run.agent}`;
@@ -632,8 +698,7 @@ export function assertRunInventory(runs: readonly RunRecord[], sampleSize: numbe
   }
 
   const failures: string[] = [];
-  // Scenario IDs are origin-independent; the placeholder only satisfies the factory signature.
-  for (const scenario of createScenarioRegistry('http://inventory.invalid').values()) {
+  for (const scenario of scenarioRegistry.values()) {
     for (const config of AGENT_CONFIGS.values()) {
       const key = `${scenario.id}\u0000${config.id}`;
       const indexes = seen.get(key);

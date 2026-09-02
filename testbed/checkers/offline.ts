@@ -10,6 +10,7 @@ import {
 } from '../completion';
 import type { AttackClass, CapturedEvent, Channel, RunRecord } from '../scorecard.schema';
 import { scenarioFromRegistry, type Scenario, type ScenarioRegistry } from '../scenarios';
+import type { FixtureId } from '../scenarios/types';
 import { verifyEventsDigest } from '../fixtures/benign-login/server';
 import { classify, validateScenarioAuth, type ScenarioAuth } from './classify';
 import { leakScan } from './leakScan';
@@ -41,7 +42,7 @@ export type OfflineAdjudicationInput = {
   runsPath: string;
   manifestPath: string;
   artifactDirectory: string;
-  verificationKey: KeyObject;
+  verificationKeys: Readonly<Record<FixtureId, KeyObject>>;
   scenarioRegistry: ScenarioRegistry;
   agentConfigs: ReadonlyMap<string, OfflineAgentConfig>;
 };
@@ -73,16 +74,30 @@ export async function adjudicatePersistedRuns(
     throw new Error('Offline evidence manifest does not match the persisted run inventory');
   }
 
-  // One verifier owns one ledger for the entire evaluation, not one ledger per run.
-  const verifier = new CompletionVerifier(input.verificationKey);
+  // One verifier per fixture key, all sharing one ledger for the entire evaluation.
+  const replayLedger = new Set<string>();
+  const verifiers = new Map<FixtureId, CompletionVerifier>();
+  for (const [fixtureId, verificationKey] of Object.entries(input.verificationKeys)) {
+    verifiers.set(
+      fixtureId as FixtureId,
+      new CompletionVerifier(verificationKey, undefined, undefined, replayLedger),
+    );
+  }
   const recomputed: RunRecord[] = [];
   const positiveCells = new Set<string>();
   for (const stored of runs) {
     const evidence = evidenceByRun.get(runKey(stored));
     if (!evidence) throw new Error(`Missing offline evidence for ${formatRun(stored)}`);
+    const { scenario, verificationKey } = verificationTrustForRun(
+      stored, evidence, input.scenarioRegistry, input.verificationKeys,
+    );
+    const verifier = verifiers.get(scenario.fixtureId);
+    if (verifier === undefined) {
+      throw new Error(`Missing verification key for fixture: ${scenario.fixtureId}`);
+    }
     const result = await recomputeRun(
-      stored, evidence, verifier, input.artifactDirectory, input.scenarioRegistry,
-      input.agentConfigs, input.verificationKey,
+      stored, evidence, scenario, verifier, input.artifactDirectory,
+      input.agentConfigs, verificationKey,
     );
     recomputed.push(result.record);
     if (result.positiveControl) positiveCells.add(cellKey(stored));
@@ -91,18 +106,31 @@ export async function adjudicatePersistedRuns(
   return recomputed;
 }
 
+export function verificationTrustForRun(
+  stored: Pick<RunRecord, 'scenario'>,
+  _evidence: Pick<OfflineRunEvidence, 'completionBinding'>,
+  scenarioRegistry: ScenarioRegistry,
+  verificationKeys: Readonly<Record<FixtureId, KeyObject>>,
+): Readonly<{ scenario: Scenario; verificationKey: KeyObject }> {
+  const scenario = scenarioFromRegistry(scenarioRegistry, stored.scenario);
+  const verificationKey = verificationKeys[scenario.fixtureId];
+  if (verificationKey === undefined) {
+    throw new Error(`Missing verification key for fixture: ${scenario.fixtureId}`);
+  }
+  return { scenario, verificationKey };
+}
+
 type RecomputedRun = Readonly<{ record: RunRecord; positiveControl: boolean }>;
 
 async function recomputeRun(
   stored: RunRecord,
   evidence: OfflineRunEvidence,
+  scenario: Scenario,
   verifier: CompletionVerifier,
   artifactDirectory: string,
-  scenarioRegistry: ScenarioRegistry,
   agentConfigs: ReadonlyMap<string, OfflineAgentConfig>,
   verificationKey: KeyObject,
 ): Promise<RecomputedRun> {
-  const scenario = scenarioFromRegistry(scenarioRegistry, stored.scenario);
   const config = agentConfigs.get(stored.agent);
   if (!config) throw new Error(`Missing eval agent config: ${stored.agent}`);
   assertRegistryAgreement(stored, evidence, scenario, config);

@@ -30,7 +30,11 @@ describe('scenario registry auth validation', () => {
     const scenario = poisonedScenario([{
       channel: 'tool-result', direction: 'inbound', initiator: 'tool:fill_from_vault',
     }]);
-    expect(() => createScenarioRegistry('http://fixture.test', [scenario]))
+    expect(() => createScenarioRegistry({
+      'benign-login': 'http://fixture.test',
+      'lookalike-origin': 'http://lookalike.test',
+      'dom-hidden-injection': 'http://hidden.test',
+    }, [scenario]))
       .toThrow('cannot use reserved tool initiators');
   });
 

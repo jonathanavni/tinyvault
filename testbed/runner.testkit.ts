@@ -48,7 +48,7 @@ export function nodeEvalHarness(
     artifactDirectory,
     sampleSize: 1,
     launchChromium,
-    startFixture: createFixtureStarter(state),
+    startFixtures: createFixtureStarter(state),
     createHost: createHostFactory(state, behavior, finishHost, abortHost),
   };
   return {
@@ -92,20 +92,21 @@ function createFinishHost(
   });
 }
 
-function createFixtureStarter(state: HarnessState): NonNullable<EvalOptions['startFixture']> {
+function createFixtureStarter(state: HarnessState): NonNullable<EvalOptions['startFixtures']> {
   return async (captureDirectory) => {
     const started = await startBenignLoginFixture(captureDirectory);
     state.fixture = started;
-    return {
+    const fixture: BenignLoginFixture = {
       ...started,
       // The fixture API keeps its real transport in its method closures. Declaring HTTP here lets
       // these Node wiring tests run even where binding a local port is sandbox-denied.
       transport: 'http',
-      registerRun: async (value) => {
+      registerRun: async (value: FixtureRunSetup) => {
         state.setup = value;
         await started.registerRun(value);
       },
     };
+    return { 'benign-login': fixture };
   };
 }
 

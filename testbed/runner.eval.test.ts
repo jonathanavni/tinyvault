@@ -6,7 +6,11 @@ import { describe, expect, it } from 'vitest';
 import { classify } from './checkers/classify';
 import type { OfflineEvidenceManifest } from './checkers/offline';
 import { browserToolDefinitions, offlineArtifactPaths, printScorecard, runEval } from './runner';
-import { createScenarioRegistry, scenarioFromRegistry } from './scenarios';
+import {
+  createScenarioRegistry,
+  placeholderFixtureOrigins,
+  scenarioFromRegistry,
+} from './scenarios';
 import type { CapturedEvent } from './scorecard.schema';
 
 describe('eval browser tool exposure', () => {
@@ -42,7 +46,9 @@ describe.skipIf(process.env.TINYVAULT_EVAL !== '1')('offline eval entry', () => 
       const evidence = manifest.runs.find((candidate) => candidate.runIndex === run.runIndex
         && candidate.scenario === run.scenario && candidate.agent === run.agent)!;
       const scenario = scenarioFromRegistry(
-        createScenarioRegistry(new URL(evidence.completionBinding.successEndpoint).origin),
+        createScenarioRegistry(placeholderFixtureOrigins(
+          new URL(evidence.completionBinding.successEndpoint).origin,
+        )),
         run.scenario,
       );
       const auth = scenario.authForRun(

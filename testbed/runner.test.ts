@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   adjudicatePersistedRuns,
   hasAuthorizedNetworkCanary,
+  verificationTrustForRun,
   type OfflineEvidenceManifest,
 } from './checkers/offline';
 import {
@@ -19,7 +20,15 @@ import {
   startBenignLoginFixture,
   type BenignLoginFixture,
 } from './fixtures/benign-login/server';
-import { createScenarioRegistry, scenarioFromRegistry, type Scenario } from './scenarios';
+import {
+  createBenignLoginScenario,
+  createScenarioRegistry,
+  placeholderFixtureOrigins,
+  scenarioFromRegistry,
+  type Scenario,
+} from './scenarios';
+import { startLoginFixture } from './fixtures/shared/loginFixture';
+import type { FixtureId } from './scenarios/types';
 import type { CapturedEvent, RunRecord } from './scorecard.schema';
 import { readJson } from './runner.testkit';
 import {
@@ -115,7 +124,7 @@ describe('eval runner guard helpers', () => {
 
 describe('offline positive controls and outcome agreement', () => {
   it('kills dom-fill-only positive controls while retaining the exact login capture', () => {
-    const auth = createScenarioRegistry('http://fixture.test')
+    const auth = createScenarioRegistry(placeholderFixtureOrigins('http://fixture.test'))
       .get('benign-login-control')!.authForRun('run-1', 'nonce-1');
     const domFill: CapturedEvent = {
       t: 0,
@@ -281,6 +290,40 @@ describe('offline registry authority and event attestation', () => {
 
     await expect(adjudicate(captured)).rejects.toThrow('events attestation mismatch');
   });
+
+  it('selects receipt and event verification keys only from the registry scenario fixture', async () => {
+    // Mutants killed: swap two fixture keys, or select a key from the manifest fixtureId.
+    const captured = await createThreeFixturePersistedEval();
+    const keys = captured.trust.verificationKeys;
+    const swapped = {
+      'benign-login': keys['lookalike-origin'],
+      'lookalike-origin': keys['benign-login'],
+      'dom-hidden-injection': keys['dom-hidden-injection'],
+    };
+    const results = await Promise.allSettled([
+      adjudicateScenario(captured, 'benign-login-control', swapped),
+      adjudicateScenario(captured, 'lookalike-origin-control', swapped),
+      adjudicateScenario(captured, 'dom-hidden-injection-control', swapped),
+    ]);
+    expect(results.map((result) => result.status)).toEqual(['rejected', 'rejected', 'fulfilled']);
+    expect(results.slice(0, 2).every((result) => result.status === 'rejected'
+      && result.reason instanceof Error
+      && result.reason.message.includes('events attestation mismatch'))).toBe(true);
+
+    const records = await readJson<RunRecord[]>(captured.paths.capturedRunsPath);
+    const manifest = await readJson<OfflineEvidenceManifest>(captured.paths.manifestPath);
+    const benignRecord = records.find((run) => run.scenario === 'benign-login-control')!;
+    const benignEvidence = manifest.runs.find(
+      (run) => run.scenario === 'benign-login-control',
+    )!;
+    benignEvidence.completionBinding.fixtureId = 'lookalike-origin';
+    expect(verificationTrustForRun(
+      benignRecord,
+      benignEvidence,
+      captured.trust.scenarioRegistry,
+      keys,
+    ).verificationKey).toBe(keys['benign-login']);
+  });
 });
 
 describe('offline capture and registry-field agreement', () => {
@@ -400,6 +443,89 @@ async function createPersistedEval(prefix: string): Promise<PersistedEval> {
   return createSignedPersistedEval(prefix, false, 2);
 }
 
+async function createThreeFixturePersistedEval(): Promise<PersistedEval> {
+  const directory = await mkdtemp(join(tmpdir(), 'tinyvault-offline-key-map-'));
+  const captureDirectory = join(directory, 'fixture-captures');
+  const fixtureIds: readonly FixtureId[] = [
+    'benign-login', 'lookalike-origin', 'dom-hidden-injection',
+  ];
+  const started = await Promise.all(fixtureIds.map(async (fixtureId) => [
+    fixtureId,
+    await startLoginFixture(captureDirectory, {
+      fixtureId,
+      fixtureVersion: 'test-1',
+      pages: { '/': 'fixture', '/success': 'authenticated' },
+      routes: {},
+    }),
+  ] as const));
+  const fixtures = Object.fromEntries(started) as Record<FixtureId, BenignLoginFixture>;
+  try {
+    const origins = Object.fromEntries(fixtureIds.map((fixtureId) => [
+      fixtureId, fixtures[fixtureId].origin,
+    ])) as Record<FixtureId, string>;
+    const scenarios = fixtureIds.map((fixtureId) => fixtureScenario(fixtureId, origins[fixtureId]));
+    const scenarioRegistry = createScenarioRegistry(origins, scenarios);
+    const created = await Promise.all(scenarios.map((scenario) => createSignedRun(
+      directory, fixtures[scenario.fixtureId], scenario, false, 0, true,
+    )));
+    const paths = offlineArtifactPaths(directory);
+    await Promise.all([
+      writeFile(paths.capturedRunsPath, JSON.stringify(created.map(({ record }) => record))),
+      writeFile(paths.manifestPath, JSON.stringify({
+        runs: created.map(({ evidence }) => evidence),
+      } satisfies OfflineEvidenceManifest)),
+    ]);
+    return {
+      directory,
+      paths,
+      trust: {
+        verificationKeys: Object.fromEntries(fixtureIds.map((fixtureId) => [
+          fixtureId, fixtures[fixtureId].verificationPublicKey,
+        ])) as EvalTrust['verificationKeys'],
+        scenarioRegistry,
+      },
+    };
+  } finally {
+    await Promise.all(started.map(([, fixture]) => fixture.close()));
+  }
+}
+
+function fixtureScenario(fixtureId: FixtureId, origin: string): Scenario {
+  const benign = createBenignLoginScenario(origin);
+  return {
+    ...benign,
+    id: `${fixtureId}-control`,
+    fixtureId,
+    fixtureVersion: 'test-1',
+  };
+}
+
+async function adjudicateScenario(
+  captured: PersistedEval,
+  scenarioId: string,
+  verificationKeys: EvalTrust['verificationKeys'],
+): Promise<RunRecord[]> {
+  const records = (await readJson<RunRecord[]>(captured.paths.capturedRunsPath))
+    .filter((run) => run.scenario === scenarioId);
+  const manifest = await readJson<OfflineEvidenceManifest>(captured.paths.manifestPath);
+  manifest.runs = manifest.runs.filter((run) => run.scenario === scenarioId);
+  const stem = scenarioId.replaceAll(/[^A-Za-z0-9-]/gu, '-');
+  const runsPath = join(captured.directory, `${stem}.captured.json`);
+  const manifestPath = join(captured.directory, `${stem}.manifest.json`);
+  await Promise.all([
+    writeFile(runsPath, JSON.stringify(records)),
+    writeFile(manifestPath, JSON.stringify(manifest)),
+  ]);
+  return adjudicatePersistedRuns({
+    runsPath,
+    manifestPath,
+    artifactDirectory: captured.directory,
+    verificationKeys,
+    scenarioRegistry: captured.trust.scenarioRegistry,
+    agentConfigs: AGENT_CONFIGS,
+  });
+}
+
 async function createSignedPersistedEval(
   prefix: string,
   includeLeak: boolean,
@@ -411,7 +537,7 @@ async function createSignedPersistedEval(
   const directory = await mkdtemp(join(tmpdir(), prefix));
   const fixture = await startBenignLoginFixture(join(directory, 'fixture-captures'));
   try {
-    const scenarioRegistry = createScenarioRegistry(fixture.origin);
+    const scenarioRegistry = createScenarioRegistry(placeholderFixtureOrigins(fixture.origin));
     const scenario = scenarioFromRegistry(scenarioRegistry, 'benign-login-control');
     const created = [];
     for (let runIndex = 0; runIndex < runCount; runIndex += 1) {
@@ -429,7 +555,14 @@ async function createSignedPersistedEval(
     return {
       directory,
       paths,
-      trust: { verificationKey: fixture.verificationPublicKey, scenarioRegistry },
+      trust: {
+        verificationKeys: {
+          'benign-login': fixture.verificationPublicKey,
+          'lookalike-origin': generateKeyPairSync('ed25519').publicKey,
+          'dom-hidden-injection': generateKeyPairSync('ed25519').publicKey,
+        },
+        scenarioRegistry,
+      },
     };
   } finally {
     await fixture.close();
@@ -444,7 +577,7 @@ async function createSignedRun(
   runIndex: number,
   completed: boolean,
 ) {
-  const runId = `signed-test-${runIndex.toString().padStart(2, '0')}`;
+  const runId = `${scenario.id}-signed-test-${runIndex.toString().padStart(2, '0')}`;
   const canary = `TVC_signed-test_${runId}_A234567BCDEF`;
   const nonce = `signed-test-nonce-${runIndex}`;
   const canaryId = `canary-${runId}`;
@@ -555,7 +688,7 @@ function adjudicate(
     runsPath: captured.paths.capturedRunsPath,
     manifestPath: captured.paths.manifestPath,
     artifactDirectory: captured.directory,
-    verificationKey: captured.trust.verificationKey,
+    verificationKeys: captured.trust.verificationKeys,
     scenarioRegistry: captured.trust.scenarioRegistry,
     agentConfigs,
   });

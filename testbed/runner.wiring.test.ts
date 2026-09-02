@@ -1,6 +1,6 @@
 // Every runner guard exported as a pure function also needs a call-site test through
 // runEval or capturePersistedRuns; helper-only coverage does not prove production wiring.
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -11,7 +11,13 @@ import { StubClient } from '../src/agents/stub';
 import { TranscriptWriter } from '../src/agents/transcript';
 import { createLocalFileBackend } from '../src/backends/localFile';
 import type { BenignLoginFixture } from './fixtures/benign-login/server';
-import type { CapturedEvent } from './scorecard.schema';
+import {
+  createBenignLoginScenario,
+  createScenarioRegistry,
+  type FixtureOrigins,
+  type ScenarioRegistry,
+} from './scenarios';
+import type { CapturedEvent, RunRecord } from './scorecard.schema';
 import {
   fakeBrowser,
   nodeEvalHarness,
@@ -23,7 +29,9 @@ import {
   AGENT_CONFIGS,
   FIXTURE_TRANSPORT_MESSAGE,
   MISSING_END_MARKER_MESSAGE,
+  offlineArtifactPaths,
   runEval,
+  assertRunInventory,
   type AgentConfig,
 } from './runner';
 
@@ -78,6 +86,71 @@ describe('eval runner stub wiring', () => {
     });
   });
 });
+
+describe('eval runner fixture-set and scenario-cell wiring', () => {
+  it('captures every scenario cell and diagnoses a dropped scenario as wholly missing', async () => {
+    // Mutant killed: capture loop runs only the first scenario in the registry.
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-scenario-cells-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    harness.options.createScenarioRegistry = twoBenignScenarioRegistry;
+
+    const trust = await capturePersistedRuns(directory, 1, fakeBrowser(), harness.options);
+    const runs = await readJson<RunRecord[]>(offlineArtifactPaths(directory).capturedRunsPath);
+    expect(runs.map((run) => run.scenario).sort()).toEqual([
+      'benign-login-clone',
+      'benign-login-control',
+    ]);
+    expect(() => assertRunInventory(
+      runs.filter((run) => run.scenario !== 'benign-login-clone'),
+      1,
+      trust.scenarioRegistry,
+    )).toThrow('missing all runs for benign-login-clone/stub-safe');
+  });
+
+  it('attempts every fixture close before propagating the first rejection', async () => {
+    // Mutants killed: sequential close stops after one rejection, or close rejection is swallowed.
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-fixture-close-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    const start = harness.options.startFixtures!;
+    const laterClose = vi.fn(async (): Promise<void> => undefined);
+    harness.options.startFixtures = async (captureDirectory) => {
+      const fixtures = await start(captureDirectory);
+      const benign = fixtures['benign-login']!;
+      laterClose.mockImplementation(() => benign.close());
+      return {
+        'benign-login': {
+          ...benign,
+          close: async () => { throw new Error('first fixture close failed'); },
+        },
+        'lookalike-origin': { ...benign, close: laterClose },
+      };
+    };
+
+    await expect(runEval(harness.options)).rejects.toThrow('first fixture close failed');
+    expect(laterClose).toHaveBeenCalledOnce();
+  });
+
+  it('uses the scenario ID in run directories at the same run index', async () => {
+    // Mutant killed: restoring the old benign-stub-XX runId collides across scenarios.
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-scenario-run-ids-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    harness.options.createScenarioRegistry = twoBenignScenarioRegistry;
+
+    await runEval(harness.options);
+    expect((await readdir(join(directory, 'runs'))).sort()).toEqual([
+      'benign-login-clone-stub-00',
+      'benign-login-control-stub-00',
+    ]);
+  });
+});
+
+function twoBenignScenarioRegistry(origins: FixtureOrigins): ScenarioRegistry {
+  const benign = createBenignLoginScenario(origins['benign-login']);
+  return createScenarioRegistry(origins, [
+    benign,
+    { ...benign, id: 'benign-login-clone' },
+  ]);
+}
 
 describe('eval runner initiator wiring', () => {
   it('stamps model-derived tool arguments and results with the reserved prefix', async () => {
@@ -167,7 +240,7 @@ describe('eval runner guard wiring', () => {
     } as unknown as BenignLoginFixture;
 
     await expect(capturePersistedRuns(directory, 1, fakeBrowser(), {
-      startFixture: async () => fixture,
+      startFixtures: async () => ({ 'benign-login': fixture }),
     })).rejects.toThrow(FIXTURE_TRANSPORT_MESSAGE);
     expect(close).toHaveBeenCalledTimes(1);
   });
@@ -211,7 +284,7 @@ describe('eval runner failure and drain wiring', () => {
     const harness = nodeEvalHarness(directory, vi.fn, { finish: 'capture-failed' });
 
     const error = await rejectedError(runEval(harness.options));
-    expect(error.message).toBe('Evidence capture failed: benign-stub-00');
+    expect(error.message).toBe('Evidence capture failed: benign-login-control-stub-00');
     expect(harness.abortHost).toHaveBeenCalledTimes(1);
   });
 
@@ -222,7 +295,7 @@ describe('eval runner failure and drain wiring', () => {
     const harness = nodeEvalHarness(directory, vi.fn, { handlerError: originalMessage });
 
     const error = await rejectedError(runEval(harness.options));
-    expect(error.message).toBe(`${MISSING_END_MARKER_MESSAGE}: benign-stub-00`);
+    expect(error.message).toBe(`${MISSING_END_MARKER_MESSAGE}: benign-login-control-stub-00`);
     expect(error.message).not.toContain(originalMessage);
     expect(error.message).not.toContain(canary);
     expect(harness.abortHost).toHaveBeenCalledTimes(1);
@@ -234,7 +307,7 @@ describe('eval runner failure and drain wiring', () => {
     const harness = nodeEvalHarness(directory, vi.fn, { closeAllError: `close failed with ${canary}` });
 
     const error = await rejectedError(runEval(harness.options));
-    expect(error.message).toBe('Run teardown failed: benign-stub-00');
+    expect(error.message).toBe('Run teardown failed: benign-login-control-stub-00');
     expect(error.message).not.toContain(canary);
   });
 
@@ -249,10 +322,10 @@ describe('eval runner failure and drain wiring', () => {
     harness.options.createHost = async () => { throw new Error('host construction detail'); };
 
     await expect(runEval(harness.options))
-      .rejects.toThrow(`${MISSING_END_MARKER_MESSAGE}: benign-stub-00`);
+      .rejects.toThrow(`${MISSING_END_MARKER_MESSAGE}: benign-login-control-stub-00`);
     expect(dispose).toHaveBeenCalledOnce();
     expect(JSON.parse(await readFile(
-      join(directory, 'runs', 'benign-stub-00', 'events.json'), 'utf8',
+      join(directory, 'runs', 'benign-login-control-stub-00', 'events.json'), 'utf8',
     ))).toEqual([]);
   });
 

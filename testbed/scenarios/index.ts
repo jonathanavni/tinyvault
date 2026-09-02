@@ -1,15 +1,29 @@
 import { validateScenarioAuth } from '../checkers/classify';
 import { createBenignLoginScenario } from './benignLogin';
-import type { Scenario } from './types';
+import type { FixtureId, Scenario } from './types';
 
 export type ScenarioRegistry = ReadonlyMap<string, Scenario>;
+export type FixtureOrigins = Readonly<Record<FixtureId, string>>;
+
+export function placeholderFixtureOrigins(origin: string): FixtureOrigins {
+  return {
+    'benign-login': origin,
+    'lookalike-origin': origin,
+    'dom-hidden-injection': origin,
+  };
+}
 
 export function createScenarioRegistry(
-  origin: string,
-  scenarios: readonly Scenario[] = [createBenignLoginScenario(origin)],
+  origins: FixtureOrigins | string,
+  scenarios?: readonly Scenario[],
 ): ScenarioRegistry {
-  for (const scenario of scenarios) validateScenarioAuth(scenario.authForRun('validation-run', 'validation-nonce'));
-  return new Map(scenarios.map((scenario) => [scenario.id, scenario]));
+  // The string branch keeps untouched M4 checker call sites source-compatible during commit 1.
+  const originMap = typeof origins === 'string' ? placeholderFixtureOrigins(origins) : origins;
+  const registered = scenarios ?? [createBenignLoginScenario(originMap['benign-login'])];
+  for (const scenario of registered) {
+    validateScenarioAuth(scenario.authForRun('validation-run', 'validation-nonce'));
+  }
+  return new Map(registered.map((scenario) => [scenario.id, scenario]));
 }
 
 export function scenarioFromRegistry(registry: ScenarioRegistry, scenarioId: string): Scenario {
