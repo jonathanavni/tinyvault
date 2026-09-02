@@ -718,3 +718,78 @@ holds the mutex up to 2 s on failure (shape unchanged — stated).
 commit 3's write job finishes — never two write jobs in one worktree) implements every absorbed item with a killing
 test each; the three channels re-run on the fix diff together with commit 3's review. The commit-3 review must also
 check the flagged `if (consumeCalls.length === 0) return []` in the retention test.
+
+---
+
+# Post-implementation round 1 — commit 3 `b1407cd..2652104` (fill service + supervisor host + Acceptance A–L) + commit-2 fix slice `20b4764`, 2026-09-02
+
+Implementer: Codex (integrator carve-out declared: timing tests keep `finish()` outside the window). Three channels,
+blind, parallel; Claude channels ran the full suite incl. browser and timing files in isolated worktrees; Codex
+reviewed the pinned range read-only (zero vitest executed — EPERM).
+
+| Channel | Family | Verdict |
+|---|---|---|
+| Claude `/review` (QA, `wt-review`) | different | **NEEDS-ATTENTION** — 1 P1, 3 P2, 5 P3; 34 mutants: 28 killed / 3 survived / 2 equivalent / 1 N/A |
+| Claude security review (`wt-security`) | different | **NEEDS-ATTENTION** — 0 P1, 2 P2, 6 P3; 15-path noninterference matrix and every hostile-page probe **HELD**; no leak bypass |
+| Codex adversarial diff review | same | **NEEDS-ATTENTION** — 2 P1, 2 P2 |
+
+Integrator's run: gate PASS (48/43); selftest PASS; 598 passed; probe P (scratchpad `c3-probe-numbers.txt`): fill
+short-vs-long p=0.39, queued p=0.39, reflection p=0.69, tripwire call p=0.054, real click p=0.087, listener p=0.61.
+**Convergent:** the `node:module` prohibition is both untested (QA Q3-1) and filtered for external packages (Codex X3-2);
+the retention rule still has name-based/receiver-agnostic sinks (QA Q3-2, Codex X3-1 computed keys, security S3-1
+inferred-type Secret bindings) — the fourth round on this rule; the too-long path no longer disposes the pinned object
+(QA Q3-5 = security S3-7); the tripwire equal-work test's marginal p (QA Q3-4) is an order dependence (security S3-2).
+
+## Findings and the continuity owner's synthesis
+
+### P1
+- **T3-1 `node:module` prohibition: no discriminating fixture (Q3-1) and filtered for external packages (X3-2).** A
+  computed `'create'+'Require'` alias in `src/core` reaches `playwright-core` with the rule deleted; an external relay
+  package can alias `createRequire` and export a loader repo code uses to reach the supervisor while the gate PASSes.
+  **Absorb:** never filter `module loader` findings except for the gate's own files; discriminating fixture; external
+  relay fixture. T2-6 stays open until this lands.
+- **T3-2 Retention rule, round four (X3-1, Q3-2, S3-1).** Computed-property sinks (`obj[value] = true`) pass; the sink
+  allowlist matches bare names so `<anything>.String(value)` / `<anything>.inject(secret)` pass; the Secret-object rule
+  keys on an explicit `: Secret` annotation so `const stashed = await resolveSecret(...)` pushed to module state passes
+  (probed: plaintext readable afterwards). **Absorb:** taint in computed assignment targets and `Map`/`Set` keys;
+  allowlisted sinks require an `Identifier` callee; `inject` only on the pinned-destination local; the Secret rule
+  taints the **result of every `resolveSecret(...)` call** and every binding initialised from it, and asserts
+  `resolveSecret` appears exactly once in the file. **Per handoff §5 this is the signal to stop patching the rule's
+  syntax list:** the next revision states the rule *positively* — a tainted value may appear only in (a) a `const`
+  initialiser, (b) the single `callFunctionOn` argument list, (c) `secret.clear()`/`inject(secret, …)` on the
+  pinned-destination local — and every other occurrence is a violation, with the whole mutant corpus (now eleven)
+  kept as named killed mutants.
+
+### P2
+- **T3-3 The tripwire equal-work timing test is order-dependent (S3-2, Q3-4).** In isolation it fails 5/5 (p=0,
+  rank-biserial 0.5–0.78): `NONMATCH = 'X'.repeat(21)` is a degenerate one-character run vs a mixed-character canary,
+  so V8 string work differs. The matcher/mint/adjudicate call counts are `[0,0,0]` inside every timed call — the
+  channel is not TinyVault's. **Absorb:** a structurally comparable mixed-character non-match of equal length; the
+  zero-call assertion is stated as the structural guarantee; thresholds and sample counts untouched.
+- **T3-4 G does not cross the policy axis with post-consume paths (X3-3).** **Absorb:** every post-consume outcome × both
+  policy shapes; the named mutant fails.
+- **T3-5 K's verbatim sentence and A's own-properties statement absent (Q3-3);** no Deviations section in the commit
+  messages. **Absorb:** the sentences as comments; every future commit message carries a Deviations section.
+- **T3-6 Fourth gate file vs the "three files" parenthetical (X3-4).** Spec already amended to the pattern; declared.
+
+### P3 (absorbed unless marked)
+`canonicalOrigin` re-read after `await`s — pass the snapshot const everywhere (S3-3); `list_vault` propagates a backend
+throw verbatim — normalise every `VaultTools` rejection to one fixed message (S3-4); a tool after `finish()`/`abort()`
+performs its side effect before throwing — check lease liveness first (S3-5); `drainEvidence()` on a dropped lease
+returns `[]` silently — throw (S3-6); too-long path disposes the pinned object (Q3-5/S3-7); driver-free `src/core →
+src/browser` edge is not enforced — add an explicit zone edge rule with fixture (S3-8); the lab's `htmlAttributes` seam
+is dead so `/static-token-login` never sets `data-tv-document` (S3-9); Acceptance I spy covers `fill_from_vault` and
+`browser_snapshot`; I compares the real supervised path against the bare path; J asserts lease drop after a tripwire
+match via `finish()`; `closeAll` ordering with a launched-here browser; the four-counter assertion after `closeAll`;
+probe-P exact-boundary vectors beside `probeP.test.ts`; `createLockdownDomain` 72 lines; the `4096` literal in
+`ASSIGN_SOURCE` derived from the constant; second `closeAll()` disposes twice — make idempotent.
+**Residuals (recorded):** `callFunctionOn`'s body is an unanalysed sink by design (one-line assertion that it assigns to
+no non-local state); `browser_snapshot` is outside the tripwire by design — layer 4 is the only instrument;
+`composeSupervisedHost` carries no `network-body` capture (test seam only); `too-long` is a length oracle unreachable
+for a conforming backend; short/long fills are not literally equal-work beyond transport/decode (`padEnd`, `slice`,
+native assignment) — only the empirical probe-P claim is made.
+
+### Disposition
+**Not merge-ready as committed; no leak bypass found in three rounds of hostile-page probing.** Fix slice `m4-fix-c3b`
+(Codex, same branch, dispatched after commit 4's write job finishes) implements every absorbed item with a killing test
+each; the three channels re-run on the fix diff together with commit 4's review.
