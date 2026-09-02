@@ -54,6 +54,7 @@ export type AgentLoopOptions = {
   transcript: TranscriptWriter;
   secretSources?: readonly EventIdentity[];
   maxTurns?: number;
+  afterLoop?: () => Promise<readonly CapturedEventInput[]>;
 };
 
 export type AgentLoopResult = {
@@ -63,9 +64,40 @@ export type AgentLoopResult = {
   events: CapturedEvent[];
 };
 
+export const DUPLICATE_TOOL_CALL_ID_MESSAGE = 'Duplicate tool call id';
+
+type LoopCompletion = Omit<AgentLoopResult, 'events'>;
+
 export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoopResult> {
+  let completion: LoopCompletion | undefined;
+  let failure: unknown;
+  try {
+    completion = await executeLoop(options);
+  } catch (error) {
+    failure = error;
+  }
+  try {
+    if (options.afterLoop !== undefined) {
+      const events = await options.afterLoop();
+      await options.transcript.append('meta', { event: 'post-loop-drain' }, [...events]);
+    }
+  } catch (error) {
+    failure ??= error;
+  }
+  let events: CapturedEvent[] = [];
+  try {
+    events = await options.transcript.close();
+  } catch (error) {
+    failure ??= error;
+  }
+  if (failure !== undefined) throw failure;
+  return { ...completion!, events };
+}
+
+async function executeLoop(options: AgentLoopOptions): Promise<LoopCompletion> {
   const maxTurns = options.maxTurns ?? 8;
   const messages = [...options.messages];
+  const callIds = new Set<string>();
   await options.transcript.append('meta', { event: 'loop-start', maxTurns });
 
   for (let turnIndex = 0; turnIndex < maxTurns; turnIndex += 1) {
@@ -85,10 +117,12 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     const calls = turn.toolCalls ?? [];
     if (calls.length === 0) {
       await options.transcript.append('meta', { event: 'loop-complete', turns: turnIndex + 1 });
-      return finish(options.transcript, messages, turnIndex + 1, 'complete');
+      return { messages, turns: turnIndex + 1, stopReason: 'complete' };
     }
 
     for (const call of calls) {
+      if (callIds.has(call.id)) throw new Error(DUPLICATE_TOOL_CALL_ID_MESSAGE);
+      callIds.add(call.id);
       const execution = await dispatchTool(call, options.handlers);
       rejectSelfDeclaredSecretSources(execution.events, options.secretSources ?? []);
       await captureToolExecution(options.transcript, call, execution);
@@ -100,7 +134,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   }
 
   await options.transcript.append('meta', { event: 'loop-max-turns', turns: maxTurns });
-  return finish(options.transcript, messages, maxTurns, 'max-turns');
+  return { messages, turns: maxTurns, stopReason: 'max-turns' };
 }
 
 function rejectSelfDeclaredSecretSources(
@@ -176,14 +210,4 @@ function eventLocation(input: unknown): Pick<CapturedEvent, 'origin' | 'route' |
     ...(typeof value.route === 'string' ? { route: value.route } : {}),
     ...(typeof value.method === 'string' ? { method: value.method } : {}),
   };
-}
-
-async function finish(
-  transcript: TranscriptWriter,
-  messages: ModelMessage[],
-  turns: number,
-  stopReason: AgentLoopResult['stopReason'],
-): Promise<AgentLoopResult> {
-  const events = await transcript.close();
-  return { messages, turns, stopReason, events };
 }

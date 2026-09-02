@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { MAX_SECRET_CODE_UNITS } from '../core/browserPort';
 import { createLocalFileBackend } from './localFile';
 import { defaultSealingPrimitives, type SealingPrimitives } from './localFileSodium';
 import {
@@ -36,6 +37,25 @@ function entry(secret: string, origin = 'https://EXAMPLE.com:443'): LocalVaultEn
 }
 
 describe('local vault writer', () => {
+  it('kills a duplicated/off-by-one secret bound: 4096 accepted, 4097 refused before disk access', async () => {
+    const acceptedTrace: string[] = [];
+    const acceptedKey = new Uint8Array(32).fill(3);
+    const primitives = wrappingPrimitives({ seal: () => new Uint8Array(16).fill(1) });
+    await expect(writeLocalVault(
+      '/vault', '/key', [entry('x'.repeat(MAX_SECRET_CODE_UNITS))],
+      { primitives, fs: writerFsWithKey(acceptedKey, acceptedTrace) },
+    )).resolves.toHaveLength(1);
+    expect(acceptedTrace).toContain('open');
+
+    const refusedTrace: string[] = [];
+    await expect(writeLocalVault(
+      '/vault', '/key', [entry('x'.repeat(MAX_SECRET_CODE_UNITS + 1))],
+      { primitives, fs: writerFsWithKey(new Uint8Array(32), refusedTrace) },
+    )).rejects.toThrow('Invalid local vault entry');
+    expect(refusedTrace).toEqual([]);
+    expect(MAX_SECRET_CODE_UNITS).toBe(4096);
+  });
+
   it('kills non-round-tripping handles, normalization-on-read-only, and loose fresh-file modes', async () => {
     // Mutation killed: writer emits malformed/duplicate handles, stores unnormalized origin, or omits 0600.
     const { vaultPath, keyPath } = await paths();

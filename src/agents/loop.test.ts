@@ -4,7 +4,12 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { runAgentLoop, type ModelClient, type ModelTurn } from './loop';
+import {
+  DUPLICATE_TOOL_CALL_ID_MESSAGE,
+  runAgentLoop,
+  type ModelClient,
+  type ModelTurn,
+} from './loop';
 import { StubClient } from './stub';
 import { TranscriptWriter, type TranscriptRecord } from './transcript';
 import { leakScan } from '../../testbed/checkers/leakScan';
@@ -163,5 +168,64 @@ describe('agent loop and transcript', () => {
       secretSources: [MODEL_CONTEXT_SECRET_SOURCE],
       maxTurns: 1,
     })).rejects.toThrow('cannot declare itself as an agent secret source');
+  });
+
+  it('kills a post-close drain by invoking afterLoop once and appending its unstamped events', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-after-loop-'));
+    const transcriptPath = join(directory, 'transcript.jsonl');
+    const transcript = await TranscriptWriter.create(transcriptPath, join(directory, 'events.json'));
+    let calls = 0;
+    const result = await runAgentLoop({
+      client: new StubClient([{}]),
+      messages: [{ role: 'user', content: 'drain after loop' }],
+      tools: [], handlers: {}, transcript,
+      afterLoop: async () => {
+        calls += 1;
+        return [{ channel: 'network-body', direction: 'outbound', initiator: 'fixture', bytes: 'late' }];
+      },
+    });
+
+    expect(calls).toBe(1);
+    expect(result.events.at(-1)).toMatchObject({ bytes: 'late', initiator: 'fixture' });
+    expect(result.events.at(-1)).not.toHaveProperty('requestId');
+    const records = (await readFile(transcriptPath, 'utf8')).trim().split('\n')
+      .map((line) => JSON.parse(line) as TranscriptRecord);
+    expect(JSON.parse(records.at(-1)!.bytes)).toEqual({ event: 'post-loop-drain' });
+  });
+
+  it('kills success-only drain and transcript-close paths when a tool handler throws', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-after-loop-error-'));
+    const eventsPath = join(directory, 'events.json');
+    const transcript = await TranscriptWriter.create(join(directory, 'transcript.jsonl'), eventsPath);
+    let drains = 0;
+    await expect(runAgentLoop({
+      client: new StubClient([{ toolCalls: [{ id: 'throw-1', name: 'thrower', input: {} }] }]),
+      messages: [{ role: 'user', content: 'throw path' }],
+      tools: [{ name: 'thrower', description: 'test', inputSchema: {} }],
+      handlers: { thrower: () => { throw new Error('handler failed'); } },
+      transcript,
+      afterLoop: async () => {
+        drains += 1;
+        return [{ channel: 'network-body', direction: 'outbound', initiator: 'fixture', bytes: 'late-error' }];
+      },
+    })).rejects.toThrow('handler failed');
+    expect(drains).toBe(1);
+    expect(await readFile(eventsPath, 'utf8')).toContain('late-error');
+  });
+
+  it('kills duplicate call-id correlation within one run with the fixed error', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-duplicate-id-'));
+    const transcript = await TranscriptWriter.create(
+      join(directory, 'transcript.jsonl'), join(directory, 'events.json'),
+    );
+    const duplicate = { id: 'same-id', name: 'safe_tool', input: {} };
+    await expect(runAgentLoop({
+      client: new StubClient([{ toolCalls: [duplicate] }, { toolCalls: [duplicate] }]),
+      messages: [{ role: 'user', content: 'duplicate id' }],
+      tools: [{ name: 'safe_tool', description: 'test', inputSchema: {} }],
+      handlers: { safe_tool: () => ({ result: { ok: true } }) },
+      transcript,
+      maxTurns: 2,
+    })).rejects.toThrow(DUPLICATE_TOOL_CALL_ID_MESSAGE);
   });
 });

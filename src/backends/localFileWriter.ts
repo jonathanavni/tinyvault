@@ -9,6 +9,7 @@ import type { FileHandle } from 'node:fs/promises';
 import { open, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { MAX_SECRET_CODE_UNITS } from '../core/browserPort';
 import type { FieldRole, ItemMeta, Origin } from '../core/types';
 import { validateBareOrigin } from '../core/originGuard';
 import {
@@ -202,7 +203,8 @@ function validateEntry(input: LocalVaultEntry): ValidatedEntry {
     || (input.account !== undefined && typeof input.account !== 'string')
     || typeof input.canonicalOrigin !== 'string'
     || !isValidFieldRecipe(input.fieldRecipe)
-    || typeof input.secret !== 'string') throw new Error(INVALID_ENTRY_MESSAGE);
+    || typeof input.secret !== 'string'
+    || input.secret.length > MAX_SECRET_CODE_UNITS) throw new Error(INVALID_ENTRY_MESSAGE);
 
   let canonicalOrigin: Origin;
   try {
