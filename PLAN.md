@@ -12,12 +12,12 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 ## Current State
 
 `2026-09-01-m4` — focus: M4 (fill service end-to-end + all integration security gates, 🔴) through the full Codex ladder; in parallel: absorb A1/A3 + fact-check corrections into `PROJECT-SPEC.md`, prune merged agent branches, schedule the §9.1 LOC-budget question.
-**In progress (2026-09-02, ~09:20 CDT):** `codex/m4-fill-service` at `5757a24` = fix slice `m4-fix-final2` (G-S1 image-
-button leak closed; retention positive pass at every depth + lexical sink resolution, S9–S15; G-X2 `unobserved`;
-SCHEMA amended) + probe P slice `1cc9b73` (C-F1) + the flatCopy construction (C-F1 addendum: the last rejection was a
-string-representation artefact; 6/6 full-file runs clean after). Integrator: 710 tests, timing family 7/7, gate 49/44,
-`make eval` 10/10 0 leaks. **Three reviews of `530b0cb..5757a24` in flight** (Codex `task-mtk6e9u1-l1cwlg`, QA in
-`wt-review`, security in `wt-security`). Then: absorb (a small slice if needed), merge FF to `main`, `/wrapup`.
+**In progress (2026-09-02, ~10:30 CDT):** `codex/m4-fill-service`: `5757a24` reviewed by three channels (register
+"Final2 round": every G-* P1/P2 closed by reproduced mutation; new: bodyless-GET exfiltration invisible to layer 4
+(H-S1), retention round eight — implicit flow, sink body, Secret binding, localFile.ts scope (I-X1/H-S2..4), `unobserved`
+provenance (I-X2), fragile positive control (H-Q1)); continuity-owner amendments: spec threat-model boundary, core.md
+test-callback exemption, SCHEMA `url` channel + aggregate `unobserved`. **Fix slice `m4-fix-final3` running in Codex.**
+Then: integrator run, commit, three reviews, merge FF to `main`, `/wrapup`.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·

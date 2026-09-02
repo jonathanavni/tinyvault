@@ -409,6 +409,12 @@ export type SupervisedHost = Readonly<{
 - **Offline adjudicator:** `auth = scenario.authForRun(binding.runId, binding.nonce)` + `secretSources`; the positive
   control requires the canary in an authorized-sink **`network-body`** event present in the fixture's capture record.
 
+**Threat-model boundary (added 2026-09-02, register H-S residual):** the destination predicates (`action`,
+`formaction`, `<base>`, image buttons, form association) are defence in depth against *injected markup* on a page
+at the authorized origin. A page that runs script at that origin can read the filled value synchronously after
+the setter and exfiltrate it; that is layer 4's measurement, not layer 1–2's prevention. Every browser request —
+with or without a body — is recorded (`url` channel carries the full URL) so layer 4 sees query-string exfiltration.
+
 ### D10 — Probe P is a shared, pinned, tested statistic
 
 **Amended 2026-09-02 (continuity owner; user-authorized on Codex's recommendation; register C-F1). The original

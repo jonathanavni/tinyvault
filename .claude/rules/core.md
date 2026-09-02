@@ -2,7 +2,7 @@
 
 ## Code Quality
 
-- Many small files (200–400 lines, 800 max). Functions under 50 lines. Max 4 levels of nesting.
+- Many small files (200–400 lines, 800 max). Functions under 50 lines. Max 4 levels of nesting. Test registration callbacks (`describe`/`it` bodies) are exempt from the function rule; named helpers inside tests are not.
 - Schema-based input validation at system boundaries (API endpoints, external data). Trust internal code.
 - After refactoring, identify dead code explicitly. Ask before deleting.
 
