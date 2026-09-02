@@ -52,3 +52,27 @@ Example:
   controls in the findings register that made `file(1)` report `data` and hid the file from default
   `grep`. Write control characters as `U+XXXX` notation in docs, and annotate non-ASCII test vectors with
   their code point.
+
+## M3 session (2026-09-01)
+
+- **The Bash tool runs zsh, which does not word-split an unquoted `$VAR`.** `C="node x.mjs"; $C status`
+  runs a command literally named "node x.mjs" (exit 127). Three poll monitors sat silent for 40+ minutes.
+  Write the command inline (or `${=C}`), and make poll loops exit loudly on an unreadable status — a
+  monitor whose failure mode is silence is the same bug as a leak checker that cannot go red. (2026-09-01)
+- **The Codex sandbox cannot write `.git`** (index.lock EPERM) and usually **cannot `mkdtemp`** (its
+  `npm test` then runs zero vitest/selftest tests while `tsc` and the gate pass). It stops correctly at a
+  commit boundary. Pre-authorize "leave the work uncommitted; the integrator commits with explicit paths"
+  in every packet, and never trust its test counts — run the suite yourself. (2026-09-01)
+- **A Codex job marked `failed` can mean a model-capacity error AFTER the work is done.** Inspect the tree
+  and run the suite before assuming lost work; its break/restore mutation experiments can leave a mutation
+  applied if the turn dies mid-way, so check the load-bearing line explicitly. Retry a review or report
+  turn once; capacity errors cluster. (2026-09-01)
+- **Branch-scoped Codex reviews read `base..HEAD` at run time.** Committing anything while one runs drifts
+  its basis. Pin base *and* head in the prompt and hold commits. (2026-09-01)
+- **`import.meta.resolve(spec, parent)` silently ignores `parent` without
+  `--experimental-import-meta-resolve`** and resolves relative to the calling script — which happens to be
+  right for a repo-root gate, so a missing flag is invisible until a nested `node_modules` case. The gate now
+  refuses to run unflagged; keep the flag on both `package.json` invocations. (2026-09-01)
+- **`typescript`'s runtime JS contains a non-literal `require` and an unresolved optional
+  `source-map-support` edge.** Any gate that follows real runtime modules fails closed on it; that is why the
+  scripts-rooted tolerance exists and why it must stay keyed on the entry root. (2026-09-01)

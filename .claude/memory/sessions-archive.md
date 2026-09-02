@@ -21,3 +21,4 @@ ladder hit its cap when the seam could not be settled on paper; the mechanism wa
 build-time dependency boundary + runtime attestation) and every subsequent blocker was found only by
 running code. (commits `9f216b0`..`6a6b67c`)
 
+- **2026-09-01-m3** — M3 (backend interface + libsodium local-file, B1 slice 2/3) through the full Codex ladder: spec locked after 3 paper rounds (8/4/4 findings), Codex implemented (2 commits), 3 post-impl channels in parallel → 2 convergent P1s (AD source; gate laundering via `scripts/`), 2 fix rounds, integrator mutation pass, merged FF to `main` (`1e24f73`). Gate gap G-1 (`.d.ts` scanned instead of runtime JS) found and fixed. Fact-check thread closed (27/7/3/3). `make test` 206 → 339.

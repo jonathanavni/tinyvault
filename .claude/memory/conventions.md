@@ -45,3 +45,20 @@ Example:
 - **Registers are append-only.** When a closure claim turns out to be wrong, append the correction and name
   the over-claim; do not quietly edit the earlier row. A register that rewrites its own history is worth
   less than one that shows the sequence.
+
+## Review-ladder conventions confirmed in M3 (2026-09-01)
+
+- **"Deviations From Handoff" is mandatory for any departure from a locked sentence; a code comment is not a
+  deviation record.** A2 shipped as a blanket `scripts/` exemption with only a comment and cost a review round.
+- **A test can enforce the wrong behaviour.** Round-1 A1's test asserted the superseded r1/r2 mechanism, not
+  the locked one. When a spec revision supersedes a mechanism, grep the *tests* for the old mechanism's name
+  during the §5.1 sweep, not only the docs.
+- **Post-impl channels run in parallel in isolated worktrees**, each applying the named mutations itself.
+  Convergent findings across channels are high-confidence; single-channel P3s are still absorbed when cheap.
+- **Rate a finding by the strongest reproduced probe, not the first report.** Codex rated A1 fail-closed; the
+  security reviewer's getter/`Proxy` probe showed release. The register carries the upgrade and says why.
+- **The cap round is followed by an integrator confirmation pass, not a fourth review** — apply every named
+  mutation on the committed tree, expect the named test to fail, revert, leave the tree clean, and paste the
+  table into the register. An equivalent mutant (the mutation changes nothing) is recorded as such, not as a gap.
+- **Continuity-owner amendments to a locked sentence are recorded in the register (C-section) *and* the spec
+  in the same commit**, with the old wording annotated as superseded where it survives as history.

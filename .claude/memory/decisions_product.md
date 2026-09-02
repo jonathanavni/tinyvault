@@ -33,3 +33,19 @@ See `PROJECT-SPEC.md` §4 (the mechanism/invariants) and §11 (model/safeguards)
 - **Payments are a non-goal** (triaged 2026-08-31): rail owners solve that class upstream (Stripe Link's
   one-time cards). Sign-in has no rail owner — that is TinyVault's class.
 
+
+*(Added 2026-09-01, after M3 — enforced in code and mutation-tested.)*
+
+- **A secret is released only for the policy the fill gate authorized.** `resolveSecret(handle,
+  authorizedPolicy)` compares the record's *current* policy to the authorized one before decrypting and seals
+  each secret with additional data bound to `[handle, origin, recipe]`. The compare closes the policy/secret
+  TOCTOU between the gate's two backend calls; the AD stops re-pointing by metadata edit. Computing the AD from
+  the caller's argument is *not* equivalent (it never authenticates the cleartext beside the ciphertext).
+- **Backends hold nothing between calls — not even the key.** Local-file reads the 32-byte key per call and
+  zeroes it in a nested `finally`. `dispose()` exists for session-token backends (M9) and is a documented
+  no-op where there is nothing to drop.
+- **The dependency gate follows runtime modules with Node's own resolvers and is two-tier:** data-plane roots
+  tolerate nothing; scripts-rooted walks tolerate unsupported/unscanned/unresolved loads *inside
+  `node_modules`* only, keyed on the entry root; production may not import `scripts/`, directly or
+  transitively; protected classification is the union of link path and real path; the gate refuses to run
+  without `--experimental-import-meta-resolve`.

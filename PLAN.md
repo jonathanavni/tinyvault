@@ -12,46 +12,45 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 ## Current State
 
 `2026-09-01-m3` — focus: M3 (backend interface + libsodium local-file, B1 slice 2/3) through the full 🔴 Codex ladder; spec-amendment fact-check research in parallel.
-
-`2026-09-01-m2` — focus: dispatch M2 through the full 🔴 ladder, with B1's M2 slice folded in.
-**Outcome: M2 built, reviewed across 8 rounds, and merged to `main` (`6a6b67c`, fast-forward).**
+**Outcome: M3 built by Codex, reviewed across three pre-impl and three post-impl rounds, confirmed by the integrator's mutation pass, and merged to `main` (fast-forward to `1e24f73`). Fact-check thread closed.**
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
-**M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) ·
-**M3 next.**
+**M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
+**M4 next.**
 
-**Where the code actually is:** the six security primitives exist and are unit-tested with no browser —
-`Secret<string>`, bare-origin validator, provenance-keyed lockdown registry with a separated lifecycle
-capability, non-reentrant session mutex, runtime-validated result constructors, and the tripwire detector
-plus attestation seam in a protected supervisor zone. A build-time dependency gate enforces the
-data/control-plane boundary and **fails closed on anything it cannot follow**. `make test` 206 passing;
-`make eval` unchanged at 10/10 completion, 0 leaks. **Still no fill service — that is M4.**
+**Where the code actually is:** the trusted-side `CredentialBackend` interface and the libsodium local-file
+backend exist and are unit-tested with no browser — per-record XChaCha20-Poly1305 sealing with policy-bound
+additional data; `resolveSecret(handle, authorizedPolicy)` compares the parsed record to the authorized policy
+**before** decrypting (closing the policy/secret TOCTOU between the fill gate's two backend calls); no key or
+record cache; nested key/plaintext cleanup; typed fixed-text errors with foreign-exception containment; an
+atomic writer. The dependency gate now resolves external packages to their **runtime** modules with Node's own
+resolvers (it had been scanning `.d.ts` files — G-1), forbids production→`scripts/` edges, and refuses to run
+unflagged. `make test` 339 passing (up from 206); `make eval` unchanged at 10/10 completion, 0 leaks.
+**Still no fill service — that is M4.**
 
 **Blocked / needs attention:**
 - Nothing blocking. Threads to carry forward:
-  1. **Unverified external claims** in `docs/spec-amendment-2026-08-31.md` (funding figures, product
-     details, URLs) — must be fact-checked before entering `PROJECT-SPEC.md` or the public README. Now the
-     oldest open thread; it has survived two sessions untouched.
-  2. **Deferred M2 residuals**, all recorded in the Decisions Log and `docs/m2-review-findings.md`:
-     Cherokee fail-closed false-reject (172 code points, cosmetic); **F-7** error classification;
-     the two redundant F-1 guards (the fix spec says remove rather than ceremonially test); the sweep's
-     two-target template scope; and **`src/shared` exporting `secretTransforms`**, which makes the plane
-     split organizational rather than a capability boundary — state it, don't over-claim it.
-  3. **LOC budget.** M2 added ~1,300 lines net of the fix rounds. `testbed/` is no longer the only large
-     thing. The §9.1 simplification question is still scoped at the M1 testbed and was never answered — the
-     testbed-scoped pass was launched but its results never landed.
+  1. **Spec-amendment corrections.** The external claims are fact-checked (`docs/spec-amendment-factcheck.md`:
+     27 confirmed / 7 partial / 3 wrong / 3 unverifiable), but A1/A3 have still not been absorbed into
+     `PROJECT-SPEC.md`; apply the report's corrections when they are (Grok Bot's credential model, the dead
+     CyberArk link, the Stripe×Instinct dates/attribution).
+  2. **Deferred residuals**, all in `docs/m3-review-findings.md` (§D, round-2 residuals) and the M2 register:
+     partial key file on non-EEXIST failure; no directory fsync after rename; the `createRequire` ban is
+     heuristic (M2 G-2); a scripts-rooted gate walk cannot see non-literal loads inside a toolchain package;
+     M2's residuals unchanged.
+  3. **LOC budget.** M3 added ~2,800 lines net in `src/` + `scripts/` (backend 6 files ≈ 900, its tests ≈ 1,300,
+     the gate + its 11-fixture matrix ≈ 600). The §9.1 simplification question has now been deferred by three
+     milestones and should be scheduled, not carried.
 
-**Next session — M3 (backend interface + libsodium local-file, 🔴):**
-- Full ladder per `docs/handoff-pattern.md` §4; review gate and focus surfaces in `phase-0-plan.md` §9.1.
-- **Carries B1 slice 2/3**: `resolveSecret` never caches the secret, while `dispose?()` drops backend
-  **auth-session material only** — the split that keeps the invariant from being either false or forcing
-  pointless re-authentication.
-- **Run `handoff-pattern.md` §5.1 (the absorption-completion sweep) after every absorbed finding.** It is a
-  mandatory gate and skipping it cost a review round in M2.
-- Deferred audit items already written into their milestones: **M4** (dom-fill live-DOM identity,
-  trusted-side `wrongOrigin`, B1 slice 3/3 rotation, probe P timing, tripwire wiring), **M5**
-  (capture-coverage gate), **M7+** (`revocation` fixture, needs B1).
-
+**Next session — M4 (fill service end-to-end + ALL integration security gates, 🔴):**
+- Full ladder per `docs/handoff-pattern.md` §4; gates in `phase-0-plan.md` §8 M4 row. First Playwright
+  dependency — **run the gate on it early** (second real runtime dependency, first with native pieces).
+- Backend contract to honour: `BackendError.kind → FillResult.reason` is `not-found → handle-unavailable`, all
+  else (incl. `integrity`) → `backend-error`, never an unlock instruction; `BackendStatus → SetupReason` per
+  §6; pass back the frozen policy from `resolvePolicy` unchanged; B1 slice 3/3 rotation through the fill.
+- **Pre-authorize in the packet:** Codex cannot write `.git` (integrator commits, explicit paths), and
+  "Deviations From Handoff" is mandatory for any departure from a locked sentence. Pin review base+head and
+  hold commits while a branch-scoped review runs.
 
 ## Decisions Log
 
@@ -360,3 +359,7 @@ data/control-plane boundary and **fails closed on anything it cannot follow**. `
     fail-closed false-reject, F-7 error classification, the redundant F-1 guards, the sweep's two-target
     template scope, and `src/shared` exporting `secretTransforms` (plane split is organizational, not a
     capability boundary).
+- **2026-09-01** — **M3 spec: three-round paper ladder (8 → 4 → 4 findings), LOCKED at the cap.** Absorbed: `resolveSecret(handle, authorizedPolicy)` with an **exact pre-open compare on the parsed record** (round 1 found the policy/secret TOCTOU between the fill gate's two backend calls; round 2 found that computing the AEAD additional data from the caller's argument does not authenticate the cleartext metadata — so the compare is the mechanism and the AD is the backstop); **no key cache at all** over a single-flight state machine (removing state beats serializing it; local-file has no auth-session material, so `dispose()` is a documented no-op and the "dispose drops session material only" half of B1 is proven at M9); **per-record AEAD sealing** over a whole-file seal (metadata calls never invoke decrypt; metadata cleartext at rest and rollback by a host-disk writer are stated out of scope); **`libsodium-wrappers`** (WASM, ships its own types, no `crypto_pwhash` in the standard build → raw 32-byte key file, no KDF in v0.1); **Node's own resolvers mandated for the gate** after round 3 showed the hand-written `exports` fixture demanded non-Node behaviour. Rejected: a 1 MiB file cap (scope creep; DoS by a host-disk writer is residual).
+- **2026-09-01** — **Gate gap G-1 found and fixed inside M3.** `ts.resolveModuleName` lands on a typed package's `.d.ts`, so the M2 gate had never scanned a dependency's runtime JS; with zero runtime dependencies on `main` nothing exercised it. M3 was the first runtime dependency, hence the first exercise. Fixed the class (runtime resolution, declaration files never a traversal target) inside the slice rather than as a separate M2 fix, because the two land together or not at all.
+- **2026-09-01** — **M3 post-impl: three channels in parallel (isolated worktrees), convergent NO-SHIP, two fix rounds, merged after the integrator's confirmation pass.** **A1:** the reader built the AD from the caller's argument; Codex judged it fail-closed, the security channel's getter/`Proxy` probe showed a metadata-only edit *releases* the secret — rated P1 although unreachable by the in-scope adversary, because a locked mechanism was defeated **and a test enforced the deviation** (written to the r1/r2 history text, not to D2 as locked). **A2:** Codex blanket-exempted every `scripts/` external edge because `typescript`'s runtime JS fails closed under the new resolver — a silent deviation where the packet said stop-and-report. Fixes: AD from the record; traverse externals from every node; forbid production→`scripts/` (direct and transitive); scripts-rooted-only toolchain tolerance keyed on the *entry root*. Round 2 moved one hole (a symlink out of `src/supervisor`) and breached the 800-line rule; round 3 (cap) closed both, and the integrator's mutation pass killed every named mutant (the real A1 mutant dies on five tests). **Two continuity-owner amendments (amend-and-relock):** per-syntax resolution replaces the spec's "union of import and require branches" (Node-accurate; an `import` edge cannot load the `require` branch); the scripts-rooted tolerance includes **unresolved** loads (load-bearing for `typescript`'s optional `source-map-support`; class rule over a per-package exemption).
+- **2026-09-01** — **Spec-amendment fact-check closed the oldest open thread** (`docs/spec-amendment-factcheck.md`): 27 confirmed / 7 partial / 3 wrong / 3 unverifiable. Wrong: Grok Bot's credential model (it *has* a published, bad one — one shared VM per account; the accurate version is the stronger argument), the CyberArk citation (dead link), the Stripe×Instinct dates and attribution. Corrections apply when A1/A3 are absorbed into the spec, which has not happened yet.
