@@ -862,3 +862,11 @@ narrow until M5 (no `browser_snapshot` in the eval tool set; bodyless requests u
 **Not merge-ready as committed; no leak bypass or fabrication path found.** Fix slice `m4-fix-c4` (Codex, after the
 commit-3 fix slice's write job finishes) implements every absorbed item with a wiring test each; the three channels
 re-run on both fix diffs together; then the post-M4 whole-codebase audit (§9.2, carrying the §9.1 question).
+
+### T3-1 follow-up — continuity-owner decision (2026-09-02, during fix slice `m4-fix-c3b`)
+Removing the external-package filter from the `module loader` rule (X3-2) makes the real gate FAIL on
+`playwright-core/lib/bootstrap.js` (`require("module")` — its CommonJS bootstrap), reached from every importer of the
+driver. Codex stopped as instructed. **Decision:** `playwright-core/lib/bootstrap.js` becomes the third `opaqueFiles`
+entry (same pinned, integrity-recorded package; the same opaque-loader class the per-file tolerance exists for). The
+tolerance stays per-file, so the external **relay** package of X3-2's exploit — not vetted — still fails closed, which
+is the property the finding was about. Spec §7.1 amended in place; the rule 4 fixture must now name three importers.

@@ -641,7 +641,8 @@ const VETTED_EXTERNAL_PACKAGES = [
     importerFiles: ['src/browser/playwright.ts'],               // the ONLY repo file that may import any of `packages` (W3-7)
     directImportOnly: ['playwright'],                            // repo files may never import 'playwright-core' directly
     reachableFrom: ['src/browser', 'testbed'],                   // entry roots that may reach it at all (Y2-12)
-    opaqueFiles: ['playwright-core/lib/coreBundle.js', 'playwright-core/lib/utilsBundle.js'],
+    opaqueFiles: ['playwright-core/lib/coreBundle.js', 'playwright-core/lib/utilsBundle.js',
+                  'playwright-core/lib/bootstrap.js'],   // added 2026-09-02 (T3-1 follow-up): its CJS bootstrap does require("module")
     reason: 'browser driver; the two bundles carry non-literal and optional loads; the plaintext is handed to it by design' },
 ];
 ```
