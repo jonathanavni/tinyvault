@@ -646,3 +646,75 @@ state as residual.
 **Not merge-ready as committed; no security bypass found.** Fix slice `m4-fix-c1` (Codex, same branch, queued behind
 commit 2) implements every absorbed item with a killing test each; the three channels re-run on the fix diff together
 with commit 2's review.
+
+---
+
+# Post-implementation round 1 — commit 2 `5bfc401..b1407cd` (session owner, controls, in-realm sources, probe P, lab, loop hooks, writer bound) + gate fix slice `0cbe9d1`, 2026-09-02
+
+Implementer: Codex (plus one declared integrator carve-out: `navigatePage` settles a failed `goto` on the main-frame
+`framenavigated` event). Three channels, blind, parallel; both Claude channels ran the browser suites in isolated
+worktrees; Codex reviewed the pinned range read-only (its sandbox ran zero vitest/selftest tests — EPERM on mkdtemp).
+
+| Channel | Family | Verdict |
+|---|---|---|
+| Claude `/review` (QA, `wt-review`) | different | **NEEDS-ATTENTION** — 2 P1, 2 P2, 4 P3; 27 mutants killed / 3 survived / 2 equivalent |
+| Claude security review (`wt-security`) | different | **NEEDS-ATTENTION** — 2 P1, 2 P2, 5 P3; 41 probe assertions, **no leak bypass** |
+| Codex adversarial diff review | same | **NEEDS-ATTENTION** — 2 P1, 3 P2, 1 P3 |
+
+Integrator's run: gate PASS (45/41); selftest PASS; vitest 442 passed incl. every browser suite. **Three-way convergent
+P1:** the structural retention rule is not enforcing (QA Q2-2 = security S2-1 = Codex 1). **Two-way convergent:** the
+`browser_type` lockdown guard and swap have no tests (QA Q2-1/Q2-3 = Codex 4); runVettedConfigurationFixtures over
+50 lines (QA Q2-8 = Codex 6).
+
+## Findings and the continuity owner's synthesis
+
+### P1
+- **T2-1 Retention rule non-enforcing (all three channels).** `allowedTaintedCall` whitelists any callee whose result
+  initialises a `const`; analysis never leaves the enclosing function. Survivors (probed, runtime read-back): a
+  `keep: value` property in a `state.taint.push(...)`; `const hex = leakEncode(value)` writing a module `let`; a stash
+  inside `toFixedHex`; `const leaked = retain(hex)`. **Absorb:** tainted arguments only to `callFunctionOn` or to named
+  local helpers whose bodies are analysed with the argument tainted (one-hop interprocedural over the file's own
+  functions); taint through property writes, templates, destructuring, spread, `.length`, `arguments`; the four
+  survivors become named killed mutants; for a file without `consume()` (commit 3's `fillService.ts`) the rule is a
+  **Secret-object rule** (a `Secret` may only be passed to `inject`/`consume`/`clear`, never stored) — never vacuous.
+- **T2-2 Inject latency is length-dependent (security S2-2).** The in-realm decode loop runs `length` iterations; the
+  shipped probe P rejects 16 vs 4096 (p≈0, rank-biserial 0.88–0.93, median Δ +0.15 ms; null control passes). The
+  transport is constant-size but the decode is not constant-work; the honest-claims timing sentence is currently false
+  and H would fail. **Absorb:** decode all 4096 units unconditionally, then slice.
+- **T2-3 `walk()` does not descend directory symlinks (Codex 2).** `src/core/alias -> ../../rogue` with `rogue/evil.mjs`
+  importing the supervisor is never seen; a symlinked directory of `.test.ts`/`.d.ts` escapes C1's all-source scan.
+  **Absorb:** follow directory symlinks with cycle detection and link/real recording under the stricter-zone rule, or
+  reject source-directory symlinks as a configuration violation (choose reject — simpler, fail-closed); fixtures.
+- **T2-4 `browser_type`'s lockdown guard has zero tests; deleting it leaves 89 tests green (QA Q2-1, Codex 4).**
+  Correct by live probe. **Absorb:** both disjuncts tested separately; the swap decorator (Q2-3); the W3-10 sentinel.
+
+### P2
+- **T2-5 `consume()` sits inside the `try` whose catch manufactures `transport` (security S2-4)** — a pre-call throw
+  (second inject on a cleared `Secret`) returns `transport` with no taint recorded; an undeclared deviation from D5's
+  listing. **Absorb:** `consume()` and `too-long` above the `try`; pre-call throws propagate; killing mutant.
+- **T2-6 `createRequire` via `await import('node:module')` aliased (security S2-3; G-2 class, pre-existing)** reaches
+  `playwright-core` and the supervisor with the gate PASSing. **Absorb:** any import/require of `node:module`/`module`
+  outside the gate itself is an unsupported construct (fail closed); fixtures; G-2 closed.
+- **T2-7 Page close does not bump `documentEpoch` (Codex 3)** — staleness holds via the registry, the epoch channel does
+  not. **Absorb:** bump on first close; assertion.
+- **T2-8 C3's normalization guard has no killing fixture; C2 lacks the reverse cross-zone symlink (Codex 5).** **Absorb.**
+- **T2-9 100-session entropy test at 2.7 s of a 5 s default (QA Q2-4; flaked once).** **Absorb:** explicit timeout.
+
+### P3 (absorbed unless marked)
+`form.getAttribute` clobber → native `getAttribute` via descriptor + two lab routes (S2-5); CR/LF secrets silently
+sanitised → writer precondition refuses U+000A/U+000D (S2-6); failed snapshot = `{url:'', nodes:[]}` → absence-detection
+test that a live page never yields `url: ''`, residual stated (S2-7); `frameOrigin`'s main-world `location.origin`
+read → comment (S2-8); pinned-never-injected object handles retained until epoch/close (S2-9, **residual**); masked-node
+key set asserted at the realm source (Q2-5); `TYPE_SOURCE` into `inRealm.ts` (Q2-6); poisoned-`getAttribute` lab route
+(Q2-7); functions over 50 lines: `runVettedConfigurationFixtures` 73, `checkDependencyBoundary` 56 (Q2-8/Codex 6).
+**Test gaps (Codex):** transport spy pins exactly 16,384 hex chars and 4,096 units (a 4,095-unit encoder mutant
+survives); close-ordering test records counts only; probe P threshold boundaries unpinned (`p < 0.001` / `> 4 ms`
+cutoffs pass) → boundary vectors. **Undeclared deviations, now recorded:** `launchChromium(launcher = chromium)` seam
+(authorised by Q4; D1 amended); `TYPE_SOURCE` as a fifth in-realm source; `role` capped at 200; the navigate carve-out
+holds the mutex up to 2 s on failure (shape unchanged — stated).
+
+### Disposition
+**Not merge-ready as committed; no leak bypass found.** Fix slice `m4-fix-c2b` (Codex, same branch, dispatched after
+commit 3's write job finishes — never two write jobs in one worktree) implements every absorbed item with a killing
+test each; the three channels re-run on the fix diff together with commit 3's review. The commit-3 review must also
+check the flagged `if (consumeCalls.length === 0) return []` in the retention test.
