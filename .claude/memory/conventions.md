@@ -85,3 +85,30 @@ Example:
   receiver, `throw value`, a shadowed module-local `String`, `for…of`, a `String.prototype` accessor). The Secret-object
   rule, which lists the permitted occurrences and rejects everything else, never needed a second round. Write the
   allowlist first; name the killed mutants; make three channels attack it. (2026-09-02)
+
+## Post-implementation loop conventions (from the 15-hour M4 session, 2026-09-02)
+
+- **Post-implementation fix loops get a round cap, like the paper ladder.** M4 ran five fix slices; the retention
+  rule went nine rounds. From round six on each round found shapes inside an already-declared residual class at
+  ~2 hours per round. Cap the loop at three post-impl rounds per milestone, and write the LAST round's criteria
+  into its packet from the start: P1 only for a layers-1–2 leak, an undeclared layer-4 blind spot, or a red
+  `make test`; everything else is a residual with proof, recorded verbatim in the register.
+- **Stop an unbounded adversarial loop by narrowing the claim, not by adding code.** The retention loop ended when
+  the honest-claims sentence was amended to say what the rule is (a shape allowlist over a fixed file set with a
+  named corpus, not an escape analysis). When a channel beats the same invariant three rounds running, amend the
+  claim first, then decide whether any code is still worth it.
+- **Packet wording shapes Codex's structural choices.** "A non-test helper module in `src/browser`" produced a
+  `typescript` Proxy that evaded the dependency gate from inside the data plane; "every function analysed" produced
+  literal minimal compliance. Name the zone the code belongs in, name what must not change in the security core,
+  and say which verification the integrator will run.
+- **Budget one or two integrator fix cycles per browser-heavy Codex slice, and expect test synchronisation.**
+  Codex cannot run Chromium; its browser tests fail on deferred evidence, sockets left open (`server.close()`
+  waits on upgraded WebSocket sockets), and hooks timing out. Ask for settle-and-accumulate assertions, never
+  drain-once.
+- **Measurement blind spots are declared, never routed through capture failure.** Turning an unobservable request
+  shape into `captureFailed` hands a hostile page a one-tag denial-of-measurement lever. Declare the blind spot next
+  to the `Channel` enum in `SCHEMA.md` with its register id, and file the capture work in `BACKLOG.md`.
+- **Continuity discipline that paid for itself:** the PLAN.md breadcrumb after every state change, each channel's
+  synthesis buffered to a scratchpad file before the register is written, review packets as files with a
+  `__HEAD__` placeholder filled from `git rev-parse` after the commit. Two compactions and one process exit cost
+  nothing.

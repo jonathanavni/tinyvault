@@ -24,6 +24,7 @@ TinyVault is a **harness-agnostic, model-blind credential-fill library for brows
 - **Always delegate research and reviews** — they benefit from isolation regardless of context pressure (see `/review`).
 - **For cross-model work — adversarial review and scoped implementation slices — hand off to Codex.** See [`docs/handoff-pattern.md`](docs/handoff-pattern.md).
 - **For high-risk-surface work — run the full ladder.** On this project the high-risk surface is the security core itself: the fill service, origin validation, redaction, post-fill lockdown, and the credential-backend adapters. Default those to the full plan → implement → review ladder in [`docs/handoff-pattern.md`](docs/handoff-pattern.md) §4, and route them through the **security-specialized third channel** (§7.1). Claude implementing the invariant-enforcing code in parallel collapses the cross-model coverage the ladder exists to provide.
+- **Post-implementation fix loops are capped at three rounds per milestone**, and the last round's packet states its P1 criteria up front (a layers-1–2 leak, an undeclared layer-4 blind spot, or a red `make test`); everything else is a recorded residual. When a channel beats the same invariant three rounds running, narrow the claim before adding code. See `.claude/memory/conventions.md`.
 - Enter plan mode for any non-trivial task (3+ steps or an architectural decision).
 - Use `/start` at session start, `/wrapup` at session end, `/review` after completing a milestone.
 - Build a skill / command for any workflow you repeat 3+ times.
