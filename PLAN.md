@@ -12,11 +12,12 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 ## Current State
 
 `2026-09-01-m4` — focus: M4 (fill service end-to-end + all integration security gates, 🔴) through the full Codex ladder; in parallel: absorb A1/A3 + fact-check corrections into `PROJECT-SPEC.md`, prune merged agent branches, schedule the §9.1 LOC-budget question.
-**In progress (2026-09-02, ~11:15 CDT):** `codex/m4-fill-service` at `cd152a2` = fix slice `m4-fix-final3` (H-S1 url
-events; retention round eight S16–S22; `unobserved` provenance + aggregate; positive controls; family-gate negative
-control; P3s). Integrator: 738 tests, timing family 8/8, gate 49/44, `make eval` 10/10 0 leaks unobserved=0.
-**Three reviews of `5757a24..cd152a2` in flight** (Codex `task-mtk9ed9e-nce3s4`, QA `wt-review`, security
-`wt-security`). Then: absorb, merge FF to `main`, `/wrapup`.
+**In progress (2026-09-02, ~12:30 CDT):** `codex/m4-fill-service` at `79c6557`: `cd152a2` (fix-final3) reviewed by
+three channels (register "Final3 round": integrator tsc slip fixed `3e74854`; Blob bodies + headers + WebSocket
+frames invisible to layer 4; retention file-set scope; CDP guard removed to satisfy the rule; url-event change moved a
+capture hole; unobserved masking understated; probe P floor ~5–10 µs). Continuity amendments: honest-claims sentence
+names the retention rule's scope and probe P's floor; D10 batches the sub-µs probe; SCHEMA channels + residual.
+**Fix slice `m4-fix-final4` running in Codex.** Then: integrator run (tsc last), commit, three reviews, merge FF, `/wrapup`.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
