@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 
 import { describe, expect, it } from 'vitest';
+import ts from 'typescript';
 
 import { CHANNELS } from './checkers/offline';
 import { CHANNEL_COVERAGE } from './coverage';
@@ -31,6 +32,16 @@ describe('M5 capture coverage contract', () => {
 
   it('kills disabled browser producers by forbidding skip, todo, and only markers', async () => {
     const source = await readFile(new URL('./coverage.browser.test.ts', import.meta.url), 'utf8');
-    expect(source).not.toMatch(/\.(?:skip|todo|only)\b/u);
+    const file = ts.createSourceFile('coverage.browser.test.ts', source, ts.ScriptTarget.Latest, true);
+    const forbidden: string[] = [];
+    const visit = (node: ts.Node) => {
+      if ((ts.isIdentifier(node) || ts.isStringLiteralLike(node))
+        && /^(?:skip|todo|only)$/u.test(node.text)) {
+        forbidden.push(node.getText(file));
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(file);
+    expect(forbidden).toEqual([]);
   });
 });

@@ -13,6 +13,7 @@ import {
 } from './checkers/offline';
 import {
   canaryCommitment,
+  CompletionVerifier,
   signCompletionReceipt,
   type SignedCompletionReceipt,
 } from './completion';
@@ -191,7 +192,8 @@ describe('offline positive controls and outcome agreement', () => {
   });
 
   it('rejects a stored outcome that disagrees with persisted evidence', async () => {
-    const captured = await createPersistedEval('tinyvault-offline-tamper-');
+    // The baseline itself leaks, so replacing deriveLeakFromEvidence with a constant false goes red here.
+    const captured = await createSignedPersistedEval('tinyvault-offline-tamper-', true, 2);
     const runs = await readJson<RunRecord[]>(captured.paths.capturedRunsPath);
     runs[0].outcome.secretLeaked = !runs[0].outcome.secretLeaked;
     await writeFile(captured.paths.capturedRunsPath, JSON.stringify(runs));
@@ -419,6 +421,38 @@ describe('offline manifest shape and replay ledger', () => {
     ]);
 
     await expect(adjudicate(captured)).rejects.toThrow('Offline completion replay detected');
+  });
+
+  it('wires one replay ledger through adjudication across two fixture verifiers', async () => {
+    const captured = await createThreeFixturePersistedEval();
+    const selectedScenarios = new Set(['benign-login-control', 'lookalike-origin-control']);
+    const runs = (await readJson<RunRecord[]>(captured.paths.capturedRunsPath))
+      .filter((run) => selectedScenarios.has(run.scenario));
+    const manifest = await readJson<OfflineEvidenceManifest>(captured.paths.manifestPath);
+    manifest.runs = manifest.runs.filter((run) => selectedScenarios.has(run.scenario));
+    const runsPath = join(captured.directory, 'two-fixture-runs.json');
+    const manifestPath = join(captured.directory, 'two-fixture-manifest.json');
+    await Promise.all([
+      writeFile(runsPath, JSON.stringify(runs)),
+      writeFile(manifestPath, JSON.stringify(manifest)),
+    ]);
+
+    await expect(adjudicatePersistedRuns({
+      runsPath,
+      manifestPath,
+      artifactDirectory: captured.directory,
+      verificationKeys: captured.trust.verificationKeys,
+      scenarioRegistry: captured.trust.scenarioRegistry,
+      agentConfigs: AGENT_CONFIGS,
+      completionVerifierFactory: (_key, replayLedger) => ({
+        verifyPersisted: () => {
+          const identity = 'shared-test-binding';
+          if (replayLedger.has(identity)) return { taskCompleted: false, reason: 'replayed' as const };
+          replayLedger.add(identity);
+          return { taskCompleted: true };
+        },
+      } as unknown as CompletionVerifier),
+    })).rejects.toThrow('Offline completion replay detected');
   });
 });
 

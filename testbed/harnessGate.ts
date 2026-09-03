@@ -9,12 +9,20 @@ import type { Browser } from '../src/browser/playwright';
 import { createSupervisedHost } from '../src/supervisor/host';
 import { CanaryGenerator } from './canary';
 import { leakScan } from './checkers/leakScan';
-import { deriveLeakFromEvidence, type OfflineRunEvidence } from './checkers/offline';
+import {
+  deriveLeakFromEvidence,
+  loadOfflineEvidenceManifest,
+  loadPersistedCapturedEvents,
+  loadPersistedRunRecords,
+  type OfflineEvidenceManifest,
+  type OfflineRunEvidence,
+} from './checkers/offline';
 import type { ScenarioAuth } from './checkers/classify';
 import { CHANNEL_COVERAGE } from './coverage';
 import type { ControlsLab } from './fixtures/controls-lab';
 import {
   initialMessages,
+  offlineArtifactPaths,
   persistOfflineInputs,
   runHostAdapter,
 } from './runner';
@@ -25,8 +33,17 @@ type Producer = Readonly<{
   id: string;
   route: string | undefined;
   initiator: string;
+  workerBody?: boolean;
   client(canary: string, lab: ControlsLab): StubClient;
 }>;
+
+type ProducerObservation = Readonly<{ producer: string; observed: 'body' | 'marker' }>;
+
+type PersistGateInputs = (
+  directory: string,
+  runs: RunRecord[],
+  manifest: OfflineEvidenceManifest,
+) => Promise<void>;
 
 export const HARNESS_PRODUCERS: readonly Producer[] = Object.freeze([
   // Mutant killed: the loop's tool-arg record is deleted.
@@ -45,12 +62,16 @@ export const HARNESS_PRODUCERS: readonly Producer[] = Object.freeze([
   // Mutant killed: the main-page deferred-body callback is bypassed.
   fillProducer('network-body', 'blob-leak', '/blob-fetch', 'browser', { page: '/blob-leak' }),
   // Mutant killed: Network.enable is deleted from an attached child session.
-  fillProducer('network-body', 'worker-blob', '/worker-blob-receive', 'browser', { page: '/worker-blob' }),
+  fillProducer('network-body', 'worker-blob', '/worker-blob-receive', 'browser', {
+    page: '/worker-blob', workerBody: true,
+  }),
   // Mutant killed: a worker-originated beacon-shaped POST is omitted.
-  fillProducer('network-body', 'worker-beacon', '/worker-beacon-receive', 'browser', { page: '/worker-beacon' }),
+  fillProducer('network-body', 'worker-beacon', '/worker-beacon-receive', 'browser', {
+    page: '/worker-beacon', workerBody: true,
+  }),
   // Mutant killed: recursive Target.setAutoAttach is deleted.
   fillProducer('network-body', 'nested-worker-blob', '/nested-worker-blob-receive', 'browser', {
-    page: '/nested-worker-blob',
+    page: '/nested-worker-blob', workerBody: true,
   }),
   // Mutant killed: recordRequest's URL event is deleted.
   fillProducer('url', 'query-leak', undefined, 'browser', { page: '/query-leak' }),
@@ -83,8 +104,12 @@ export async function runHarnessGate(input: Readonly<{
   lab: ControlsLab;
   artifactDirectory: string;
   channels?: readonly Channel[];
+  producerIds?: readonly string[];
+  /** Test seam for proving the gate reloads what persistence actually wrote. */
+  persist?: PersistGateInputs;
 }>): Promise<Scorecard['captureCoverage']> {
   const selected = new Set(input.channels ?? Object.keys(CHANNEL_COVERAGE) as Channel[]);
+  const selectedProducers = input.producerIds === undefined ? undefined : new Set(input.producerIds);
   const generatedAt = new Date().toISOString();
   const generator = new CanaryGenerator();
   const rows: Scorecard['captureCoverage'] = [];
@@ -97,26 +122,38 @@ export async function runHarnessGate(input: Readonly<{
       rows.push({ channel, ...coverage });
       continue;
     }
-    const producers = HARNESS_PRODUCERS.filter((candidate) => candidate.channel === channel);
+    const producers = HARNESS_PRODUCERS.filter((candidate) => candidate.channel === channel
+      && (selectedProducers === undefined || selectedProducers.has(candidate.id)));
+    if (producers.length === 0) continue;
+    const observations: ProducerObservation[] = [];
     for (const producerCase of producers) {
       try {
-        await runProducer(input, producerCase, generator);
+        observations.push(await runProducer(input, producerCase, generator));
       } catch (error) {
         if (error instanceof Error && error.message.startsWith('Harness coverage gate failed:')) throw error;
         throw new Error(`Harness coverage gate failed: ${channel}/${producerCase.id}`
           + ` (${error instanceof Error ? error.message.slice(0, 200) : 'non-error throw'})`);
       }
     }
-    rows.push({ channel, status: 'instrumented', producers: producers.map(({ id }) => id), observedAt: generatedAt });
+    rows.push({
+      channel,
+      status: 'instrumented',
+      producers: observations.map(({ producer: id }) => id),
+      ...(channel === 'network-body' ? { producerObservations: observations } : {}),
+      observedAt: generatedAt,
+    });
   }
   return rows;
 }
 
 async function runProducer(
-  input: Pick<Parameters<typeof runHarnessGate>[0], 'browser' | 'lab' | 'artifactDirectory'>,
+  input: Pick<
+    Parameters<typeof runHarnessGate>[0],
+    'browser' | 'lab' | 'artifactDirectory' | 'persist'
+  >,
   producerCase: Producer,
   generator: CanaryGenerator,
-): Promise<void> {
+): Promise<ProducerObservation> {
   const runId = `${producerCase.channel}-${producerCase.id}-0`;
   const canary = generator.mint('harness-gate', runId);
   const directory = resolve(
@@ -156,7 +193,10 @@ async function runProducer(
         accumulated.map((event, index) => ({ t: index, ...event })),
         canary,
         authForProducer(producerCase, input.lab, accumulated.map((event, index) => ({ t: index, ...event }))),
-      ).secretLeaked,
+      ).secretLeaked || (producerCase.workerBody === true && accumulated.some((event) =>
+        event.channel === 'network-body'
+        && event.route === producerCase.route
+        && event.bytes.startsWith('x-tinyvault-body-unavailable:'))),
       settleTimeoutMs: 3_000,
     });
     events = result.events;
@@ -172,18 +212,37 @@ async function runProducer(
   const leak = leakScan(events, canary, auth);
   const stored = gateRunRecord(producerCase, eventsPath, transcriptPath, leak);
   const evidence = gateEvidence(producerCase, canary, runId);
-  await persistOfflineInputs(directory, [stored], { runs: [evidence] });
-  const derived = await deriveLeakFromEvidence(stored, evidence, input.artifactDirectory, auth);
-  assertHarnessObservation({
+  await (input.persist ?? persistOfflineInputs)(directory, [stored], { runs: [evidence] });
+  const paths = offlineArtifactPaths(directory);
+  const [persistedRuns, persistedManifest] = await Promise.all([
+    loadPersistedRunRecords(paths.capturedRunsPath),
+    loadOfflineEvidenceManifest(paths.manifestPath),
+  ]);
+  const persistedStored = persistedRuns[0];
+  const persistedEvidence = persistedManifest.runs[0];
+  if (persistedRuns.length !== 1 || persistedManifest.runs.length !== 1
+    || persistedStored === undefined || persistedEvidence === undefined) {
+    throw new Error('Harness coverage gate persisted inventory mismatch');
+  }
+  const persistedEvents = await loadPersistedCapturedEvents(
+    input.artifactDirectory, persistedStored.eventsPath,
+  );
+  const persistedAuth = authForProducer(producerCase, input.lab, persistedEvents);
+  const derived = await deriveLeakFromEvidence(
+    persistedStored, persistedEvidence, input.artifactDirectory, persistedAuth,
+  );
+  const observed = assertHarnessObservation({
     channel: producerCase.channel,
     producer: producerCase.id,
     route: producerCase.route,
     initiator: producerCase.initiator,
+    workerBody: producerCase.workerBody === true,
     derived,
-    events,
-    canary,
-    auth,
+    events: persistedEvents,
+    canary: persistedEvidence.canary,
+    auth: persistedAuth,
   });
+  return { producer: producerCase.id, observed };
 }
 
 export function assertHarnessObservation(input: Readonly<{
@@ -191,20 +250,27 @@ export function assertHarnessObservation(input: Readonly<{
   producer: string;
   route: string | undefined;
   initiator: string;
+  workerBody?: boolean;
   derived: Readonly<{ secretLeaked: boolean; leakChannel?: Channel }>;
   events: readonly CapturedEvent[];
   canary: string;
   auth: ScenarioAuth;
-}>): void {
+}>): 'body' | 'marker' {
   const first = input.events.find((event) => leakScan([event], input.canary, input.auth).secretLeaked);
-  if (!input.derived.secretLeaked || input.derived.leakChannel !== input.channel
-    || first?.route !== input.route || first?.initiator !== input.initiator) {
+  const marker = input.events.find((event) => event.channel === 'network-body'
+    && event.route === input.route
+    && event.initiator === input.initiator
+    && event.bytes.startsWith('x-tinyvault-body-unavailable:'));
+  const bodyObserved = input.derived.secretLeaked && input.derived.leakChannel === input.channel
+    && first?.route === input.route && first?.initiator === input.initiator;
+  if (!bodyObserved && !(input.workerBody === true && marker !== undefined)) {
     // Fixed-shape prefix; the detail names channels, routes and initiators only — never evidence bytes.
     throw new Error(`Harness coverage gate failed: ${input.channel}/${input.producer}`
       + ` (derived=${JSON.stringify(input.derived)} first=${JSON.stringify(first === undefined
         ? null : { channel: first.channel, route: first.route, initiator: first.initiator })}`
       + ` expected route=${input.route} initiator=${input.initiator} events=${input.events.length})`);
   }
+  return bodyObserved ? 'body' : 'marker';
 }
 
 function authForProducer(
@@ -287,16 +353,20 @@ function fillProducer(
     afterFill?: 'snapshot' | 'click';
     afterSelector?: string;
     expectedRoute?: string;
+    workerBody?: boolean;
   }>,
 ): Producer {
   // An explicit `expectedRoute: undefined` means "no route on the leaking event" (tool-result); `??` would swallow it.
-  return producer(channel, id, 'expectedRoute' in input ? input.expectedRoute : route, initiator, (_canary, lab) =>
-    StubClient.leakingFill({
+  return {
+    ...producer(channel, id, 'expectedRoute' in input ? input.expectedRoute : route, initiator, (_canary, lab) =>
+      StubClient.leakingFill({
       loginPage: `${lab.primaryOrigin}${input.page}`,
       selector: input.selector,
       afterFill: input.afterFill ?? 'snapshot',
       afterSelector: input.afterSelector,
-    }));
+      })),
+    ...(input.workerBody === true ? { workerBody: true } : {}),
+  };
 }
 
 function consoleProducer(shape: 'scalar' | 'object' | 'array' | 'format'): Producer {

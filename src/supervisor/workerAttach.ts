@@ -5,6 +5,7 @@ const AUTO_ATTACH = Object.freeze({
   waitForDebuggerOnStart: true,
   flatten: false,
 });
+const CHILD_COMMAND_TIMEOUT_MS = 5_000;
 
 type SessionPath = readonly string[];
 
@@ -37,9 +38,12 @@ type ProtocolEnvelope = Readonly<{
 export class WorkerAttachRouter {
   readonly #pending = new Map<string, Readonly<{
     path: SessionPath;
+    timer: NodeJS.Timeout;
     resolve(value: Record<string, unknown>): void;
     reject(error: Error): void;
   }>>();
+  /** A nested command is wrapped in one sendMessageToTarget command at every parent path. */
+  readonly #wrappers = new Map<string, string>();
   readonly #detached = new Set<string>();
   #nextId = 1;
 
@@ -70,9 +74,21 @@ export class WorkerAttachRouter {
       return;
     }
     if (envelope.id !== undefined) {
-      const pending = this.#pending.get(key(path, envelope.id));
-      if (pending === undefined) return;
-      this.#pending.delete(key(path, envelope.id));
+      const responseKey = key(path, envelope.id);
+      const pending = this.#pending.get(responseKey);
+      if (pending === undefined) {
+        const innerKey = this.#wrappers.get(responseKey);
+        if (innerKey === undefined) return;
+        this.#wrappers.delete(responseKey);
+        if (envelope.error !== undefined) {
+          this.#rejectPending(
+            innerKey,
+            new Error(envelope.error.message ?? 'Nested CDP wrapper command failed'),
+          );
+        }
+        return;
+      }
+      this.#deletePending(responseKey);
       if (envelope.error !== undefined) {
         pending.reject(new Error(envelope.error.message ?? 'Child CDP command failed'));
       } else {
@@ -109,19 +125,20 @@ export class WorkerAttachRouter {
     const waiting = event.waitingForDebugger === true;
     const path = [...parent, sessionId];
     const setup = (async () => {
+      const results = await Promise.allSettled([
+        this.#send(path, 'Network.enable'),
+        this.#send(path, 'Target.setAutoAttach', AUTO_ATTACH),
+      ]);
+      const failures = results
+        .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+        .map((result) => result.reason as unknown);
+      const detached = this.#detached.has(pathKey(path)) || failures.some(isDetachedError);
+      if (!detached && failures.length > 0) this.callbacks.fail();
+      if (!waiting || detached) return;
       try {
-        await this.#send(path, 'Network.enable');
-        await this.#send(path, 'Target.setAutoAttach', AUTO_ATTACH);
-      } catch {
-        this.callbacks.fail();
-      } finally {
-        if (waiting) {
-          try {
-            await this.#send(path, 'Runtime.runIfWaitingForDebugger');
-          } catch {
-            this.callbacks.fail();
-          }
-        }
+        await this.#send(path, 'Runtime.runIfWaitingForDebugger');
+      } catch (error) {
+        if (!this.#detached.has(pathKey(path)) && !isDetachedError(error)) this.callbacks.fail();
       }
     })();
     this.callbacks.track(setup);
@@ -137,8 +154,7 @@ export class WorkerAttachRouter {
     this.#detached.add(pathKey(detachedPath));
     for (const [pendingKey, pending] of this.#pending) {
       if (!isPathPrefix(detachedPath, pending.path)) continue;
-      this.#pending.delete(pendingKey);
-      pending.reject(new Error('Target.detachedFromTarget'));
+      this.#rejectPending(pendingKey, new Error('Target.detachedFromTarget'));
     }
   }
 
@@ -156,7 +172,7 @@ export class WorkerAttachRouter {
         );
       })
       .catch((error: unknown) => {
-        if (this.#detached.has(pathKey(path)) || isDetachedError(error)) {
+        if (this.#detached.has(pathKey(path)) || isDetachedError(error) || isCommandTimeout(error)) {
           this.callbacks.recordUnavailable(event.request.url, event.request.method);
           return;
         }
@@ -170,21 +186,48 @@ export class WorkerAttachRouter {
     method: string,
     params: Record<string, unknown> = {},
   ): Promise<Record<string, unknown>> {
+    if (path.some((_sessionId, index) => this.#detached.has(pathKey(path.slice(0, index + 1))))) {
+      return Promise.reject(new Error('Target.detachedFromTarget'));
+    }
     const id = this.#nextId++;
     const message = nestedMessage(path.slice(1), { id, method, params });
+    const pendingKey = key(path, id);
     const response = new Promise<Record<string, unknown>>((resolve, reject) => {
-      this.#pending.set(key(path, id), { path: [...path], resolve, reject });
+      const timer = setTimeout(() => {
+        this.#rejectPending(pendingKey, new Error(`Child CDP command timed out: ${method}`));
+      }, CHILD_COMMAND_TIMEOUT_MS);
+      this.#pending.set(pendingKey, { path: [...path], timer, resolve, reject });
     });
+    for (let depth = 1; depth < path.length; depth += 1) {
+      this.#wrappers.set(key(path.slice(0, depth), id), pendingKey);
+    }
     void this.cdp.send('Target.sendMessageToTarget', {
       sessionId: path[0],
       message,
     }).catch((error: unknown) => {
-      const pending = this.#pending.get(key(path, id));
-      if (pending === undefined) return;
-      this.#pending.delete(key(path, id));
-      pending.reject(error instanceof Error ? error : new Error(String(error)));
+      this.#rejectPending(
+        pendingKey,
+        error instanceof Error ? error : new Error(String(error)),
+      );
     });
     return response;
+  }
+
+  #deletePending(pendingKey: string): void {
+    const pending = this.#pending.get(pendingKey);
+    if (pending === undefined) return;
+    clearTimeout(pending.timer);
+    this.#pending.delete(pendingKey);
+    for (const [wrapperKey, innerKey] of this.#wrappers) {
+      if (innerKey === pendingKey) this.#wrappers.delete(wrapperKey);
+    }
+  }
+
+  #rejectPending(pendingKey: string, error: Error): void {
+    const pending = this.#pending.get(pendingKey);
+    if (pending === undefined) return;
+    this.#deletePending(pendingKey);
+    pending.reject(error);
   }
 }
 
@@ -216,9 +259,14 @@ function key(path: SessionPath, id: number): string {
   return `${pathKey(path)}:${id}`;
 }
 
-function isDetachedError(error: unknown): boolean {
+export function isDetachedError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes('No session with given id') || message.includes('Target.detachedFromTarget');
+}
+
+function isCommandTimeout(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.startsWith('Child CDP command timed out:');
 }
 
 function isPathPrefix(prefix: SessionPath, path: SessionPath): boolean {

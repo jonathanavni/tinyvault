@@ -403,32 +403,66 @@ async function processLoginBody(body: string, state: RequestState): Promise<numb
   return 303;
 }
 
-async function readBody(request: IncomingMessage): Promise<string> {
-  const chunks: Buffer[] = [];
-  let length = 0;
-  for await (const chunk of request) {
-    const bytes = Buffer.from(chunk);
-    length += bytes.length;
-    if (length > 1024 * 1024) throw new BodyTooLargeError();
-    chunks.push(bytes);
-  }
-  return Buffer.concat(chunks).toString('utf8');
-}
-
-class BodyTooLargeError extends Error {}
-
-async function readBodyOrReject(
+export async function readBodyOrReject(
   request: IncomingMessage,
   response: ServerResponse,
+  timeoutMs = 2_000,
 ): Promise<string | undefined> {
-  try {
-    return await readBody(request);
-  } catch (error) {
-    if (!(error instanceof BodyTooLargeError)) throw error;
-    response.statusCode = 413;
-    response.end('request body too large');
-    return undefined;
-  }
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let length = 0;
+    let settled = false;
+    const timer = setTimeout(() => rejectRequest(408, 'request body timeout'), timeoutMs);
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      request.off('data', onData);
+      request.off('end', onEnd);
+      request.off('error', onError);
+      request.off('aborted', onAborted);
+    };
+    const destroyAfterResponse = () => {
+      request.once('error', () => undefined);
+      request.destroy();
+      resolve(undefined);
+    };
+    const rejectRequest = (status: number, message: string) => {
+      if (settled) return;
+      settled = true;
+      request.pause();
+      cleanup();
+      response.statusCode = status;
+      // The response is flushed before the unread upload stream is destroyed, including on a fresh connection.
+      response.end(message, destroyAfterResponse);
+    };
+    const onData = (chunk: Buffer | string) => {
+      const bytes = Buffer.from(chunk);
+      length += bytes.length;
+      if (length > 1024 * 1024) {
+        rejectRequest(413, 'request body too large');
+        return;
+      }
+      chunks.push(bytes);
+    };
+    const onEnd = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(Buffer.concat(chunks).toString('utf8'));
+    };
+    const onError = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const onAborted = () => onError(new Error('Request body aborted'));
+
+    request.on('data', onData);
+    request.once('end', onEnd);
+    request.once('error', onError);
+    request.once('aborted', onAborted);
+  });
 }
 
 function pageBody(page: LoginFixturePage | undefined): string {

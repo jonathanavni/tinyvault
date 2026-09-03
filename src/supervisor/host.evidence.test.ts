@@ -2,16 +2,38 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { CredentialBackend } from '../backends/backend';
 import {
+  BODY_UNAVAILABLE_NOT_ATTACHED,
   CONSOLE_BUDGET_EXCEEDED,
   EvidenceLease,
   composeSupervisedHost,
   createSupervisedHost,
+  inspectSupervisedHostCaptureFailedForTest,
 } from './host';
 
 const CANARY = 'TVC_deferred_evidence_6A31';
 const ORIGIN = 'https://example.test';
 
 describe('deferred supervisor evidence', () => {
+  it('turns a Playwright bodyless POST with no CDP observation into a counted marker', async () => {
+    const lease = new EvidenceLease(CANARY);
+    lease.recordRequest(request(`${ORIGIN}/worker-miss`, 'POST'));
+    await lease.settle();
+    expect(lease.drainEvidence()).toContainEqual(expect.objectContaining({
+      channel: 'network-body', route: '/worker-miss', bytes: BODY_UNAVAILABLE_NOT_ATTACHED,
+    }));
+    lease.abort();
+  });
+
+  it('lets a child-session body satisfy the Playwright request correlation exactly once', async () => {
+    const lease = new EvidenceLease(CANARY);
+    lease.recordRequest(request(`${ORIGIN}/worker-hit`, 'POST'));
+    lease.recordDeferredBody(`${ORIGIN}/worker-hit`, 'POST', CANARY, false);
+    await lease.settle();
+    const bodies = lease.drainEvidence().filter((event) => event.channel === 'network-body');
+    expect(bodies).toEqual([expect.objectContaining({ route: '/worker-hit', bytes: CANARY })]);
+    lease.abort();
+  });
+
   it('serializes bounded console RemoteObjects without executing in the page', () => {
     const { lease, emit, off } = consoleLease('https://example.test/page');
     emit({
@@ -64,6 +86,33 @@ describe('deferred supervisor evidence', () => {
     expect(flood.filter((event) => event.bytes === CONSOLE_BUDGET_EXCEEDED)).toHaveLength(1);
     expect(flood).toHaveLength(999);
     expect(off).toHaveBeenCalledOnce();
+    lease.abort();
+  });
+
+  it('bounds huge primitive strings and preview breadth before JSON serialization', () => {
+    const { lease, emit } = consoleLease(ORIGIN);
+    const huge = 'x'.repeat(50 * 1024 * 1024);
+    const preview = Array.from({ length: 10_000 }, (_, index) => ({
+      name: `property-${index}`,
+      value: index === 0 ? `head…tail-${'y'.repeat(2_000)}` : 'value',
+    }));
+    const started = performance.now();
+    emit({
+      type: 'log',
+      args: [
+        { type: 'string', value: huge },
+        { type: 'object', preview: { overflow: true, properties: preview } },
+      ],
+    });
+    const elapsed = performance.now() - started;
+    const event = lease.drainEvidence()[0]!;
+    const args = (JSON.parse(event.bytes) as { args: unknown[] }).args;
+    expect(elapsed).toBeLessThan(1_000);
+    expect(Buffer.byteLength(event.bytes)).toBeLessThanOrEqual(64 * 1024);
+    expect(args.every((argument) => Buffer.byteLength(JSON.stringify(argument)) <= 8 * 1024)).toBe(true);
+    expect(event.bytes).toContain('…[truncated]');
+    expect(event.bytes).toContain('…[preview-overflow]');
+    expect(event.bytes).toContain('…[abbreviated]');
     lease.abort();
   });
 
@@ -205,6 +254,42 @@ describe('deferred supervisor evidence', () => {
     await host.closeAll();
   });
 
+  it('holds browser_open_session behind an already-pending attach acknowledgement', async () => {
+    let release!: () => void;
+    const attach = new Promise<void>((resolve) => { release = resolve; });
+    const setup = fixedComposedHost();
+    setup.lease.trackAttach(attach);
+    const opening = setup.host.tools.browser_open_session();
+    let settled = false;
+    void opening.then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    release();
+    expect(await opening).toEqual({ sessionId: 'fixed-session' });
+    setup.host.abort();
+    await setup.host.closeAll();
+  });
+
+  it('consumes an open-session timeout allowance in the wrapper that awaited it', async () => {
+    vi.useFakeTimers();
+    try {
+      const setup = fixedComposedHost();
+      setup.lease.trackAttach(new Promise<void>(() => undefined));
+      const opening = setup.host.tools.browser_open_session();
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(await opening).toEqual({ sessionId: 'fixed-session' });
+      expect(inspectSupervisedHostCaptureFailedForTest(setup.host)).toBe(true);
+      expect(await setup.host.tools.browser_navigate({
+        sessionId: 'fixed-session', url: ORIGIN,
+      })).toEqual({ ok: false, reason: 'session-unknown' });
+      expect(setup.navigate).not.toHaveBeenCalled();
+      setup.host.abort();
+      await setup.host.closeAll();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps open and navigate result bytes identical with the barrier present and stubbed', async () => {
     const present = fixedComposedHost();
     const stubbed = fixedComposedHost();
@@ -295,8 +380,9 @@ function fakeAttachBrowser(attach: Promise<void>) {
 
 function fixedComposedHost() {
   const lease = new EvidenceLease(CANARY);
+  const navigate = vi.fn(async () => undefined);
   const page = {
-    navigate: async () => undefined,
+    navigate,
     click: async () => undefined,
     type: async () => 'ok' as const,
     snapshot: async () => ({ url: ORIGIN, nodes: [] }),
@@ -318,6 +404,7 @@ function fixedComposedHost() {
   };
   return {
     lease,
+    navigate,
     host: composeSupervisedHost({ fillService: fillService as never, sessions: sessions as never, lease }),
   };
 }

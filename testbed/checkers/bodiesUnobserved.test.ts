@@ -8,16 +8,17 @@ function event(overrides: Partial<CapturedEvent>): CapturedEvent {
 }
 
 describe('bodiesUnobserved (M5 D7 marker count)', () => {
-  // Mutant killed: counting every network-body event, or matching the marker as a substring.
-  it('counts exactly the network-body events whose bytes are the declared marker', () => {
+  // Mutant killed: counting every network-body event, or omitting the correlated not-attached reason.
+  it('counts network-body events carrying any declared unavailable reason', () => {
     const events = [
       event({ bytes: BODY_UNAVAILABLE_MARKER }),
       event({ bytes: BODY_UNAVAILABLE_MARKER, route: '/worker-blob' }),
       event({ bytes: `${BODY_UNAVAILABLE_MARKER} extra` }),
+      event({ bytes: 'x-tinyvault-body-unavailable: not-attached' }),
       event({ bytes: 'TVC_real_body' }),
       event({ channel: 'url', bytes: BODY_UNAVAILABLE_MARKER }),
     ];
-    expect(bodiesUnobserved(events)).toBe(2);
+    expect(bodiesUnobserved(events)).toBe(4);
     expect(bodiesUnobserved([])).toBe(0);
   });
 

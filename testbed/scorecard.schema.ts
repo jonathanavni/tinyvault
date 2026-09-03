@@ -85,7 +85,16 @@ export type RunRecord = {
  *  `not-yet-instrumented` with a reason and a register id. `CHANNEL_COVERAGE` is a `Record<Channel, …>`, so adding
  *  a channel without deciding its coverage does not compile. The offline adjudicator never reads these rows. */
 export type ChannelCoverage =
-  | { status: 'instrumented'; producers: readonly string[]; observedAt?: string }   // every sub-producer re-derived; observedAt stamped by the harness gate
+  | {
+    status: 'instrumented';
+    producers: readonly string[];
+    /** Present for network-body: whether each producer yielded the body or a counted worker-miss marker. */
+    producerObservations?: readonly Readonly<{
+      producer: string;
+      observed: 'body' | 'marker';
+    }>[];
+    observedAt?: string;
+  }   // every sub-producer re-derived; observedAt stamped by the harness gate
   | { status: 'not-yet-instrumented'; reason: string; registerId: string };
 
 export type Scorecard = {

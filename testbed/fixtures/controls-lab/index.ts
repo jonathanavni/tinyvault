@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 
+import { readBodyOrReject } from '../shared/loginFixture';
+
 type Origins = Readonly<{ primary: string; secondary: string }>;
 type Route = (origins: Origins) => string;
 export type LabRequest = Readonly<{ method: string; path: string; body?: string }>;
@@ -138,6 +140,13 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
   '/worker-blob': ({ secondary }) => workerLeakPage(`${secondary}/worker-blob-receive`),
   '/worker-beacon': ({ secondary }) => workerLeakPage(`${secondary}/worker-beacon-receive`),
   '/nested-worker-blob': ({ secondary }) => nestedWorkerLeakPage(`${secondary}/nested-worker-blob-receive`),
+  '/workers-200': ({ secondary }) => manyWorkersPage(`${secondary}/workers-200-receive`, 200),
+  '/terminate-workers-20': ({ secondary }) => terminateDuringAttachPage(
+    `${secondary}/terminate-workers-live-receive`,
+  ),
+  '/navigate-workers-20': ({ secondary }) => navigateDuringWorkersPage(
+    `${secondary}/navigate-workers-receive`,
+  ),
   '/terminate-worker-slow': ({ secondary }) => terminatingWorkerPage(
     `${secondary}/terminate-worker-slow-receive`, false,
   ),
@@ -157,6 +166,12 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
     var worker = new Worker(URL.createObjectURL(new Blob([source])));
     worker.postMessage(value);
   </script>`,
+  '/busy-popup': () => `${loginForm()}<button id="popup" type="button">Popup</button><script>
+    document.querySelector('#popup').addEventListener('click', function () {
+      window.open('/busy-popup-child');
+    });
+  </script>`,
+  '/busy-popup-child': () => '<script>var until=Date.now()+4000;while(Date.now()<until){};</script>',
   '/decoy-control': () => `${loginForm()}<form method="post" action="/verify">
     <input id="decoy" type="password"><button id="verify" type="submit">Verify</button></form>`,
   '/reflect-redirect': () => loginForm('name="password"', 'action="/reflect"'),
@@ -269,7 +284,8 @@ async function serveAndCapture(
 ): Promise<void> {
   const url = new URL(request.url ?? '/', 'http://fixture.invalid');
   const path = url.pathname;
-  const body = await readRequestBody(request);
+  const body = await readBodyOrReject(request, response, 500);
+  if (body === undefined) return;
   requests?.push(Object.freeze({
     method: request.method ?? '', path, ...(body === '' ? {} : { body }),
   }));
@@ -299,12 +315,6 @@ async function serveAndCapture(
     route === undefined ? '<main>not found</main>' : route(getOrigins()),
     path === '/static-token-login' ? 'data-tv-document="static-document"' : '',
   ));
-}
-
-async function readRequestBody(request: IncomingMessage): Promise<string> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of request) chunks.push(Buffer.from(chunk));
-  return Buffer.concat(chunks).toString('utf8');
 }
 
 function attachWebSocketServer(server: Server, requests: LabRequest[]): void {
@@ -392,6 +402,51 @@ function nestedWorkerLeakPage(endpoint: string): string {
     document.querySelector('#password').addEventListener('input', function () {
       var worker = new Worker(URL.createObjectURL(new Blob([${JSON.stringify(outer)}])));
       worker.postMessage(this.value);
+    });
+  </script>`;
+}
+
+function manyWorkersPage(endpoint: string, count: number): string {
+  return `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      window.__workers = [];
+      for (var index = 0; index < ${count}; index += 1) {
+        var source = ${JSON.stringify(workerSource(`${endpoint}?index=`))}
+          .replace(${JSON.stringify(`${endpoint}?index=`)}, ${JSON.stringify(`${endpoint}?index=`)} + index);
+        var worker = new Worker(URL.createObjectURL(new Blob([source])));
+        window.__workers.push(worker);
+        worker.postMessage(this.value);
+      }
+    });
+  </script>`;
+}
+
+function terminateDuringAttachPage(liveEndpoint: string): string {
+  const idle = 'self.onmessage=function(){}';
+  const live = `self.onmessage=function(event){setTimeout(function(){fetch(${JSON.stringify(liveEndpoint)},`
+    + `{method:'POST',body:new Blob([event.data])}).catch(function(){})},300)}`;
+  return `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      for (let delay = 0; delay < 20; delay += 1) {
+        const worker = new Worker(URL.createObjectURL(new Blob([${JSON.stringify(idle)}])));
+        setTimeout(() => worker.terminate(), delay);
+      }
+      const liveWorker = new Worker(URL.createObjectURL(new Blob([${JSON.stringify(live)}])));
+      liveWorker.postMessage(this.value);
+    });
+  </script>`;
+}
+
+function navigateDuringWorkersPage(endpoint: string): string {
+  return `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      for (let index = 0; index < 20; index += 1) {
+        const worker = new Worker(URL.createObjectURL(new Blob([
+          ${JSON.stringify(workerSource(endpoint))}
+        ])));
+        worker.postMessage(this.value);
+      }
+      location.href = '/nowhere';
     });
   </script>`;
 }

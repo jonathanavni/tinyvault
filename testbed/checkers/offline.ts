@@ -45,6 +45,11 @@ export type OfflineAdjudicationInput = {
   verificationKeys: Readonly<Record<FixtureId, KeyObject>>;
   scenarioRegistry: ScenarioRegistry;
   agentConfigs: ReadonlyMap<string, OfflineAgentConfig>;
+  /** Test seam for proving the evaluation-wide replay ledger reaches every fixture verifier. */
+  completionVerifierFactory?: (
+    verificationKey: KeyObject,
+    replayLedger: Set<string>,
+  ) => CompletionVerifier;
 };
 
 export const CHANNELS = new Set<Channel>([
@@ -60,12 +65,10 @@ const ATTACK_CLASSES = new Set<AttackClass>([
 export async function adjudicatePersistedRuns(
   input: OfflineAdjudicationInput,
 ): Promise<RunRecord[]> {
-  const [runsValue, manifestValue] = await Promise.all([
-    readJson(input.runsPath),
-    readJson(input.manifestPath),
+  const [runs, manifest] = await Promise.all([
+    loadPersistedRunRecords(input.runsPath),
+    loadOfflineEvidenceManifest(input.manifestPath),
   ]);
-  const runs = parseRunRecords(runsValue);
-  const manifest = parseManifest(manifestValue);
   const evidenceByRun = new Map(manifest.runs.map((item) => [runKey(item), item]));
   const distinctRunKeys = new Set(runs.map((run) => runKey(run)));
   if (evidenceByRun.size !== manifest.runs.length
@@ -80,7 +83,8 @@ export async function adjudicatePersistedRuns(
   for (const [fixtureId, verificationKey] of Object.entries(input.verificationKeys)) {
     verifiers.set(
       fixtureId as FixtureId,
-      new CompletionVerifier(verificationKey, undefined, undefined, replayLedger),
+      input.completionVerifierFactory?.(verificationKey, replayLedger)
+        ?? new CompletionVerifier(verificationKey, undefined, undefined, replayLedger),
     );
   }
   const recomputed: RunRecord[] = [];
@@ -164,9 +168,25 @@ export async function deriveLeakFromEvidence(
   artifactDirectory: string,
   auth: ScenarioAuth,
 ): Promise<LeakScanResult> {
-  const eventsBytes = await readContainedBytes(artifactDirectory, stored.eventsPath, 'eventsPath');
-  const events = parseCapturedEvents(JSON.parse(eventsBytes.toString('utf8')) as unknown);
+  const events = await loadPersistedCapturedEvents(artifactDirectory, stored.eventsPath);
   return leakScan(events, evidence.canary, auth);
+}
+
+/** Public persistence parsers used by the harness gate as well as full offline adjudication. */
+export async function loadPersistedRunRecords(path: string): Promise<RunRecord[]> {
+  return parseRunRecords(await readJson(path));
+}
+
+export async function loadOfflineEvidenceManifest(path: string): Promise<OfflineEvidenceManifest> {
+  return parseManifest(await readJson(path));
+}
+
+export async function loadPersistedCapturedEvents(
+  artifactDirectory: string,
+  eventsPath: string,
+): Promise<CapturedEvent[]> {
+  const eventsBytes = await readContainedBytes(artifactDirectory, eventsPath, 'eventsPath');
+  return parseCapturedEvents(JSON.parse(eventsBytes.toString('utf8')) as unknown);
 }
 
 function assertEvaluationPositiveControls(
