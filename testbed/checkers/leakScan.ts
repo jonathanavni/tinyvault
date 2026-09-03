@@ -6,7 +6,11 @@ import {
 } from '../../src/shared/secretTransforms';
 import type { CapturedEvent, Channel } from '../scorecard.schema';
 import { classify, validateScenarioAuth, type ScenarioAuth } from './classify';
-import { decodeEvidence } from './leakDecoders';
+import {
+  decodeEvidence,
+  EVIDENCE_DECODER_NAMES,
+  type EvidenceDecoderName,
+} from './leakDecoders';
 
 export {
   SECRET_TRANSFORM_NAMES,
@@ -21,15 +25,14 @@ export type LeakScanResult = {
 };
 
 const ALL_TRANSFORMS = new Set<SecretTransformName>(SECRET_TRANSFORM_NAMES);
-// Raw event bytes and all extracted structured leaves share this decoded-candidate budget.
-const MAX_EVENT_DECODED_CANDIDATES = 64;
+const NO_DISABLED_DECODERS = new Set<EvidenceDecoderName>();
 
 export function leakScan(
   events: readonly CapturedEvent[],
   canary: string,
   auth: ScenarioAuth,
 ): LeakScanResult {
-  return leakScanWithTransforms(events, canary, auth, ALL_TRANSFORMS);
+  return leakScanInternal(events, canary, auth, ALL_TRANSFORMS, NO_DISABLED_DECODERS);
 }
 
 /** Exported so the meta-gate can mutation-test each production transform. */
@@ -39,12 +42,41 @@ export function leakScanWithTransforms(
   auth: ScenarioAuth,
   enabled: ReadonlySet<SecretTransformName>,
 ): LeakScanResult {
+  return leakScanInternal(events, canary, auth, enabled, NO_DISABLED_DECODERS);
+}
+
+/** Meta-gate-only seam for independent transform and decoder deletion mutations. */
+export function leakScanForMetaGate(
+  events: readonly CapturedEvent[],
+  canary: string,
+  auth: ScenarioAuth,
+  options: Readonly<{
+    enabledTransforms?: ReadonlySet<SecretTransformName>;
+    disabledDecoders?: ReadonlySet<EvidenceDecoderName>;
+  }>,
+): LeakScanResult {
+  return leakScanInternal(
+    events,
+    canary,
+    auth,
+    options.enabledTransforms ?? ALL_TRANSFORMS,
+    options.disabledDecoders ?? NO_DISABLED_DECODERS,
+  );
+}
+
+function leakScanInternal(
+  events: readonly CapturedEvent[],
+  canary: string,
+  auth: ScenarioAuth,
+  enabled: ReadonlySet<SecretTransformName>,
+  disabledDecoders: ReadonlySet<EvidenceDecoderName>,
+): LeakScanResult {
   validateScenarioAuth(auth);
   const unauthorized = unauthorizedEvents(events, auth);
 
   for (const event of unauthorized) {
     if (containsEvidenceValues(
-      [event.bytes, ...structuredPayloadValues([event])], canary, enabled,
+      [event.bytes, ...structuredPayloadValues([event])], canary, enabled, disabledDecoders,
     )) {
       return leaked(event.channel);
     }
@@ -137,9 +169,8 @@ function containsEvidenceValues(
   values: readonly string[],
   canary: string,
   enabled: ReadonlySet<SecretTransformName>,
+  disabledDecoders: ReadonlySet<EvidenceDecoderName>,
 ): boolean {
-  let candidateCount = 0;
-  const seenCandidates = new Set<string>();
   for (const value of values) {
     if (containsEnabledTransform(value, canary, enabled)) return true;
     if (enabled.has('base64')
@@ -148,31 +179,12 @@ function containsEvidenceValues(
     }
   }
   for (const value of values) {
-    for (const candidate of decodeEvidence(value, canary)) {
-      if (!decoderEnabled(candidate.decoder, enabled)) continue;
-      if (seenCandidates.has(candidate.text)) continue;
-      seenCandidates.add(candidate.text);
-      candidateCount += 1;
+    // Each structured leaf receives a fresh, independent per-decoder allowance.
+    for (const candidate of decodeEvidence(value, canary, { disabled: disabledDecoders })) {
       if (containsEnabledTransform(candidate.text, canary, enabled)) return true;
-      // The per-event expansion budget includes bytes and all structured payload leaves.
-      if (candidateCount >= MAX_EVENT_DECODED_CANDIDATES) break;
     }
-    if (candidateCount >= MAX_EVENT_DECODED_CANDIDATES) break;
   }
   return false;
-}
-
-function decoderEnabled(
-  decoder: ReturnType<typeof decodeEvidence>[number]['decoder'],
-  enabled: ReadonlySet<SecretTransformName>,
-): boolean {
-  // The existing mutation seam treats the two canonical base64 transforms as a pair for
-  // evidence decoding; production enables both. Separator decoding similarly subsumes the
-  // whitespace-only transform. These dependencies keep the older deletion mutants load-bearing.
-  if (decoder === 'base64-run') {
-    return enabled.has('base64') && enabled.has('base64url-unpadded');
-  }
-  return decoder !== 'separators' || enabled.has('whitespace-split');
 }
 
 function base64AlignmentSignatures(canary: string): string[] {
@@ -243,10 +255,49 @@ function parameterValues(parameters: URLSearchParams): string[] {
 }
 
 function collectStringLeaves(value: unknown): string[] {
-  if (typeof value === 'string') return [value];
-  if (Array.isArray(value)) return value.flatMap(collectStringLeaves);
-  if (isRecord(value)) return Object.values(value).flatMap(collectStringLeaves);
-  return [];
+  const MAX_DEPTH = 64;
+  const MAX_LEAVES = 4_096;
+  const MAX_TOTAL_BYTES = 1024 * 1024;
+  const MAX_VISITED_VALUES = 4_096;
+  const leaves: string[] = [];
+  const stack: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
+  let totalBytes = 0;
+  let visited = 0;
+
+  while (stack.length > 0 && leaves.length < MAX_LEAVES
+    && totalBytes < MAX_TOTAL_BYTES && visited < MAX_VISITED_VALUES) {
+    const current = stack.pop();
+    if (current === undefined) break;
+    visited += 1;
+    if (typeof current.value === 'string') {
+      const remaining = MAX_TOTAL_BYTES - totalBytes;
+      const bytes = Buffer.from(current.value, 'utf8');
+      if (bytes.length > remaining) break;
+      leaves.push(current.value);
+      totalBytes += bytes.length;
+      continue;
+    }
+    if (current.depth >= MAX_DEPTH) continue;
+    const capacity = MAX_VISITED_VALUES - visited - stack.length;
+    if (capacity <= 0) continue;
+    if (Array.isArray(current.value)) {
+      const count = Math.min(current.value.length, capacity);
+      for (let index = count - 1; index >= 0; index -= 1) {
+        stack.push({ value: current.value[index], depth: current.depth + 1 });
+      }
+    } else if (isRecord(current.value)) {
+      const values: unknown[] = [];
+      for (const key in current.value) {
+        if (!Object.prototype.hasOwnProperty.call(current.value, key)) continue;
+        values.push(current.value[key]);
+        if (values.length >= capacity) break;
+      }
+      for (let index = values.length - 1; index >= 0; index -= 1) {
+        stack.push({ value: values[index], depth: current.depth + 1 });
+      }
+    }
+  }
+  return leaves;
 }
 
 function parseJson(bytes: string): unknown | undefined {

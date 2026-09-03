@@ -68,6 +68,7 @@ export const META_GATE_REQUIRED_DECODERS = [
 export const META_GATE_REQUIRED_DECODER_CONTROLS = [
   ...META_GATE_REQUIRED_DECODERS,
   'garbage-never-throws',
+  'leakscan-never-throws',
 ] as const;
 
 type MetaTransformName = typeof META_GATE_REQUIRED_TRANSFORMS[number];
@@ -115,7 +116,11 @@ const INDEPENDENT_DECODER_FIXTURES: readonly MetaDecoderFixture[] = [
     name: 'base64-run',
     encode: (canary) => Buffer.from(independentPercent(canary, 'mixed')).toString('base64'),
   },
-  { name: 'utf16', encode: (canary) => Buffer.from(canary, 'utf16le').toString('latin1') },
+  {
+    name: 'utf16',
+    encode: (canary) => Buffer.from(independentPercent(canary, 'mixed'), 'utf16le')
+      .toString('latin1'),
+  },
   { name: 'charcode-array', encode: (canary) => JSON.stringify([...Buffer.from(canary)]) },
   { name: 'html-entities', encode: (canary) => [...canary]
     .map((character) => `&#${character.charCodeAt(0)};`).join('') },
@@ -522,6 +527,16 @@ function decoderNegativeControls(
       name: 'decoder-control:garbage-never-throws',
       expectedLeak: false,
       events: [unauthorizedEvent('model-text', '\u0000\u00ffnot-compressed%%%[999, nope', 599, auth)],
+    },
+    {
+      name: 'decoder-control:leakscan-never-throws',
+      expectedLeak: false,
+      events: [unauthorizedEvent(
+        'model-text',
+        `{\"deep\":${'['.repeat(256)}null${']'.repeat(256)},\"note\":\"deep-structure\"}`,
+        600,
+        auth,
+      )],
     },
   ];
 }

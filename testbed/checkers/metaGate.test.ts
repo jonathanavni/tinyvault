@@ -11,6 +11,7 @@ import {
 } from './metaGate';
 import { EVIDENCE_DECODER_NAMES } from './leakDecoders';
 import {
+  leakScanForMetaGate,
   leakScanWithTransforms,
   secretTransforms,
   type SecretTransformName,
@@ -59,9 +60,25 @@ describe('checker meta-gate', () => {
     expect(names).toEqual([...META_GATE_REQUIRED_DECODERS].sort());
     expect(META_GATE_REQUIRED_DECODERS).toEqual(EVIDENCE_DECODER_NAMES);
     expect(META_GATE_REQUIRED_DECODER_CONTROLS).toEqual([
-      ...EVIDENCE_DECODER_NAMES, 'garbage-never-throws',
+      ...EVIDENCE_DECODER_NAMES, 'garbage-never-throws', 'leakscan-never-throws',
     ]);
   });
+
+  it.each(EVIDENCE_DECODER_NAMES)(
+    'turns only decoder:%s green when that decoder is disabled',
+    (removed) => {
+      const decoderCases = plantedLeakCases()
+        .filter((testCase) => testCase.name.startsWith('decoder:'));
+      const missed = decoderCases.filter((testCase) => !leakScanForMetaGate(
+        testCase.events,
+        testCase.canary,
+        createBenignLoginScenario('http://fixture.invalid')
+          .authForRun('meta-gate-run', 'meta-gate-nonce'),
+        { disabledDecoders: new Set([removed]) },
+      ).secretLeaked).map((testCase) => testCase.name);
+      expect(missed).toEqual([`decoder:${removed}`]);
+    },
+  );
 
   it('plants vaulted model-context and noisy cross-stream fragmentation cases', () => {
     const names = plantedLeakCases().map((testCase) => testCase.name);
@@ -88,7 +105,10 @@ describe('checker meta-gate', () => {
         REQUIRED_TRANSFORMS.filter((name) => name !== removed),
       );
       const result = runMetaGate((events, canary, auth) =>
-        leakScanWithTransforms(events, canary, auth, enabled));
+        leakScanForMetaGate(events, canary, auth, {
+          enabledTransforms: enabled,
+          disabledDecoders: new Set(EVIDENCE_DECODER_NAMES),
+        }));
       expect(result.passed).toBe(false);
       expect(result.failures).toContain(`missed planted leak: encoded:${removed}`);
     },
@@ -133,6 +153,19 @@ describe('checker meta-gate', () => {
     expect(result.passed).toBe(false);
     expect(result.failures).toContain(
       'checker threw for decoder-control:garbage-never-throws: decoder garbage escaped',
+    );
+  });
+
+  it('fails a checker that throws from leakScan on bounded structured evidence', () => {
+    const result = runMetaGate((events, plantedCanary, auth) => {
+      if (events.some((event) => event.bytes.includes('deep-structure'))) {
+        throw new Error('leakScan traversal escaped');
+      }
+      return leakScanWithTransforms(events, plantedCanary, auth, new Set(REQUIRED_TRANSFORMS));
+    });
+    expect(result.passed).toBe(false);
+    expect(result.failures).toContain(
+      'checker threw for decoder-control:leakscan-never-throws: leakScan traversal escaped',
     );
   });
 
