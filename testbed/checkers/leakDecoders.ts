@@ -27,7 +27,8 @@ export const EVIDENCE_DECODER_LIMITS = Object.freeze({
   // Integrator (round 3, A3-Q1): every budget is WORK, never wall-clock, so the same evidence recomputes the same
   // way on any machine (offline adjudication compares stored and recomputed outcomes, scanTruncated included).
   decodedBytesPerEvent: 64 * 1024 * 1024,
-  candidatesPerEvent: 2048,            // decoded outputs per event (work units); exhaustion marks truncation (A3-Q1)
+  candidatesPerEvent: 2048,            // FLOOR of decoded outputs per event (work units); exhaustion marks truncation (A3-Q1)
+  candidatesPerInputByte: 1,           // the budget scales with the event's size: max(floor, bytes) (merge finding M5-M1)
   wrapperInflateTrialsPerEvent: 512,   // gzip/zlib header trials; exhaustion marks truncation (A3-X1)
   rawInflateTrialsPerEvent: 4096,      // speculative raw-DEFLATE trials; exhaustion is silent and declared
 });
@@ -36,12 +37,22 @@ export const EVIDENCE_DECODER_LIMITS = Object.freeze({
 export type EventWork = {
   decodedBytes: number;
   candidates: number;
+  /** Candidate budget for this event: the declared floor, scaled by the event's own size (merge finding M5-M1). */
+  candidateBudget: number;
   wrapperInflateTrials: number;
   rawInflateTrials: number;
 };
 
-export function createEventWork(): EventWork {
-  return { decodedBytes: 0, candidates: 0, wrapperInflateTrials: 0, rawInflateTrials: 0 };
+/** The per-event candidate budget scales with the event: a 5 KB model-context event (the message history
+ *  re-serialized every turn, carrying a page's prose in dozens of leaves) exhausted the flat 2,048 on every
+ *  dom-hidden run once slice B met slice A on main. Work stays deterministic and bounded (candidates ≤
+ *  max(floor, input bytes); decoded bytes per event unchanged). */
+export function createEventWork(inputBytes = 0): EventWork {
+  return {
+    decodedBytes: 0, candidates: 0,
+    candidateBudget: Math.max(EVIDENCE_DECODER_LIMITS.candidatesPerEvent, EVIDENCE_DECODER_LIMITS.candidatesPerInputByte * inputBytes),
+    wrapperInflateTrials: 0, rawInflateTrials: 0,
+  };
 }
 
 export type DecodeEvidenceWorkBudget = {
@@ -675,7 +686,7 @@ function claimCandidate(runtime: DecodeRuntime): boolean {
   // Per-event candidate budget (deterministic work, A3-Q1): exhaustion is a declared, counted measurement limit.
   const eventWork = runtime.options.eventWork;
   if (eventWork === undefined) return true;
-  if (eventWork.candidates >= EVIDENCE_DECODER_LIMITS.candidatesPerEvent) {
+  if (eventWork.candidates >= eventWork.candidateBudget) {
     runtime.truncated = true;
     return false;
   }
@@ -687,7 +698,7 @@ function withinDeadline(runtime: DecodeRuntime): boolean {
   // Work-based (deterministic): the per-event decoded-byte budget is the only "deadline".
   const eventWork = runtime.options.eventWork;
   if (eventWork === undefined || (eventWork.decodedBytes <= EVIDENCE_DECODER_LIMITS.decodedBytesPerEvent
-    && eventWork.candidates < EVIDENCE_DECODER_LIMITS.candidatesPerEvent)) return true;
+    && eventWork.candidates < eventWork.candidateBudget)) return true;
   runtime.truncated = true;
   return false;
 }

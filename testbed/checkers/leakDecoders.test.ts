@@ -24,7 +24,7 @@ describe('evidence decoders', () => {
     ]);
     expect(EVIDENCE_DECODER_LIMITS).toMatchObject({
       graphDepth: 3, decodedBytesPerValue: 8 * 1024 * 1024,
-      decodedBytesPerEvent: 64 * 1024 * 1024, candidatesPerEvent: 2048, wrapperInflateTrialsPerEvent: 512, rawInflateTrialsPerEvent: 4096,
+      decodedBytesPerEvent: 64 * 1024 * 1024, candidatesPerEvent: 2048, candidatesPerInputByte: 1, wrapperInflateTrialsPerEvent: 512, rawInflateTrialsPerEvent: 4096,
     });
     const noisyRuns = Array.from({ length: 100 }, (_, index) =>
       Buffer.from(`ordinary-candidate-${index.toString().padStart(3, '0')}`).toString('base64'))

@@ -23,7 +23,17 @@ const REQUIRED_CASE_ROUTES = [
   '/push-state-after-pin', '/token-rewrite', '/mirror-span', '/echo-field',
   '/self-navigating-iframe', '/iframe-self', '/iframe-final', '/static-token-login',
   '/storage', '/controls', '/post-body', '/query-leak', '/file-request',
-  '/blob-leak', '/header-leak', '/trailing-dot-leak', '/cookie-header-leak',
+  '/blob-leak', '/empty-beacon', '/bodyless-methods', '/worker-blob', '/worker-beacon', '/nested-worker-blob',
+  '/workers-200',
+  '/terminate-workers-20', '/navigate-workers-20',
+  '/terminate-worker-slow', '/terminate-worker-fast', '/page-close-worker', '/page-close-worker-race',
+  '/query-workers-200',
+  '/popup-worker', '/popup-worker-child', '/popup-blob', '/popup-blob-child',
+  '/popup-blob-close', '/popup-blob-close-child', '/keepalive-navigate', '/unload-beacon',
+  '/close-about-blank', '/self-closing-popup', '/self-closing-popup-child',
+  '/busy-popup', '/busy-popup-child',
+  '/decoy-control', '/reflect-redirect', '/console-leak',
+  '/header-leak', '/trailing-dot-leak', '/cookie-header-leak',
   '/ws-leak', '/ws-binary-leak', '/ws-protocol-leak', '/multipart-text-leak',
 ] as const;
 
@@ -72,7 +82,52 @@ describe('two-origin controls lab manifest', () => {
       if (action !== '/submit') expect(html).not.toContain('action="/submit"');
     }
   });
+
+  it('rejects oversized request bodies with a readable 413 on both origins', async () => {
+    const lab = await startControlsLab();
+    try {
+      for (const origin of [lab.primaryOrigin, lab.secondaryOrigin]) {
+        const response = await fetch(`${origin}/submit`, {
+          method: 'POST', body: 'x'.repeat(1024 * 1024 + 1),
+        });
+        expect(response.status).toBe(413);
+        expect(await response.text()).toBe('request body too large');
+      }
+    } finally {
+      await lab.close();
+    }
+  });
+
+  it('times out a request body that never completes without stalling either origin', async () => {
+    const lab = await startControlsLab();
+    try {
+      for (const origin of [lab.primaryOrigin, lab.secondaryOrigin]) {
+        await expect(incompletePost(`${origin}/submit`)).resolves.toEqual({
+          status: 408,
+          body: 'request body timeout',
+        });
+      }
+    } finally {
+      await lab.close();
+    }
+  });
 });
+
+function incompletePost(url: string): Promise<{ status: number | undefined; body: string }> {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(url, { method: 'POST' });
+    request.once('error', reject);
+    request.once('response', (response) => {
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+      response.once('end', () => {
+        request.removeListener('error', reject);
+        resolve({ status: response.statusCode, body: Buffer.concat(chunks).toString('utf8') });
+      });
+    });
+    request.write('partial');
+  });
+}
 
 function duplicateAttributes(html: string): string[] {
   const duplicates: string[] = [];
@@ -88,3 +143,4 @@ function duplicateAttributes(html: string): string[] {
   }
   return duplicates;
 }
+import { request as httpRequest } from 'node:http';

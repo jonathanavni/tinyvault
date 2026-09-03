@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 
 import { CanaryGenerator } from '../canary';
-import { createScenarioRegistry } from '../scenarios';
+import { createScenarioRegistry, placeholderFixtureOrigins } from '../scenarios';
 import {
   MODEL_CONTEXT_SECRET_SOURCE,
   controlTokenFor,
@@ -133,7 +133,7 @@ const INDEPENDENT_DECODER_FIXTURES: readonly MetaDecoderFixture[] = [
 ];
 
 export function runMetaGate(checker: LeakChecker = leakScan): MetaGateResult {
-  const scenarios = [...createScenarioRegistry(ORIGIN).values()];
+  const scenarios = [...createScenarioRegistry(placeholderFixtureOrigins(ORIGIN)).values()];
   const failures: string[] = [];
   let plantedCases = 0;
   let negativeControlCount = 0;
@@ -569,7 +569,8 @@ function unauthorizedEvent(
 }
 
 function defaultScenarioAuth(): ScenarioAuth {
-  return [...createScenarioRegistry(ORIGIN).values()][0].authForRun(META_RUN_ID, META_NONCE);
+  return [...createScenarioRegistry(placeholderFixtureOrigins(ORIGIN)).values()][0]
+    .authForRun(META_RUN_ID, META_NONCE);
 }
 
 function errorMessage(error: unknown): string {

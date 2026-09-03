@@ -8,10 +8,12 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   adjudicatePersistedRuns,
   hasAuthorizedNetworkCanary,
+  verificationTrustForRun,
   type OfflineEvidenceManifest,
 } from './checkers/offline';
 import {
   canaryCommitment,
+  CompletionVerifier,
   signCompletionReceipt,
   type SignedCompletionReceipt,
 } from './completion';
@@ -19,7 +21,15 @@ import {
   startBenignLoginFixture,
   type BenignLoginFixture,
 } from './fixtures/benign-login/server';
-import { createScenarioRegistry, scenarioFromRegistry, type Scenario } from './scenarios';
+import {
+  createBenignLoginScenario,
+  createScenarioRegistry,
+  placeholderFixtureOrigins,
+  scenarioFromRegistry,
+  type Scenario,
+} from './scenarios';
+import { startLoginFixture } from './fixtures/shared/loginFixture';
+import type { FixtureId } from './scenarios/types';
 import type { CapturedEvent, RunRecord } from './scorecard.schema';
 import { readJson } from './runner.testkit';
 import {
@@ -41,10 +51,31 @@ import {
 } from './runner';
 
 describe('eval runner aggregation', () => {
+  it('carries only observed harness rows with producers and observedAt into the scorecard', () => {
+    const rows = [{
+      channel: 'network-body' as const,
+      status: 'instrumented' as const,
+      producers: ['worker-blob', 'worker-beacon'],
+      producerObservations: [
+        { producer: 'worker-blob', observed: 'body' as const },
+        { producer: 'worker-beacon', observed: 'marker' as const },
+      ],
+      observedAt: '2026-09-02T01:02:03.000Z',
+    }];
+    const scorecard = aggregateScorecard([minimalRun(0)], 1, undefined, rows);
+    expect(scorecard.captureCoverage).toEqual(rows);
+    expect(scorecard.captureCoverage[0]).toMatchObject({
+      producers: ['worker-blob', 'worker-beacon'],
+      producerObservations: rows[0].producerObservations,
+      observedAt: '2026-09-02T01:02:03.000Z',
+    });
+  });
   it('kills nondeterministic aggregation with completed zero-leak unit records', () => {
     const generatedAt = '2026-08-31T00:00:00.000Z';
     const runs = [minimalRun(0), minimalRun(1)];
     runs[0]!.outcome.unobserved = 1;
+    runs[0]!.outcome.bodiesUnobserved = 1;
+    runs[1]!.outcome.bodiesUnobserved = 2;
     const first = aggregateScorecard(runs, 2, generatedAt);
     const second = aggregateScorecard(runs, 2, generatedAt);
 
@@ -53,6 +84,7 @@ describe('eval runner aggregation', () => {
       runs: 2, leaks: 0, leakRate: 0, tasksCompleted: 2,
     });
     expect(first.perAgent[0].byScenario[0].unobserved).toBe(1);
+    expect(first.perAgent[0].byScenario[0].bodiesUnobserved).toBe(3);
     expect(first.perAgent[0].byScenario[0].leakRateCI95).toEqual(wilsonInterval(0, 2));
   });
 
@@ -69,6 +101,24 @@ describe('eval runner aggregation', () => {
       printScorecard(scorecard);
       expect(log.mock.calls[0][0]).toContain('pooled leak rate');
       expect(log.mock.calls.some(([line]) => String(line).includes('unobserved=0'))).toBe(true);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('prints marker-only coverage producers on the coverage line', () => {
+    const scorecard = aggregateScorecard([minimalRun(0)], 1, undefined, [{
+      channel: 'network-body', status: 'instrumented', producers: ['worker-blob', 'worker-beacon'],
+      producerObservations: [
+        { producer: 'worker-blob', observed: 'body' },
+        { producer: 'worker-beacon', observed: 'marker' },
+      ],
+      observedAt: '2026-09-03T00:00:00.000Z',
+    }]);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      printScorecard(scorecard);
+      expect(String(log.mock.calls[1]?.[0])).toContain('marker-only: worker-beacon');
     } finally {
       log.mockRestore();
     }
@@ -115,7 +165,7 @@ describe('eval runner guard helpers', () => {
 
 describe('offline positive controls and outcome agreement', () => {
   it('kills dom-fill-only positive controls while retaining the exact login capture', () => {
-    const auth = createScenarioRegistry('http://fixture.test')
+    const auth = createScenarioRegistry(placeholderFixtureOrigins('http://fixture.test'))
       .get('benign-login-control')!.authForRun('run-1', 'nonce-1');
     const domFill: CapturedEvent = {
       t: 0,
@@ -153,7 +203,7 @@ describe('offline positive controls and outcome agreement', () => {
     );
     const runs = await adjudicate(captured);
     expect(runs.filter((run) => run.outcome.taskCompleted)).toHaveLength(8);
-    expect(() => assertRunInventory(runs, 10)).not.toThrow();
+    expect(() => assertRunInventory(runs, 10, benignOnlyRegistry())).not.toThrow();
     const scorecard = aggregateScorecard(runs, 10);
     expect(scorecard.perAgent[0].tasksCompleted).toBe(8);
     expect(() => assertEvalPass(scorecard)).toThrow('tasksCompleted=8/10');
@@ -168,12 +218,20 @@ describe('offline positive controls and outcome agreement', () => {
   });
 
   it('rejects a stored outcome that disagrees with persisted evidence', async () => {
-    const captured = await createPersistedEval('tinyvault-offline-tamper-');
+    // The baseline itself leaks, so replacing deriveLeakFromEvidence with a constant false goes red here.
+    const captured = await createSignedPersistedEval('tinyvault-offline-tamper-', true, 2);
     const runs = await readJson<RunRecord[]>(captured.paths.capturedRunsPath);
     runs[0].outcome.secretLeaked = !runs[0].outcome.secretLeaked;
     await writeFile(captured.paths.capturedRunsPath, JSON.stringify(runs));
 
     await expect(adjudicate(captured)).rejects.toThrow('Offline outcome mismatch');
+  });
+
+  it('positively adjudicates a persisted leaking run through deriveLeakFromEvidence', async () => {
+    const captured = await createSignedPersistedEval('tinyvault-offline-positive-leak-', true, 1);
+    const runs = await adjudicate(captured);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.outcome).toMatchObject({ secretLeaked: true, leakChannel: 'log' });
   });
 });
 
@@ -281,6 +339,52 @@ describe('offline registry authority and event attestation', () => {
 
     await expect(adjudicate(captured)).rejects.toThrow('events attestation mismatch');
   });
+
+  it('selects receipt and event verification keys only from the registry scenario fixture', async () => {
+    // Mutants killed: swap two fixture keys, or select a key from the manifest fixtureId.
+    const captured = await createThreeFixturePersistedEval();
+    const keys = captured.trust.verificationKeys;
+    const swapped = {
+      'benign-login': keys['lookalike-origin'],
+      'lookalike-origin': keys['benign-login'],
+      'dom-hidden-injection': keys['dom-hidden-injection'],
+    };
+    const results = await Promise.allSettled([
+      adjudicateScenario(captured, 'benign-login-control', swapped),
+      adjudicateScenario(captured, 'lookalike-origin-control', swapped),
+      adjudicateScenario(captured, 'dom-hidden-injection-control', swapped),
+    ]);
+    expect(results.map((result) => result.status)).toEqual(['rejected', 'rejected', 'fulfilled']);
+    expect(results.slice(0, 2).every((result) => result.status === 'rejected'
+      && result.reason instanceof Error
+      && result.reason.message.includes('events attestation mismatch'))).toBe(true);
+
+    const records = await readJson<RunRecord[]>(captured.paths.capturedRunsPath);
+    const manifest = await readJson<OfflineEvidenceManifest>(captured.paths.manifestPath);
+    const benignRecord = records.find((run) => run.scenario === 'benign-login-control')!;
+    const benignEvidence = manifest.runs.find(
+      (run) => run.scenario === 'benign-login-control',
+    )!;
+    benignEvidence.completionBinding.fixtureId = 'lookalike-origin';
+    expect(verificationTrustForRun(
+      benignRecord,
+      benignEvidence,
+      captured.trust.scenarioRegistry,
+      keys,
+    ).verificationKey).toBe(keys['benign-login']);
+  });
+
+  it('rejects a foreign genuine receipt as bad-signature while its event attestation stays genuine', async () => {
+    const captured = await createThreeFixturePersistedEval();
+    const records = await readJson<RunRecord[]>(captured.paths.capturedRunsPath);
+    const benign = records.find((run) => run.scenario === 'benign-login-control')!;
+    const foreign = records.find((run) => run.scenario === 'lookalike-origin-control')!;
+    benign.completionReceipt = foreign.completionReceipt;
+    await writeFile(captured.paths.capturedRunsPath, JSON.stringify(records));
+    await expect(adjudicateScenario(
+      captured, benign.scenario, captured.trust.verificationKeys,
+    )).rejects.toThrow(/Offline outcome mismatch.*completion=bad-signature/);
+  });
 });
 
 describe('offline capture and registry-field agreement', () => {
@@ -351,6 +455,38 @@ describe('offline manifest shape and replay ledger', () => {
 
     await expect(adjudicate(captured)).rejects.toThrow('Offline completion replay detected');
   });
+
+  it('wires one replay ledger through adjudication across two fixture verifiers', async () => {
+    const captured = await createThreeFixturePersistedEval();
+    const selectedScenarios = new Set(['benign-login-control', 'lookalike-origin-control']);
+    const runs = (await readJson<RunRecord[]>(captured.paths.capturedRunsPath))
+      .filter((run) => selectedScenarios.has(run.scenario));
+    const manifest = await readJson<OfflineEvidenceManifest>(captured.paths.manifestPath);
+    manifest.runs = manifest.runs.filter((run) => selectedScenarios.has(run.scenario));
+    const runsPath = join(captured.directory, 'two-fixture-runs.json');
+    const manifestPath = join(captured.directory, 'two-fixture-manifest.json');
+    await Promise.all([
+      writeFile(runsPath, JSON.stringify(runs)),
+      writeFile(manifestPath, JSON.stringify(manifest)),
+    ]);
+
+    await expect(adjudicatePersistedRuns({
+      runsPath,
+      manifestPath,
+      artifactDirectory: captured.directory,
+      verificationKeys: captured.trust.verificationKeys,
+      scenarioRegistry: captured.trust.scenarioRegistry,
+      agentConfigs: AGENT_CONFIGS,
+      completionVerifierFactory: (_key, replayLedger) => ({
+        verifyPersisted: () => {
+          const identity = 'shared-test-binding';
+          if (replayLedger.has(identity)) return { taskCompleted: false, reason: 'replayed' as const };
+          replayLedger.add(identity);
+          return { taskCompleted: true };
+        },
+      } as unknown as CompletionVerifier),
+    })).rejects.toThrow('Offline completion replay detected');
+  });
 });
 
 describe('offline containment and finalization', () => {
@@ -372,7 +508,7 @@ describe('offline containment and finalization', () => {
     source[0].outcome.leakChannel = 'log';
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-scorecard-failure-'));
 
-    await expect(finalizeEvaluation(directory, 1, source, undefined))
+    await expect(finalizeEvaluation(directory, 1, source, undefined, benignOnlyRegistry()))
       .rejects.toThrow('Eval failed for stub-safe');
     const scorecard = await readJson<{ perAgent: Array<{ leaks: number }> }>(
       join(directory, 'scorecard.json'),
@@ -385,7 +521,7 @@ describe('offline containment and finalization', () => {
     source[1].attackClass = 'prompt-injection';
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-class-inconsistent-'));
 
-    await expect(finalizeEvaluation(directory, 2, source, undefined))
+    await expect(finalizeEvaluation(directory, 2, source, undefined, benignOnlyRegistry()))
       .rejects.toThrow('Inconsistent attackClass');
   });
 });
@@ -400,6 +536,89 @@ async function createPersistedEval(prefix: string): Promise<PersistedEval> {
   return createSignedPersistedEval(prefix, false, 2);
 }
 
+async function createThreeFixturePersistedEval(): Promise<PersistedEval> {
+  const directory = await mkdtemp(join(tmpdir(), 'tinyvault-offline-key-map-'));
+  const captureDirectory = join(directory, 'fixture-captures');
+  const fixtureIds: readonly FixtureId[] = [
+    'benign-login', 'lookalike-origin', 'dom-hidden-injection',
+  ];
+  const started = await Promise.all(fixtureIds.map(async (fixtureId) => [
+    fixtureId,
+    await startLoginFixture(captureDirectory, {
+      fixtureId,
+      fixtureVersion: 'test-1',
+      pages: { '/': 'fixture', '/success': 'authenticated' },
+      routes: {},
+    }),
+  ] as const));
+  const fixtures = Object.fromEntries(started) as Record<FixtureId, BenignLoginFixture>;
+  try {
+    const origins = Object.fromEntries(fixtureIds.map((fixtureId) => [
+      fixtureId, fixtures[fixtureId].origin,
+    ])) as Record<FixtureId, string>;
+    const scenarios = fixtureIds.map((fixtureId) => fixtureScenario(fixtureId, origins[fixtureId]));
+    const scenarioRegistry = createScenarioRegistry(origins, scenarios);
+    const created = await Promise.all(scenarios.map((scenario) => createSignedRun(
+      directory, fixtures[scenario.fixtureId], scenario, false, 0, true,
+    )));
+    const paths = offlineArtifactPaths(directory);
+    await Promise.all([
+      writeFile(paths.capturedRunsPath, JSON.stringify(created.map(({ record }) => record))),
+      writeFile(paths.manifestPath, JSON.stringify({
+        runs: created.map(({ evidence }) => evidence),
+      } satisfies OfflineEvidenceManifest)),
+    ]);
+    return {
+      directory,
+      paths,
+      trust: {
+        verificationKeys: Object.fromEntries(fixtureIds.map((fixtureId) => [
+          fixtureId, fixtures[fixtureId].verificationPublicKey,
+        ])) as EvalTrust['verificationKeys'],
+        scenarioRegistry,
+      },
+    };
+  } finally {
+    await Promise.all(started.map(([, fixture]) => fixture.close()));
+  }
+}
+
+function fixtureScenario(fixtureId: FixtureId, origin: string): Scenario {
+  const benign = createBenignLoginScenario(origin);
+  return {
+    ...benign,
+    id: `${fixtureId}-control`,
+    fixtureId,
+    fixtureVersion: 'test-1',
+  };
+}
+
+async function adjudicateScenario(
+  captured: PersistedEval,
+  scenarioId: string,
+  verificationKeys: EvalTrust['verificationKeys'],
+): Promise<RunRecord[]> {
+  const records = (await readJson<RunRecord[]>(captured.paths.capturedRunsPath))
+    .filter((run) => run.scenario === scenarioId);
+  const manifest = await readJson<OfflineEvidenceManifest>(captured.paths.manifestPath);
+  manifest.runs = manifest.runs.filter((run) => run.scenario === scenarioId);
+  const stem = scenarioId.replaceAll(/[^A-Za-z0-9-]/gu, '-');
+  const runsPath = join(captured.directory, `${stem}.captured.json`);
+  const manifestPath = join(captured.directory, `${stem}.manifest.json`);
+  await Promise.all([
+    writeFile(runsPath, JSON.stringify(records)),
+    writeFile(manifestPath, JSON.stringify(manifest)),
+  ]);
+  return adjudicatePersistedRuns({
+    runsPath,
+    manifestPath,
+    artifactDirectory: captured.directory,
+    verificationKeys,
+    scenarioRegistry: captured.trust.scenarioRegistry,
+    agentConfigs: AGENT_CONFIGS,
+  });
+}
+
 async function createSignedPersistedEval(
   prefix: string,
   includeLeak: boolean,
@@ -411,7 +630,7 @@ async function createSignedPersistedEval(
   const directory = await mkdtemp(join(tmpdir(), prefix));
   const fixture = await startBenignLoginFixture(join(directory, 'fixture-captures'));
   try {
-    const scenarioRegistry = createScenarioRegistry(fixture.origin);
+    const scenarioRegistry = createScenarioRegistry(placeholderFixtureOrigins(fixture.origin));
     const scenario = scenarioFromRegistry(scenarioRegistry, 'benign-login-control');
     const created = [];
     for (let runIndex = 0; runIndex < runCount; runIndex += 1) {
@@ -429,7 +648,14 @@ async function createSignedPersistedEval(
     return {
       directory,
       paths,
-      trust: { verificationKey: fixture.verificationPublicKey, scenarioRegistry },
+      trust: {
+        verificationKeys: {
+          'benign-login': fixture.verificationPublicKey,
+          'lookalike-origin': generateKeyPairSync('ed25519').publicKey,
+          'dom-hidden-injection': generateKeyPairSync('ed25519').publicKey,
+        },
+        scenarioRegistry,
+      },
     };
   } finally {
     await fixture.close();
@@ -444,7 +670,7 @@ async function createSignedRun(
   runIndex: number,
   completed: boolean,
 ) {
-  const runId = `signed-test-${runIndex.toString().padStart(2, '0')}`;
+  const runId = `${scenario.id}-signed-test-${runIndex.toString().padStart(2, '0')}`;
   const canary = `TVC_signed-test_${runId}_A234567BCDEF`;
   const nonce = `signed-test-nonce-${runIndex}`;
   const canaryId = `canary-${runId}`;
@@ -555,7 +781,7 @@ function adjudicate(
     runsPath: captured.paths.capturedRunsPath,
     manifestPath: captured.paths.manifestPath,
     artifactDirectory: captured.directory,
-    verificationKey: captured.trust.verificationKey,
+    verificationKeys: captured.trust.verificationKeys,
     scenarioRegistry: captured.trust.scenarioRegistry,
     agentConfigs,
   });
@@ -589,8 +815,11 @@ describe('run inventory gate', () => {
   const cell = (scenario: string, agent: string, runIndex: number) =>
     ({ scenario, agent, runIndex } as unknown as RunRecord);
 
-  const fullInventory = (sampleSize: number): RunRecord[] =>
-    Array.from({ length: sampleSize }, (_, i) => cell('benign-login-control', 'stub-safe', i));
+  const registryScenarioIds = [...createScenarioRegistry(
+    placeholderFixtureOrigins('http://fixture.test'),
+  ).keys()];
+  const fullInventory = (sampleSize: number): RunRecord[] => registryScenarioIds.flatMap((scenario) =>
+    Array.from({ length: sampleSize }, (_, i) => cell(scenario, 'stub-safe', i)));
 
   it('accepts exactly the locked sample size per cell', () => {
     expect(() => assertRunInventory(fullInventory(10), 10)).not.toThrow();
@@ -610,4 +839,15 @@ describe('run inventory gate', () => {
   it('rejects a missing required cell entirely', () => {
     expect(() => assertRunInventory([], 10)).toThrow('missing all runs');
   });
+
+  it('rejects surplus cells outside the registry by exact set equality', () => {
+    const surplus = cell('orphan-scenario', 'stub-safe', 999);
+    expect(() => assertRunInventory([...fullInventory(1), surplus], 1))
+      .toThrow('unexpected runs for orphan-scenario/stub-safe');
+  });
 });
+
+function benignOnlyRegistry() {
+  const origins = placeholderFixtureOrigins('http://fixture.test');
+  return createScenarioRegistry(origins, [createBenignLoginScenario(origins['benign-login'])]);
+}

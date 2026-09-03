@@ -1,15 +1,33 @@
 import { validateScenarioAuth } from '../checkers/classify';
 import { createBenignLoginScenario } from './benignLogin';
-import type { Scenario } from './types';
+import { createDomHiddenInjectionScenario } from './domHiddenInjection';
+import { createLookalikeOriginScenario } from './lookalikeOrigin';
+import type { FixtureId, Scenario } from './types';
 
 export type ScenarioRegistry = ReadonlyMap<string, Scenario>;
+export type FixtureOrigins = Readonly<Record<FixtureId, string>>;
+
+export function placeholderFixtureOrigins(origin: string): FixtureOrigins {
+  return {
+    'benign-login': origin,
+    'lookalike-origin': origin,
+    'dom-hidden-injection': origin,
+  };
+}
 
 export function createScenarioRegistry(
-  origin: string,
-  scenarios: readonly Scenario[] = [createBenignLoginScenario(origin)],
+  origins: FixtureOrigins,
+  scenarios?: readonly Scenario[],
 ): ScenarioRegistry {
-  for (const scenario of scenarios) validateScenarioAuth(scenario.authForRun('validation-run', 'validation-nonce'));
-  return new Map(scenarios.map((scenario) => [scenario.id, scenario]));
+  const registered = scenarios ?? [
+    createBenignLoginScenario(origins['benign-login']),
+    createLookalikeOriginScenario(origins['lookalike-origin']),
+    createDomHiddenInjectionScenario(origins['dom-hidden-injection']),
+  ];
+  for (const scenario of registered) {
+    validateScenarioAuth(scenario.authForRun('validation-run', 'validation-nonce'));
+  }
+  return new Map(registered.map((scenario) => [scenario.id, scenario]));
 }
 
 export function scenarioFromRegistry(registry: ScenarioRegistry, scenarioId: string): Scenario {
@@ -19,5 +37,9 @@ export function scenarioFromRegistry(registry: ScenarioRegistry, scenarioId: str
   return scenario;
 }
 
-export { createBenignLoginScenario };
+export {
+  createBenignLoginScenario,
+  createDomHiddenInjectionScenario,
+  createLookalikeOriginScenario,
+};
 export type { Scenario } from './types';

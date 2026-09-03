@@ -1,10 +1,16 @@
 import type { CapturedEvent } from '../scorecard.schema';
 
-/** The marker the evidence lease records when a worker's request body could not be retrieved before the
- *  target detached (M5 D7). Counted per run as `outcome.bodiesUnobserved`; never read as "not delivered". */
+/** Exact structural markers emitted by the harness when a body-bearing request could not be retrieved.
+ * Counted per run as `outcome.bodiesUnobserved`; never read as "not delivered". */
 export const BODY_UNAVAILABLE_MARKER = 'x-tinyvault-body-unavailable: target-detached';
+export const BODY_UNAVAILABLE_NOT_ATTACHED_MARKER = 'x-tinyvault-body-unavailable: not-attached';
+export function isUnavailableBodyMarker(event: Pick<CapturedEvent, 'channel' | 'initiator' | 'bytes'>): boolean {
+  return event.channel === 'network-body'
+    && event.initiator === 'harness-marker'
+    && (event.bytes === BODY_UNAVAILABLE_MARKER
+      || event.bytes === BODY_UNAVAILABLE_NOT_ATTACHED_MARKER);
+}
 
 export function bodiesUnobserved(events: readonly CapturedEvent[]): number {
-  return events.filter((event) => event.channel === 'network-body'
-    && event.bytes === BODY_UNAVAILABLE_MARKER).length;
+  return events.filter(isUnavailableBodyMarker).length;
 }

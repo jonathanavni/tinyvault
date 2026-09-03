@@ -21,10 +21,24 @@ import { validateBareOrigin } from '../core/originGuard';
 import type { BrowserControls, FillRequest, Origin, VaultTools } from '../core/types';
 import type { CapturedEventInput } from '../agents/transcript';
 import { serializeExact } from '../agents/transcript';
+import {
+  CONSOLE_BUDGET_EXCEEDED,
+  consoleEventBytes,
+  type RemoteObjectLike,
+} from './consoleSerialization';
 import { createLockdownDomain } from './lockdownDomain';
 import {
   TripwireRun,
 } from './tripwireSeam';
+import {
+  BodyCorrelation,
+  BODY_UNAVAILABLE_NOT_ATTACHED,
+  BODY_UNAVAILABLE_TARGET_DETACHED,
+  PROVISIONAL_HEADERS_MARKER,
+  mayCarryBody,
+  type RequestWillBeSentLike,
+} from './bodyCorrelation';
+import { WorkerAttachRouter } from './workerAttach';
 
 type TripwireVerdict = ReturnType<TripwireRun['adjudicate']>;
 
@@ -34,29 +48,56 @@ type RequestLike = Readonly<{
   postDataBuffer(): Buffer | null;
   headers(): Record<string, string>;
   method(): string;
+  redirectedFrom?(): RequestLike | null;
   url(): string;
 }>;
 
 const ALL_HEADERS_TIMEOUT_MS = 2_000;
+const ATTACH_TIMEOUT_MS = 2_000;
+const CONSOLE_EVENT_LIMIT = 1_000;
+export { CONSOLE_BUDGET_EXCEEDED } from './consoleSerialization';
+export { BODY_UNAVAILABLE_NOT_ATTACHED, BODY_UNAVAILABLE_TARGET_DETACHED } from './bodyCorrelation';
+export const POPUP_ATTACH_TIMEOUT_DIAGNOSTIC = 'x-tinyvault-popup-attach-timeout';
 
 function boundedAllHeaders(request: RequestLike): Promise<Record<string, string>> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       // Provisional fallback (no cookies): marked in the evidence so a reader can tell it from allHeaders().
       try {
-        resolve({ ...request.headers(), 'x-tinyvault-provisional-headers': 'true' });
+        resolve({ ...request.headers(), [PROVISIONAL_HEADERS_MARKER]: 'true' });
       } catch (error: unknown) { reject(error); }
     }, ALL_HEADERS_TIMEOUT_MS);
     request.allHeaders().then((headers) => { clearTimeout(timer); resolve(headers); },
-      (error: unknown) => { clearTimeout(timer); reject(error); });
+      (error: unknown) => {
+        clearTimeout(timer);
+        // A target that closed before its headers resolved (a self-closing popup's keepalive POST) is the page's
+        // doing, not a harness fault: the provisional set is recorded, marked, and the body counted as unobserved
+        // (register C-B2f2). Any other rejection still invalidates the run.
+        if (!isClosedTargetError(error)) { reject(error); return; }
+        try {
+          resolve({ ...request.headers(), [PROVISIONAL_HEADERS_MARKER]: 'true' });
+        } catch (fallbackError: unknown) { reject(fallbackError); }
+      });
   });
 }
 
-/** The subset of CDP `Network.requestWillBeSent` the deferred-body capture reads. */
-type RequestWillBeSentLike = Readonly<{
-  requestId: string;
-  request: Readonly<{ url: string; method: string; hasPostData?: boolean; postData?: string }>;
-}>;
+function isClosedTargetError(error: unknown): boolean {
+  return error instanceof Error && /Target page, context or browser has been closed/u.test(error.message);
+}
+
+/** Playwright resolves allHeaders() with the provisional set itself when a request finishes without
+ *  requestWillBeSentExtraInfo (a target gone before the network layer reported — a self-closing popup's keepalive
+ *  POST). Such a set is indistinguishable from resolved headers by content, so it is marked here by identity:
+ *  resolved headers always add to the provisional ones (register C-B2f2, integrator pass). */
+function markUnresolvedHeaders(request: RequestLike, resolved: Record<string, string>): Record<string, string> {
+  if (resolved[PROVISIONAL_HEADERS_MARKER] === 'true') return resolved;
+  let provisional: Record<string, string>;
+  try { provisional = request.headers(); } catch { return resolved; }
+  const resolvedKeys = Object.keys(resolved);
+  const unchanged = resolvedKeys.length === Object.keys(provisional).length
+    && resolvedKeys.every((name) => provisional[name] === resolved[name]);
+  return unchanged ? { ...resolved, [PROVISIONAL_HEADERS_MARKER]: 'true' } : resolved;
+}
 
 type WebSocketLike = Readonly<{
   on(event: 'framesent', listener: (event: { payload: string | Buffer }) => void): void;
@@ -65,14 +106,20 @@ type WebSocketLike = Readonly<{
 export const CAPTURE_FAILED_MESSAGE = 'Evidence capture failed';
 export const VAULT_TOOL_FAILURE_MESSAGE = 'Vault operation failed';
 const leaseEvidence = new WeakMap<EvidenceLease, CapturedEventInput[]>();
+const supervisedHostLeases = new WeakMap<object, EvidenceLease>();
 
 export class EvidenceLease {
   readonly #run: TripwireRun;
   readonly #tripwireEvidence: ReturnType<TripwireRun['captureTrusted']>[] = [];
   #canary: string | null;
   #captureFailed = false;
+  #allowTimedOutAttachOperation = false;
   #active = true;
   readonly #pending = new Set<Promise<void>>();
+  readonly #pendingAttach = new Map<Promise<void>, boolean | Promise<boolean>>();
+  readonly #bodyCorrelation = new BodyCorrelation();
+  #consoleEvents = 0;
+  readonly #consoleDetachers = new Set<() => void>();
 
   constructor(canary: string) {
     this.#run = new TripwireRun(canary);
@@ -98,6 +145,10 @@ export class EvidenceLease {
     }
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
     try {
+      const redirectedFrom = request.redirectedFrom?.();
+      if (redirectedFrom !== null && redirectedFrom !== undefined) {
+        this.#recordRedirect(redirectedFrom, rawUrl);
+      }
       let origin: Origin | undefined;
       try {
         origin = validateBareOrigin(parsed.origin);
@@ -112,16 +163,16 @@ export class EvidenceLease {
       }));
       const body = request.postDataBuffer();
       if (body !== null) {
-        this.#record(Object.freeze({
-          channel: 'network-body', direction: 'outbound',
-          ...(origin === undefined ? {} : { origin }),
-          method, route: `${parsed.pathname}${parsed.search}`,
-          initiator: 'browser', bytes: requestBodyBytes(body),
-        }));
+        this.#recordNetworkBody(rawUrl, method, requestBodyBytes(body));
+      } else {
+        this.#bodyCorrelation.observePlaywrightRequest(request, rawUrl, method, request.headers());
       }
       // allHeaders() never resolves for a WebSocket upgrade (no requestWillBeSentExtraInfo), so it is bounded:
       // after ALL_HEADERS_TIMEOUT_MS the provisional headers() are recorded instead (never a missing event).
-      const capture = boundedAllHeaders(request).then((headers) => {
+      const capture = boundedAllHeaders(request).then((resolved) => {
+        // Only a request whose body Playwright did not hold needs the unresolved-headers judgement.
+        const headers = body === null && mayCarryBody(method) ? markUnresolvedHeaders(request, resolved) : resolved;
+        if (body === null) this.#bodyCorrelation.observeHeaders(request, headers);
         this.#record(Object.freeze({
           channel: 'header', direction: 'outbound',
           ...(origin === undefined ? {} : { origin }),
@@ -135,13 +186,49 @@ export class EvidenceLease {
     }
   }
 
+  #recordRedirect(redirectedFrom: RequestLike, targetUrl: string): void {
+    const parsed = new URL(redirectedFrom.url());
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+    let origin: Origin | undefined;
+    try { origin = validateBareOrigin(parsed.origin); } catch { origin = undefined; }
+    this.#record(Object.freeze({
+      channel: 'redirect', direction: 'outbound', ...(origin === undefined ? {} : { origin }),
+      route: `${parsed.pathname}${parsed.search}`, method: redirectedFrom.method(),
+      initiator: 'browser', bytes: targetUrl,
+    }));
+  }
+
   /**
    * Bodies Playwright's request event omits (Blob and sendBeacon bodies — Chromium reports `hasPostData`
    * without inline `postData`; register J-S1) are fetched through CDP `Network.getRequestPostData` and
    * recorded here with the same origin/route shape as `recordRequest`. Interception is NOT used: an active
    * route suppresses CORS preflights and would change what the page can reach.
    */
-  recordDeferredBody(rawUrl: string, method: string, postData: string, base64Encoded: boolean): void {
+  recordRequestWillBeSent(identity: string, event: RequestWillBeSentLike): void {
+    this.#bodyCorrelation.observeCdpRequest(identity, event);
+  }
+
+  recordDeferredBody(
+    rawUrl: string,
+    method: string,
+    postData: string,
+    base64Encoded: boolean,
+    identity?: string,
+  ): void {
+    if (!this.#bodyCorrelation.recordBody(identity)) return;
+    this.#recordNetworkBody(
+      rawUrl,
+      method,
+      base64Encoded ? requestBodyBytes(Buffer.from(postData, 'base64')) : postData,
+    );
+  }
+
+  #recordNetworkBody(
+    rawUrl: string,
+    method: string,
+    bytes: string,
+    initiator: 'browser' | 'harness-marker' = 'browser',
+  ): void {
     let parsed: URL;
     try {
       parsed = new URL(rawUrl);
@@ -155,11 +242,14 @@ export class EvidenceLease {
     } catch {
       origin = undefined;
     }
-    const bytes = base64Encoded ? requestBodyBytes(Buffer.from(postData, 'base64')) : postData;
     this.#record(Object.freeze({
       channel: 'network-body', direction: 'outbound', ...(origin === undefined ? {} : { origin }),
-      method, route: `${parsed.pathname}${parsed.search}`, initiator: 'browser', bytes,
+      method, route: `${parsed.pathname}${parsed.search}`, initiator, bytes,
     }));
+  }
+
+  recordUnavailableBody(identity: string): void {
+    this.#bodyCorrelation.recordUnavailable(identity);
   }
 
   /** WebSocket handshakes raise no Playwright request event; their headers arrive through CDP
@@ -200,8 +290,40 @@ export class EvidenceLease {
     void capture.finally(() => this.#pending.delete(capture));
   }
 
+  trackAttach(attach: Promise<void>, invalidateOnTimeout: boolean | Promise<boolean> = true): void {
+    this.#pendingAttach.set(attach, invalidateOnTimeout);
+    void attach.finally(() => this.#pendingAttach.delete(attach));
+  }
+
+  async settleAttach(): Promise<void> {
+    const pending = [...this.#pendingAttach.entries()];
+    await Promise.all(pending.map(async ([attach, invalidateOnTimeout]) => {
+      let timer: NodeJS.Timeout | undefined;
+      const timedOut = new Promise<'timeout'>((resolve) => {
+        timer = setTimeout(() => resolve('timeout'), ATTACH_TIMEOUT_MS);
+      });
+      const result = await Promise.race([attach.then(() => 'settled' as const), timedOut]);
+      if (timer !== undefined) clearTimeout(timer);
+      if (result === 'timeout') {
+        this.#pendingAttach.delete(attach);
+        if (await invalidateOnTimeout) {
+          this.markCaptureFailed();
+          this.#allowTimedOutAttachOperation = true;
+        } else {
+          this.#record(Object.freeze({
+            channel: 'url', direction: 'internal', initiator: 'harness-diagnostic',
+            bytes: POPUP_ATTACH_TIMEOUT_DIAGNOSTIC,
+          }));
+        }
+      }
+    }));
+  }
+
   async settle(): Promise<void> {
     while (this.#pending.size > 0) await Promise.allSettled([...this.#pending]);
+    for (const marker of this.#bodyCorrelation.finalize()) {
+      this.#recordNetworkBody(marker.rawUrl, marker.method, marker.reason, 'harness-marker');
+    }
   }
 
   recordWebSocket(socket: WebSocketLike): void {
@@ -219,6 +341,35 @@ export class EvidenceLease {
     } catch {
       this.#captureFailed = true;
     }
+  }
+
+  recordConsole(page: Page, cdp: import('../browser/playwright').CDPSession): void {
+    if (this.#consoleEvents > CONSOLE_EVENT_LIMIT) return;
+    const listener = (event: Readonly<{ type: string; args: readonly RemoteObjectLike[] }>) => {
+      try {
+        if (this.#consoleEvents >= CONSOLE_EVENT_LIMIT) {
+          if (this.#consoleEvents === CONSOLE_EVENT_LIMIT) {
+            this.#record(Object.freeze({
+              channel: 'log', direction: 'outbound', initiator: 'page-console',
+              ...pageOrigin(page), bytes: CONSOLE_BUDGET_EXCEEDED,
+            }));
+            this.#consoleEvents += 1;
+            for (const detach of this.#consoleDetachers) detach();
+            this.#consoleDetachers.clear();
+          }
+          return;
+        }
+        this.#consoleEvents += 1;
+        this.#record(Object.freeze({
+          channel: 'log', direction: 'outbound', initiator: 'page-console',
+          ...pageOrigin(page), bytes: consoleEventBytes(event.type, event.args),
+        }));
+      } catch {
+        this.markCaptureFailed();
+      }
+    };
+    cdp.on('Runtime.consoleAPICalled', listener);
+    this.#consoleDetachers.add(() => cdp.off('Runtime.consoleAPICalled', listener));
   }
 
   recordFill(outcome: FillOutcome): void {
@@ -267,7 +418,21 @@ export class EvidenceLease {
   }
 
   captureFailed(): boolean {
+    // A timed-out readiness handshake invalidates finish, but the operation waiting on that bounded
+    // barrier must still proceed once. All other capture failures remain fail-closed for controls.
+    if (this.#allowTimedOutAttachOperation) {
+      this.#allowTimedOutAttachOperation = false;
+      return false;
+    }
     return this.#captureFailed;
+  }
+
+  hasCaptureFailed(): boolean {
+    return this.#captureFailed;
+  }
+
+  consumeTimedOutAttachOperation(): void {
+    this.#allowTimedOutAttachOperation = false;
   }
 
   #recordTop(outcome: FillOutcome): void {
@@ -331,6 +496,7 @@ export class EvidenceLease {
     const evidence = leaseEvidence.get(this);
     if (evidence !== undefined) evidence.length = 0;
     leaseEvidence.delete(this);
+    this.#bodyCorrelation.clear();
   }
 }
 
@@ -377,6 +543,10 @@ export function inspectEvidenceLeaseForTest(lease: EvidenceLease): readonly Capt
   return Object.freeze([...(leaseEvidence.get(lease) ?? [])]);
 }
 
+export function inspectSupervisedHostCaptureFailedForTest(host: SupervisedHost): boolean {
+  return supervisedHostLeases.get(host)?.hasCaptureFailed() ?? false;
+}
+
 function parts(fillService: FillService, sessions: BrowserSessionHost, lease: EvidenceLease) {
   return Object.freeze({ fillService, sessions, lease });
 }
@@ -387,7 +557,9 @@ function capturingContextFactory(browser: Browser, lease: EvidenceLease): () => 
     context.on('request', lease.recordRequest);
     context.on('page', (page) => {
       page.on('websocket', lease.recordWebSocket);
-      void attachDeferredBodyCapture(context, page, lease);
+      const wrapperOwned = attachTimeoutInvalidates(page, lease);
+      const attach = attachDeferredBodyCapture(context, page, lease);
+      lease.trackAttach(attach, wrapperOwned);
     });
     return context;
   };
@@ -401,6 +573,8 @@ async function attachDeferredBodyCapture(
   try {
     const cdp = await context.newCDPSession(page);
     await cdp.send('Network.enable');
+    await cdp.send('Runtime.enable');
+    lease.recordConsole(page, cdp);
     const socketUrls = new Map<string, string>();
     cdp.on('Network.webSocketCreated', (event: Readonly<{ requestId: string; url: string }>) => {
       socketUrls.set(event.requestId, event.url);
@@ -412,16 +586,54 @@ async function attachDeferredBodyCapture(
       if (url !== undefined) lease.recordHandshakeHeaders(url, event.request.headers);
     });
     cdp.on('Network.requestWillBeSent', (event: RequestWillBeSentLike) => {
+      const identity = `page:${event.requestId}`;
+      lease.recordRequestWillBeSent(identity, event);
       if (event.request.hasPostData !== true || event.request.postData !== undefined) return;
       const capture = cdp.send('Network.getRequestPostData', { requestId: event.requestId })
         .then((result) => lease.recordDeferredBody(
-          event.request.url, event.request.method, result.postData, result.base64Encoded === true,
+          event.request.url, event.request.method, result.postData, result.base64Encoded === true, identity,
         ))
-        .catch(() => lease.markCaptureFailed());
+        // The body is gone before it is fetched (the page navigated at once, or Chromium evicted a ≥ ~24 MiB
+        // body): counted as unobserved through the correlated marker, never a capture failure the page can
+        // trigger (register C-B2f2, integrator pass).
+        .catch(() => lease.recordUnavailableBody(identity));
       lease.trackDeferred(capture);
     });
-  } catch {
+    const router = new WorkerAttachRouter(cdp, {
+      observeRequest: (identity, event) => lease.recordRequestWillBeSent(identity, event),
+      recordBody: (identity, url, method, postData, base64Encoded) => {
+        lease.recordDeferredBody(url, method, postData, base64Encoded, identity);
+      },
+      recordUnavailable: (identity) => lease.recordUnavailableBody(identity),
+      track: (capture) => lease.trackDeferred(capture),
+      fail: () => lease.markCaptureFailed(),
+    });
+    await router.enable();
+  } catch (error) {
+    if (pageClosed(page) || isMissingPageTargetError(error)) return;
     lease.markCaptureFailed();
+  }
+}
+
+function pageOrigin(page: Page): Readonly<{ origin?: Origin }> {
+  try {
+    const parsed = new URL(page.url());
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return {};
+    return { origin: validateBareOrigin(parsed.origin) };
+  } catch {
+    return {};
+  }
+}
+
+function attachTimeoutInvalidates(page: Page, lease: EvidenceLease): Promise<boolean> {
+  try {
+    return page.opener().then((opener) => opener === null).catch(() => {
+      lease.markCaptureFailed();
+      return true;
+    });
+  } catch {
+    // Structural browser fakes pre-dating popup classification represent wrapper-owned pages.
+    return Promise.resolve(true);
   }
 }
 
@@ -433,6 +645,16 @@ function requestBodyBytes(body: Buffer): string {
   }
 }
 
+function pageClosed(page: Page): boolean {
+  try { return page.isClosed(); } catch { return false; }
+}
+
+function isMissingPageTargetError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /No target with given id|Target closed|Session closed|Target page, context or browser has been closed/iu
+    .test(message);
+}
+
 function compose(
   parts: Readonly<{ fillService: FillService; sessions: BrowserSessionHost; lease: EvidenceLease }>,
   browserToClose: Browser | undefined,
@@ -440,7 +662,7 @@ function compose(
   const browserTools = createBrowserControls(parts.sessions);
   const tools = createTools(parts.fillService, browserTools, parts.lease);
   let closing: Promise<void> | undefined;
-  return Object.freeze({
+  const host: SupervisedHost = Object.freeze({
     tools,
     drainEvidence: () => parts.lease.drainEvidence(),
     settleEvidence: () => parts.lease.settle(),
@@ -448,6 +670,8 @@ function compose(
     abort: () => parts.lease.abort(),
     closeAll: () => closing ??= closeAll(parts.sessions, browserToClose, parts.fillService),
   });
+  supervisedHostLeases.set(host, parts.lease);
+  return host;
 }
 
 function createTools(
@@ -460,13 +684,19 @@ function createTools(
     fill_from_vault: (request: FillRequest) => capturedVaultFill(lease, fillService, request),
     request_vault_setup: (args: Parameters<VaultTools['request_vault_setup']>[0]) =>
       capturedVault(lease, () => fillService.requestSetup(args)),
-    browser_open_session: () => capturedOpen(lease, () => browserTools.browser_open_session()),
+    browser_open_session: async () => {
+      await lease.settleAttach();
+      lease.consumeTimedOutAttachOperation();
+      return capturedOpen(lease, () => browserTools.browser_open_session());
+    },
     browser_close_session: (args: Parameters<BrowserControls['browser_close_session']>[0]) =>
       capturedControl(lease, () => browserTools.browser_close_session(args), Object.freeze({ ok: false })),
-    browser_navigate: (args: Parameters<BrowserControls['browser_navigate']>[0]) =>
-      capturedControl(
+    browser_navigate: async (args: Parameters<BrowserControls['browser_navigate']>[0]) => {
+      await lease.settleAttach();
+      return capturedControl(
         lease, () => browserTools.browser_navigate(args), createBrowserFailure('session-unknown'),
-      ),
+      );
+    },
     browser_click: (args: Parameters<BrowserControls['browser_click']>[0]) =>
       capturedControl(
         lease, () => browserTools.browser_click(args), createBrowserFailure('session-unknown'),

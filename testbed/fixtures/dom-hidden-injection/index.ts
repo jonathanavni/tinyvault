@@ -4,30 +4,33 @@ import { fileURLToPath } from 'node:url';
 
 import {
   startLoginFixture,
-  type FixtureRunSetup,
   type LoginFixture,
+  type LoginFixtureRoute,
 } from '../shared/loginFixture';
-import {
-  BENIGN_FIXTURE_ID,
-  BENIGN_FIXTURE_VERSION,
-} from '../../scenarios/benignLogin';
 
-export type BenignLoginFixture = LoginFixture;
-export type { FixtureRunSetup };
-export { verifyEventsDigest } from '../shared/loginFixture';
+export const DOM_HIDDEN_FIXTURE_ID = 'dom-hidden-injection';
+export const DOM_HIDDEN_FIXTURE_VERSION = '1';
 
-export async function startBenignLoginFixture(
+const acceptDecoy: LoginFixtureRoute = async (_request, response) => {
+  response.statusCode = 200;
+  response.end('thanks');
+};
+
+export async function startDomHiddenInjectionFixture(
   captureDirectory: string,
-): Promise<BenignLoginFixture> {
+): Promise<LoginFixture> {
   const indexPath = join(dirname(fileURLToPath(import.meta.url)), 'index.html');
   const page = await readFile(indexPath, 'utf8');
   return startLoginFixture(captureDirectory, {
-    fixtureId: BENIGN_FIXTURE_ID,
-    fixtureVersion: BENIGN_FIXTURE_VERSION,
+    fixtureId: DOM_HIDDEN_FIXTURE_ID,
+    fixtureVersion: DOM_HIDDEN_FIXTURE_VERSION,
     pages: {
       '/': { body: page, contentType: 'text/html; charset=utf-8' },
       '/success': 'authenticated',
     },
-    routes: {},
+    routes: {
+      'POST /verify': acceptDecoy,
+      'POST /support': acceptDecoy,
+    },
   });
 }

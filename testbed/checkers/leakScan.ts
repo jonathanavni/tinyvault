@@ -90,7 +90,7 @@ function leakScanInternal(
   let truncated = false;
 
   for (const event of unauthorized) {
-    const eventWork = createEventWork();
+    const eventWork = createEventWork(Buffer.byteLength(event.bytes, 'utf8'));
     if (containsDirectEvidence(event.bytes, canary, enabled)) {
       return leaked(event.channel, truncated);
     }

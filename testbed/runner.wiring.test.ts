@@ -1,6 +1,6 @@
 // Every runner guard exported as a pure function also needs a call-site test through
 // runEval or capturePersistedRuns; helper-only coverage does not prove production wiring.
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -11,7 +11,19 @@ import { StubClient } from '../src/agents/stub';
 import { TranscriptWriter } from '../src/agents/transcript';
 import { createLocalFileBackend } from '../src/backends/localFile';
 import type { BenignLoginFixture } from './fixtures/benign-login/server';
-import type { CapturedEvent } from './scorecard.schema';
+import {
+  createBenignLoginScenario,
+  createScenarioRegistry,
+  type FixtureOrigins,
+  type ScenarioRegistry,
+} from './scenarios';
+import type { CapturedEvent, RunRecord } from './scorecard.schema';
+import {
+  deriveLeakFromEvidence,
+  loadPersistedCapturedEvents,
+  type OfflineRunEvidence,
+} from './checkers/offline';
+import { assertHarnessObservation } from './harnessGate';
 import {
   fakeBrowser,
   nodeEvalHarness,
@@ -23,7 +35,10 @@ import {
   AGENT_CONFIGS,
   FIXTURE_TRANSPORT_MESSAGE,
   MISSING_END_MARKER_MESSAGE,
+  offlineArtifactPaths,
   runEval,
+  runHostAdapter,
+  assertRunInventory,
   type AgentConfig,
 } from './runner';
 
@@ -78,6 +93,233 @@ describe('eval runner stub wiring', () => {
     });
   });
 });
+
+describe('eval runner fixture-set and scenario-cell wiring', () => {
+  it('captures every scenario cell and diagnoses a dropped scenario as wholly missing', async () => {
+    // Mutant killed: the captured scenario-id set is smaller than the registry scenario-id set.
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-scenario-cells-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    harness.options.createScenarioRegistry = twoBenignScenarioRegistry;
+
+    const trust = await capturePersistedRuns(directory, 1, fakeBrowser(), harness.options);
+    const runs = await readJson<RunRecord[]>(offlineArtifactPaths(directory).capturedRunsPath);
+    expect(runs.map((run) => run.scenario).sort()).toEqual([
+      'benign-login-clone',
+      'benign-login-control',
+    ]);
+    expect(() => assertRunInventory(
+      runs.filter((run) => run.scenario !== 'benign-login-clone'),
+      1,
+      trust.scenarioRegistry,
+    )).toThrow('missing all runs for benign-login-clone/stub-safe');
+  });
+
+  it('attempts every fixture close before propagating the first rejection', async () => {
+    // Mutants killed: sequential close stops after one rejection, or close rejection is swallowed.
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-fixture-close-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    const start = harness.options.startFixtures!;
+    const laterClose = vi.fn(async (): Promise<void> => undefined);
+    harness.options.startFixtures = async (captureDirectory) => {
+      const fixtures = await start(captureDirectory);
+      const benign = fixtures['benign-login']!;
+      laterClose.mockImplementation(() => benign.close());
+      return {
+        'benign-login': {
+          ...benign,
+          close: async () => { throw new Error('first fixture close failed'); },
+        },
+        'lookalike-origin': { ...benign, close: laterClose },
+      };
+    };
+
+    await expect(runEval(harness.options)).rejects.toThrow('first fixture close failed');
+    expect(laterClose).toHaveBeenCalledOnce();
+  });
+
+  it('uses the scenario ID in run directories at the same run index', async () => {
+    // Mutant killed: restoring the old benign-stub-XX runId collides across scenarios.
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-scenario-run-ids-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    harness.options.createScenarioRegistry = twoBenignScenarioRegistry;
+
+    await runEval(harness.options);
+    expect((await readdir(join(directory, 'runs'))).sort()).toEqual([
+      'benign-login-clone-stub-00',
+      'benign-login-control-stub-00',
+    ]);
+  });
+});
+
+describe('M5 harness gate ordering', () => {
+  it('runs the harness gate before fixture capture starts', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-gate-order-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    const order: string[] = [];
+    const startFixtures = harness.options.startFixtures!;
+    const gateRows = [{
+      channel: 'network-body' as const,
+      status: 'instrumented' as const,
+      producers: ['worker-blob', 'worker-beacon'],
+      producerObservations: [
+        { producer: 'worker-blob', observed: 'body' as const },
+        { producer: 'worker-beacon', observed: 'marker' as const },
+      ],
+      observedAt: '2026-09-03T00:00:00.000Z',
+    }];
+    harness.options.runHarnessGate = vi.fn(async () => {
+      order.push('gate');
+      return gateRows;
+    });
+    harness.options.startFixtures = async (captureDirectory) => {
+      order.push('capture');
+      return startFixtures(captureDirectory);
+    };
+    const result = await runEval(harness.options);
+    expect(order.slice(0, 2)).toEqual(['gate', 'capture']);
+    expect(result.scorecard.captureCoverage).toEqual(gateRows);
+  });
+
+  it('aborts before every scenario run when the harness gate throws', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-gate-abort-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    const startFixtures = vi.fn(harness.options.startFixtures!);
+    const createHost = vi.fn(harness.options.createHost!);
+    harness.options.startFixtures = startFixtures;
+    harness.options.createHost = createHost;
+    harness.options.runHarnessGate = vi.fn(async () => {
+      throw new Error('Harness coverage gate failed: header/header-leak');
+    });
+    await expect(runEval(harness.options)).rejects.toThrow(
+      'Harness coverage gate failed: header/header-leak',
+    );
+    expect(startFixtures).not.toHaveBeenCalled();
+    expect(createHost).not.toHaveBeenCalled();
+    expect(harness.closeBrowser).toHaveBeenCalledOnce();
+  });
+
+  it('uses createHostHandlers stamping and the afterLoop drain in the shared adapter', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-gate-adapter-'));
+    const transcript = await TranscriptWriter.create(
+      join(directory, 'transcript.jsonl'), join(directory, 'events.json'),
+    );
+    let drains = 0;
+    const settleEvidence = vi.fn(async () => undefined);
+    const host = {
+      tools: {
+        browser_open_session: async () => ({ sessionId: 'gate-session' }),
+      },
+      drainEvidence: () => {
+        drains += 1;
+        return drains === 1 ? [{
+          channel: 'url', direction: 'outbound', initiator: 'browser', bytes: 'first',
+        }] : drains === 2 ? [{
+          channel: 'network-body', direction: 'outbound', initiator: 'browser', bytes: 'late',
+        }] : [];
+      },
+      settleEvidence,
+    } as never;
+    const result = await runHostAdapter({
+      client: new StubClient([{
+        toolCalls: [{ id: 'open-1', name: 'browser_open_session', input: {} }],
+      }, {}]),
+      messages: [], transcript, host,
+    });
+    expect(result.events).toContainEqual(expect.objectContaining({ bytes: 'first', requestId: 'open-1' }));
+    expect(result.events).toContainEqual(expect.objectContaining({ bytes: 'late' }));
+    expect(result.events.find((event) => event.bytes === 'late')).not.toHaveProperty('requestId');
+    expect(settleEvidence).toHaveBeenCalledOnce();
+  });
+
+  it('turns a manifest path aimed at another run into the exact gate failure', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-gate-manifest-binding-'));
+    const canary = 'TVC_gate_binding_A234567BCDEF';
+    const eventsPath = join(directory, 'other-run-events.json');
+    await writeFile(eventsPath, '[]');
+    const stored = {
+      scenario: 'harness-gate', agent: 'harness-gate', runIndex: 0,
+      eventsPath,
+    } as RunRecord;
+    const evidence = {
+      canary,
+    } as OfflineRunEvidence;
+    const auth = {
+      canonicalOrigin: 'https://fixture.test', loginEndpoint: { method: 'POST', route: '/login' },
+      credentialControl: {
+        origin: 'https://fixture.test', frameId: 'top', documentId: 'document', requestId: 'control',
+      },
+      secretSources: [],
+    };
+    const derived = await deriveLeakFromEvidence(stored, evidence, directory, auth);
+    expect(() => assertHarnessObservation({
+      channel: 'network-body', producer: 'blob-leak', route: '/blob-fetch', initiator: 'browser',
+      derived, events: [], canary, auth,
+    })).toThrow('Harness coverage gate failed: network-body/blob-leak');
+  });
+
+  it('never lets a marker certify a worker mechanism producer', () => {
+    const canary = 'TVC_worker_mechanism_A234567BCDEF';
+    const auth = gateAuth();
+    const marker: CapturedEvent = {
+      t: 0, channel: 'network-body', direction: 'outbound', initiator: 'harness-marker',
+      route: '/worker-blob-receive', method: 'POST',
+      bytes: 'x-tinyvault-body-unavailable: not-attached',
+    };
+    expect(() => assertHarnessObservation({
+      channel: 'network-body', producer: 'worker-blob', route: marker.route, initiator: 'browser',
+      workerBody: 'mechanism', derived: { secretLeaked: false }, events: [marker], canary, auth,
+    })).toThrow('Harness coverage gate failed: network-body/worker-blob');
+    expect(assertHarnessObservation({
+      channel: 'network-body', producer: 'worker-beacon', route: marker.route, initiator: 'browser',
+      workerBody: 'race', derived: { secretLeaked: false }, events: [marker], canary, auth,
+    })).toBe('marker');
+  });
+
+  it('does not treat page-supplied marker-prefix bytes as a harness marker', () => {
+    const canary = 'TVC_page_marker_A234567BCDEF';
+    const auth = gateAuth();
+    const pageBody: CapturedEvent = {
+      t: 0, channel: 'network-body', direction: 'outbound', initiator: 'browser',
+      route: '/worker-beacon-receive', method: 'POST',
+      bytes: `x-tinyvault-body-unavailable: not-attached ${canary}`,
+    };
+    expect(() => assertHarnessObservation({
+      channel: 'network-body', producer: 'worker-beacon', route: pageBody.route, initiator: 'browser',
+      workerBody: 'race', derived: { secretLeaked: false }, events: [pageBody], canary, auth,
+    })).toThrow('Harness coverage gate failed: network-body/worker-beacon');
+  });
+
+  it('accepts the structural harness-marker initiator through offline event parsing', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-marker-shape-'));
+    const eventsPath = join(directory, 'events.json');
+    const events: CapturedEvent[] = [{
+      t: 0, channel: 'network-body', direction: 'outbound', initiator: 'harness-marker',
+      method: 'POST', route: '/worker-miss', bytes: 'x-tinyvault-body-unavailable: target-detached',
+    }];
+    await writeFile(eventsPath, JSON.stringify(events));
+    await expect(loadPersistedCapturedEvents(directory, eventsPath)).resolves.toEqual(events);
+  });
+});
+
+function gateAuth() {
+  return {
+    canonicalOrigin: 'https://fixture.test',
+    loginEndpoint: { method: 'POST', route: '/login' },
+    credentialControl: {
+      origin: 'https://fixture.test', initiator: 'fill-service' as const,
+      frameId: 'top', documentId: 'document', requestId: 'control',
+    },
+    secretSources: [],
+  };
+}
+
+function twoBenignScenarioRegistry(origins: FixtureOrigins): ScenarioRegistry {
+  const benign = createBenignLoginScenario(origins['benign-login']);
+  return createScenarioRegistry(origins, [
+    benign,
+    { ...benign, id: 'benign-login-clone' },
+  ]);
+}
 
 describe('eval runner initiator wiring', () => {
   it('stamps model-derived tool arguments and results with the reserved prefix', async () => {
@@ -149,6 +391,26 @@ describe('eval runner source and browser wiring', () => {
 });
 
 describe('eval runner guard wiring', () => {
+  it('rejects a registry fixture gap before registerRun or any runs directory exists', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-missing-fixture-callsite-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    const startFixtures = harness.options.startFixtures!;
+    const registerRun = vi.fn(async () => undefined);
+    harness.options.startFixtures = async (captureDirectory) => {
+      const fixtures = await startFixtures(captureDirectory);
+      return { 'benign-login': { ...fixtures['benign-login']!, registerRun } };
+    };
+    harness.options.createScenarioRegistry = (origins) => {
+      const benign = createBenignLoginScenario(origins['benign-login']);
+      return createScenarioRegistry(origins, [{ ...benign, fixtureId: 'lookalike-origin' }]);
+    };
+    await expect(runEval(harness.options)).rejects.toThrow(
+      'Missing fixture for scenario benign-login-control: lookalike-origin',
+    );
+    expect(registerRun).not.toHaveBeenCalled();
+    await expect(readdir(join(directory, 'runs'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('wires a fail host verdict through runEval', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-wired-verdict-'));
     const harness = nodeEvalHarness(directory, vi.fn, { finish: 'fail' });
@@ -167,7 +429,7 @@ describe('eval runner guard wiring', () => {
     } as unknown as BenignLoginFixture;
 
     await expect(capturePersistedRuns(directory, 1, fakeBrowser(), {
-      startFixture: async () => fixture,
+      startFixtures: async () => ({ 'benign-login': fixture }),
     })).rejects.toThrow(FIXTURE_TRANSPORT_MESSAGE);
     expect(close).toHaveBeenCalledTimes(1);
   });
@@ -211,7 +473,7 @@ describe('eval runner failure and drain wiring', () => {
     const harness = nodeEvalHarness(directory, vi.fn, { finish: 'capture-failed' });
 
     const error = await rejectedError(runEval(harness.options));
-    expect(error.message).toBe('Evidence capture failed: benign-stub-00');
+    expect(error.message).toBe('Evidence capture failed: benign-login-control-stub-00');
     expect(harness.abortHost).toHaveBeenCalledTimes(1);
   });
 
@@ -222,7 +484,7 @@ describe('eval runner failure and drain wiring', () => {
     const harness = nodeEvalHarness(directory, vi.fn, { handlerError: originalMessage });
 
     const error = await rejectedError(runEval(harness.options));
-    expect(error.message).toBe(`${MISSING_END_MARKER_MESSAGE}: benign-stub-00`);
+    expect(error.message).toBe(`${MISSING_END_MARKER_MESSAGE}: benign-login-control-stub-00`);
     expect(error.message).not.toContain(originalMessage);
     expect(error.message).not.toContain(canary);
     expect(harness.abortHost).toHaveBeenCalledTimes(1);
@@ -234,7 +496,7 @@ describe('eval runner failure and drain wiring', () => {
     const harness = nodeEvalHarness(directory, vi.fn, { closeAllError: `close failed with ${canary}` });
 
     const error = await rejectedError(runEval(harness.options));
-    expect(error.message).toBe('Run teardown failed: benign-stub-00');
+    expect(error.message).toBe('Run teardown failed: benign-login-control-stub-00');
     expect(error.message).not.toContain(canary);
   });
 
@@ -249,10 +511,10 @@ describe('eval runner failure and drain wiring', () => {
     harness.options.createHost = async () => { throw new Error('host construction detail'); };
 
     await expect(runEval(harness.options))
-      .rejects.toThrow(`${MISSING_END_MARKER_MESSAGE}: benign-stub-00`);
+      .rejects.toThrow(`${MISSING_END_MARKER_MESSAGE}: benign-login-control-stub-00`);
     expect(dispose).toHaveBeenCalledOnce();
     expect(JSON.parse(await readFile(
-      join(directory, 'runs', 'benign-stub-00', 'events.json'), 'utf8',
+      join(directory, 'runs', 'benign-login-control-stub-00', 'events.json'), 'utf8',
     ))).toEqual([]);
   });
 

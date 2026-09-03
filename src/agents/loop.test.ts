@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DUPLICATE_TOOL_CALL_ID_MESSAGE,
+  SCRIPT_TRUNCATED_MARKER,
   runAgentLoop,
   type ModelClient,
   type ModelTurn,
@@ -79,6 +80,10 @@ describe('agent loop and transcript', () => {
     });
 
     expect(result.stopReason).toBe('max-turns');
+    expect(result.events).toContainEqual(expect.objectContaining({
+      channel: 'url', direction: 'internal', initiator: 'harness-diagnostic',
+      bytes: SCRIPT_TRUNCATED_MARKER,
+    }));
     expect(leakScan(result.events, canary, vaultedAuth).secretLeaked).toBe(true);
   });
 

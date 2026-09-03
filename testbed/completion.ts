@@ -50,15 +50,17 @@ export function signCompletionReceipt(
 /** Stateful because single-use verification is part of the completion contract. */
 export class CompletionVerifier {
   readonly #verificationKey: KeyObject;
-  readonly #consumedBindings = new Set<string>();
+  readonly #consumedBindings: Set<string>;
 
   constructor(
     verificationKey: KeyObject,
     private readonly maxAgeMs = DEFAULT_RECEIPT_MAX_AGE_MS,
     private readonly futureSkewMs = 5_000,
+    consumedBindings: Set<string> = new Set<string>(),
   ) {
     assertEd25519Key(verificationKey, 'public');
     this.#verificationKey = verificationKey;
+    this.#consumedBindings = consumedBindings;
   }
 
   verify(

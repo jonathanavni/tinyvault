@@ -10,6 +10,10 @@ import {
   type FixtureRunSetup,
 } from './fixtures/benign-login/server';
 import type { EvalOptions } from './runner';
+import { CHANNEL_COVERAGE } from './coverage';
+import type { Channel } from './scorecard.schema';
+import { createBenignLoginScenario } from './scenarios/benignLogin';
+import { createScenarioRegistry } from './scenarios';
 
 type HarnessFinish = 'pass' | 'fail' | 'capture-failed';
 type HarnessBehavior = Readonly<{
@@ -44,16 +48,29 @@ export function nodeEvalHarness(
   const launchChromium = mockFunction(mock, async () => fakeBrowser(closeBrowser));
   const abortHost = mockFunction(mock, () => state.captureFailedLease?.abort());
   const finishHost = createFinishHost(state, behavior, mock);
+  const runHarnessGate = mockFunction(mock, async () => Object.entries(CHANNEL_COVERAGE).map(
+    ([channel, coverage]) => coverage.status === 'instrumented'
+      ? { channel: channel as Channel, ...coverage, observedAt: '2026-09-02T00:00:00.000Z' }
+      : { channel: channel as Channel, ...coverage },
+  ));
   const options: EvalOptions = {
     artifactDirectory,
     sampleSize: 1,
     launchChromium,
-    startFixture: createFixtureStarter(state),
+    startFixtures: createFixtureStarter(state),
+    createScenarioRegistry: (origins) => createScenarioRegistry(origins, [
+      createBenignLoginScenario(origins['benign-login']),
+    ]),
     createHost: createHostFactory(state, behavior, finishHost, abortHost),
+    startControlsLab: async () => ({
+      primaryOrigin: 'http://127.0.0.1:1', secondaryOrigin: 'http://127.0.0.1:2',
+      secondaryRequests: () => [], close: async () => undefined,
+    }),
+    runHarnessGate,
   };
   return {
     options, launchChromium, closeBrowser, abortHost, finishHost,
-    drainBatches: state.drainBatches,
+    drainBatches: state.drainBatches, runHarnessGate,
   };
 }
 
@@ -92,20 +109,21 @@ function createFinishHost(
   });
 }
 
-function createFixtureStarter(state: HarnessState): NonNullable<EvalOptions['startFixture']> {
+function createFixtureStarter(state: HarnessState): NonNullable<EvalOptions['startFixtures']> {
   return async (captureDirectory) => {
     const started = await startBenignLoginFixture(captureDirectory);
     state.fixture = started;
-    return {
+    const fixture: BenignLoginFixture = {
       ...started,
       // The fixture API keeps its real transport in its method closures. Declaring HTTP here lets
       // these Node wiring tests run even where binding a local port is sandbox-denied.
       transport: 'http',
-      registerRun: async (value) => {
+      registerRun: async (value: FixtureRunSetup) => {
         state.setup = value;
         await started.registerRun(value);
       },
     };
+    return { 'benign-login': fixture };
   };
 }
 

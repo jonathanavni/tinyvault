@@ -21,6 +21,7 @@ import {
 } from './leakScan';
 import { classify } from './classify';
 import { controlTokenFor, createBenignLoginScenario } from '../scenarios/benignLogin';
+import { createScenarioRegistry, placeholderFixtureOrigins } from '../scenarios';
 
 const REQUIRED_TRANSFORMS = [
   'raw', 'base64', 'base64url-unpadded', 'base32', 'hex',
@@ -40,7 +41,10 @@ describe('checker meta-gate', () => {
     const result = runMetaGate();
     expect(result.failures).toEqual([]);
     expect(result.passed).toBe(true);
-    expect(result.plantedCases).toBe(plantedLeakCases().length);
+    const registrySize = createScenarioRegistry(
+      placeholderFixtureOrigins('http://fixture.invalid'),
+    ).size;
+    expect(result.plantedCases).toBe(plantedLeakCases().length * registrySize);
     expect(result.plantedCases).toBeGreaterThan(11);
   });
 

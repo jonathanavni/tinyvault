@@ -4,13 +4,13 @@ import { resolve } from 'node:path';
 
 import {
   runAgentLoop,
+  scriptWasTruncated,
   type ModelMessage,
   type ToolCall,
   type ToolDefinition,
   type ToolHandler,
 } from '../src/agents/loop';
-import { StubClient } from '../src/agents/stub';
-import { TranscriptWriter } from '../src/agents/transcript';
+import { TranscriptWriter, type CapturedEventInput } from '../src/agents/transcript';
 import { createLocalFileBackend } from '../src/backends/localFile';
 import { generateLocalVaultKey, writeLocalVault } from '../src/backends/localFileWriter';
 import { launchChromium, type Browser } from '../src/browser/playwright';
@@ -31,7 +31,9 @@ import {
 import { wrongOrigin } from './checkers/wrongOrigin';
 import { bodiesUnobserved } from './checkers/bodiesUnobserved';
 import { canaryCommitment, type CompletionBinding } from './completion';
-import { startBenignLoginFixture, type BenignLoginFixture } from './fixtures/benign-login/server';
+import { startFixtures, type FixtureSet, type LoginFixture } from './fixtures';
+import { startControlsLab } from './fixtures/controls-lab';
+import { runHarnessGate } from './harnessGate';
 import type { RunRecord, Scorecard } from './scorecard.schema';
 import {
   BENIGN_USERNAME,
@@ -39,10 +41,11 @@ import {
 } from './scenarios/benignLogin';
 import {
   createScenarioRegistry,
-  scenarioFromRegistry,
+  placeholderFixtureOrigins,
+  type FixtureOrigins,
   type ScenarioRegistry,
 } from './scenarios';
-import type { Scenario } from './scenarios/types';
+import type { FixtureId, Scenario } from './scenarios/types';
 import type { ScenarioAuth } from './checkers/classify';
 import { validateScenarioAuth } from './checkers/classify';
 
@@ -50,6 +53,8 @@ const DEFAULT_SAMPLE_SIZE = 10;
 const MODEL_ID = 'stub-scripted-v1';
 const AGENT_ID = 'stub-safe';
 const CHECKER_VERSION = 'm4-v1';
+const STUB_SCRIPT_MAX_TURNS = 16;
+
 export const FIXTURE_TRANSPORT_MESSAGE = 'Fixture transport is not HTTP';
 export const MISSING_END_MARKER_MESSAGE = 'Run ended without an end marker';
 
@@ -80,18 +85,27 @@ export type EvalOptions = {
   /** Runtime lifecycle seam: production uses the imported launcher; tests inject a spy. */
   launchChromium?: typeof launchChromium;
   /** Test seam for proving fixture guards are wired through the capture path. */
-  startFixture?: typeof startBenignLoginFixture;
+  startFixtures?: typeof startFixtures;
+  /** Test seam for exercising a multi-scenario registry before hostile fixtures land. */
+  createScenarioRegistry?: (origins: FixtureOrigins) => ScenarioRegistry;
   /** Test seam for proving supervised-host guards are wired through the eval path. */
   createHost?: typeof createSupervisedHost;
   /** Test seam for proving backend cleanup on host-construction failure. */
   createBackend?: typeof createLocalFileBackend;
+  /** Test/agent seam. A max-turn stop is persisted as a failed measurement, never completion. */
+  maxTurns?: number;
   /** Test seam for proving the checker gate precedes artifact replacement. */
   runMetaGate?: typeof runMetaGate;
+  /** Test seam for proving the harness gate precedes every scenario run. */
+  runHarnessGate?: typeof runHarnessGate;
+  /** Test seam paired with runHarnessGate so Node-only runner tests never bind loopback. */
+  startControlsLab?: typeof startControlsLab;
 };
 
 export type CaptureOptions = Pick<
   EvalOptions,
-  'launchChromium' | 'startFixture' | 'createHost' | 'createBackend'
+  | 'launchChromium' | 'startFixtures' | 'createScenarioRegistry' | 'createHost' | 'createBackend'
+  | 'maxTurns'
 >;
 
 export type EvalResult = { scorecard: Scorecard; runs: RunRecord[]; scorecardPath: string };
@@ -118,24 +132,35 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
 
   const browser = await (options.launchChromium ?? launchChromium)();
   try {
+    const lab = await (options.startControlsLab ?? startControlsLab)();
+    let coverage: Scorecard['captureCoverage'];
+    try {
+      coverage = await (options.runHarnessGate ?? runHarnessGate)({
+        browser, lab, artifactDirectory,
+      });
+    } finally {
+      await lab.close();
+    }
     const trust = await capturePersistedRuns(artifactDirectory, sampleSize, browser, options);
     const paths = offlineArtifactPaths(artifactDirectory);
     const runs = await adjudicatePersistedRuns({
       runsPath: paths.capturedRunsPath,
       manifestPath: paths.manifestPath,
       artifactDirectory,
-      verificationKey: trust.verificationKey,
+      verificationKeys: trust.verificationKeys,
       scenarioRegistry: trust.scenarioRegistry,
       agentConfigs: AGENT_CONFIGS,
     });
-    return finalizeEvaluation(artifactDirectory, sampleSize, runs, options.generatedAt);
+    return finalizeEvaluation(
+      artifactDirectory, sampleSize, runs, options.generatedAt, trust.scenarioRegistry, coverage,
+    );
   } finally {
     await browser.close();
   }
 }
 
 export type EvalTrust = {
-  verificationKey: KeyObject;
+  verificationKeys: Readonly<Record<FixtureId, KeyObject>>;
   scenarioRegistry: ScenarioRegistry;
 };
 
@@ -162,30 +187,86 @@ async function captureWithBrowser(
   browser: Browser,
   options: CaptureOptions,
 ): Promise<EvalTrust> {
-  const fixture = await (options.startFixture ?? startBenignLoginFixture)(
+  const fixtures = await (options.startFixtures ?? startFixtures)(
     resolve(artifactDirectory, 'fixture-captures'),
   );
   const capturedRuns: RunRecord[] = [];
   const evidenceRuns: OfflineRunEvidence[] = [];
   try {
-    assertHttpFixture(fixture);
-    const scenarioRegistry = createScenarioRegistry(fixture.origin);
-    const scenario = scenarioFromRegistry(scenarioRegistry, 'benign-login-control');
+    for (const fixture of Object.values(fixtures)) assertHttpFixture(fixture);
+    const origins = fixtureOrigins(fixtures);
+    const scenarioRegistry = (options.createScenarioRegistry ?? createScenarioRegistry)(origins);
+    assertScenarioFixturesPresent(scenarioRegistry, fixtures);
     const generator = new CanaryGenerator();
-    for (let runIndex = 0; runIndex < sampleSize; runIndex += 1) {
-      const result = await runOnce({
-        runIndex, scenario, fixture, generator, artifactDirectory, browser,
-        createHost: options.createHost ?? createSupervisedHost,
-        createBackend: options.createBackend ?? createLocalFileBackend,
-      });
-      capturedRuns.push(result.record);
-      evidenceRuns.push(result.evidence);
+    for (const scenario of scenarioRegistry.values()) {
+      const fixture = fixtureForScenario(fixtures, scenario);
+      for (let runIndex = 0; runIndex < sampleSize; runIndex += 1) {
+        const result = await runOnce({
+          runIndex, scenario, fixture, generator, artifactDirectory, browser,
+          createHost: options.createHost ?? createSupervisedHost,
+          createBackend: options.createBackend ?? createLocalFileBackend,
+          maxTurns: options.maxTurns ?? STUB_SCRIPT_MAX_TURNS,
+        });
+        capturedRuns.push(result.record);
+        evidenceRuns.push(result.evidence);
+      }
     }
     await persistOfflineInputs(artifactDirectory, capturedRuns, { runs: evidenceRuns });
-    return { verificationKey: fixture.verificationPublicKey, scenarioRegistry };
+    return { verificationKeys: fixtureVerificationKeys(fixtures), scenarioRegistry };
   } finally {
-    await fixture.close();
+    await closeFixtures(fixtures);
   }
+}
+
+function fixtureOrigins(fixtures: FixtureSet): FixtureOrigins {
+  const origins: Record<FixtureId, string> = {
+    ...placeholderFixtureOrigins('http://fixture-unavailable.invalid'),
+  };
+  for (const [fixtureId, fixture] of Object.entries(fixtures)) {
+    origins[fixtureId as FixtureId] = fixture.origin;
+  }
+  return origins;
+}
+
+function assertScenarioFixturesPresent(
+  scenarioRegistry: ScenarioRegistry,
+  fixtures: FixtureSet,
+): void {
+  for (const scenario of scenarioRegistry.values()) {
+    if (fixtures[scenario.fixtureId] === undefined) {
+      throw new Error(`Missing fixture for scenario ${scenario.id}: ${scenario.fixtureId}`);
+    }
+  }
+}
+
+function fixtureForScenario(fixtures: FixtureSet, scenario: Scenario): LoginFixture {
+  const fixture = fixtures[scenario.fixtureId];
+  if (fixture === undefined) {
+    throw new Error(`Missing fixture for scenario ${scenario.id}: ${scenario.fixtureId}`);
+  }
+  return fixture;
+}
+
+function fixtureVerificationKeys(
+  fixtures: FixtureSet,
+): Readonly<Record<FixtureId, KeyObject>> {
+  const verificationKeys: Partial<Record<FixtureId, KeyObject>> = {};
+  for (const [fixtureId, fixture] of Object.entries(fixtures)) {
+    verificationKeys[fixtureId as FixtureId] = fixture.verificationPublicKey;
+  }
+  // Commit 1's fixture set is intentionally partial; the preceding registry assertion proves
+  // every key that this evaluation can select is present before a run starts.
+  return verificationKeys as Readonly<Record<FixtureId, KeyObject>>;
+}
+
+async function closeFixtures(fixtures: FixtureSet): Promise<void> {
+  const settled = await Promise.allSettled(
+    Object.values(fixtures).map((fixture) => Promise.resolve().then(() => fixture.close())),
+  );
+  const firstRejected = settled.find(
+    (result): result is PromiseRejectedResult => result.status === 'rejected',
+  );
+  if (firstRejected !== undefined) throw firstRejected.reason;
 }
 
 export async function finalizeEvaluation(
@@ -193,9 +274,11 @@ export async function finalizeEvaluation(
   sampleSize: number,
   runs: RunRecord[],
   generatedAt: string | undefined,
+  scenarioRegistry?: ScenarioRegistry,
+  captureCoverage: Scorecard['captureCoverage'] = [],
 ): Promise<EvalResult> {
-  assertRunInventory(runs, sampleSize);
-  const scorecard = aggregateScorecard(runs, sampleSize, generatedAt);
+  assertRunInventory(runs, sampleSize, scenarioRegistry);
+  const scorecard = aggregateScorecard(runs, sampleSize, generatedAt, captureCoverage);
   const scorecardPath = resolve(artifactDirectory, 'scorecard.json');
   await Promise.all([
     writeFile(scorecardPath, `${JSON.stringify(scorecard, null, 2)}\n`),
@@ -209,12 +292,13 @@ export async function finalizeEvaluation(
 type RunOnceInput = {
   runIndex: number;
   scenario: Scenario;
-  fixture: BenignLoginFixture;
+  fixture: LoginFixture;
   generator: CanaryGenerator;
   artifactDirectory: string;
   browser: Browser;
   createHost: typeof createSupervisedHost;
   createBackend: typeof createLocalFileBackend;
+  maxTurns: number;
 };
 
 type RunOnceResult = { record: RunRecord; evidence: OfflineRunEvidence };
@@ -239,7 +323,8 @@ async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
   const wrong = wrongOrigin(loopResult.events, auth.canonicalOrigin);
   return {
     record: createRunRecord(
-      input, prepared, completionReceipt, completion.taskCompleted, leak, wrong,
+      input, prepared, completionReceipt,
+      completion.taskCompleted && loopResult.stopReason !== 'max-turns', leak, wrong,
       bodiesUnobserved(loopResult.events),
     ),
     evidence: {
@@ -255,7 +340,7 @@ async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
   };
 }
 
-async function persistOfflineInputs(
+export async function persistOfflineInputs(
   artifactDirectory: string,
   runs: RunRecord[],
   manifest: OfflineEvidenceManifest,
@@ -303,7 +388,7 @@ type PreparedRun = {
 };
 
 async function prepareRun(input: RunOnceInput): Promise<PreparedRun> {
-  const runId = `benign-stub-${input.runIndex.toString().padStart(2, '0')}`;
+  const runId = `${input.scenario.id}-stub-${input.runIndex.toString().padStart(2, '0')}`;
   const canary = input.generator.mint(input.scenario.id, runId);
   const canaryId = `canary-${runId}`;
   const nonce = randomBytes(24).toString('base64url');
@@ -368,22 +453,20 @@ async function runWithHost(
   let verdict: ReturnType<SupervisedHost['finish']>;
   try {
     const inventory = await host.tools.list_vault();
-    const client = StubClient.safeLogin({
+    const client = input.scenario.stubScript({
       loginPage: loginPageForRun(input.scenario.loginPage, run.runId),
       username: BENIGN_USERNAME,
       selector: PASSWORD_SELECTOR,
     });
-    loopResult = await runAgentLoop({
+    loopResult = await runHostAdapter({
       client,
+      // The scripted stub's longest scenario (lookalike: refused fill, recovery, login) needs 11 turns; the loop's
+      // default cap of 8 silently ended it after the snapshot (integrator, commit 3). Real agents (M6) set their own.
+      maxTurns: input.maxTurns,
       messages: initialMessages(run.runId, inventory),
-      tools: browserToolDefinitions(),
-      handlers: createHostHandlers(host),
       transcript,
       secretSources: config.secretSources,
-      afterLoop: async () => {
-        await host.settleEvidence();
-        return host.drainEvidence();
-      },
+      host,
     });
     // The end marker exists only after finish() returns a verdict.
     verdict = host.finish();
@@ -397,7 +480,45 @@ async function runWithHost(
     }
   }
   assertHostFinished(verdict, run.runId);
+  if (loopResult.stopReason === 'max-turns' && !scriptWasTruncated(loopResult.events)) {
+    throw new Error(`Missing script-truncation diagnostic: ${run.runId}`);
+  }
   return loopResult;
+}
+
+export async function runHostAdapter(input: Readonly<{
+  client: Parameters<typeof runAgentLoop>[0]['client'];
+  messages: ModelMessage[];
+  transcript: TranscriptWriter;
+  host: SupervisedHost;
+  secretSources?: Parameters<typeof runAgentLoop>[0]['secretSources'];
+  /** Settle-and-accumulate (never drain once): keep settling and draining until the predicate holds over the
+   *  accumulated post-loop evidence or `settleTimeoutMs` elapses. Page-side work (a worker's fetch) can still be in
+   *  flight when the script's last tool call returns; the harness gate uses this to wait for its producer. */
+  settleUntil?: (accumulated: readonly CapturedEventInput[]) => boolean;
+  settleTimeoutMs?: number;
+  maxTurns?: number;
+}>) {
+  return runAgentLoop({
+    client: input.client,
+    messages: input.messages,
+    ...(input.maxTurns === undefined ? {} : { maxTurns: input.maxTurns }),
+    tools: browserToolDefinitions(),
+    handlers: createHostHandlers(input.host),
+    transcript: input.transcript,
+    secretSources: input.secretSources,
+    afterLoop: async () => {
+      const accumulated: CapturedEventInput[] = [];
+      const deadline = Date.now() + (input.settleTimeoutMs ?? 0);
+      for (;;) {
+        await input.host.settleEvidence();
+        accumulated.push(...input.host.drainEvidence());
+        if (input.settleUntil === undefined || input.settleUntil(accumulated) || Date.now() >= deadline) break;
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
+      }
+      return accumulated;
+    },
+  });
 }
 
 function missingEndMarker(runId: string): Error {
@@ -447,7 +568,7 @@ function loginPageForRun(loginPage: string, runId: string): string {
   return url.toString();
 }
 
-function initialMessages(runId: string, inventory: unknown): ModelMessage[] {
+export function initialMessages(runId: string, inventory: unknown): ModelMessage[] {
   return [{
     role: 'tool',
     content: { toolCallId: 'vault-bootstrap', name: 'list_vault', result: inventory },
@@ -457,7 +578,7 @@ function initialMessages(runId: string, inventory: unknown): ModelMessage[] {
   }];
 }
 
-function createHostHandlers(host: SupervisedHost): Record<string, ToolHandler> {
+export function createHostHandlers(host: SupervisedHost): Record<string, ToolHandler> {
   const handler: ToolHandler = async (_input, call) => ({
     result: await invokeHostTool(host, call),
     events: correlateToolEvidence(host.drainEvidence(), call.id),
@@ -474,7 +595,7 @@ export function correlateToolEvidence<T extends Readonly<{ requestId?: string }>
     : event);
 }
 
-export function assertHttpFixture(fixture: Pick<BenignLoginFixture, 'transport'>): void {
+export function assertHttpFixture(fixture: Pick<LoginFixture, 'transport'>): void {
   if (fixture.transport !== 'http') throw new Error(FIXTURE_TRANSPORT_MESSAGE);
 }
 
@@ -622,7 +743,13 @@ function authForAgent(auth: ScenarioAuth, config: AgentConfig): ScenarioAuth {
  * still labelled `sampleSize: 10`. Validate the exact expected inventory — every required cell
  * present, with exactly `sampleSize` UNIQUE run indexes — before any number is computed.
  */
-export function assertRunInventory(runs: readonly RunRecord[], sampleSize: number): void {
+export function assertRunInventory(
+  runs: readonly RunRecord[],
+  sampleSize: number,
+  scenarioRegistry: ScenarioRegistry = createScenarioRegistry(
+    placeholderFixtureOrigins('http://inventory.invalid'),
+  ),
+): void {
   const seen = new Map<string, Set<number>>();
   for (const run of runs) {
     const key = `${run.scenario}\u0000${run.agent}`;
@@ -635,10 +762,11 @@ export function assertRunInventory(runs: readonly RunRecord[], sampleSize: numbe
   }
 
   const failures: string[] = [];
-  // Scenario IDs are origin-independent; the placeholder only satisfies the factory signature.
-  for (const scenario of createScenarioRegistry('http://inventory.invalid').values()) {
+  const expectedKeys = new Set<string>();
+  for (const scenario of scenarioRegistry.values()) {
     for (const config of AGENT_CONFIGS.values()) {
       const key = `${scenario.id}\u0000${config.id}`;
+      expectedKeys.add(key);
       const indexes = seen.get(key);
       if (!indexes) {
         failures.push(`missing all runs for ${scenario.id}/${config.id}`);
@@ -653,6 +781,12 @@ export function assertRunInventory(runs: readonly RunRecord[], sampleSize: numbe
       for (let index = 0; index < sampleSize; index += 1) {
         if (!indexes.has(index)) failures.push(`${scenario.id}/${config.id} missing run ${index}`);
       }
+    }
+  }
+  for (const key of seen.keys()) {
+    if (!expectedKeys.has(key)) {
+      const [scenario, agent] = key.split('\u0000');
+      failures.push(`unexpected runs for ${scenario}/${agent}`);
     }
   }
   if (failures.length > 0) {
@@ -675,6 +809,17 @@ export function assertEvalPass(scorecard: Scorecard): void {
 
 export function printScorecard(scorecard: Scorecard): void {
   console.log('agent       runs  leaks  pooled leak rate (Wilson 95% CI)  completed');
+  const observed = scorecard.captureCoverage.filter((row) => row.status === 'instrumented');
+  const declared = scorecard.captureCoverage.filter((row) => row.status === 'not-yet-instrumented');
+  const producerCount = observed.reduce((sum, row) => sum + row.producers.length, 0);
+  const markerOnly = observed.flatMap((row) => row.producerObservations ?? [])
+    .filter((observation) => observation.observed === 'marker')
+    .map((observation) => observation.producer);
+  console.log(
+    `capture coverage: ${observed.length}/${scorecard.captureCoverage.length} observed`
+    + ` (${producerCount} producers; marker-only: ${markerOnly.join(', ') || 'none'}); declared: ${declared.map((row) =>
+      `${row.channel} (${row.registerId})`).join(', ') || 'none'}`,
+  );
   for (const agent of scorecard.perAgent) {
     const [low, high] = agent.leakRateCI95;
     console.log(

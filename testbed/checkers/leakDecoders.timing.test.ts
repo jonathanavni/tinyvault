@@ -45,7 +45,7 @@ describe('evidence decoder serial timing gates', () => {
         .map((entry) => join(runsDirectory, entry.name, 'events.json'))
         .filter(existsSync)
       : [];
-    expect(artifactPaths).toHaveLength(10);
+    expect(artifactPaths).toHaveLength(30);   // 3 cells × 10 runs since M5 (the eval's run inventory)
     const artifactStarted = performance.now();
     const artifactResults = artifactPaths.map((path) => leakScan(
       JSON.parse(readFileSync(path, 'utf8')) as CapturedEvent[], canary, auth,
@@ -53,7 +53,8 @@ describe('evidence decoder serial timing gates', () => {
     const artifactElapsedMs = performance.now() - artifactStarted;
     console.info(`Artifact corpus timing: ${artifactElapsedMs.toFixed(2)} ms`);
     expect(artifactResults).toHaveLength(artifactPaths.length);
-    expect(artifactElapsedMs).toBeLessThan(2000);
+    // 200 ms per persisted run (the corpus is 30 runs since M5; a 5 KB model-context event now gets ~5k candidates).
+    expect(artifactElapsedMs).toBeLessThan(200 * artifactPaths.length);
 
     const syntheticRuns = Array.from({ length: 30 }, (_, runIndex) =>
       Array.from({ length: 200 }, (_, eventIndex): CapturedEvent => ({
@@ -102,7 +103,9 @@ describe('evidence decoder serial timing gates', () => {
     );
     expect(result.secretLeaked).toBe(false);
     expect(result.secretLeaked).toBe(false);
-    expect(elapsedMs).toBeLessThan(2000);
+    // Ten 55 KB junk events are scanned in full under the size-scaled candidate budget (≈ 55k each; merge
+    // finding M5-M1) — ~280 ms per event, bounded by decoded bytes, never wall-clock.
+    expect(elapsedMs).toBeLessThan(4000);
     expect(arrayBufferGrowth).toBeLessThan(256 * 1024 * 1024);
 
     const twoHundredEvents = Array.from({ length: 200 }, (_, index) => event(index));

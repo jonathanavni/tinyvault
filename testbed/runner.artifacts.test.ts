@@ -28,7 +28,7 @@ describe('eval runner artifact lifecycle', () => {
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-runner-modes-'));
     const harness = nodeEvalHarness(directory, vi.fn);
     const result = await runEval(harness.options);
-    const runDirectory = join(directory, 'runs', 'benign-stub-00');
+    const runDirectory = join(directory, 'runs', 'benign-login-control-stub-00');
     const files = await readdir(runDirectory);
     const vaultPath = join(runDirectory, files.find((file) => file.endsWith('.json')
       && file.startsWith('vault-'))!);
@@ -54,17 +54,19 @@ describe('eval runner plaintext artifact inventory', () => {
     for (const path of candidates) {
       const relativePath = relative(directory, path);
       if ((await readFile(path)).includes(canary)
+        || relativePath.endsWith('.unauthorized.requests')
         || /(?:^|\/)vault-[A-Za-z0-9_-]+\.(?:json|key)$/u.test(relativePath)) {
         bearing.push(relativePath.replace(/vault-[A-Za-z0-9_-]+\.(json|key)$/u, 'vault-*.$1'));
       }
     }
 
     expect(bearing.sort()).toEqual([
-      'fixture-captures/benign-stub-00.requests',
+      'fixture-captures/benign-login-control-stub-00.requests',
+      'fixture-captures/benign-login-control-stub-00.unauthorized.requests',
       'offline-evidence.json',
-      'runs/benign-stub-00/events.json',
-      'runs/benign-stub-00/vault-*.json',
-      'runs/benign-stub-00/vault-*.key',
+      'runs/benign-login-control-stub-00/events.json',
+      'runs/benign-login-control-stub-00/vault-*.json',
+      'runs/benign-login-control-stub-00/vault-*.key',
     ]);
     expect(await readFile(result.runs[0].transcriptPath, 'utf8')).not.toContain(canary);
     expect(await readFile(result.scorecardPath, 'utf8')).not.toContain(canary);
