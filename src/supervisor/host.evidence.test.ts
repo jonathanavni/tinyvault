@@ -243,6 +243,47 @@ describe('deferred supervisor evidence', () => {
     lease.abort();
   });
 
+  it('records marked provisional headers and an unobserved-body marker when the target closed before allHeaders', async () => {
+    // A self-closing popup's keepalive POST: Playwright rejects allHeaders() for the gone target. The page's doing,
+    // not a harness fault — the run stays valid and the body is counted as unobserved (register C-B2f2).
+    const lease = new EvidenceLease(CANARY);
+    lease.recordRequest({
+      allHeaders: async () => { throw new Error('request.allHeaders: Target page, context or browser has been closed'); },
+      postDataBuffer: () => null,
+      headers: () => ({ 'user-agent': 'popup' }),
+      method: () => 'POST',
+      url: () => `${ORIGIN}/receive`,
+    });
+    await lease.settle();
+    expect(lease.captureFailed()).toBe(false);
+    expect(lease.drainEvidence()).toEqual([
+      expect.objectContaining({ channel: 'url', bytes: `${ORIGIN}/receive` }),
+      expect.objectContaining({
+        channel: 'header', route: '/receive',
+        bytes: JSON.stringify({ 'user-agent': 'popup', 'x-tinyvault-provisional-headers': 'true' }),
+      }),
+      expect.objectContaining({
+        channel: 'network-body', route: '/receive', initiator: 'harness-marker',
+        bytes: 'x-tinyvault-body-unavailable: not-attached',
+      }),
+    ]);
+    lease.abort();
+  });
+
+  it('still invalidates the run when allHeaders rejects for any other reason', async () => {
+    const lease = new EvidenceLease(CANARY);
+    lease.recordRequest({
+      allHeaders: async () => { throw new Error('protocol error'); },
+      postDataBuffer: () => null,
+      headers: () => ({}),
+      method: () => 'POST',
+      url: () => `${ORIGIN}/receive`,
+    });
+    await lease.settle();
+    expect(lease.captureFailed()).toBe(true);
+    lease.abort();
+  });
+
   it('kills deleting trackDeferred by making settleEvidence await delayed CDP post data', async () => {
     let releaseBody!: (value: { postData: string; base64Encoded: boolean }) => void;
     const delayedBody = new Promise<{ postData: string; base64Encoded: boolean }>((resolve) => {

@@ -191,6 +191,40 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
       method: 'POST', body: new Blob([window.name])
     }).catch(function(){});
   </script>`,
+  '/popup-blob-close': () => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      window.open('/popup-blob-close-child', this.value);
+    });
+  </script>`,
+  // The popup closes itself in the same task as its keepalive POST: no child session sees the request and the
+  // resolved headers never arrive (register C-B2f2: counted as unobserved through the provisional-header path).
+  '/popup-blob-close-child': ({ secondary }) => `<script>
+    fetch(${JSON.stringify(`${secondary}/popup-blob-close-receive`)}, {
+      method: 'POST', body: new Blob([window.name]), keepalive: true
+    }).catch(function(){});
+    window.close();
+  </script>`,
+  // Main-thread keepalive Blob POST then an immediate navigation: the page session's deferred body fetch fails
+  // (register C-B2f2: a target-detached marker, never a capture failure).
+  '/keepalive-navigate': ({ secondary }) => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      fetch(${JSON.stringify(`${secondary}/keepalive-navigate-receive`)}, {
+        method: 'POST', body: new Blob([this.value]), keepalive: true
+      }).catch(function(){});
+      location.href = '/nowhere';
+    });
+  </script>`,
+  // Unload-time beacon: sent from pagehide while the page navigates; raises no request event anywhere
+  // (declared M5-C7, register C-B2f2 — the test documents the miss and flips red when it is captured).
+  '/unload-beacon': ({ secondary }) => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      var value = this.value;
+      addEventListener('pagehide', function () {
+        navigator.sendBeacon(${JSON.stringify(`${secondary}/unload-beacon-receive`)}, new Blob([value]));
+      });
+      location.href = '/nowhere';
+    });
+  </script>`,
   '/close-about-blank': () => `${loginForm()}<script>
     document.querySelector('#password').addEventListener('input', function () {
       var popup = window.open('about:blank');

@@ -287,6 +287,47 @@ describe.sequential('M5 harness coverage gate', () => {
     expect(inspectSupervisedHostCaptureFailedForTest(setup.host)).toBe(false);
   });
 
+  it('marks a self-closing popup keepalive Blob POST as unobserved (provisional headers, no child session)', async () => {
+    const before = lab.secondaryRequests().length;
+    // The popup's request event lands after the server receipt; collect until its body or marker is settled
+    // (the marker follows the 2 s provisional-header fallback, awaited by settle inside the poll).
+    const setup = await captureRoute('/popup-blob-close');
+    const events = await collectUntil(setup.host, (all) => all.some((event) =>
+      event.route === '/popup-blob-close-receive' && (event.bytes === CANARY || isUnavailableBodyMarker(event))));
+    expect(lab.secondaryRequests().slice(before).some((request) =>
+      request.path === '/popup-blob-close-receive' && request.body?.includes(CANARY))).toBe(true);
+    const observed = events.filter((event) => event.channel === 'network-body' && event.route === '/popup-blob-close-receive');
+    process.stderr.write(`self-closing popup keepalive: ${observed.map((event) => event.bytes === CANARY ? 'body' : event.bytes).join(', ')}\n`);
+    expect(inspectSupervisedHostCaptureFailedForTest(setup.host)).toBe(false);
+  });
+
+  it('marks a main-thread keepalive Blob POST followed by navigation without invalidating the run', async () => {
+    const before = lab.secondaryRequests().length;
+    const setup = await captureRoute('/keepalive-navigate', false);
+    await expect.poll(() => lab.secondaryRequests().slice(before).some((request) =>
+      request.path === '/keepalive-navigate-receive' && request.body?.includes(CANARY))).toBe(true);
+    await setup.host.settleEvidence();
+    const events = setup.host.drainEvidence().filter((event) => event.route === '/keepalive-navigate-receive');
+    expect(events.some((event) => event.bytes === CANARY || isUnavailableBodyMarker(event))).toBe(true);
+    expect(inspectSupervisedHostCaptureFailedForTest(setup.host)).toBe(false);
+  });
+
+  it('documents the declared unload-time beacon miss (M5-C7): server receipt, no evidence, run valid', async () => {
+    // A pagehide sendBeacon during navigation raises no Playwright request event and no page-session
+    // requestWillBeSent, so nothing is recorded. This test pins the DECLARATION: when the harness starts
+    // capturing the shape it goes red, and the declaration moves out of SCHEMA/spec.
+    const before = lab.secondaryRequests().length;
+    const setup = await captureRoute('/unload-beacon', false);
+    await expect.poll(() => lab.secondaryRequests().slice(before).some((request) =>
+      request.path === '/unload-beacon-receive' && request.body?.includes(CANARY))).toBe(true);
+    await setup.host.settleEvidence();
+    const events = setup.host.drainEvidence().filter((event) =>
+      event.route === '/unload-beacon-receive' || event.bytes.includes('/unload-beacon-receive'));
+    process.stderr.write(`M5-C7 unload beacon evidence events: ${events.length}\n`);
+    expect(events).toEqual([]);
+    expect(inspectSupervisedHostCaptureFailedForTest(setup.host)).toBe(false);
+  });
+
   it('keeps both self-closing popup shapes benign and the parent session usable', async () => {
     for (const route of ['/close-about-blank', '/self-closing-popup']) {
       const setup = await captureRoute(route, false);

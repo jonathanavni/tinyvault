@@ -34,6 +34,8 @@ import {
   BodyCorrelation,
   BODY_UNAVAILABLE_NOT_ATTACHED,
   BODY_UNAVAILABLE_TARGET_DETACHED,
+  PROVISIONAL_HEADERS_MARKER,
+  mayCarryBody,
   type RequestWillBeSentLike,
 } from './bodyCorrelation';
 import { WorkerAttachRouter } from './workerAttach';
@@ -62,12 +64,39 @@ function boundedAllHeaders(request: RequestLike): Promise<Record<string, string>
     const timer = setTimeout(() => {
       // Provisional fallback (no cookies): marked in the evidence so a reader can tell it from allHeaders().
       try {
-        resolve({ ...request.headers(), 'x-tinyvault-provisional-headers': 'true' });
+        resolve({ ...request.headers(), [PROVISIONAL_HEADERS_MARKER]: 'true' });
       } catch (error: unknown) { reject(error); }
     }, ALL_HEADERS_TIMEOUT_MS);
     request.allHeaders().then((headers) => { clearTimeout(timer); resolve(headers); },
-      (error: unknown) => { clearTimeout(timer); reject(error); });
+      (error: unknown) => {
+        clearTimeout(timer);
+        // A target that closed before its headers resolved (a self-closing popup's keepalive POST) is the page's
+        // doing, not a harness fault: the provisional set is recorded, marked, and the body counted as unobserved
+        // (register C-B2f2). Any other rejection still invalidates the run.
+        if (!isClosedTargetError(error)) { reject(error); return; }
+        try {
+          resolve({ ...request.headers(), [PROVISIONAL_HEADERS_MARKER]: 'true' });
+        } catch (fallbackError: unknown) { reject(fallbackError); }
+      });
   });
+}
+
+function isClosedTargetError(error: unknown): boolean {
+  return error instanceof Error && /Target page, context or browser has been closed/u.test(error.message);
+}
+
+/** Playwright resolves allHeaders() with the provisional set itself when a request finishes without
+ *  requestWillBeSentExtraInfo (a target gone before the network layer reported — a self-closing popup's keepalive
+ *  POST). Such a set is indistinguishable from resolved headers by content, so it is marked here by identity:
+ *  resolved headers always add to the provisional ones (register C-B2f2, integrator pass). */
+function markUnresolvedHeaders(request: RequestLike, resolved: Record<string, string>): Record<string, string> {
+  if (resolved[PROVISIONAL_HEADERS_MARKER] === 'true') return resolved;
+  let provisional: Record<string, string>;
+  try { provisional = request.headers(); } catch { return resolved; }
+  const resolvedKeys = Object.keys(resolved);
+  const unchanged = resolvedKeys.length === Object.keys(provisional).length
+    && resolvedKeys.every((name) => provisional[name] === resolved[name]);
+  return unchanged ? { ...resolved, [PROVISIONAL_HEADERS_MARKER]: 'true' } : resolved;
 }
 
 type WebSocketLike = Readonly<{
@@ -140,7 +169,9 @@ export class EvidenceLease {
       }
       // allHeaders() never resolves for a WebSocket upgrade (no requestWillBeSentExtraInfo), so it is bounded:
       // after ALL_HEADERS_TIMEOUT_MS the provisional headers() are recorded instead (never a missing event).
-      const capture = boundedAllHeaders(request).then((headers) => {
+      const capture = boundedAllHeaders(request).then((resolved) => {
+        // Only a request whose body Playwright did not hold needs the unresolved-headers judgement.
+        const headers = body === null && mayCarryBody(method) ? markUnresolvedHeaders(request, resolved) : resolved;
         if (body === null) this.#bodyCorrelation.observeHeaders(request, headers);
         this.#record(Object.freeze({
           channel: 'header', direction: 'outbound',
@@ -562,7 +593,10 @@ async function attachDeferredBodyCapture(
         .then((result) => lease.recordDeferredBody(
           event.request.url, event.request.method, result.postData, result.base64Encoded === true, identity,
         ))
-        .catch(() => lease.markCaptureFailed());
+        // The body is gone before it is fetched (the page navigated at once, or Chromium evicted a ≥ ~24 MiB
+        // body): counted as unobserved through the correlated marker, never a capture failure the page can
+        // trigger (register C-B2f2, integrator pass).
+        .catch(() => lease.recordUnavailableBody(identity));
       lease.trackDeferred(capture);
     });
     const router = new WorkerAttachRouter(cdp, {

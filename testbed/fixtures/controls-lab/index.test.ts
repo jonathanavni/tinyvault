@@ -29,6 +29,7 @@ const REQUIRED_CASE_ROUTES = [
   '/terminate-worker-slow', '/terminate-worker-fast', '/page-close-worker', '/page-close-worker-race',
   '/query-workers-200',
   '/popup-worker', '/popup-worker-child', '/popup-blob', '/popup-blob-child',
+  '/popup-blob-close', '/popup-blob-close-child', '/keepalive-navigate', '/unload-beacon',
   '/close-about-blank', '/self-closing-popup', '/self-closing-popup-child',
   '/busy-popup', '/busy-popup-child',
   '/decoy-control', '/reflect-redirect', '/console-leak',

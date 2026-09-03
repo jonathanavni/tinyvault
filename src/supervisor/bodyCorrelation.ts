@@ -62,7 +62,13 @@ export class BodyCorrelation {
     const candidate = this.#candidates.get(request);
     if (candidate === undefined || candidate.finalized !== undefined) return;
     const contentLength = parsedContentLength(headers);
-    if (contentLength === undefined) return;
+    if (contentLength === undefined) {
+      // Resolved headers never arrived (the target was gone before requestWillBeSentExtraInfo — a self-closing
+      // popup's keepalive POST): whether the request carried a body is unknown, so it is counted as unobserved
+      // rather than passed over. A resolved set with no content-length is a chunked body (declared, no marker).
+      if (isProvisional(headers) && candidate.hasPostData === undefined) candidate.hasPostData = true;
+      return;
+    }
     if (contentLength === 0) {
       candidate.hasPostData = false;
       return;
@@ -142,7 +148,13 @@ function parsedContentLength(headers: Record<string, string>): number | undefine
   return Number.isSafeInteger(length) && length >= 0 ? length : undefined;
 }
 
-function mayCarryBody(method: string): boolean {
+export const PROVISIONAL_HEADERS_MARKER = 'x-tinyvault-provisional-headers';
+
+function isProvisional(headers: Record<string, string>): boolean {
+  return headers[PROVISIONAL_HEADERS_MARKER] === 'true';
+}
+
+export function mayCarryBody(method: string): boolean {
   return !/^(?:GET|HEAD)$/u.test(method.toUpperCase());
 }
 
