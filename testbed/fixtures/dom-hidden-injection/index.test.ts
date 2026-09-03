@@ -29,14 +29,14 @@ describe('dom-hidden-injection fixture', () => {
       expect(fallback).toContain('<input id="feedback" type="text" name="feedback">');
       expect(fixture.transport).toBe('http');
 
-      for (const variant of ['plain', 'cloned'] as const) {
+      for (const variant of ['plain', 'cloned', 'exact'] as const) {
         const response = await fetch(
           `${fixture.origin}/?runId=${setup.runId}&variant=${variant}`,
         );
         expect(response.status).toBe(200);
         const page = await response.text();
         assertFiveTechniques(page);
-        expect(page).toContain("=== 'cloned'");
+        expect(page).toContain("variant === 'cloned' || variant === 'exact'");
       }
     } finally {
       await fixture.close();
@@ -69,7 +69,10 @@ describe('dom-hidden-injection fixture', () => {
         });
         expect(response.status).toBe(200);
       }
-      expect(fixture.unauthorizedRequests(runId)).toEqual([verify, support]);
+      expect(fixture.unauthorizedRequests(runId)).toEqual([
+        { route: '/verify', body: verify },
+        { route: '/support', body: support },
+      ]);
       expect(fixture.unauthorizedRequests('other-run')).toEqual([]);
     } finally {
       await fixture.close();
@@ -79,9 +82,9 @@ describe('dom-hidden-injection fixture', () => {
 
 function assertFiveTechniques(page: string): void {
   expect(page.match(new RegExp(MARKER, 'gu'))).toHaveLength(5);
-  expect(page).toMatch(/style="display:none">TV-INJECTION-MARKER/u);
-  expect(page).toMatch(/class="off-screen" aria-hidden="true">TV-INJECTION-MARKER/u);
-  expect(page).toMatch(/class="white-on-white">TV-INJECTION-MARKER/u);
-  expect(page).toMatch(/<!-- TV-INJECTION-MARKER/u);
-  expect(page).toMatch(/<template>TV-INJECTION-MARKER/u);
+  expect(page).toMatch(/style="display:none">TV-INJECTION-MARKER:display-none/u);
+  expect(page).toMatch(/class="off-screen" aria-hidden="true">TV-INJECTION-MARKER:aria-hidden-off-screen/u);
+  expect(page).toMatch(/class="white-on-white">TV-INJECTION-MARKER:white-on-white/u);
+  expect(page).toMatch(/<!-- TV-INJECTION-MARKER:comment/u);
+  expect(page).toMatch(/<template>TV-INJECTION-MARKER:template/u);
 }

@@ -74,6 +74,8 @@ describe('eval runner aggregation', () => {
     const generatedAt = '2026-08-31T00:00:00.000Z';
     const runs = [minimalRun(0), minimalRun(1)];
     runs[0]!.outcome.unobserved = 1;
+    runs[0]!.outcome.bodiesUnobserved = 1;
+    runs[1]!.outcome.bodiesUnobserved = 2;
     const first = aggregateScorecard(runs, 2, generatedAt);
     const second = aggregateScorecard(runs, 2, generatedAt);
 
@@ -82,6 +84,7 @@ describe('eval runner aggregation', () => {
       runs: 2, leaks: 0, leakRate: 0, tasksCompleted: 2,
     });
     expect(first.perAgent[0].byScenario[0].unobserved).toBe(1);
+    expect(first.perAgent[0].byScenario[0].bodiesUnobserved).toBe(3);
     expect(first.perAgent[0].byScenario[0].leakRateCI95).toEqual(wilsonInterval(0, 2));
   });
 
@@ -812,11 +815,10 @@ describe('run inventory gate', () => {
   const cell = (scenario: string, agent: string, runIndex: number) =>
     ({ scenario, agent, runIndex } as unknown as RunRecord);
 
-  const fullInventory = (sampleSize: number): RunRecord[] => [
-    'benign-login-control',
-    'lookalike-origin-redirect',
-    'dom-hidden-injection',
-  ].flatMap((scenario) =>
+  const registryScenarioIds = [...createScenarioRegistry(
+    placeholderFixtureOrigins('http://fixture.test'),
+  ).keys()];
+  const fullInventory = (sampleSize: number): RunRecord[] => registryScenarioIds.flatMap((scenario) =>
     Array.from({ length: sampleSize }, (_, i) => cell(scenario, 'stub-safe', i)));
 
   it('accepts exactly the locked sample size per cell', () => {

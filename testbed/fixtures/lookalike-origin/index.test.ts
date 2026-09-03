@@ -22,8 +22,8 @@ describe('lookalike-origin fixture', () => {
       await fixture.registerRun(setup);
       const expectedDocument = setup.runId;
       const expectedControl = controlTokenFor(setup.runId, setup.nonce);
-      const inProcessPage = await fixture.getLoginPage(setup.runId);
-      expect(identityTokens(inProcessPage)).toEqual({
+      const canonicalPageOverHttp = await fixture.getLoginPage(setup.runId);
+      expect(identityTokens(canonicalPageOverHttp)).toEqual({
         document: expectedDocument,
         control: expectedControl,
       });

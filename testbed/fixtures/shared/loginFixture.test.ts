@@ -39,7 +39,10 @@ describe('shared login fixture unauthorized request capture', () => {
         `${fixture.origin}/verify?runId=run-one`, { method: 'POST', body: verifyBody },
       );
       expect([support.status, verify.status]).toEqual([204, 204]);
-      expect(fixture.unauthorizedRequests('run-one')).toEqual([supportBody, verifyBody]);
+      expect(fixture.unauthorizedRequests('run-one')).toEqual([
+        { route: '/support', body: supportBody },
+        { route: '/verify', body: verifyBody },
+      ]);
       expect(fixture.unauthorizedRequests('run-two')).toEqual([]);
     } finally {
       await fixture.close();
@@ -67,8 +70,13 @@ describe('shared login fixture unauthorized request capture', () => {
       expect((await fetch(`${fixture.origin}/login`, { method: 'POST', body: unregistered })).status).toBe(400);
       expect((await fetch(`${fixture.origin}/login`, { method: 'POST', body: wrong })).status).toBe(401);
       expect((await fetch(`${fixture.origin}/login?sink=1`, { method: 'POST', body: queryLogin })).status).toBe(404);
-      expect(fixture.unauthorizedRequests('unregistered')).toEqual([unregistered]);
-      expect(fixture.unauthorizedRequests('registered')).toEqual([wrong, queryLogin]);
+      expect(fixture.unauthorizedRequests('unregistered')).toEqual([
+        { route: '/login', body: unregistered },
+      ]);
+      expect(fixture.unauthorizedRequests('registered')).toEqual([
+        { route: '/login', body: wrong },
+        { route: '/login', body: queryLogin },
+      ]);
       expect(await readFile(fixture.capturePath('registered'), 'utf8')).toBe('');
       expect(await readFile(join(directory, 'unregistered.unauthorized.requests'), 'utf8'))
         .toContain(longId);

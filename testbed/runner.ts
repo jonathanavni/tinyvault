@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 
 import {
   runAgentLoop,
+  scriptWasTruncated,
   type ModelMessage,
   type ToolCall,
   type ToolDefinition,
@@ -91,6 +92,8 @@ export type EvalOptions = {
   createHost?: typeof createSupervisedHost;
   /** Test seam for proving backend cleanup on host-construction failure. */
   createBackend?: typeof createLocalFileBackend;
+  /** Test/agent seam. A max-turn stop is persisted as a failed measurement, never completion. */
+  maxTurns?: number;
   /** Test seam for proving the checker gate precedes artifact replacement. */
   runMetaGate?: typeof runMetaGate;
   /** Test seam for proving the harness gate precedes every scenario run. */
@@ -101,7 +104,8 @@ export type EvalOptions = {
 
 export type CaptureOptions = Pick<
   EvalOptions,
-  'launchChromium' | 'startFixtures' | 'createScenarioRegistry' | 'createHost' | 'createBackend'
+  | 'launchChromium' | 'startFixtures' | 'createScenarioRegistry' | 'createHost' | 'createBackend'
+  | 'maxTurns'
 >;
 
 export type EvalResult = { scorecard: Scorecard; runs: RunRecord[]; scorecardPath: string };
@@ -201,6 +205,7 @@ async function captureWithBrowser(
           runIndex, scenario, fixture, generator, artifactDirectory, browser,
           createHost: options.createHost ?? createSupervisedHost,
           createBackend: options.createBackend ?? createLocalFileBackend,
+          maxTurns: options.maxTurns ?? STUB_SCRIPT_MAX_TURNS,
         });
         capturedRuns.push(result.record);
         evidenceRuns.push(result.evidence);
@@ -293,6 +298,7 @@ type RunOnceInput = {
   browser: Browser;
   createHost: typeof createSupervisedHost;
   createBackend: typeof createLocalFileBackend;
+  maxTurns: number;
 };
 
 type RunOnceResult = { record: RunRecord; evidence: OfflineRunEvidence };
@@ -317,7 +323,8 @@ async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
   const wrong = wrongOrigin(loopResult.events, auth.canonicalOrigin);
   return {
     record: createRunRecord(
-      input, prepared, completionReceipt, completion.taskCompleted, leak, wrong,
+      input, prepared, completionReceipt,
+      completion.taskCompleted && loopResult.stopReason !== 'max-turns', leak, wrong,
       bodiesUnobserved(loopResult.events),
     ),
     evidence: {
@@ -455,7 +462,7 @@ async function runWithHost(
       client,
       // The scripted stub's longest scenario (lookalike: refused fill, recovery, login) needs 11 turns; the loop's
       // default cap of 8 silently ended it after the snapshot (integrator, commit 3). Real agents (M6) set their own.
-      maxTurns: STUB_SCRIPT_MAX_TURNS,
+      maxTurns: input.maxTurns,
       messages: initialMessages(run.runId, inventory),
       transcript,
       secretSources: config.secretSources,
@@ -473,6 +480,9 @@ async function runWithHost(
     }
   }
   assertHostFinished(verdict, run.runId);
+  if (loopResult.stopReason === 'max-turns' && !scriptWasTruncated(loopResult.events)) {
+    throw new Error(`Missing script-truncation diagnostic: ${run.runId}`);
+  }
   return loopResult;
 }
 

@@ -45,9 +45,11 @@ export type LoginFixture = {
   ): CompletionVerification;
   attestEvents(runId: string, eventsBytes: Uint8Array): string;
   capturePath(runId: string): string;
-  unauthorizedRequests(runId: string): readonly string[];
+  unauthorizedRequests(runId: string): readonly UnauthorizedRequest[];
   close(): Promise<void>;
 };
+
+export type UnauthorizedRequest = Readonly<{ route: string; body: string }>;
 
 export type LoginFixturePage = string | Readonly<{
   body: string;
@@ -212,7 +214,7 @@ function checkedCapturePath(directory: string, runId: string): string {
 function fixtureUnauthorizedRequests(
   state: RequestState,
   runId: string,
-): readonly string[] {
+): readonly UnauthorizedRequest[] {
   assertRunId(runId);
   return [...(state.unauthorizedRequests.get(runId) ?? [])];
 }
@@ -304,7 +306,7 @@ type RequestState = {
   runs: Map<string, FixtureRunSetup>;
   receipts: Map<string, string>;
   issued: Set<string>;
-  unauthorizedRequests: Map<string, string[]>;
+  unauthorizedRequests: Map<string, UnauthorizedRequest[]>;
   captureDirectory: string;
 };
 
@@ -357,7 +359,8 @@ function renderPage(page: string, setup: FixtureRunSetup | undefined): string {
     : ` data-tv-control="${controlTokenFor(setup.runId, setup.nonce)}"`;
   return page
     .replace('{{TV_DOCUMENT_ATTRIBUTE}}', documentAttribute)
-    .replace('{{TV_CONTROL_ATTRIBUTE}}', controlAttribute);
+    .replace('{{TV_CONTROL_ATTRIBUTE}}', controlAttribute)
+    .replace('{{TV_BENIGN_USERNAME}}', BENIGN_USERNAME);
 }
 
 async function captureUnauthorizedRequest(
@@ -369,9 +372,13 @@ async function captureUnauthorizedRequest(
   const requestedRunId = formRunId ?? url.searchParams.get('runId') ?? 'unregistered';
   const runId = state.runs.has(requestedRunId) ? requestedRunId : 'unregistered';
   const requests = state.unauthorizedRequests.get(runId) ?? [];
-  requests.push(body);
+  const captured = { route: url.pathname, body };
+  requests.push(captured);
   state.unauthorizedRequests.set(runId, requests);
-  await appendFile(unauthorizedCapturePath(state.captureDirectory, runId), `${body}\n`);
+  await appendFile(
+    unauthorizedCapturePath(state.captureDirectory, runId),
+    `${JSON.stringify(captured)}\n`,
+  );
 }
 
 async function processLoginBody(body: string, state: RequestState): Promise<number> {

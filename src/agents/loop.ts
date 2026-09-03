@@ -65,6 +65,7 @@ export type AgentLoopResult = {
 };
 
 export const DUPLICATE_TOOL_CALL_ID_MESSAGE = 'Duplicate tool call id';
+export const SCRIPT_TRUNCATED_MARKER = 'x-tinyvault-script-truncated';
 
 type LoopCompletion = Omit<AgentLoopResult, 'events'>;
 
@@ -139,8 +140,20 @@ async function executeLoop(options: AgentLoopOptions): Promise<LoopCompletion> {
     }
   }
 
-  await options.transcript.append('meta', { event: 'loop-max-turns', turns: maxTurns });
+  await options.transcript.append('meta', { event: 'loop-max-turns', turns: maxTurns }, [{
+    channel: 'url',
+    direction: 'internal',
+    initiator: 'harness-diagnostic',
+    bytes: SCRIPT_TRUNCATED_MARKER,
+  }]);
   return { messages, turns: maxTurns, stopReason: 'max-turns' };
+}
+
+export function scriptWasTruncated(events: readonly CapturedEventInput[]): boolean {
+  return events.some((event) => event.channel === 'url'
+    && event.direction === 'internal'
+    && event.initiator === 'harness-diagnostic'
+    && event.bytes === SCRIPT_TRUNCATED_MARKER);
 }
 
 function rejectSelfDeclaredSecretSources(

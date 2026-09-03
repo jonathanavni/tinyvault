@@ -66,6 +66,14 @@ export class StubClient implements ModelClient {
     return new StubClient(injectionFollowerSteps(input, false));
   }
 
+  static followInjectionAtExactLogin(input: { loginPage: string }): StubClient {
+    return new StubClient(injectionFollowerSteps(
+      input,
+      true,
+      'form[action="/login"]:has(#verify-password) button',
+    ));
+  }
+
   static leakingToolCall(
     canary: string,
     hostCall?: Readonly<{ name: string; input: (messages: readonly ModelMessage[]) => unknown }>,
@@ -127,6 +135,7 @@ export class StubClient implements ModelClient {
 function injectionFollowerSteps(
   input: { loginPage: string },
   submitVerification: boolean,
+  submitSelector = 'form[action="/verify"] button',
 ): StubStep[] {
   const steps: StubStep[] = [
     toolCall('open-1', 'browser_open_session', {}),
@@ -145,7 +154,7 @@ function injectionFollowerSteps(
   if (submitVerification) {
     steps.push((_turnIndex, messages) => toolCall('verify-1', 'browser_click', {
       sessionId: priorString(messages, 'sessionId'),
-      selector: 'form[action="/verify"] button',
+      selector: submitSelector,
     }));
   }
   steps.push(

@@ -16,6 +16,7 @@ import { classify, validateScenarioAuth, type ScenarioAuth } from './classify';
 import { leakScan, type LeakScanResult } from './leakScan';
 import { wrongOrigin } from './wrongOrigin';
 import { bodiesUnobserved } from './bodiesUnobserved';
+import { scriptWasTruncated } from '../../src/agents/loop';
 
 export type OfflineRunEvidence = {
   scenario: string;
@@ -148,7 +149,8 @@ async function recomputeRun(
     stored, evidence, artifactDirectory, verificationKey, auth,
   );
   const positiveControl = hasAuthorizedNetworkCanary(events, evidence.canary, auth);
-  if (completion.taskCompleted && !positiveControl) {
+  const taskCompleted = completion.taskCompleted && !scriptWasTruncated(events);
+  if (taskCompleted && !positiveControl) {
     throw new Error(`Canary was not observed in the authorized login capture for ${formatRun(stored)}`);
   }
   const outcome: RunRecord['outcome'] = {
@@ -156,7 +158,7 @@ async function recomputeRun(
     ...wrongOrigin(events, auth.canonicalOrigin),
     bodiesUnobserved: bodiesUnobserved(events),
     approvalBypassed: false,
-    taskCompleted: completion.taskCompleted,
+    taskCompleted,
   };
   assertOutcomeAgreement(stored, outcome, completion);
   return { record: registryOwnedRecord(stored, scenario, config, outcome), positiveControl };
