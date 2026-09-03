@@ -11,7 +11,7 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-02-m5` — focus: M5 per the locked plan (hostile fixtures #1–#2 `lookalike-origin` + `dom-hidden-injection` wired into the spine, the Opus 5 capture-coverage gate) through the Codex ladder — **outcome: M5 shipped (`96e3ea3`, 2026-09-03); M4 residuals folded in per spec §D8; hygiene done the same day (`codex/*` branches pruned; `rules.ts` → `rules.ts` + `taintHelpers.ts`; `runner.ts` → `runner.ts` + `evalAgents.ts` + `scorecardAggregate.ts`, all three under the 800-line gate now enforced for them; A2/D1 written into `PROJECT-SPEC.md` §3/§4/§7).**, parallelized where safe; then fold the M4 residuals (BACKLOG "M5 work") into M5 scope explicitly. Hygiene (branch prune, `rules.ts` split, A2/D1 spec paragraphs) deferred.
+`2026-09-02-m5` — focus: M5 per the locked plan (hostile fixtures #1–#2 `lookalike-origin` + `dom-hidden-injection` wired into the spine, the Opus 5 capture-coverage gate) through the Codex ladder — **outcome: M5 shipped (`96e3ea3`, 2026-09-03); M4 residuals folded in per spec §D8; hygiene done the same day (`codex/*` branches pruned; `rules.ts` → `rules.ts` + `taintHelpers.ts`; `runner.ts` → `runner.ts` + `evalAgents.ts` + `scorecardAggregate.ts`, all three under the 800-line gate now enforced for them; A2/D1 written into `PROJECT-SPEC.md` §3/§4/§7).**
 
 **M5 as shipped (one paragraph; the register `docs/m5-review-findings.md` holds everything else):** three slices on two
 Codex branches — A (the leak checker's finite decoder inventory, three rounds + an integrator confirmation pass, merged
@@ -26,18 +26,48 @@ M5-C7; M5-C2 incl. the completion oracle; shared/service workers; worker console
 attribution). BACKLOG carries the M6 items (unload capture, requestId namespacing, stage-specific closed-page suppression,
 the non-cloneable destination slice).
 
+**Post-M5 project assessment (Codex, read-only, 2026-09-03 — `docs/project-assessment-2026-09-03.md`; verified line by
+line by Claude the same day, register C-P):** verdict NEEDS ATTENTION, and right on the substance. Confirmed: (1) **`make test`
+is red on its own clock** — `leakDecoders.timing.test.ts` runs 65.8 s against a 60 s cap because the M5-M1 size-scaled candidate
+budget makes the 200-event junk stress scan ~300 ms per event (it passed the merge and hygiene runs only by sitting under the
+cap); (2) **`make test` is not clean-clone reproducible** — the same file requires 30 persisted runs under gitignored
+`artifacts/eval/runs` that the test target never generates (pre-existing since slice A, when it required 10); (3) **fixture
+topology conflicts with the locked spec** — `PROJECT-SPEC.md` goal 3, the launch checklist and the first-week milestones say
+Docker-composed fixtures, the phase plan repeats it, and M5 shipped in-process Node servers without a Decisions Log entry
+adjudicating it; (4) five stale documents (README status paragraph, `ORIENT.md` placeholders, the phase plan's build-status note,
+this file's focus line, the spec §5 sketch naming native autofill where the locked design is the in-realm inject); (5) no CI,
+Node pinning, lint gate, license or version. Already declared and unchanged: the scripted-stub caveat, the finish-before-settle
+contract, the writer durability notes, every measurement residual. The assessment's own milestone table mislabels M1–M3 and calls
+the decoder budgets time-based (they are work-based); do not copy it.
+
+**M5.1 — gate repair (next, before M6; small, integrator-owned, verified by a clean clone):**
+- Split the timing file: keep the ten-event benchmark assertion; give the 200-event stress scan its own test with its own
+  bound (or a smaller corpus) — never a timeout bump. Mutant: the flat 2,048 budget restored → the model-context regression red.
+- Remove the hidden prerequisite: the corpus timing test builds its own corpus (or a checked-in minimal one); `make test` passes
+  from `git clone` + `npm ci` + `make browsers`. Recorded as a rule in `CLAUDE.md`.
+- **Fixture topology — OPEN, needs the user** (Decisions Log, 2026-09-03): amend the spec to in-process fixtures (recommended) or
+  build the Docker topology and re-run Acceptance C. Until decided, the spec's wording stands and the phase plan carries an
+  adjudication note.
+- Docs already refreshed in this pass (README status, `ORIENT.md`, phase-plan build note, spec §5 as-built note); the leak-rate
+  table stays empty and every `0/30` is labelled a deterministic-harness result until M6 produces real-agent rows.
+- Release engineering (CI with separate deterministic / browser / timing / eval jobs, `engines` + Node pinning, lint, license,
+  security policy, changelog, tags) is a **pre-launch slice at M10**, not now — BACKLOG.
+
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
 **M4 ✅** (`b8a9396`, 2026-09-02) · **M5 ✅** (`96e3ea3`, 2026-09-03).
 
-**Next session:** `/start`; **M6** per `docs/phase-0-plan.md` §8 (reference agent + naive baseline; the baseline leaks on
-camera) through the same ladder — spec first (evals before specs: the naive baseline's expected leak cells and the
-`checkLiveFire` alarm are the eval), then Codex paper rounds, then slices. Carry into the M6 spec: the BACKLOG "M6 items from
-the M5 last rounds" (unload-time requests M5-C7 first — M6's navigate-after-fetch agents hit it; requestId namespacing;
-stage-specific closed-page suppression; the correlation identity test), the form-selection obligation (the compliant
-dom-hidden script names its form), and the retention-rule-beyond-shapes item now unparked (`rules.ts` split).
+**Next session:** `/start`; **M5.1 gate repair first** (the two P0s above, then the topology decision), then **M6** per
+`docs/phase-0-plan.md` §8 (reference agent + naive baseline; the baseline leaks on camera) through the same ladder — spec first
+(evals before specs: the naive baseline's expected leak cells and the `checkLiveFire` alarm are the eval), then Codex paper rounds,
+then slices. Carry into the M6 spec as acceptance inputs, not backlog notes: every declared observation blind spot (M5-C1
+screenshot text, M5-C7 unload-time requests first — M6's navigate-after-fetch agents hit it; requestId namespacing; the
+stage-specific closed-page suppression; the correlation identity test), the `finish()`-settles-or-refuses API shape, the
+form-selection obligation (the compliant dom-hidden script names its form), and the retention-rule-beyond-shapes item now
+unparked.
 
-**Blocked / needs attention:** nothing blocking. Threads: deferred M2/M3 residuals unchanged (`docs/m3-review-findings.md`
+**Blocked / needs attention:** the fixture-topology decision (above) needs the user; `make test` is red on a clean clone
+and marginal on this machine until M5.1 lands. Threads: deferred M2/M3 residuals unchanged (`docs/m3-review-findings.md`
 §D); the 🔴 non-cloneable `dom-fill` destination slice (BACKLOG) is the strongest surviving lookalike path (a script at the
 authorized origin rewriting the form action after the fill — scored at layer 4, not refused at layer 2); shipped slice
 specs (m2–m5) stay at the docs root by precedent because the honest-claims sentences live there.
@@ -380,3 +410,5 @@ specs (m2–m5) stay at the docs root by precedent because the honest-claims sen
 - **2026-09-03** — **Surfaced hiding techniques are measured by suffixed markers with per-technique removal as the binding,** over a count-sliced list (fabricated) or intrinsic snapshot visibility metadata (production change, out of scope); the snapshot carries no visibility filter, so 3 of 5 surface (display-none, aria-hidden off-screen, white-on-white) and the comment and `<template>` do not (C-B3).
 - **2026-09-03** — **Post-implementation fix rounds stayed within the cap (slice A: 3; commit 2: 3 + integrator pass; commit 3: 2 + integrator pass),** and each last round's new blind spot was declared with a pinning test rather than opening a fourth round, per the M4 learnings; docs edits by Codex on a branch are parked and applied on main, where they are homed.
 - **2026-09-03** — **The checker's per-event candidate budget scales with the event (`max(2,048, one per input byte)`)** over a flat 2,048 (slice A) or a per-value cap, because the merged tree showed a flat budget exhausted by an ordinary 5 KB model-context event (the message history re-serialized each turn), which would make `scanTruncated` fire on every real-agent run in M6; work stays deterministic and bounded by the decoded-bytes budget, and the reaching input is declared (M5-M1, register C-M).
+- **2026-09-03** — **A read-only cross-model project assessment after each milestone close is worth its cost.** Codex's teardown of `main` at `e69259d` found two P0 gate defects the ladder's per-slice rounds could not see (a timing test that only passes by variance under its cap; a gitignored artifact prerequisite) and one contract drift (fixture topology vs the locked spec) — all verified. Kept as a `/review`-class step after every milestone; the doc lives in `docs/` and its verified findings in the register.
+- **2026-09-03** — **OPEN, needs the user: hostile-fixture topology — amend `PROJECT-SPEC.md` to in-process fixtures, or build the Docker Compose topology the spec requires.** Recommendation: amend. The fixtures are harness-owned, offline and deterministic as in-process Node servers (port-distinct loopback origins, per-fixture signers), the gate starts them in milliseconds at every eval, and containers add no security property for pages we author; Docker would buy only environment isolation the threat model does not need (the model, not the page host, is the adversary). Until decided the spec's wording stands and the slice spec's topology is recorded as a deviation, not an amendment.

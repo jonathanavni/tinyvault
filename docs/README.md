@@ -51,5 +51,8 @@ Active planning docs:
   **Shipped (M5, `96e3ea3`).**
 - `m5-review-findings.md` — the M5 review register: D7 probe evidence (four rounds), paper rounds 1–2 verbatim,
   the continuity-owner dispositions (C-1, C-2) and the lock; then per-slice three-channel rounds (A: C-A1–C-A3; B: C-B1, C-B2, C-B2f1, C-B2f2, C-B3) with the capped fix rounds and the integrator confirmation passes. **Append-only.**
+- `project-assessment-2026-09-03.md` — Codex's read-only project teardown at `e69259d` (post-M5): two P0 gate defects, the
+  fixture-topology conflict, stale docs, missing release engineering. Verified by Claude the same day; dispositions in
+  `m5-review-findings.md` §C-P and the M5.1 slice in `PLAN.md`. Its milestone table is inaccurate for M1–M3 — read `PLAN.md` for those.
 - `archive/implementation-plan-superseded.md` — earlier orphaned Phase 0 draft, consolidated into
   `phase-0-plan.md` (provenance only)

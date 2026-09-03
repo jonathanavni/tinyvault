@@ -25,8 +25,11 @@ and the repository and CI must contain no real credentials.
 
 ## Status
 
-**Pre-release, under construction.** The contracts are frozen and the *measurement harness* works; the
-credential fill service itself is not built yet.
+**Pre-release, under construction.** The contracts are frozen, the fill service and its integration gates are built
+(M4), and the measurement harness runs the first two hostile fixtures (M5). What does not exist yet: a real agent in front
+of those fixtures (M6), the MCP adapter (M8) and the 1Password backend (M9). A read-only project assessment
+(`docs/project-assessment-2026-09-03.md`) found two test-gate defects being repaired next (M5.1 in `PLAN.md`): the decoder
+timing file runs at its own 60 s cap, and `make test` needs generated eval artifacts a clean clone does not have.
 
 | Milestone | State |
 |---|---|
@@ -39,9 +42,9 @@ credential fill service itself is not built yet.
 | M6–M7 — reference + naive agents | not started |
 | M8–M10 — MCP adapter, 1Password backend, demo | not started |
 
-`make eval` runs today and produces a scorecard, but it drives a **scripted stub agent** against a benign
-local login fixture — it is exercising the harness, not yet measuring a real agent. The table below stays
-empty until M6 puts real agents in front of real hostile fixtures.
+`make eval` runs today and produces a scorecard (30 runs, three cells, currently 0 leaks), but it drives a **scripted stub
+agent** — it is exercising the harness against the hostile fixtures, not measuring a real agent. Treat every current number as a
+**deterministic-harness result**. The table below stays empty until M6 puts real agents in front of the fixtures.
 
 | Agent | Runs | Leaks | Leak rate (95% CI) | Tasks completed |
 |---|---:|---:|---:|---:|

@@ -3916,3 +3916,18 @@ leaves exceed one per byte — e.g. > 16 KB of two-character separators-only tok
 Merge resolution (recorded): `offline.ts` keeps main's manifest-bound `deriveLeakFromEvidence` with explicit
 `secretLeaked`/`leakChannel` (the branch's `...leak` spread would have leaked `truncated` into the outcome); the
 harness-gate record carries `scanTruncated: 0`; per-cell `scanTruncated: 0` assertions added to the three eval cells.
+
+## C-P — post-M5 project assessment (Codex, read-only, 2026-09-03) — verified dispositions
+
+Source: `docs/project-assessment-2026-09-03.md` (main at `e69259d`). Every finding re-run or re-read by the integrator.
+
+| Finding | Verified? | Disposition |
+|---|---|---|
+| P0 `make test` red: `leakDecoders.timing.test.ts` exceeds its 60 s cap | **Yes** — 65.8 s alone (`--reporter=verbose`); ten-event benchmark 3.0 s (< 4 s), the 200-event stress scan the rest. Cause: M5-M1's size-scaled candidate budget scans each 55 KB junk event in full (~300 ms). Passed the merge and hygiene runs by sitting under the cap. | **M5.1**: separate the benchmark assertion from the stress scan; bound the stress case on its own; never a timeout bump. |
+| P0 not clean-clone reproducible: the corpus timing test needs 30 gitignored persisted runs | **Yes** — `artifacts/` ignored; `make test` never produces it; pre-existing since slice A (10 runs). | **M5.1**: the test builds its own corpus or a minimal one is checked in; clean-clone rule added to `CLAUDE.md`. |
+| P0 fixture topology conflicts with the locked spec (Docker-composed) | **Yes** — spec §3 goal 3, §6 checklist, §9 milestones; phase plan §5/§7; no Decisions Log adjudication. | **OPEN, needs the user** (Decisions Log 2026-09-03; recommendation: amend the spec). Spec wording stands; notes added in the spec §5 and the phase plan. |
+| P1 the 0/30 result is a scripted stub, not real-agent evidence | Yes — already stated in README. | README wording tightened: every current number is a deterministic-harness result. |
+| P1 stale docs (README status, `ORIENT.md`, phase-plan build note, `PLAN.md` line 14, spec §5 sketch) | **Yes**, all five. | Refreshed in this pass (spec §5 as an "as built" note, not an amendment). |
+| P1 release engineering absent (CI, engines, lint, entrypoint, license, security policy, changelog, tags) | Yes. | BACKLOG, an M10 pre-launch slice. |
+| Residuals (screenshot text, unload beacons, requestId uniqueness, decoder budgets, retention shapes, post-fill action rewrite, `finish()` not settling, writer durability) | Yes, all already declared. | Carried into the M6 spec as acceptance inputs (PLAN next-session); `finish()` and the writer added to BACKLOG explicitly. |
+| Assessment defects | — | Its milestone table mislabels M1–M3; the decoder budgets are work-based, not time-based (slice A round 3). Noted in the docs index. |

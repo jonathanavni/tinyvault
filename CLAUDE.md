@@ -15,6 +15,7 @@ TinyVault is a **harness-agnostic, model-blind credential-fill library for brows
 - **Naive-then-optimize** — implement the obviously-correct version first, verify correctness, then optimize. Never skip step 1.
 - **Enforce invariants in code, not docs** — the trust boundary (plaintext never model-visible, origin pinning, post-fill lockdown, redaction-proven-by-grep) is the product. A documented invariant that isn't enforced and tested is a bug.
 - **Compaction-safe artifacts** — write important outputs (interface specs, decisions, scorecards) to files immediately. Don't rely on conversation history surviving.
+- **The gate is the clean clone** — `make test` must pass from `git clone` + install; generated eval artifacts are never a test prerequisite, and a benchmark assertion never shares a test with a stress scan (a red hidden by run-to-run variance is two bugs). After every milestone close, run a read-only cross-model project assessment and verify it line by line.
 - **Silent-wrong is an observability gap** — a leak checker that runs green but doesn't actually detect a leak is two bugs. For each component ask "what's the absence-detection signal?"
 
 ## Workflow

@@ -131,3 +131,7 @@ Example:
   committing it, and pre-check conflicts with `git merge-tree`. Register/BACKLOG/SCHEMA paragraphs an implementer adds
   on the branch are moved to the scratchpad and applied on main, where those files are homed (avoids conflicts and
   keeps one home per fact). (2026-09-03)
+- **`make test` must pass from a clean clone; generated artifacts are never a test prerequisite.** The corpus timing test
+  silently required 30 gitignored eval runs since slice A. A read-only cross-model project assessment after each milestone
+  close (`/review`-class, doc in `docs/`, verified findings in the register) is now part of the milestone close — it caught
+  what per-slice rounds cannot (gate variance, contract drift against the locked spec). (2026-09-03)

@@ -8,20 +8,35 @@ TinyVault is a harness-agnostic, model-blind credential-fill library for browser
 
 ## How It Works
 
-*(To be filled in during/after Phase 0 — see `PROJECT-SPEC.md` §5 for the initial architecture sketch: untrusted caller → trusted fill service (origin validation, autofill, redaction) → browser (Playwright/CDP) + credential backend (`op`/`bw`/local-file). The hostile-web testbed drives a target agent through named attacks and emits a leak scorecard.)*
+Three tools are all the model ever sees: `list_vault` (opaque handles + labels, never secrets), `fill_from_vault`
+(handle + session + field roles → origin-pinned fill, closed result), and `request_vault_setup` (the refusal path — never
+"ask the user for the password in chat"). The trusted fill service (`src/core`, `src/supervisor`) resolves a handle at fill
+time through a backend (`src/backends`, libsodium local file today), validates the live page against the credential's
+canonical origin, injects the value atomically in an isolated realm (`src/browser`), locks the filled fields down, and
+redacts everything that flows back. A supervisor captures every byte that crosses the boundary on eleven evidence
+channels; the testbed (`testbed/`) replays that evidence offline through a leak checker with a finite decoder inventory
+and a meta-gate that proves the checker can still catch planted leaks. `make eval` runs the scripted stub agent against the
+benign fixture and the two hostile fixtures (`lookalike-origin`, `dom-hidden-injection`) and prints a leak-rate table with
+Wilson intervals plus the capture-coverage line. The claims are exactly the honest-claims sentences in
+`docs/m4-slice-spec.md` and `docs/m5-slice-spec.md`; every declared blind spot is in `SCHEMA.md`.
 
 ## Working On It
 
-This repo uses the **tinytandem** two-model workflow: Claude orchestrates and holds continuity; Codex implements bounded slices and reviews adversarially. Read [`CLAUDE.md`](CLAUDE.md) and [`docs/handoff-pattern.md`](docs/handoff-pattern.md). Start a session with `/start`, end with `/wrapup`, review milestones with `/review`.
+This repo uses the **tinytandem** two-model workflow: Claude orchestrates and holds continuity; Codex implements bounded
+slices on `codex/<task>` branches and reviews adversarially. Read `CLAUDE.md`, then `PLAN.md` (Current State + Decisions
+Log), then `docs/handoff-pattern.md`. Every slice runs the ladder: spec → Codex paper review → lock → Codex implements →
+three post-implementation channels (Claude QA, Claude security, Codex) with real-Chromium probes → capped fix rounds →
+integrator confirmation pass → merge gate on the merged tree. Review findings are append-only in `docs/m*-review-findings.md`.
+Sessions start with `/start` and end with `/wrapup`.
 
 ## Common Operations
 
 ```bash
-# (fill in once the toolchain is scaffolded in Phase 0)
-# Install:
-# Run tests:
-# Run the leak testbed / scorecard:
-# Record the demo:
+npm ci && make browsers      # install (Node 22+, Playwright Chromium)
+make test                    # tsc + dependency boundary + unit/browser suites + the serial timing families
+make eval                    # the leak-rate scorecard (scripted stub × 3 cells × 10 runs) + capture coverage
+make baseline                # M6: the naive baseline (not implemented yet)
+make demo                    # M10: the 60-second demo (not implemented yet)
 ```
 
 ## Known Weirdness
@@ -30,4 +45,7 @@ This repo uses the **tinytandem** two-model workflow: Claude orchestrates and ho
 
 ## Key Links
 
-<!-- Repo, blog draft, demo GIF, the OpenInstinct / Instinct references from the spec -->
+- Repo: `github.com/jonathanavni/tinyvault` (private until the README readiness pass)
+- Roadmap and rationale: `PROJECT-SPEC.md`; execution: `PLAN.md`; contracts: `SCHEMA.md`
+- Latest outside view: `docs/project-assessment-2026-09-03.md`
+- Blog draft, demo GIF: not yet (M10)

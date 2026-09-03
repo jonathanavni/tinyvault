@@ -170,3 +170,7 @@ Example:
   limits"); use `command grep` or python for transcript/JSONL mining.** Two more zsh traps met the same night: `$T:testbed/…`
   applies the `:t` modifier (path tail) — write `${T}:…`; and `set -- $VAR` does NOT word-split in zsh — use
   `read A B C <<< "$VAR"` (a status monitor misparsed "running" as terminal until fixed). (2026-09-03)
+- **A stress scan sharing a test with a benchmark assertion hides its own regression.** After M5-M1 the 200-event junk scan in
+  `leakDecoders.timing.test.ts` runs ~60 s — under the 60 s cap on some runs, over on others (65.8 s alone). The merge and
+  hygiene gates were green by variance. Benchmarks assert a bound on a small corpus; stress scans get their own test and
+  their own bound. Found by the post-M5 assessment, not by the ladder. (2026-09-03)

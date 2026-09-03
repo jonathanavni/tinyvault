@@ -58,3 +58,16 @@ work in flight, the rest stay parked here (register "Final5 round"):
   `recordBody` currently survives the count-only assertion).
 - **Same-route over-count (B2f2-Q4/S4).** Worse-only; a body on an unbound identity leaves its twin's marker. Reconcile by
   consuming a same-shape unfinalized candidate at `recordBody`.
+
+## From the post-M5 assessment (Codex 2026-09-03; register C-P)
+
+- **[M10 pre-launch slice] Release engineering.** No CI, no `engines`/Node pinning, no lint or formatting gate, no package
+  entrypoint/exports, no license, security policy, contribution guide, changelog or tags. CI must split deterministic unit
+  checks, browser checks, the serial timing families and the evaluator run so a red keeps its meaning; a clean-clone job is the
+  reproducibility proof.
+- **[M6 spec input] `finish()` settles or refuses.** `SupervisedHost.finish()` does not settle pending deferred captures; the
+  runner's `afterLoop` does, an integration contract a caller can miss. Make `finish()` await `settleEvidence()` itself or fail
+  loudly when captures are pending.
+- **[M6 spec input] Local-file writer durability.** A non-EEXIST failure during exclusive key creation can leave a partial key
+  file; the directory is not fsynced after rename (documented in `src/backends/localFileWriter.ts`).
+- The two P0 gate defects (timing file at its cap; gitignored artifact prerequisite) are **M5.1 in `PLAN.md`**, not backlog.
