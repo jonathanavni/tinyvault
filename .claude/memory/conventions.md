@@ -112,3 +112,16 @@ Example:
   synthesis buffered to a scratchpad file before the register is written, review packets as files with a
   `__HEAD__` placeholder filled from `git rev-parse` after the commit. Two compactions and one process exit cost
   nothing.
+
+## Post-implementation loop conventions confirmed in M5 (2026-09-03)
+
+- **The cap round's findings get an integrator confirmation pass, and that pass is verified the same way a slice
+  is:** every channel's exact reaching input re-run through the production function, the suite run three times,
+  and the dispositions written into the register before the merge. The pass may change mechanism (it replaced a
+  wall-clock budget with deterministic work units) but only in the evaluator zone, never the security core.
+- **A reviewer's stricter reading of a locked sentence is recorded, not silently overridden.** Codex demanded the
+  page-close case hold the body; D7 r3 says a lost body is counted, never assumed absent; the integrator kept the
+  locked reading (body OR exactly one counted marker, never neither) and wrote the disagreement into the register.
+- **Never run two browser-timing suites concurrently on the machine.** The probe-P family flipped red in the one
+  run that overlapped another worktree's ten coverage repeats; rerun alone on a quiet box and report both.
+

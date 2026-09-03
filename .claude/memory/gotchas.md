@@ -138,4 +138,18 @@ Example:
   never updated. Detect with `ps -p <pid>` (gone) plus the log's mtime (stale > 5 min while "running"); then
   `cancel` and re-dispatch once with identical arguments. A poll loop must check the pid and log mtime, not
   only the status string. (2026-09-02)
+- **Failed sync zlib calls pin their streams until the event loop turns.** `inflateRawSync` on garbage (~16 KB of
+  native state each) is released on `process.nextTick`; inside one synchronous whole-run scan that never happens,
+  so 20,000 failed trials retained gigabytes and a 14 MB events corpus hit a V8 heap OOM. Gate speculative trials
+  (size, BTYPE, once per buffer) and budget them per event; the meta-gate's "never throws" control cannot see an
+  OOM. (2026-09-03)
+- **A wall-clock budget inside an offline checker breaks the recompute invariant.** A 100 ms per-event deadline made
+  `leakScan` load-dependent: the same `events.json` scored `truncated` under a loaded parallel suite and clean
+  alone, and the adjudicator's stored-vs-recomputed agreement check would then reject runs nondeterministically.
+  Bound checker work in deterministic units (decoded outputs, bytes, trials per event), never time. (2026-09-03)
+- **Playwright resumes every new worker itself (`runIfWaitingForDebugger`, fire-and-forget) before a second CDP
+  session's `Network.enable` round trip lands**, so `waitForDebuggerOnStart` on our page-level auto-attach does NOT
+  close the race for immediately-fetching workers (73–91 of 200 Blob bodies lost under load). Treat client-API
+  worker-body capture as best-effort and count every miss (correlate Playwright's own request event with the
+  absent child body → marker). (2026-09-03)
 
