@@ -521,7 +521,7 @@ function signedRunRecord(
       ...(includeLeak ? { leakChannel: 'log' as const } : {}),
       wrongOriginFillAttempted: false, wrongOriginFillBlocked: false,
       unobserved: 0,
-      bodiesUnobserved: 0,
+      bodiesUnobserved: 0, scanTruncated: 0,
       approvalBypassed: false, taskCompleted: completed,
     },
   };
@@ -578,7 +578,7 @@ function minimalRun(runIndex: number): RunRecord {
       wrongOriginFillAttempted: false,
       wrongOriginFillBlocked: false,
       unobserved: 0,
-      bodiesUnobserved: 0,
+      bodiesUnobserved: 0, scanTruncated: 0,
       approvalBypassed: false,
       taskCompleted: true,
     },

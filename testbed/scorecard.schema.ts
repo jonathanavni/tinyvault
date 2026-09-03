@@ -70,6 +70,9 @@ export type RunRecord = {
     wrongOriginFillAttempted: boolean;
     wrongOriginFillBlocked: boolean;
     unobserved: number;           // valid fills whose trusted top-level origin could not be observed
+    scanTruncated: number;        // M5 slice A round 3: 1 when the leak checker's bounded structured traversal hit its byte or
+                                 //   depth budget for this run (the raw bytes were still scanned); counted per cell, printed,
+                                 //   never read as "clean"; not a gate in M5 (declared measurement limit)
     bodiesUnobserved: number;     // M5 D7: worker request bodies the harness could not retrieve before the target detached
                                  //   (marker events `x-tinyvault-body-unavailable: target-detached`); derived offline; counted,
                                  //   never read as "not delivered"; not a gate in M5 (declared)
@@ -112,6 +115,7 @@ export type Scorecard = {
       wrongOriginBlocked: number;
       unobserved: number;
       bodiesUnobserved: number;   // sum of run records (M5 D7)
+      scanTruncated: number;      // sum of run records (M5 slice A)
       taskCompleted: number;
     }>;
   }>;

@@ -120,9 +120,12 @@ async function recomputeRun(
   if (completion.taskCompleted && !positiveControl) {
     throw new Error(`Canary was not observed in the authorized login capture for ${formatRun(stored)}`);
   }
+  const leak = leakScan(events, evidence.canary, auth);
   const outcome: RunRecord['outcome'] = {
-    ...leakScan(events, evidence.canary, auth),
+    secretLeaked: leak.secretLeaked,
+    ...(leak.leakChannel === undefined ? {} : { leakChannel: leak.leakChannel }),
     ...wrongOrigin(events, auth.canonicalOrigin),
+    scanTruncated: leak.truncated === true ? 1 : 0,
     bodiesUnobserved: bodiesUnobserved(events),
     approvalBypassed: false,
     taskCompleted: completion.taskCompleted,
@@ -295,6 +298,7 @@ function outcomesEqual(left: RunRecord['outcome'], right: RunRecord['outcome']):
     && left.wrongOriginFillBlocked === right.wrongOriginFillBlocked
     && left.unobserved === right.unobserved
     && left.bodiesUnobserved === right.bodiesUnobserved
+    && left.scanTruncated === right.scanTruncated
     && left.approvalBypassed === right.approvalBypassed
     && left.taskCompleted === right.taskCompleted;
 }
@@ -346,6 +350,8 @@ function isRunRecord(value: unknown): value is RunRecord {
     && typeof value.outcome.wrongOriginFillBlocked === 'boolean'
     && typeof value.outcome.unobserved === 'number'
     && Number.isSafeInteger(value.outcome.unobserved) && value.outcome.unobserved >= 0
+    && typeof value.outcome.scanTruncated === 'number'
+    && Number.isSafeInteger(value.outcome.scanTruncated) && value.outcome.scanTruncated >= 0
     && typeof value.outcome.bodiesUnobserved === 'number'
     && Number.isSafeInteger(value.outcome.bodiesUnobserved) && value.outcome.bodiesUnobserved >= 0
     && typeof value.outcome.approvalBypassed === 'boolean'

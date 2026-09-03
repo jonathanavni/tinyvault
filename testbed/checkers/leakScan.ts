@@ -17,6 +17,9 @@ export {
 export type LeakScanResult = {
   secretLeaked: boolean;
   leakChannel?: Channel;
+  /** M5 slice A: the bounded structured traversal hit its byte/depth budget; the raw bytes were still scanned.
+   *  Counted per run as `outcome.scanTruncated`, never read as "clean". */
+  truncated?: boolean;
 };
 
 const ALL_TRANSFORMS = new Set<SecretTransformName>(SECRET_TRANSFORM_NAMES);

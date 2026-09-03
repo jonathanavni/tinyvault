@@ -314,6 +314,7 @@ type RunRecord = {
     wrongOriginFillAttempted: boolean;
     wrongOriginFillBlocked: boolean;
     bodiesUnobserved: number;     // M5 D7: unretrieved worker bodies (marker events), derived offline, counted per cell
+    scanTruncated: number;        // M5 slice A: the checker's structured traversal hit its budget (raw bytes still scanned); counted per cell
     approvalBypassed: boolean;   // RESERVED in v0.1 (always false): its only scenario, approval-fatigue, is deferred
                                  //   with the purchase flow; no v0.1 checker computes it
     taskCompleted: boolean;      // RECOMPUTED offline from completionReceipt (round-2 #5), never inferred from transcript

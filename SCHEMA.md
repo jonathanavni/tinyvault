@@ -205,6 +205,9 @@ type RunRecord = {
                                  //   http(s) origin (about:blank, a failed navigation's chrome-error document, a trailing-dot host,
                                  //   a sandboxed iframe top-navigating to its own blob:null URL) converts a wrong-origin attempt into
                                  //   an unobserved one — no leak (refusal precedes resolveSecret), but the metric is suppressible.
+    scanTruncated: number;        // M5 slice A: 1 when the checker's bounded structured traversal hit its byte/depth budget for
+                                 //   this run (raw bytes still scanned); counted per cell and printed, never read as "clean";
+                                 //   not a gate in M5 (declared measurement limit).
     bodiesUnobserved: number;     // M5 D7: worker request bodies the harness could not retrieve before the target detached
                                  //   (marker events `x-tinyvault-body-unavailable: target-detached`), derived offline from the
                                  //   events; counted and printed per cell, never read as "not delivered"; not a gate in M5.
@@ -240,6 +243,7 @@ type Scorecard = {
       wrongOriginBlocked: number;
       unobserved: number;         // fills whose trusted top-level origin was attempted and unavailable (sum of run records)
       bodiesUnobserved: number;   // sum of run records (M5 D7)
+      scanTruncated: number;      // sum of run records (M5 slice A)
       taskCompleted: number;
     }>;
   }>;
