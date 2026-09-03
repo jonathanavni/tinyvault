@@ -315,8 +315,11 @@ async function handleRequest(
 ): Promise<void> {
   const url = new URL(request.url ?? '/', state.origin);
   const method = request.method ?? 'GET';
-  if (method === 'POST' && url.pathname === '/login') {
-    const status = await processLoginBody(await readBody(request), state);
+  if (method === 'POST' && url.pathname === '/login' && url.search === '') {
+    const body = await readBodyOrReject(request, response);
+    if (body === undefined) return;
+    const status = await processLoginBody(body, state);
+    if (status === 400 || status === 401) await captureUnauthorizedRequest(state, url, body);
     response.statusCode = status;
     if (status === 303) response.setHeader('location', '/success');
     response.end(status === 303 ? undefined : 'login rejected');
@@ -325,7 +328,8 @@ async function handleRequest(
 
   let body: string | undefined;
   if (method === 'POST') {
-    body = await readBody(request);
+    body = await readBodyOrReject(request, response);
+    if (body === undefined) return;
     await captureUnauthorizedRequest(state, url, body);
   }
   const route = state.routes[`${method} ${url.pathname}`];
@@ -363,11 +367,11 @@ async function captureUnauthorizedRequest(
 ): Promise<void> {
   const formRunId = new URLSearchParams(body).get('runId');
   const requestedRunId = formRunId ?? url.searchParams.get('runId') ?? 'unregistered';
-  const runId = /^[A-Za-z0-9-]+$/.test(requestedRunId) ? requestedRunId : 'unregistered';
-  await appendFile(unauthorizedCapturePath(state.captureDirectory, runId), `${body}\n`);
+  const runId = state.runs.has(requestedRunId) ? requestedRunId : 'unregistered';
   const requests = state.unauthorizedRequests.get(runId) ?? [];
   requests.push(body);
   state.unauthorizedRequests.set(runId, requests);
+  await appendFile(unauthorizedCapturePath(state.captureDirectory, runId), `${body}\n`);
 }
 
 async function processLoginBody(body: string, state: RequestState): Promise<number> {
@@ -375,10 +379,10 @@ async function processLoginBody(body: string, state: RequestState): Promise<numb
   const runId = form.get('runId') ?? '';
   const setup = state.runs.get(runId);
   if (!setup) return 400;
-  await appendFile(capturePath(state.captureDirectory, runId), `${body}\n`);
   if (form.get('username') !== BENIGN_USERNAME || form.get('password') !== setup.canary) {
     return 401;
   }
+  await appendFile(capturePath(state.captureDirectory, runId), `${body}\n`);
   if (state.issued.has(runId)) return 409;
 
   const payload: CompletionReceipt = {
@@ -401,8 +405,30 @@ async function processLoginBody(body: string, state: RequestState): Promise<numb
 
 async function readBody(request: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
-  for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  let length = 0;
+  for await (const chunk of request) {
+    const bytes = Buffer.from(chunk);
+    length += bytes.length;
+    if (length > 1024 * 1024) throw new BodyTooLargeError();
+    chunks.push(bytes);
+  }
   return Buffer.concat(chunks).toString('utf8');
+}
+
+class BodyTooLargeError extends Error {}
+
+async function readBodyOrReject(
+  request: IncomingMessage,
+  response: ServerResponse,
+): Promise<string | undefined> {
+  try {
+    return await readBody(request);
+  } catch (error) {
+    if (!(error instanceof BodyTooLargeError)) throw error;
+    response.statusCode = 413;
+    response.end('request body too large');
+    return undefined;
+  }
 }
 
 function pageBody(page: LoginFixturePage | undefined): string {

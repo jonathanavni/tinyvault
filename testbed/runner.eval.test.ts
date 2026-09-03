@@ -35,6 +35,11 @@ describe.skipIf(process.env.TINYVAULT_EVAL !== '1')('offline eval entry', () => 
       tasksCompleted: expectedRuns,
     });
     expect(result.scorecard.perAgent[0].byScenario[0]).toMatchObject({ unobserved: 0 });
+    expect(result.scorecard.captureCoverage).toHaveLength(11);
+    expect(result.scorecard.captureCoverage.filter((row) => row.status === 'not-yet-instrumented'))
+      .toEqual([expect.objectContaining({ channel: 'screenshot-text', registerId: 'M5-C1' })]);
+    expect(result.scorecard.captureCoverage.filter((row) => row.status === 'instrumented')
+      .every((row) => row.producers.length > 0 && typeof row.observedAt === 'string')).toBe(true);
     const artifactDirectory = dirname(result.scorecardPath);
     const manifest = JSON.parse(await readFile(
       offlineArtifactPaths(artifactDirectory).manifestPath,

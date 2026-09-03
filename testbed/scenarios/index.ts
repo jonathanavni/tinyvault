@@ -14,12 +14,10 @@ export function placeholderFixtureOrigins(origin: string): FixtureOrigins {
 }
 
 export function createScenarioRegistry(
-  origins: FixtureOrigins | string,
+  origins: FixtureOrigins,
   scenarios?: readonly Scenario[],
 ): ScenarioRegistry {
-  // The string branch keeps untouched M4 checker call sites source-compatible during commit 1.
-  const originMap = typeof origins === 'string' ? placeholderFixtureOrigins(origins) : origins;
-  const registered = scenarios ?? [createBenignLoginScenario(originMap['benign-login'])];
+  const registered = scenarios ?? [createBenignLoginScenario(origins['benign-login'])];
   for (const scenario of registered) {
     validateScenarioAuth(scenario.authForRun('validation-run', 'validation-nonce'));
   }

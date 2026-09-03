@@ -23,7 +23,10 @@ const REQUIRED_CASE_ROUTES = [
   '/push-state-after-pin', '/token-rewrite', '/mirror-span', '/echo-field',
   '/self-navigating-iframe', '/iframe-self', '/iframe-final', '/static-token-login',
   '/storage', '/controls', '/post-body', '/query-leak', '/file-request',
-  '/blob-leak', '/header-leak', '/trailing-dot-leak', '/cookie-header-leak',
+  '/blob-leak', '/worker-blob', '/worker-beacon', '/nested-worker-blob',
+  '/terminate-worker-slow', '/terminate-worker-fast', '/page-close-worker',
+  '/popup-worker', '/popup-worker-child', '/decoy-control', '/reflect-redirect', '/console-leak',
+  '/header-leak', '/trailing-dot-leak', '/cookie-header-leak',
   '/ws-leak', '/ws-binary-leak', '/ws-protocol-leak', '/multipart-text-leak',
 ] as const;
 

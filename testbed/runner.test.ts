@@ -50,6 +50,20 @@ import {
 } from './runner';
 
 describe('eval runner aggregation', () => {
+  it('carries only observed harness rows with producers and observedAt into the scorecard', () => {
+    const rows = [{
+      channel: 'log' as const,
+      status: 'instrumented' as const,
+      producers: ['scalar', 'object', 'array', 'format'],
+      observedAt: '2026-09-02T01:02:03.000Z',
+    }];
+    const scorecard = aggregateScorecard([minimalRun(0)], 1, undefined, rows);
+    expect(scorecard.captureCoverage).toEqual(rows);
+    expect(scorecard.captureCoverage[0]).toMatchObject({
+      producers: ['scalar', 'object', 'array', 'format'],
+      observedAt: '2026-09-02T01:02:03.000Z',
+    });
+  });
   it('kills nondeterministic aggregation with completed zero-leak unit records', () => {
     const generatedAt = '2026-08-31T00:00:00.000Z';
     const runs = [minimalRun(0), minimalRun(1)];
@@ -323,6 +337,18 @@ describe('offline registry authority and event attestation', () => {
       captured.trust.scenarioRegistry,
       keys,
     ).verificationKey).toBe(keys['benign-login']);
+  });
+
+  it('rejects a foreign genuine receipt as bad-signature while its event attestation stays genuine', async () => {
+    const captured = await createThreeFixturePersistedEval();
+    const records = await readJson<RunRecord[]>(captured.paths.capturedRunsPath);
+    const benign = records.find((run) => run.scenario === 'benign-login-control')!;
+    const foreign = records.find((run) => run.scenario === 'lookalike-origin-control')!;
+    benign.completionReceipt = foreign.completionReceipt;
+    await writeFile(captured.paths.capturedRunsPath, JSON.stringify(records));
+    await expect(adjudicateScenario(
+      captured, benign.scenario, captured.trust.verificationKeys,
+    )).rejects.toThrow(/Offline outcome mismatch.*completion=bad-signature/);
   });
 });
 
@@ -742,5 +768,11 @@ describe('run inventory gate', () => {
 
   it('rejects a missing required cell entirely', () => {
     expect(() => assertRunInventory([], 10)).toThrow('missing all runs');
+  });
+
+  it('rejects surplus cells outside the registry by exact set equality', () => {
+    const surplus = cell('orphan-scenario', 'stub-safe', 999);
+    expect(() => assertRunInventory([...fullInventory(1), surplus], 1))
+      .toThrow('unexpected runs for orphan-scenario/stub-safe');
   });
 });

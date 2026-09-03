@@ -10,6 +10,8 @@ import {
   type FixtureRunSetup,
 } from './fixtures/benign-login/server';
 import type { EvalOptions } from './runner';
+import { CHANNEL_COVERAGE } from './coverage';
+import type { Channel } from './scorecard.schema';
 
 type HarnessFinish = 'pass' | 'fail' | 'capture-failed';
 type HarnessBehavior = Readonly<{
@@ -44,16 +46,26 @@ export function nodeEvalHarness(
   const launchChromium = mockFunction(mock, async () => fakeBrowser(closeBrowser));
   const abortHost = mockFunction(mock, () => state.captureFailedLease?.abort());
   const finishHost = createFinishHost(state, behavior, mock);
+  const runHarnessGate = mockFunction(mock, async () => Object.entries(CHANNEL_COVERAGE).map(
+    ([channel, coverage]) => coverage.status === 'instrumented'
+      ? { channel: channel as Channel, ...coverage, observedAt: '2026-09-02T00:00:00.000Z' }
+      : { channel: channel as Channel, ...coverage },
+  ));
   const options: EvalOptions = {
     artifactDirectory,
     sampleSize: 1,
     launchChromium,
     startFixtures: createFixtureStarter(state),
     createHost: createHostFactory(state, behavior, finishHost, abortHost),
+    startControlsLab: async () => ({
+      primaryOrigin: 'http://127.0.0.1:1', secondaryOrigin: 'http://127.0.0.1:2',
+      secondaryRequests: () => [], close: async () => undefined,
+    }),
+    runHarnessGate,
   };
   return {
     options, launchChromium, closeBrowser, abortHost, finishHost,
-    drainBatches: state.drainBatches,
+    drainBatches: state.drainBatches, runHarnessGate,
   };
 }
 

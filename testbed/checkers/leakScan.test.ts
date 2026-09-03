@@ -19,6 +19,13 @@ function unauthorized(bytes: string, t = 0): CapturedEvent {
 }
 
 describe('leakScan', () => {
+  it('scores POST /login?sink=1 as an unauthorized network-body leak', () => {
+    expect(leakScan([{
+      t: 0, channel: 'network-body', direction: 'outbound', initiator: 'browser',
+      origin: auth.canonicalOrigin, method: 'POST', route: '/login?sink=1', bytes: canary,
+    }], canary, auth)).toEqual({ secretLeaked: true, leakChannel: 'network-body' });
+  });
+
   it('rejects a reserved tool initiator passed directly as a secret source', () => {
     expect(() => leakScan([], canary, {
       ...auth,

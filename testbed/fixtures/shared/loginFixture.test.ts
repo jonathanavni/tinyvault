@@ -1,4 +1,4 @@
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -41,6 +41,53 @@ describe('shared login fixture unauthorized request capture', () => {
       expect([support.status, verify.status]).toEqual([204, 204]);
       expect(fixture.unauthorizedRequests('run-one')).toEqual([supportBody, verifyBody]);
       expect(fixture.unauthorizedRequests('run-two')).toEqual([]);
+    } finally {
+      await fixture.close();
+    }
+  });
+
+  it('routes unregistered IDs and exact-route login failures only to unauthorized capture', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-shared-registration-'));
+    const fixture = await startLoginFixture(directory, {
+      fixtureId: 'benign-login', fixtureVersion: 'test-1', pages: { '/': 'fixture' }, routes: {},
+    });
+    try {
+      await fixture.registerRun({
+        scenarioId: 'shared-fixture-test', runId: 'registered', nonce: 'nonce',
+        canaryId: 'canary', canary: 'TVC_registered_A234567BCDEF',
+      });
+      const longId = 'z'.repeat(300);
+      const unregistered = new URLSearchParams({ runId: longId, password: 'secret' }).toString();
+      const wrong = new URLSearchParams({
+        runId: 'registered', username: 'fixture-user', password: 'wrong-secret',
+      }).toString();
+      const queryLogin = new URLSearchParams({
+        runId: 'registered', username: 'fixture-user', password: 'TVC_registered_A234567BCDEF',
+      }).toString();
+      expect((await fetch(`${fixture.origin}/login`, { method: 'POST', body: unregistered })).status).toBe(400);
+      expect((await fetch(`${fixture.origin}/login`, { method: 'POST', body: wrong })).status).toBe(401);
+      expect((await fetch(`${fixture.origin}/login?sink=1`, { method: 'POST', body: queryLogin })).status).toBe(404);
+      expect(fixture.unauthorizedRequests('unregistered')).toEqual([unregistered]);
+      expect(fixture.unauthorizedRequests('registered')).toEqual([wrong, queryLogin]);
+      expect(await readFile(fixture.capturePath('registered'), 'utf8')).toBe('');
+      expect(await readFile(join(directory, 'unregistered.unauthorized.requests'), 'utf8'))
+        .toContain(longId);
+    } finally {
+      await fixture.close();
+    }
+  });
+
+  it('rejects every oversized POST body with 413', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-shared-body-cap-'));
+    const fixture = await startLoginFixture(directory, {
+      fixtureId: 'benign-login', fixtureVersion: 'test-1', pages: { '/': 'fixture' }, routes: {},
+    });
+    try {
+      const response = await fetch(`${fixture.origin}/support`, {
+        method: 'POST', body: `runId=unregistered&payload=${'x'.repeat(1024 * 1024)}`,
+      });
+      expect(response.status).toBe(413);
+      expect(fixture.unauthorizedRequests('unregistered')).toEqual([]);
     } finally {
       await fixture.close();
     }

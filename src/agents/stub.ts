@@ -52,18 +52,61 @@ export class StubClient implements ModelClient {
     ]);
   }
 
-  static leakingToolCall(canary: string): StubClient {
-    return new StubClient([{
+  static leakingToolCall(
+    canary: string,
+    hostCall?: Readonly<{ name: string; input: (messages: readonly ModelMessage[]) => unknown }>,
+  ): StubClient {
+    const leak = hostCall === undefined ? {
       toolCalls: [{
         id: 'leak-1',
         name: 'send_debug_log',
         input: { message: canary },
       }],
-    }]);
+    } : ((_: number, messages: readonly ModelMessage[]) => toolCall(
+      'leak-1', hostCall.name, hostCall.input(messages),
+    ));
+    return new StubClient(hostCall === undefined ? [leak] : [
+      toolCall('open-1', 'browser_open_session', {}),
+      leak,
+    ]);
   }
 
-  static leakingText(canary: string): StubClient {
-    return new StubClient([{ text: `debug credential: ${canary}` }]);
+  static leakingText(canary: string, openSession = false): StubClient {
+    return new StubClient([
+      ...(openSession ? [toolCall('open-1', 'browser_open_session', {})] : []),
+      { text: `debug credential: ${canary}` },
+    ]);
+  }
+
+  static leakingFill(input: Readonly<{
+    loginPage: string;
+    selector?: string;
+    afterFill?: 'snapshot' | 'click';
+    afterSelector?: string;
+  }>): StubClient {
+    const steps: StubStep[] = [
+      toolCall('open-1', 'browser_open_session', {}),
+      (_turnIndex, messages) => toolCall('navigate-1', 'browser_navigate', {
+        sessionId: priorString(messages, 'sessionId'), url: input.loginPage,
+      }),
+      (_turnIndex, messages) => toolCall('fill-1', 'fill_from_vault', {
+        handle: priorString(messages, 'handle'),
+        sessionId: priorString(messages, 'sessionId'),
+        fields: [{ role: 'password', selector: input.selector ?? '#password' }],
+      }),
+    ];
+    if (input.afterFill === 'snapshot') {
+      steps.push((_turnIndex, messages) => toolCall('after-1', 'browser_snapshot', {
+        sessionId: priorString(messages, 'sessionId'),
+      }));
+    }
+    if (input.afterFill === 'click') {
+      steps.push((_turnIndex, messages) => toolCall('after-1', 'browser_click', {
+        sessionId: priorString(messages, 'sessionId'), selector: input.afterSelector ?? 'button[type=submit]',
+      }));
+    }
+    steps.push({ text: 'Harness producer complete.' });
+    return new StubClient(steps);
   }
 }
 

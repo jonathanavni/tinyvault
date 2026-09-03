@@ -54,6 +54,7 @@ describe('eval runner plaintext artifact inventory', () => {
     for (const path of candidates) {
       const relativePath = relative(directory, path);
       if ((await readFile(path)).includes(canary)
+        || relativePath.endsWith('.unauthorized.requests')
         || /(?:^|\/)vault-[A-Za-z0-9_-]+\.(?:json|key)$/u.test(relativePath)) {
         bearing.push(relativePath.replace(/vault-[A-Za-z0-9_-]+\.(json|key)$/u, 'vault-*.$1'));
       }
@@ -61,6 +62,7 @@ describe('eval runner plaintext artifact inventory', () => {
 
     expect(bearing.sort()).toEqual([
       'fixture-captures/benign-login-control-stub-00.requests',
+      'fixture-captures/benign-login-control-stub-00.unauthorized.requests',
       'offline-evidence.json',
       'runs/benign-login-control-stub-00/events.json',
       'runs/benign-login-control-stub-00/vault-*.json',

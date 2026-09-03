@@ -9,7 +9,7 @@ import {
   type ToolDefinition,
   type ToolHandler,
 } from '../src/agents/loop';
-import { TranscriptWriter } from '../src/agents/transcript';
+import { TranscriptWriter, type CapturedEventInput } from '../src/agents/transcript';
 import { createLocalFileBackend } from '../src/backends/localFile';
 import { generateLocalVaultKey, writeLocalVault } from '../src/backends/localFileWriter';
 import { launchChromium, type Browser } from '../src/browser/playwright';
@@ -31,6 +31,8 @@ import { wrongOrigin } from './checkers/wrongOrigin';
 import { bodiesUnobserved } from './checkers/bodiesUnobserved';
 import { canaryCommitment, type CompletionBinding } from './completion';
 import { startFixtures, type FixtureSet, type LoginFixture } from './fixtures';
+import { startControlsLab } from './fixtures/controls-lab';
+import { runHarnessGate } from './harnessGate';
 import type { RunRecord, Scorecard } from './scorecard.schema';
 import {
   BENIGN_USERNAME,
@@ -89,6 +91,10 @@ export type EvalOptions = {
   createBackend?: typeof createLocalFileBackend;
   /** Test seam for proving the checker gate precedes artifact replacement. */
   runMetaGate?: typeof runMetaGate;
+  /** Test seam for proving the harness gate precedes every scenario run. */
+  runHarnessGate?: typeof runHarnessGate;
+  /** Test seam paired with runHarnessGate so Node-only runner tests never bind loopback. */
+  startControlsLab?: typeof startControlsLab;
 };
 
 export type CaptureOptions = Pick<
@@ -120,6 +126,15 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
 
   const browser = await (options.launchChromium ?? launchChromium)();
   try {
+    const lab = await (options.startControlsLab ?? startControlsLab)();
+    let coverage: Scorecard['captureCoverage'];
+    try {
+      coverage = await (options.runHarnessGate ?? runHarnessGate)({
+        browser, lab, artifactDirectory,
+      });
+    } finally {
+      await lab.close();
+    }
     const trust = await capturePersistedRuns(artifactDirectory, sampleSize, browser, options);
     const paths = offlineArtifactPaths(artifactDirectory);
     const runs = await adjudicatePersistedRuns({
@@ -131,7 +146,7 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
       agentConfigs: AGENT_CONFIGS,
     });
     return finalizeEvaluation(
-      artifactDirectory, sampleSize, runs, options.generatedAt, trust.scenarioRegistry,
+      artifactDirectory, sampleSize, runs, options.generatedAt, trust.scenarioRegistry, coverage,
     );
   } finally {
     await browser.close();
@@ -253,9 +268,10 @@ export async function finalizeEvaluation(
   runs: RunRecord[],
   generatedAt: string | undefined,
   scenarioRegistry?: ScenarioRegistry,
+  captureCoverage: Scorecard['captureCoverage'] = [],
 ): Promise<EvalResult> {
   assertRunInventory(runs, sampleSize, scenarioRegistry);
-  const scorecard = aggregateScorecard(runs, sampleSize, generatedAt);
+  const scorecard = aggregateScorecard(runs, sampleSize, generatedAt, captureCoverage);
   const scorecardPath = resolve(artifactDirectory, 'scorecard.json');
   await Promise.all([
     writeFile(scorecardPath, `${JSON.stringify(scorecard, null, 2)}\n`),
@@ -315,7 +331,7 @@ async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
   };
 }
 
-async function persistOfflineInputs(
+export async function persistOfflineInputs(
   artifactDirectory: string,
   runs: RunRecord[],
   manifest: OfflineEvidenceManifest,
@@ -433,17 +449,12 @@ async function runWithHost(
       username: BENIGN_USERNAME,
       selector: PASSWORD_SELECTOR,
     });
-    loopResult = await runAgentLoop({
+    loopResult = await runHostAdapter({
       client,
       messages: initialMessages(run.runId, inventory),
-      tools: browserToolDefinitions(),
-      handlers: createHostHandlers(host),
       transcript,
       secretSources: config.secretSources,
-      afterLoop: async () => {
-        await host.settleEvidence();
-        return host.drainEvidence();
-      },
+      host,
     });
     // The end marker exists only after finish() returns a verdict.
     verdict = host.finish();
@@ -458,6 +469,39 @@ async function runWithHost(
   }
   assertHostFinished(verdict, run.runId);
   return loopResult;
+}
+
+export async function runHostAdapter(input: Readonly<{
+  client: Parameters<typeof runAgentLoop>[0]['client'];
+  messages: ModelMessage[];
+  transcript: TranscriptWriter;
+  host: SupervisedHost;
+  secretSources?: Parameters<typeof runAgentLoop>[0]['secretSources'];
+  /** Settle-and-accumulate (never drain once): keep settling and draining until the predicate holds over the
+   *  accumulated post-loop evidence or `settleTimeoutMs` elapses. Page-side work (a worker's fetch) can still be in
+   *  flight when the script's last tool call returns; the harness gate uses this to wait for its producer. */
+  settleUntil?: (accumulated: readonly CapturedEventInput[]) => boolean;
+  settleTimeoutMs?: number;
+}>) {
+  return runAgentLoop({
+    client: input.client,
+    messages: input.messages,
+    tools: browserToolDefinitions(),
+    handlers: createHostHandlers(input.host),
+    transcript: input.transcript,
+    secretSources: input.secretSources,
+    afterLoop: async () => {
+      const accumulated: CapturedEventInput[] = [];
+      const deadline = Date.now() + (input.settleTimeoutMs ?? 0);
+      for (;;) {
+        await input.host.settleEvidence();
+        accumulated.push(...input.host.drainEvidence());
+        if (input.settleUntil === undefined || input.settleUntil(accumulated) || Date.now() >= deadline) break;
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
+      }
+      return accumulated;
+    },
+  });
 }
 
 function missingEndMarker(runId: string): Error {
@@ -505,7 +549,7 @@ function loginPageForRun(loginPage: string, runId: string): string {
   return url.toString();
 }
 
-function initialMessages(runId: string, inventory: unknown): ModelMessage[] {
+export function initialMessages(runId: string, inventory: unknown): ModelMessage[] {
   return [{
     role: 'tool',
     content: { toolCallId: 'vault-bootstrap', name: 'list_vault', result: inventory },
@@ -515,7 +559,7 @@ function initialMessages(runId: string, inventory: unknown): ModelMessage[] {
   }];
 }
 
-function createHostHandlers(host: SupervisedHost): Record<string, ToolHandler> {
+export function createHostHandlers(host: SupervisedHost): Record<string, ToolHandler> {
   const handler: ToolHandler = async (_input, call) => ({
     result: await invokeHostTool(host, call),
     events: correlateToolEvidence(host.drainEvidence(), call.id),
@@ -698,9 +742,11 @@ export function assertRunInventory(
   }
 
   const failures: string[] = [];
+  const expectedKeys = new Set<string>();
   for (const scenario of scenarioRegistry.values()) {
     for (const config of AGENT_CONFIGS.values()) {
       const key = `${scenario.id}\u0000${config.id}`;
+      expectedKeys.add(key);
       const indexes = seen.get(key);
       if (!indexes) {
         failures.push(`missing all runs for ${scenario.id}/${config.id}`);
@@ -715,6 +761,12 @@ export function assertRunInventory(
       for (let index = 0; index < sampleSize; index += 1) {
         if (!indexes.has(index)) failures.push(`${scenario.id}/${config.id} missing run ${index}`);
       }
+    }
+  }
+  for (const key of seen.keys()) {
+    if (!expectedKeys.has(key)) {
+      const [scenario, agent] = key.split('\u0000');
+      failures.push(`unexpected runs for ${scenario}/${agent}`);
     }
   }
   if (failures.length > 0) {
@@ -737,6 +789,14 @@ export function assertEvalPass(scorecard: Scorecard): void {
 
 export function printScorecard(scorecard: Scorecard): void {
   console.log('agent       runs  leaks  pooled leak rate (Wilson 95% CI)  completed');
+  const observed = scorecard.captureCoverage.filter((row) => row.status === 'instrumented');
+  const declared = scorecard.captureCoverage.filter((row) => row.status === 'not-yet-instrumented');
+  const producerCount = observed.reduce((sum, row) => sum + row.producers.length, 0);
+  console.log(
+    `capture coverage: ${observed.length}/${scorecard.captureCoverage.length} observed`
+    + ` (${producerCount} producers); declared: ${declared.map((row) =>
+      `${row.channel} (${row.registerId})`).join(', ') || 'none'}`,
+  );
   for (const agent of scorecard.perAgent) {
     const [low, high] = agent.leakRateCI95;
     console.log(

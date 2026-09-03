@@ -38,6 +38,26 @@ function binding(payload = receipt()) {
 }
 
 describe('CompletionVerifier', () => {
+  it('rejects a genuine attestation paired with a foreign fixture receipt as bad-signature', () => {
+    const foreign = generateKeyPairSync('ed25519');
+    const payload = receipt();
+    const foreignReceipt = signCompletionReceipt(payload, foreign.privateKey);
+    expect(new CompletionVerifier(keyPair.publicKey).verify(
+      foreignReceipt, binding(payload), now,
+    )).toEqual({ taskCompleted: false, reason: 'bad-signature' });
+  });
+
+  it('shares replay identity across two verifiers when the evaluation ledger is shared', () => {
+    const payload = receipt();
+    const signed = signCompletionReceipt(payload, keyPair.privateKey);
+    const ledger = new Set<string>();
+    const first = new CompletionVerifier(keyPair.publicKey, undefined, undefined, ledger);
+    const second = new CompletionVerifier(keyPair.publicKey, undefined, undefined, ledger);
+    expect(first.verify(signed, binding(payload), now)).toEqual({ taskCompleted: true });
+    expect(second.verify(signed, binding(payload), now)).toEqual({
+      taskCompleted: false, reason: 'replayed',
+    });
+  });
   it('accepts a bound valid receipt once and rejects replay', () => {
     const payload = receipt();
     const signed = signCompletionReceipt(payload, keyPair.privateKey);

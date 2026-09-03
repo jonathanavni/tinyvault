@@ -1,6 +1,6 @@
 // Every runner guard exported as a pure function also needs a call-site test through
 // runEval or capturePersistedRuns; helper-only coverage does not prove production wiring.
-import { mkdtemp, readFile, readdir } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -18,6 +18,8 @@ import {
   type ScenarioRegistry,
 } from './scenarios';
 import type { CapturedEvent, RunRecord } from './scorecard.schema';
+import { deriveLeakFromEvidence, type OfflineRunEvidence } from './checkers/offline';
+import { assertHarnessObservation } from './harnessGate';
 import {
   fakeBrowser,
   nodeEvalHarness,
@@ -31,6 +33,7 @@ import {
   MISSING_END_MARKER_MESSAGE,
   offlineArtifactPaths,
   runEval,
+  runHostAdapter,
   assertRunInventory,
   type AgentConfig,
 } from './runner';
@@ -89,7 +92,7 @@ describe('eval runner stub wiring', () => {
 
 describe('eval runner fixture-set and scenario-cell wiring', () => {
   it('captures every scenario cell and diagnoses a dropped scenario as wholly missing', async () => {
-    // Mutant killed: capture loop runs only the first scenario in the registry.
+    // Mutant killed: the captured scenario-id set is smaller than the registry scenario-id set.
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-scenario-cells-'));
     const harness = nodeEvalHarness(directory, vi.fn);
     harness.options.createScenarioRegistry = twoBenignScenarioRegistry;
@@ -141,6 +144,102 @@ describe('eval runner fixture-set and scenario-cell wiring', () => {
       'benign-login-clone-stub-00',
       'benign-login-control-stub-00',
     ]);
+  });
+});
+
+describe('M5 harness gate ordering', () => {
+  it('runs the harness gate before fixture capture starts', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-gate-order-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    const order: string[] = [];
+    const startFixtures = harness.options.startFixtures!;
+    harness.options.runHarnessGate = vi.fn(async () => {
+      order.push('gate');
+      return [];
+    });
+    harness.options.startFixtures = async (captureDirectory) => {
+      order.push('capture');
+      return startFixtures(captureDirectory);
+    };
+    await runEval(harness.options);
+    expect(order.slice(0, 2)).toEqual(['gate', 'capture']);
+  });
+
+  it('aborts before every scenario run when the harness gate throws', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-gate-abort-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    const startFixtures = vi.fn(harness.options.startFixtures!);
+    const createHost = vi.fn(harness.options.createHost!);
+    harness.options.startFixtures = startFixtures;
+    harness.options.createHost = createHost;
+    harness.options.runHarnessGate = vi.fn(async () => {
+      throw new Error('Harness coverage gate failed: header/header-leak');
+    });
+    await expect(runEval(harness.options)).rejects.toThrow(
+      'Harness coverage gate failed: header/header-leak',
+    );
+    expect(startFixtures).not.toHaveBeenCalled();
+    expect(createHost).not.toHaveBeenCalled();
+    expect(harness.closeBrowser).toHaveBeenCalledOnce();
+  });
+
+  it('uses createHostHandlers stamping and the afterLoop drain in the shared adapter', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-gate-adapter-'));
+    const transcript = await TranscriptWriter.create(
+      join(directory, 'transcript.jsonl'), join(directory, 'events.json'),
+    );
+    let drains = 0;
+    const settleEvidence = vi.fn(async () => undefined);
+    const host = {
+      tools: {
+        browser_open_session: async () => ({ sessionId: 'gate-session' }),
+      },
+      drainEvidence: () => {
+        drains += 1;
+        return drains === 1 ? [{
+          channel: 'url', direction: 'outbound', initiator: 'browser', bytes: 'first',
+        }] : drains === 2 ? [{
+          channel: 'network-body', direction: 'outbound', initiator: 'browser', bytes: 'late',
+        }] : [];
+      },
+      settleEvidence,
+    } as never;
+    const result = await runHostAdapter({
+      client: new StubClient([{
+        toolCalls: [{ id: 'open-1', name: 'browser_open_session', input: {} }],
+      }, {}]),
+      messages: [], transcript, host,
+    });
+    expect(result.events).toContainEqual(expect.objectContaining({ bytes: 'first', requestId: 'open-1' }));
+    expect(result.events).toContainEqual(expect.objectContaining({ bytes: 'late' }));
+    expect(result.events.find((event) => event.bytes === 'late')).not.toHaveProperty('requestId');
+    expect(settleEvidence).toHaveBeenCalledOnce();
+  });
+
+  it('turns a manifest path aimed at another run into the exact gate failure', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-gate-manifest-binding-'));
+    const canary = 'TVC_gate_binding_A234567BCDEF';
+    const eventsPath = join(directory, 'other-run-events.json');
+    await writeFile(eventsPath, '[]');
+    const stored = {
+      scenario: 'harness-gate', agent: 'harness-gate', runIndex: 0,
+      eventsPath,
+    } as RunRecord;
+    const evidence = {
+      canary,
+    } as OfflineRunEvidence;
+    const auth = {
+      canonicalOrigin: 'https://fixture.test', loginEndpoint: { method: 'POST', route: '/login' },
+      credentialControl: {
+        origin: 'https://fixture.test', frameId: 'top', documentId: 'document', requestId: 'control',
+      },
+      secretSources: [],
+    };
+    const derived = await deriveLeakFromEvidence(stored, evidence, directory, auth);
+    expect(() => assertHarnessObservation({
+      channel: 'network-body', producer: 'blob-leak', route: '/blob-fetch', initiator: 'browser',
+      derived, events: [], canary, auth,
+    })).toThrow('Harness coverage gate failed: network-body/blob-leak');
   });
 });
 
@@ -222,6 +321,26 @@ describe('eval runner source and browser wiring', () => {
 });
 
 describe('eval runner guard wiring', () => {
+  it('rejects a registry fixture gap before registerRun or any runs directory exists', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-missing-fixture-callsite-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    const startFixtures = harness.options.startFixtures!;
+    const registerRun = vi.fn(async () => undefined);
+    harness.options.startFixtures = async (captureDirectory) => {
+      const fixtures = await startFixtures(captureDirectory);
+      return { 'benign-login': { ...fixtures['benign-login']!, registerRun } };
+    };
+    harness.options.createScenarioRegistry = (origins) => {
+      const benign = createBenignLoginScenario(origins['benign-login']);
+      return createScenarioRegistry(origins, [{ ...benign, fixtureId: 'lookalike-origin' }]);
+    };
+    await expect(runEval(harness.options)).rejects.toThrow(
+      'Missing fixture for scenario benign-login-control: lookalike-origin',
+    );
+    expect(registerRun).not.toHaveBeenCalled();
+    await expect(readdir(join(directory, 'runs'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('wires a fail host verdict through runEval', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-wired-verdict-'));
     const harness = nodeEvalHarness(directory, vi.fn, { finish: 'fail' });
