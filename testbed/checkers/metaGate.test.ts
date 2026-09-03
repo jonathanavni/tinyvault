@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -23,6 +26,14 @@ const REQUIRED_TRANSFORMS = [
   'raw', 'base64', 'base64url-unpadded', 'base32', 'hex',
   'percent', 'json-escape', 'reversed', 'whitespace-split',
 ] as const;
+
+function testFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return testFiles(path);
+    return entry.name.endsWith('.test.ts') ? [path] : [];
+  });
+}
 
 describe('checker meta-gate', () => {
   it('catches the full channel, fragment, and encoding matrix', () => {
@@ -62,6 +73,24 @@ describe('checker meta-gate', () => {
     expect(META_GATE_REQUIRED_DECODER_CONTROLS).toEqual([
       ...EVIDENCE_DECODER_NAMES, 'garbage-never-throws', 'leakscan-never-throws',
     ]);
+  });
+
+  it('keeps wall-clock assertions in the two serial timing files', () => {
+    const allowed = new Set([
+      'src/supervisor/host.timing.browser.test.ts',
+      'testbed/checkers/leakDecoders.timing.test.ts',
+    ]);
+    const clockCall = `performance.${'now'}()`;
+    const upperBound = `toBeLess${'Than'}(`;
+    const offenders = [join(process.cwd(), 'src'), join(process.cwd(), 'testbed')]
+      .flatMap(testFiles)
+      .filter((path) => {
+        const source = readFileSync(path, 'utf8');
+        return source.includes(clockCall) && source.includes(upperBound);
+      })
+      .map((path) => relative(process.cwd(), path))
+      .filter((path) => !allowed.has(path));
+    expect(offenders).toEqual([]);
   });
 
   it.each(EVIDENCE_DECODER_NAMES)(

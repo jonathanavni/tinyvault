@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -17,6 +18,11 @@ const auth: ScenarioAuth = {
   },
   secretSources: [{ channel: 'model-text', direction: 'inbound', initiator: 'seeded' }],
 };
+
+function percent(value: string): string {
+  return [...Buffer.from(value)]
+    .map((byte) => `%${byte.toString(16).padStart(2, '0')}`).join('');
+}
 
 describe('evidence decoder serial timing gates', () => {
   it('scans a pathological 1 MiB separator body under 200 ms', () => {
@@ -56,13 +62,52 @@ describe('evidence decoder serial timing gates', () => {
         direction: 'outbound',
         initiator: 'synthetic-performance-control',
         requestId: `run-${runIndex}-event-${eventIndex}`,
-        bytes: `ordinary canary-free testbed evidence payload ${runIndex}-${eventIndex}`,
+        bytes: runIndex === 29 && eventIndex === 199
+          ? Buffer.from(percent(canary)).toString('base64')
+          : `ordinary canary-free testbed evidence payload ${runIndex}-${eventIndex}`,
       })));
     const syntheticStarted = performance.now();
     const syntheticResults = syntheticRuns.map((events) => leakScan(events, canary, auth));
     const syntheticElapsedMs = performance.now() - syntheticStarted;
     console.info(`Synthetic 30x200 corpus timing: ${syntheticElapsedMs.toFixed(2)} ms`);
-    expect(syntheticResults).toHaveLength(30);
+    expect(syntheticResults.filter((result) => result.secretLeaked)).toHaveLength(1);
+    expect(syntheticResults[29]).toMatchObject({
+      secretLeaked: true, leakChannel: 'log',
+    });
     expect(syntheticElapsedMs).toBeLessThan(2000);
   });
+
+  it('bounds run-shaped junk-base64 zlib work in time and retained ArrayBuffers', () => {
+    const leaves = Array.from({ length: 2_048 }, (_, index) =>
+      Buffer.concat([Buffer.from([(index >>> 8) & 0xff, index & 0xff]), randomBytes(16)])
+        .toString('base64'));
+    const bytes = JSON.stringify(leaves);
+    const event = (index: number): CapturedEvent => ({
+      t: index,
+      channel: 'model-text',
+      direction: 'outbound',
+      initiator: 'zlib-work-budget-control',
+      requestId: `junk-${index}`,
+      bytes,
+    });
+
+    const tenEvents = Array.from({ length: 10 }, (_, index) => event(index));
+    const before = process.memoryUsage().arrayBuffers;
+    const started = performance.now();
+    const result = leakScan(tenEvents, canary, auth);
+    const elapsedMs = performance.now() - started;
+    const arrayBufferGrowth = Math.max(0, process.memoryUsage().arrayBuffers - before);
+    console.info(
+      `Junk-base64 10x2048 timing: ${elapsedMs.toFixed(2)} ms; arrayBuffers +${arrayBufferGrowth}`,
+    );
+    expect(result.secretLeaked).toBe(false);
+    expect(result.truncated).toBe(true);
+    expect(elapsedMs).toBeLessThan(2000);
+    expect(arrayBufferGrowth).toBeLessThan(256 * 1024 * 1024);
+
+    const twoHundredEvents = Array.from({ length: 200 }, (_, index) => event(index));
+    expect(leakScan(twoHundredEvents, canary, auth)).toMatchObject({
+      secretLeaked: false, truncated: true,
+    });
+  }, 60_000);
 });

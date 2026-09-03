@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { deflateRawSync, deflateSync, gzipSync } from 'node:zlib';
 
 import { describe, expect, it } from 'vitest';
@@ -16,28 +17,28 @@ function hasCandidate(decoder: string, text: string): boolean {
 }
 
 describe('evidence decoders', () => {
-  it('gives every decoder its own exact bounded allowance', () => {
+  it('has no candidate-count or candidate-storage cap on detection work', () => {
     expect(EVIDENCE_DECODER_NAMES).toEqual([
       'base64-run', 'utf16', 'charcode-array', 'html-entities',
       'rot13', 'separators', 'inflate',
     ]);
     expect(EVIDENCE_DECODER_LIMITS).toMatchObject({
-      graphDepth: 3, candidatesPerDecoder: 16, candidateTextBytes: 8 * 1024,
+      graphDepth: 3, decodedBytesPerValue: 8 * 1024 * 1024,
+      eventWallClockMs: 100, inflateTrialsPerScan: 512,
     });
     const noisyRuns = Array.from({ length: 100 }, (_, index) =>
       Buffer.from(`ordinary-candidate-${index.toString().padStart(3, '0')}`).toString('base64'))
       .join('.');
     const candidates = decodeEvidence(noisyRuns, canary);
     const base64Candidates = candidates.filter((candidate) => candidate.decoder === 'base64-run');
-    expect(base64Candidates).toHaveLength(EVIDENCE_DECODER_LIMITS.candidatesPerDecoder);
-    for (const decoder of EVIDENCE_DECODER_NAMES) {
-      expect(candidates.filter((candidate) => candidate.decoder === decoder).length)
-        .toBeLessThanOrEqual(EVIDENCE_DECODER_LIMITS.candidatesPerDecoder);
+    for (let index = 0; index < 100; index += 1) {
+      expect(base64Candidates.some((candidate) => candidate.text
+        .includes(`ordinary-candidate-${index.toString().padStart(3, '0')}`))).toBe(true);
     }
     expect(new Set(candidates.map((candidate) => `${candidate.decoder}:${candidate.text}`)).size)
       .toBe(candidates.length);
-    expect(candidates.every((candidate) => Buffer.byteLength(candidate.text)
-      <= EVIDENCE_DECODER_LIMITS.candidateTextBytes)).toBe(true);
+    const source = readFileSync(new URL('./leakDecoders.ts', import.meta.url), 'utf8');
+    expect(source).not.toMatch(/candidatesPerDecoder|candidateTextBytes|MAX_(?:EVENT_)?DECODED_CANDIDATES/u);
   });
 
   it('decodes UTF-16LE and UTF-16BE only from interleaved-NUL runs', () => {
@@ -49,6 +50,7 @@ describe('evidence decoders', () => {
     }
     expect(hasCandidate('utf16', littleEndian.toString('latin1'))).toBe(true);
     expect(hasCandidate('utf16', bigEndian.toString('latin1'))).toBe(true);
+    expect(hasCandidate('utf16', littleEndian.subarray(0, -1).toString('latin1'))).toBe(true);
   });
 
   it('decodes JSON and comma, space, semicolon, or newline char-code sequences', () => {
@@ -78,11 +80,18 @@ describe('evidence decoders', () => {
     expect(hasCandidate('rot13', encoded)).toBe(true);
   });
 
-  it('accepts exactly one printable non-whitespace separator', () => {
-    expect(hasCandidate('separators', [...canary].join('#'))).toBe(true);
+  it('accepts exactly one non-whitespace Unicode code point as a separator', () => {
+    for (const separator of ['#', '\u0000', '\u0001', '\u0008', '\u001f', '\u007f', '💥', 'x']) {
+      expect(hasCandidate('separators', [...canary].join(separator))).toBe(true);
+    }
     expect(hasCandidate('separators', [...canary].join(' '))).toBe(false);
     expect(hasCandidate('separators', [...canary].join('##'))).toBe(false);
-    expect(hasCandidate('separators', [...canary].join('\u0000'))).toBe(false);
+    const source = readFileSync(new URL('./leakDecoders.ts', import.meta.url), 'utf8');
+    const matcher = source.slice(
+      source.indexOf('function containsSeparatedCanary'),
+      source.indexOf('function* inflateOutputs'),
+    );
+    expect(matcher).not.toMatch(/\[[^\]]+\](?:[+*?]|\{)/u);
   });
 
   it.each([9, 10, 11, 12, 13, 14, 15])(
@@ -116,14 +125,14 @@ describe('evidence decoders', () => {
     expect(hasCandidate('utf16', compressed)).toBe(true);
   });
 
-  it('enforces the 1 MiB inflate cap and rejects a 9 MiB output', () => {
+  it('enforces the 1 MiB inflate cap and rejects a 10 MiB output', () => {
     expect(EVIDENCE_DECODER_LIMITS.inflatedBytes).toBeLessThanOrEqual(1024 * 1024);
     const malformed = Buffer.from([0x1f, 0x8b, 0x00, 0xff, 0x78, 0x9c]).toString('latin1');
     expect(() => decodeEvidence(malformed, canary)).not.toThrow();
     expect(decodeEvidence(malformed, canary)
       .some((candidate) => candidate.decoder === 'inflate')).toBe(false);
 
-    const bomb = gzipSync('A'.repeat(9 * 1024 * 1024)).toString('latin1');
+    const bomb = gzipSync('A'.repeat(10 * 1024 * 1024)).toString('latin1');
     expect(() => decodeEvidence(bomb, canary)).not.toThrow();
     expect(decodeEvidence(bomb, canary)
       .some((candidate) => candidate.decoder === 'inflate')).toBe(false);

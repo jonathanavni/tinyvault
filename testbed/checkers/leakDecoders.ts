@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { gunzipSync, inflateRawSync, inflateSync } from 'node:zlib';
 
 export const EVIDENCE_DECODER_NAMES = [
@@ -19,101 +20,190 @@ export type DecodedCandidate = Readonly<{
 
 export const EVIDENCE_DECODER_LIMITS = Object.freeze({
   graphDepth: 3,
-  candidatesPerDecoder: 16,
-  candidateTextBytes: 8 * 1024,
+  decodedBytesPerValue: 8 * 1024 * 1024,
+  eventWallClockMs: 100,
   inflatedBytes: 1024 * 1024,
   inflateScanBytes: 64 * 1024,
+  inflateTrialsPerScan: 512,
 });
+
+export type DecodeEvidenceWorkBudget = {
+  inflateTrialsRemaining: number;
+  triedInflateSources: Set<string>;
+};
+
+export type DecodeEvidenceScanResult = Readonly<{
+  matched: boolean;
+  truncated: boolean;
+  decodedBytes: number;
+}>;
 
 type DecodeEvidenceOptions = Readonly<{
   /** Meta-gate-only deletion seam. Production callers leave every decoder enabled. */
   disabled?: ReadonlySet<EvidenceDecoderName>;
+  deadline?: number;
+  workBudget?: DecodeEvidenceWorkBudget;
 }>;
 
 type GraphNode = Readonly<{
   text: string;
   binary: Buffer;
   binaryIsDecoded: boolean;
+  rawInflateEligible: boolean;
   depth: number;
 }>;
 
 type DecoderOutput =
   | Readonly<{ kind: 'text'; text: string }>
-  | Readonly<{ kind: 'binary'; bytes: Buffer }>;
+  | Readonly<{ kind: 'binary'; bytes: Buffer; rawInflateEligible?: boolean }>;
+
+type DecodeRuntime = {
+  decodedBytes: number;
+  matched: boolean;
+  truncated: boolean;
+  options: DecodeEvidenceOptions;
+  workBudget: DecodeEvidenceWorkBudget;
+  seenCandidates: Map<EvidenceDecoderName, Set<string>>;
+  seenNodes: Set<string>;
+  onCandidate(candidate: DecodedCandidate): boolean;
+};
 
 const MIN_BASE64_RUN = 16;
 const MIN_CHARCODE_SEQUENCE = 8;
-const MAX_INFLATE_TRIALS = EVIDENCE_DECODER_LIMITS.candidatesPerDecoder;
-const UNICODE_LETTER_OR_NUMBER = /[\p{L}\p{N}]/u;
+const NON_WHITESPACE = /\S/u;
+const DECIMAL_ENTITY_DIGITS = /^[0-9]+$/u;
+const HEX_ENTITY_DIGITS = /^[0-9a-fA-F]+$/u;
+const DECODER_SCAN_ORDER: readonly EvidenceDecoderName[] = [
+  'html-entities', 'separators', 'rot13', 'charcode-array', 'utf16', 'base64-run', 'inflate',
+];
+const BASE64_FIRST_SCAN_ORDER: readonly EvidenceDecoderName[] = [
+  'base64-run', 'html-entities', 'separators', 'rot13', 'charcode-array', 'utf16', 'inflate',
+];
+
+export function createDecodeEvidenceWorkBudget(): DecodeEvidenceWorkBudget {
+  return {
+    inflateTrialsRemaining: EVIDENCE_DECODER_LIMITS.inflateTrialsPerScan,
+    triedInflateSources: new Set<string>(),
+  };
+}
 
 /**
- * Expands one evidence value through a finite graph. Every decoder receives the original
- * value and every reachable node; each decoder owns an independent output allowance.
+ * Expands one evidence value through the finite graph and presents each decoded candidate
+ * to the matcher immediately. Candidate storage is deliberately absent from this path.
  */
+export function scanDecodedEvidence(
+  bytes: string,
+  canary: string | undefined,
+  onCandidate: (candidate: DecodedCandidate) => boolean,
+  options: DecodeEvidenceOptions = {},
+): DecodeEvidenceScanResult {
+  const runtime: DecodeRuntime = {
+    decodedBytes: 0,
+    matched: false,
+    truncated: false,
+    options,
+    workBudget: options.workBudget ?? createDecodeEvidenceWorkBudget(),
+    seenCandidates: new Map(),
+    seenNodes: new Set(),
+    onCandidate,
+  };
+  const queue: GraphNode[] = [{
+    text: bytes,
+    binary: Buffer.from(bytes, 'utf8'),
+    binaryIsDecoded: false,
+    rawInflateEligible: false,
+    depth: 0,
+  }];
+  runtime.seenNodes.add(nodeKey(queue[0]));
+
+  let cursor = 0;
+  while (cursor < queue.length && !runtime.matched) {
+    if (!withinDeadline(runtime)) break;
+    const node = queue[cursor++];
+    if (node.depth >= EVIDENCE_DECODER_LIMITS.graphDepth) continue;
+    const nextNodes: GraphNode[] = [];
+    const decoderOrder = estimatedBase64Bytes(node.text) === null
+      ? DECODER_SCAN_ORDER
+      : BASE64_FIRST_SCAN_ORDER;
+    for (const decoder of decoderOrder) {
+      if (!withinDeadline(runtime) || runtime.matched) break;
+      if (options.disabled?.has(decoder)) continue;
+      const outputs = safelyIterate(() => runDecoder(decoder, node, canary, runtime));
+      for (const output of outputs) {
+        if (runtime.matched) break;
+        if (!admitDecodedOutput(output, runtime)) continue;
+        if (output.kind === 'binary') {
+          addBinaryOutput(
+            decoder,
+            output.bytes,
+            output.rawInflateEligible ?? true,
+            node.depth,
+            runtime,
+            nextNodes,
+          );
+        } else {
+          addTextOutput(decoder, output.text, node.depth, runtime, nextNodes);
+        }
+        if (!withinDeadline(runtime)) break;
+      }
+    }
+    // Preserve the existing depth-first graph order, but no sibling can prevent a later
+    // candidate from being matched unless a declared byte/time work budget is exhausted.
+    if (nextNodes.length > 0) queue.splice(cursor, 0, ...nextNodes);
+  }
+  return {
+    matched: runtime.matched,
+    truncated: runtime.truncated,
+    decodedBytes: runtime.decodedBytes,
+  };
+}
+
+/** Convenience collector for unit tests; production detection uses scanDecodedEvidence. */
 export function decodeEvidence(
   bytes: string,
   canary?: string,
   options: DecodeEvidenceOptions = {},
 ): readonly DecodedCandidate[] {
   const candidates: DecodedCandidate[] = [];
-  const counts = new Map<EvidenceDecoderName, number>();
-  const seenCandidates = new Map<EvidenceDecoderName, Set<string>>();
-  const seenNodes = new Set<string>();
-  const queue: GraphNode[] = [{
-    text: bytes, binary: Buffer.from(bytes, 'utf8'), binaryIsDecoded: false, depth: 0,
-  }];
-  seenNodes.add(nodeKey(queue[0]));
-
-  let cursor = 0;
-  while (cursor < queue.length) {
-    const node = queue[cursor++];
-    if (node.depth >= EVIDENCE_DECODER_LIMITS.graphDepth) continue;
-    const nextNodes: GraphNode[] = [];
-    for (const decoder of EVIDENCE_DECODER_NAMES) {
-      if (options.disabled?.has(decoder) || decoderBudgetFull(decoder, counts)) continue;
-      const remaining = EVIDENCE_DECODER_LIMITS.candidatesPerDecoder
-        - (counts.get(decoder) ?? 0);
-      const outputs = safely(() => runDecoder(decoder, node, remaining, canary), []);
-      for (const output of outputs) {
-        if (decoderBudgetFull(decoder, counts)) break;
-        if (output.kind === 'binary') {
-          addBinaryOutput(decoder, output.bytes, node.depth, canary, {
-            candidates, counts, seenCandidates, seenNodes, nextNodes,
-          });
-        } else {
-          addTextOutput(decoder, output.text, node.depth, canary, {
-            candidates, counts, seenCandidates, seenNodes, nextNodes,
-          });
-        }
-      }
-    }
-    // Depth-first insertion preserves useful nested chains without letting sibling noise consume
-    // a decoder's allowance before the next layer of the same bounded composition.
-    if (nextNodes.length > 0) queue.splice(cursor, 0, ...nextNodes);
-  }
+  scanDecodedEvidence(bytes, canary, (candidate) => {
+    candidates.push(candidate);
+    return false;
+  }, options);
   return candidates;
 }
 
-type CollectorState = {
-  candidates: DecodedCandidate[];
-  counts: Map<EvidenceDecoderName, number>;
-  seenCandidates: Map<EvidenceDecoderName, Set<string>>;
-  seenNodes: Set<string>;
-  nextNodes: GraphNode[];
-};
+function admitDecodedOutput(output: DecoderOutput, runtime: DecodeRuntime): boolean {
+  const bytes = output.kind === 'binary'
+    ? output.bytes.length
+    : Buffer.byteLength(output.text);
+  if (runtime.decodedBytes + bytes > EVIDENCE_DECODER_LIMITS.decodedBytesPerValue) {
+    runtime.truncated = true;
+    return false;
+  }
+  runtime.decodedBytes += bytes;
+  return true;
+}
 
 function addBinaryOutput(
   decoder: EvidenceDecoderName,
   bytes: Buffer,
+  rawInflateEligible: boolean,
   parentDepth: number,
-  canary: string | undefined,
-  state: CollectorState,
+  runtime: DecodeRuntime,
+  nextNodes: GraphNode[],
 ): void {
-  const views = [...new Set([bytes.toString('utf8'), bytes.toString('latin1')])];
-  for (const text of views) {
-    if (decoderBudgetFull(decoder, state.counts)) break;
-    addCandidate(decoder, text, canary, state);
-    addNode({ text, binary: bytes, binaryIsDecoded: true, depth: parentDepth + 1 }, state);
+  const utf8 = bytes.toString('utf8');
+  const views = isValidUtf8(bytes) ? [utf8] : [utf8, bytes.toString('latin1')];
+  for (const text of new Set(views)) {
+    addCandidate(decoder, text, runtime);
+    if (runtime.matched) return;
+    addNode({
+      text,
+      binary: bytes,
+      binaryIsDecoded: true,
+      rawInflateEligible,
+      depth: parentDepth + 1,
+    }, runtime, nextNodes);
   }
 }
 
@@ -121,80 +211,79 @@ function addTextOutput(
   decoder: EvidenceDecoderName,
   text: string,
   parentDepth: number,
-  canary: string | undefined,
-  state: CollectorState,
+  runtime: DecodeRuntime,
+  nextNodes: GraphNode[],
 ): void {
-  addCandidate(decoder, text, canary, state);
-  // Base64/inflate binary nodes always traverse the whole inventory. Text-only outputs
-  // extend the graph only where a required inverse composition needs another base64 pass.
+  addCandidate(decoder, text, runtime);
+  if (runtime.matched) return;
+  // Exact composition graph: base64/inflate binary outputs traverse every decoder;
+  // entities and UTF-16 text outputs also extend; rot13/charcode/separators are terminal.
   if (decoder !== 'html-entities' && decoder !== 'utf16') return;
   addNode({
-    text, binary: Buffer.from(text, 'utf8'), binaryIsDecoded: false, depth: parentDepth + 1,
-  }, state);
+    text,
+    binary: Buffer.from(text, 'utf8'),
+    binaryIsDecoded: false,
+    rawInflateEligible: false,
+    depth: parentDepth + 1,
+  }, runtime, nextNodes);
 }
 
 function addCandidate(
   decoder: EvidenceDecoderName,
   text: string,
-  canary: string | undefined,
-  state: CollectorState,
+  runtime: DecodeRuntime,
 ): void {
-  const bounded = boundedCandidateText(text, canary);
-  if (bounded.length === 0) return;
-  const seen = state.seenCandidates.get(decoder) ?? new Set<string>();
-  if (seen.has(bounded)) return;
-  seen.add(bounded);
-  state.seenCandidates.set(decoder, seen);
-  state.candidates.push({ decoder, text: bounded });
-  state.counts.set(decoder, (state.counts.get(decoder) ?? 0) + 1);
+  if (text.length === 0) return;
+  const key = digestText(text);
+  const seen = runtime.seenCandidates.get(decoder) ?? new Set<string>();
+  if (seen.has(key)) return;
+  seen.add(key);
+  runtime.seenCandidates.set(decoder, seen);
+  runtime.matched = runtime.onCandidate({ decoder, text });
 }
 
-function addNode(node: GraphNode, state: CollectorState): void {
-  if (node.depth > EVIDENCE_DECODER_LIMITS.graphDepth) return;
-  const bounded = boundedCandidateText(node.text);
-  const next = { ...node, text: bounded };
-  const key = nodeKey(next);
-  if (bounded.length === 0 || state.seenNodes.has(key)) return;
-  state.seenNodes.add(key);
-  state.nextNodes.push(next);
+function addNode(
+  node: GraphNode,
+  runtime: DecodeRuntime,
+  nextNodes: GraphNode[],
+): void {
+  if (node.depth > EVIDENCE_DECODER_LIMITS.graphDepth || node.text.length === 0) return;
+  const key = nodeKey(node);
+  if (runtime.seenNodes.has(key)) return;
+  runtime.seenNodes.add(key);
+  nextNodes.push(node);
 }
 
-function boundedCandidateText(text: string, canary?: string): string {
-  if (Buffer.byteLength(text) <= EVIDENCE_DECODER_LIMITS.candidateTextBytes) return text;
-  const canaryIndex = canary ? text.indexOf(canary) : -1;
-  const center = canaryIndex < 0 ? 0 : canaryIndex;
-  const start = Math.max(0, center - Math.floor(EVIDENCE_DECODER_LIMITS.candidateTextBytes / 2));
-  return Buffer.from(text.slice(start), 'utf8')
-    .subarray(0, EVIDENCE_DECODER_LIMITS.candidateTextBytes).toString('utf8');
+function digestText(text: string): string {
+  return createHash('sha256').update(text).digest('base64url');
 }
 
-function decoderBudgetFull(
-  decoder: EvidenceDecoderName,
-  counts: ReadonlyMap<EvidenceDecoderName, number>,
-): boolean {
-  return (counts.get(decoder) ?? 0) >= EVIDENCE_DECODER_LIMITS.candidatesPerDecoder;
+function digestBytes(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('base64url');
 }
 
 function nodeKey(node: GraphNode): string {
-  return node.binaryIsDecoded
-    ? `${node.depth}:b:${node.binary.toString('base64')}:${node.text}`
-    : `${node.depth}:t:${node.text}`;
+  return `${node.depth}:${node.binaryIsDecoded ? 'b' : 't'}:${node.rawInflateEligible ? 'r' : 'n'}`
+    + `:${digestBytes(node.binary)}:${digestText(node.text)}`;
 }
 
 function runDecoder(
   decoder: EvidenceDecoderName,
   node: GraphNode,
-  limit: number,
-  canary?: string,
-): DecoderOutput[] {
-  if (decoder === 'base64-run') return decodeBase64Outputs(node.text, limit);
+  canary: string | undefined,
+  runtime: DecodeRuntime,
+): Iterable<DecoderOutput> {
+  if (decoder === 'base64-run') return decodeBase64Outputs(node.text, runtime);
   if (decoder === 'utf16') {
-    return decodeUtf16Runs(node.binary, limit).map((text) => ({ kind: 'text', text }));
+    return mapTextOutputs(decodeUtf16Runs(node.binary, runtime));
   }
   if (decoder === 'charcode-array') {
-    return decodeCharcodeSequences(node.text, limit).map((text) => ({ kind: 'text', text }));
+    return mapTextOutputs(decodeCharcodeSequences(node.text, runtime));
   }
   if (decoder === 'html-entities') {
+    if (canary && containsNumericEntityCanary(node.text, canary)) {
+      return [{ kind: 'text', text: canary }];
+    }
     const text = decodeNumericHtmlEntities(node.text);
     return text === node.text ? [] : [{ kind: 'text', text }];
   }
@@ -203,11 +292,23 @@ function runDecoder(
     return text === node.text ? [] : [{ kind: 'text', text }];
   }
   if (decoder === 'separators') {
-    return canary && canary.length >= 2 && containsSeparatedCanary(node.text, canary)
+    return canary && [...canary].length >= 2 && containsSeparatedCanary(node.text, canary)
       ? [{ kind: 'text', text: canary }]
       : [];
   }
-  return inflateOutputs(node, limit);
+  return inflateOutputs(node, runtime);
+}
+
+function* mapTextOutputs(values: Iterable<string>): Generator<DecoderOutput> {
+  for (const text of values) yield { kind: 'text', text };
+}
+
+function* safelyIterate<T>(operation: () => Iterable<T>): Generator<T> {
+  try {
+    yield* operation();
+  } catch {
+    // Evidence is hostile input. One decoder's malformed case cannot fail the checker.
+  }
 }
 
 function safely<T>(operation: () => T, fallback: T): T {
@@ -219,22 +320,35 @@ function safely<T>(operation: () => T, fallback: T): T {
   }
 }
 
-function decodeBase64Outputs(text: string, limit: number): DecoderOutput[] {
-  const outputs: DecoderOutput[] = [];
-  for (const run of base64Runs(text)) {
+function* decodeBase64Outputs(
+  text: string,
+  runtime: DecodeRuntime,
+): Generator<DecoderOutput> {
+  for (const run of base64Runs(text, runtime)) {
     for (let offset = 0; offset <= 3; offset += 1) {
-      const decoded = decodeBase64(run.slice(offset));
-      if (decoded !== null) outputs.push({ kind: 'binary', bytes: decoded });
-      if (outputs.length >= limit) return outputs;
+      if (!withinDeadline(runtime)) return;
+      const value = run.slice(offset);
+      const estimatedBytes = estimatedBase64Bytes(value);
+      if (estimatedBytes === null) continue;
+      if (runtime.decodedBytes + estimatedBytes > EVIDENCE_DECODER_LIMITS.decodedBytesPerValue) {
+        runtime.truncated = true;
+        continue;
+      }
+      const decoded = decodeBase64(value);
+      if (decoded !== null) {
+        // All alignments are scanned as text, but raw-DEFLATE is trialled once per base64 run,
+        // on its canonical decoded buffer rather than on every shifted view.
+        yield { kind: 'binary', bytes: decoded, rawInflateEligible: offset === 0 };
+      }
     }
   }
-  return outputs;
 }
 
-function base64Runs(text: string): string[] {
-  const runs: string[] = [];
+function* base64Runs(text: string, runtime: DecodeRuntime): Generator<string> {
+  const yielded = new Set<string>();
   let index = 0;
   while (index < text.length) {
+    if (!withinDeadline(runtime)) return;
     if (!isBase64BodyCharacter(text.charCodeAt(index))) {
       index += 1;
       continue;
@@ -250,16 +364,21 @@ function base64Runs(text: string): string[] {
       }
       segments.push(text.slice(start, index));
       const whitespaceStart = index;
-      while (index < text.length && isWhitespace(text.charCodeAt(index))) index += 1;
+      while (index < text.length && isAsciiWhitespace(text.charCodeAt(index))) index += 1;
       if (index === whitespaceStart || !isBase64BodyCharacter(text.charCodeAt(index))) break;
     }
     const joined = segments.join('');
-    if (joined.length >= MIN_BASE64_RUN) runs.push(joined);
+    if (joined.length >= MIN_BASE64_RUN && !yielded.has(joined)) {
+      yielded.add(joined);
+      yield joined;
+    }
     for (const segment of segments) {
-      if (segment.length >= MIN_BASE64_RUN && segment !== joined) runs.push(segment);
+      if (segment.length >= MIN_BASE64_RUN && !yielded.has(segment)) {
+        yielded.add(segment);
+        yield segment;
+      }
     }
   }
-  return [...new Set(runs)];
 }
 
 function isBase64BodyCharacter(code: number): boolean {
@@ -269,26 +388,31 @@ function isBase64BodyCharacter(code: number): boolean {
     || code === 0x2b || code === 0x2f || code === 0x5f || code === 0x2d;
 }
 
-function isWhitespace(code: number): boolean {
+function isAsciiWhitespace(code: number): boolean {
   return code === 0x09 || code === 0x0a || code === 0x0b
     || code === 0x0c || code === 0x0d || code === 0x20;
 }
 
-function decodeBase64(value: string): Buffer | null {
+function estimatedBase64Bytes(value: string): number | null {
   if (value.length < MIN_BASE64_RUN || value.length % 4 === 1
     || !/^[A-Za-z0-9+/_-]+={0,2}$/u.test(value)) return null;
+  const unpaddedLength = value.replace(/=+$/u, '').length;
+  return Math.floor(unpaddedLength * 3 / 4);
+}
+
+function decodeBase64(value: string): Buffer | null {
+  if (estimatedBase64Bytes(value) === null) return null;
   const normalized = value.replace(/-/gu, '+').replace(/_/gu, '/');
   const unpadded = normalized.replace(/=+$/u, '');
-  if (Math.floor(unpadded.length * 3 / 4) > EVIDENCE_DECODER_LIMITS.candidateTextBytes) return null;
   const padding = '='.repeat((4 - (unpadded.length % 4)) % 4);
   return Buffer.from(unpadded + padding, 'base64');
 }
 
-function decodeUtf16Runs(bytes: Buffer, limit: number): string[] {
-  const decoded: string[] = [];
+function* decodeUtf16Runs(bytes: Buffer, runtime: DecodeRuntime): Generator<string> {
   for (const endian of ['le', 'be'] as const) {
     let index = 0;
     while (index + 1 < bytes.length) {
+      if (!withinDeadline(runtime)) return;
       const startsPair = endian === 'le'
         ? bytes[index] !== 0 && bytes[index + 1] === 0
         : bytes[index] === 0 && bytes[index + 1] !== 0;
@@ -304,14 +428,19 @@ function decodeUtf16Runs(bytes: Buffer, limit: number): string[] {
         if (!pairMatches) break;
         index += 2;
       }
+      const hasLittleEndianOddTail = endian === 'le'
+        && index === bytes.length - 1 && bytes[index] !== 0;
+      if (hasLittleEndianOddTail) index += 1;
       if (index - start < 8) continue;
       const run = bytes.subarray(start, index);
-      if (endian === 'le') decoded.push(run.toString('utf16le'));
-      else decoded.push(swapUtf16(run).toString('utf16le'));
-      if (decoded.length >= limit) return decoded;
+      if (endian === 'le') {
+        const padded = run.length % 2 === 0 ? run : Buffer.concat([run, Buffer.alloc(1)]);
+        yield padded.toString('utf16le');
+      } else {
+        yield swapUtf16(run).toString('utf16le');
+      }
     }
   }
-  return decoded;
 }
 
 function swapUtf16(bytes: Buffer): Buffer {
@@ -323,21 +452,19 @@ function swapUtf16(bytes: Buffer): Buffer {
   return swapped;
 }
 
-function decodeCharcodeSequences(text: string, limit: number): string[] {
-  const decoded: string[] = [];
+function* decodeCharcodeSequences(text: string, runtime: DecodeRuntime): Generator<string> {
   const separator = String.raw`(?:\s*[,;]\s*|\s+)`;
   const pattern = new RegExp(
     String.raw`(?:^|[^0-9])((?:[0-9]{1,3}${separator}){7,}[0-9]{1,3})(?![0-9])`, 'gu',
   );
   for (const match of text.matchAll(pattern)) {
+    if (!withinDeadline(runtime)) return;
     const values = match[1].split(/\s*[,;]\s*|\s+/u)
       .map((value) => Number.parseInt(value, 10));
     if (values.every((value) => value >= 0 && value <= 255)) {
-      decoded.push(Buffer.from(values).toString('utf8'));
-      if (decoded.length >= limit) return decoded;
+      yield Buffer.from(values).toString('utf8');
     }
   }
-  return decoded;
 }
 
 function decodeNumericHtmlEntities(text: string): string {
@@ -350,6 +477,38 @@ function decodeNumericHtmlEntities(text: string): string {
     });
 }
 
+function containsNumericEntityCanary(text: string, canary: string): boolean {
+  const canaryPoints = [...canary];
+  let start = text.indexOf('&#');
+  while (start >= 0) {
+    let cursor = start;
+    let matched = true;
+    for (const point of canaryPoints) {
+      if (!text.startsWith('&#', cursor)) {
+        matched = false;
+        break;
+      }
+      const semicolon = text.indexOf(';', cursor + 2);
+      if (semicolon < 0 || semicolon - cursor > 10) {
+        matched = false;
+        break;
+      }
+      const encoded = text.slice(cursor + 2, semicolon);
+      const hexadecimal = encoded[0] === 'x' || encoded[0] === 'X';
+      const digits = hexadecimal ? encoded.slice(1) : encoded;
+      if (!digits || !(hexadecimal ? HEX_ENTITY_DIGITS : DECIMAL_ENTITY_DIGITS).test(digits)
+        || Number.parseInt(digits, hexadecimal ? 16 : 10) !== point.codePointAt(0)) {
+        matched = false;
+        break;
+      }
+      cursor = semicolon + 1;
+    }
+    if (matched) return true;
+    start = text.indexOf('&#', start + 2);
+  }
+  return false;
+}
+
 function rot13(text: string): string {
   return text.replace(/[A-Za-z]/gu, (character) => {
     const base = character <= 'Z' ? 0x41 : 0x61;
@@ -358,83 +517,122 @@ function rot13(text: string): string {
 }
 
 function containsSeparatedCanary(text: string, canary: string): boolean {
-  let start = text.indexOf(canary[0]);
+  const canaryPoints = [...canary];
+  let start = text.indexOf(canaryPoints[0]);
   while (start >= 0) {
-    let cursor = start + 1;
+    let cursor = start + canaryPoints[0].length;
     let matched = true;
-    for (let index = 1; index < canary.length; index += 1) {
-      const separator = text.charCodeAt(cursor);
-      if (!isPrintableNonWhitespaceSeparator(separator) || text[cursor + 1] !== canary[index]) {
+    for (let index = 1; index < canaryPoints.length; index += 1) {
+      const separatorPoint = text.codePointAt(cursor);
+      if (separatorPoint === undefined) {
         matched = false;
         break;
       }
-      cursor += 2;
+      const separator = String.fromCodePoint(separatorPoint);
+      cursor += separator.length;
+      if (!NON_WHITESPACE.test(separator)
+        || !text.startsWith(canaryPoints[index], cursor)) {
+        matched = false;
+        break;
+      }
+      cursor += canaryPoints[index].length;
     }
     if (matched) return true;
-    start = text.indexOf(canary[0], start + 1);
+    start = text.indexOf(canaryPoints[0], start + canaryPoints[0].length);
   }
   return false;
 }
 
-function isPrintableNonWhitespaceSeparator(code: number): boolean {
-  return !UNICODE_LETTER_OR_NUMBER.test(String.fromCharCode(code))
-    && !isWhitespace(code) && code >= 0x21 && code !== 0x7f;
-}
-
-function inflateOutputs(node: GraphNode, limit: number): DecoderOutput[] {
-  const sources: Array<{ bytes: Buffer; allowRaw: boolean }> = [
-    { bytes: node.binary, allowRaw: node.binaryIsDecoded },
-    ...embeddedCompressedSources(node.text).map((bytes) => ({ bytes, allowRaw: false })),
-  ];
+function* inflateOutputs(node: GraphNode, runtime: DecodeRuntime): Generator<DecoderOutput> {
+  const sources: Iterable<{ bytes: Buffer; allowRaw: boolean }> = (function* sources() {
+    yield { bytes: node.binary, allowRaw: node.binaryIsDecoded && node.rawInflateEligible };
+    for (const bytes of embeddedCompressedSources(node.text, runtime)) {
+      yield { bytes, allowRaw: false };
+    }
+  }());
   const seen = new Set<string>();
-  const outputs: DecoderOutput[] = [];
   for (const source of sources) {
-    const key = source.bytes.toString('base64');
+    if (!withinDeadline(runtime)) return;
+    const key = digestBytes(source.bytes);
     if (seen.has(key)) continue;
     seen.add(key);
-    for (const bytes of inflateEvidence(source.bytes, source.allowRaw)) {
-      outputs.push({ kind: 'binary', bytes });
-      if (outputs.length >= limit) return outputs;
+    for (const bytes of inflateEvidence(source.bytes, source.allowRaw, runtime, key)) {
+      yield { kind: 'binary', bytes };
     }
   }
-  return outputs;
 }
 
-function embeddedCompressedSources(text: string): Buffer[] {
-  const sources: Buffer[] = [];
+function* embeddedCompressedSources(
+  text: string,
+  runtime: DecodeRuntime,
+): Generator<Buffer> {
   const limit = Math.min(text.length - 1, EVIDENCE_DECODER_LIMITS.inflateScanBytes);
-  for (let index = 0; index < limit && sources.length < MAX_INFLATE_TRIALS; index += 1) {
+  let latin1RegionEnd = -1;
+  for (let index = 0; index < limit; index += 1) {
+    if (!withinDeadline(runtime)) return;
     const first = text.charCodeAt(index);
     const second = text.charCodeAt(index + 1);
     if (!isGzipHeader(first, second) && !isZlibHeader(first, second)) continue;
-    const suffix = text.slice(index);
-    if ([...suffix].some((character) => character.charCodeAt(0) > 0xff)) continue;
-    sources.push(Buffer.from(suffix, 'latin1'));
+    if (index >= latin1RegionEnd) {
+      latin1RegionEnd = index;
+      while (latin1RegionEnd < text.length && text.charCodeAt(latin1RegionEnd) <= 0xff) {
+        latin1RegionEnd += 1;
+      }
+    }
+    if (latin1RegionEnd <= index + 1) continue;
+    yield Buffer.from(text.slice(index, latin1RegionEnd), 'latin1');
   }
-  return sources;
 }
 
-function inflateEvidence(bytes: Buffer, allowRaw: boolean): Buffer[] {
-  const inflated: Buffer[] = [];
+function* inflateEvidence(
+  bytes: Buffer,
+  allowRaw: boolean,
+  runtime: DecodeRuntime,
+  sourceKey: string,
+): Generator<Buffer> {
   const options = { maxOutputLength: EVIDENCE_DECODER_LIMITS.inflatedBytes };
-  let trials = 0;
   const limit = Math.min(bytes.length - 1, EVIDENCE_DECODER_LIMITS.inflateScanBytes);
-  for (let index = 0; index < limit && trials < MAX_INFLATE_TRIALS; index += 1) {
+  let hasWrapperSignature = false;
+  for (let index = 0; index < limit; index += 1) {
+    if (!withinDeadline(runtime)) return;
     if (isGzipHeader(bytes[index], bytes[index + 1])) {
-      trials += 1;
+      hasWrapperSignature = true;
+      const trialKey = `gzip:${sourceKey}:${index}`;
+      if (!claimInflateTrial(runtime, trialKey)) return;
       const output = safely(() => gunzipSync(bytes.subarray(index), options), null);
-      if (output !== null) inflated.push(output);
+      if (output !== null) yield output;
     } else if (isZlibHeader(bytes[index], bytes[index + 1])) {
-      trials += 1;
+      hasWrapperSignature = true;
+      const trialKey = `zlib:${sourceKey}:${index}`;
+      if (!claimInflateTrial(runtime, trialKey)) return;
       const output = safely(() => inflateSync(bytes.subarray(index), options), null);
-      if (output !== null) inflated.push(output);
+      if (output !== null) yield output;
     }
   }
-  if (allowRaw && trials < MAX_INFLATE_TRIALS) {
-    const output = safely(() => inflateRawSync(bytes, options), null);
-    if (output !== null) inflated.push(output);
-  }
-  return inflated;
+  if (!allowRaw || bytes.length < 32 || ((bytes[0] >>> 1) & 0x03) === 0x03) return;
+  if (isValidUtf8(bytes) && !hasWrapperSignature) return;
+  const trialKey = `raw:${sourceKey}`;
+  if (!claimInflateTrial(runtime, trialKey)) return;
+  const output = safely(() => inflateRawSync(bytes, options), null);
+  if (output !== null) yield output;
+}
+
+function claimInflateTrial(runtime: DecodeRuntime, key: string): boolean {
+  if (runtime.workBudget.triedInflateSources.has(key)) return false;
+  if (runtime.workBudget.inflateTrialsRemaining <= 0) return false;
+  runtime.workBudget.triedInflateSources.add(key);
+  runtime.workBudget.inflateTrialsRemaining -= 1;
+  return true;
+}
+
+function withinDeadline(runtime: DecodeRuntime): boolean {
+  if (runtime.options.deadline === undefined || performance.now() <= runtime.options.deadline) return true;
+  runtime.truncated = true;
+  return false;
+}
+
+function isValidUtf8(bytes: Buffer): boolean {
+  return Buffer.from(bytes.toString('utf8'), 'utf8').equals(bytes);
 }
 
 function isGzipHeader(first: number, second: number): boolean {
