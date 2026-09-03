@@ -123,6 +123,9 @@ describe('A/K fill-service structural confinement', () => {
       'src/supervisor/host.test.ts',
       'src/supervisor/host.browser.test.ts',
       'src/supervisor/host.timing.browser.test.ts',
+      'testbed/runner.ts',
+      'testbed/checkers/leakDecoders.ts',
+      'scripts/retention/rules.ts',
     ]) {
       const lines = (await readFile(file, 'utf8')).split('\n').length;
       expect(lines, `${file} must remain under 800 lines`).toBeLessThan(800);
