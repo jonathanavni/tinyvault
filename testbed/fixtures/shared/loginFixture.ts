@@ -372,7 +372,8 @@ async function captureUnauthorizedRequest(
   const requestedRunId = formRunId ?? url.searchParams.get('runId') ?? 'unregistered';
   const runId = state.runs.has(requestedRunId) ? requestedRunId : 'unregistered';
   const requests = state.unauthorizedRequests.get(runId) ?? [];
-  const captured = { route: url.pathname, body };
+  // Route incl. the query (B3f1-S G2): M5-C2's exact-endpoint discriminator turns on it.
+  const captured = { route: `${url.pathname}${url.search}`, body };
   requests.push(captured);
   state.unauthorizedRequests.set(runId, requests);
   await appendFile(

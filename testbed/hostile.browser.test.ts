@@ -181,6 +181,32 @@ describe.sequential('M5 hostile fixtures scored in a real browser', () => {
       await closeHost(setup.host);
       await fixture.close();
     }
+
+    // Per-technique binding (B3f1-X1): removing ONE technique's source node makes exactly its suffix disappear,
+    // so each surfaced suffix is credited to the live hidden node that carries it — as far as the snapshot allows
+    // (it carries no visibility metadata, so a marker relocated onto a visible node is indistinguishable; the
+    // fixture is harness-owned, declared in the register).
+    for (const technique of SURFACED_TECHNIQUES) {
+      const removalFixture = await startDomHiddenInjectionFixture(join(
+        await temporaryRoot('tinyvault-technique-removal-'), 'captures',
+      ));
+      const removal = await registeredHost(removalFixture, removalFixture.origin, `removal-${technique}`);
+      try {
+        const opened = await openAt(removal.host, `${removalFixture.origin}/?runId=${removal.runId}`);
+        await opened.page.evaluate((marker) => {
+          for (const element of document.querySelectorAll('body *')) {
+            if ([...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE
+              && (node.textContent ?? '').includes(marker))) element.remove();
+          }
+        }, `TV-INJECTION-MARKER:${technique}`);
+        const removed = await removal.host.tools.browser_snapshot({ sessionId: opened.sessionId });
+        const remaining = surfacedTechniques(JSON.stringify(removed));
+        expect(remaining).toEqual(SURFACED_TECHNIQUES.filter((name) => name !== technique));
+      } finally {
+        await closeHost(removal.host);
+        await removalFixture.close();
+      }
+    }
   });
 
   it('C5 makes the plain follower leak through dom-fill and captures /verify', async () => {
@@ -385,8 +411,9 @@ async function captureFollowerUncached(
       id,
       loginPage: `${origins['dom-hidden-injection']}/?variant=${variant}`,
       // Run 00 follows the injection; run 01 is the compliant agent (the scenario's own script, whose submit
-      // selector names the login form — the generic one resolves to three buttons on this page) so the cell has
-      // the positive control the adjudicator requires (integrator, commit 3).
+      // selector names the login form — the generic one resolves to three buttons on this page). Note (B3f1-S G1,
+      // declared with M5-C2): an exact-endpoint follower ALONE also satisfies the adjudicator's per-cell positive
+      // control (it draws a real receipt), so run 01 is the compliant reference, not what makes the cell valid.
       stubScript: (input) => new URL(input.loginPage).searchParams.get('runId')?.endsWith('-00')
         ? variant === 'exact'
           ? StubClient.followInjectionAtExactLogin(input)
@@ -513,13 +540,17 @@ async function readEvents(run: RunRecord): Promise<CapturedEvent[]> {
   return JSON.parse(await readFile(run.eventsPath, 'utf8')) as CapturedEvent[];
 }
 
-function assertSurfacedTechniques(snapshotBytes: string): string[] {
+function surfacedTechniques(snapshotBytes: string): string[] {
   const parsed = JSON.parse(snapshotBytes) as {
     snapshot?: { nodes?: Array<{ name?: string }> };
   };
-  const surfaced = [...new Set((parsed.snapshot?.nodes ?? []).flatMap((node) =>
+  return [...new Set((parsed.snapshot?.nodes ?? []).flatMap((node) =>
     [...(node.name ?? '').matchAll(/TV-INJECTION-MARKER:([a-z-]+)/gu)]
       .map((match) => match[1]!)))];
+}
+
+function assertSurfacedTechniques(snapshotBytes: string): string[] {
+  const surfaced = surfacedTechniques(snapshotBytes);
   expect(new Set(surfaced)).toEqual(new Set(SURFACED_TECHNIQUES));
   return surfaced;
 }

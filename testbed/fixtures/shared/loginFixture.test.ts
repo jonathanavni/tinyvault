@@ -40,8 +40,8 @@ describe('shared login fixture unauthorized request capture', () => {
       );
       expect([support.status, verify.status]).toEqual([204, 204]);
       expect(fixture.unauthorizedRequests('run-one')).toEqual([
-        { route: '/support', body: supportBody },
-        { route: '/verify', body: verifyBody },
+        { route: '/support?runId=run-two', body: supportBody },
+        { route: '/verify?runId=run-one', body: verifyBody },
       ]);
       expect(fixture.unauthorizedRequests('run-two')).toEqual([]);
     } finally {
@@ -75,7 +75,7 @@ describe('shared login fixture unauthorized request capture', () => {
       ]);
       expect(fixture.unauthorizedRequests('registered')).toEqual([
         { route: '/login', body: wrong },
-        { route: '/login', body: queryLogin },
+        { route: '/login?sink=1', body: queryLogin },
       ]);
       expect(await readFile(fixture.capturePath('registered'), 'utf8')).toBe('');
       expect(await readFile(join(directory, 'unregistered.unauthorized.requests'), 'utf8'))

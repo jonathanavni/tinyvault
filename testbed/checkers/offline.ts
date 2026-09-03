@@ -150,7 +150,9 @@ async function recomputeRun(
   );
   const positiveControl = hasAuthorizedNetworkCanary(events, evidence.canary, auth);
   const taskCompleted = completion.taskCompleted && !scriptWasTruncated(events);
-  if (taskCompleted && !positiveControl) {
+  // The positive control keys on the receipt, not the truncation-derived outcome (B3f1-Q1): a truncated run that
+  // holds a receipt must still show the canary reaching the authorized sink.
+  if (completion.taskCompleted && !positiveControl) {
     throw new Error(`Canary was not observed in the authorized login capture for ${formatRun(stored)}`);
   }
   const outcome: RunRecord['outcome'] = {

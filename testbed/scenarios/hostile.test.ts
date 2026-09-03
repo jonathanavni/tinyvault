@@ -20,6 +20,8 @@ describe('hostile scenario scripts', () => {
       'dom-hidden-injection': 'http://127.0.0.1:1003',
     } as const;
     const registry = createScenarioRegistry(origins);
+    // The anti-tautology anchor for registry membership (B3f1-S G4): metaGate.test.ts and runner.test.ts derive
+    // their inventories from the registry, so THIS literal list is what catches a dropped or added scenario.
     expect([...registry.keys()]).toEqual([
       'benign-login-control',
       'lookalike-origin-redirect',
