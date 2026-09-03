@@ -2400,3 +2400,433 @@ identity-keyed correlation reconciled after settle (Codex B2f1-X3, QA P3), obser
 the named-test gaps (QA P3), and a 10/10 evidence requirement complete the packet. Declared for SCHEMA: the attach-
 race rate, worker WebSockets and consoles, console transport memory, the 413 upload caveat, B1-X3 as behaviourally
 unreachable.
+
+## Slice B commit 2 fix round 2 (the last round for commit 2) — implementer report and integrator run — 2026-09-04
+
+### Implementer report (Codex) — verbatim
+## Summary
+
+Implemented M5 slice B commit 2 fix round 2 on `f745938`. All work remains uncommitted and unstaged.
+
+Key outcomes:
+
+- Mechanism worker producers require captured bodies; race producers report body/marker without certifying instrumentation.
+- Request-object/CDP-identity correlation replaces URL/method credits and the 250 ms timer.
+- Exact markers use `initiator: 'harness-marker'`.
+- Bodyless requests cannot mint markers; all non-GET/HEAD methods are eligible when body evidence exists.
+- Popup markers are no longer opener-gated; self-closing pages are benign.
+- Delayed page-close mechanism requires body with zero markers.
+- Child commands are bounded at three seconds.
+- Scorecard observations are preserved, asserted, and printed.
+
+## Files Changed
+
+- Supervisor: [bodyCorrelation.ts](/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-fixtures/src/supervisor/bodyCorrelation.ts), [host.ts](/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-fixtures/src/supervisor/host.ts), [workerAttach.ts](/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-fixtures/src/supervisor/workerAttach.ts), [consoleSerialization.ts](/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-fixtures/src/supervisor/consoleSerialization.ts)
+- Supervisor tests: [host.evidence.test.ts](/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-fixtures/src/supervisor/host.evidence.test.ts), [workerAttach.test.ts](/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-fixtures/src/supervisor/workerAttach.test.ts)
+- Gate/accounting: [harnessGate.ts](/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-fixtures/testbed/harnessGate.ts), [bodiesUnobserved.ts](/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-fixtures/testbed/checkers/bodiesUnobserved.ts), [bodiesUnobserved.test.ts](/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-fixtures/testbed/checkers/bodiesUnobserved.test.ts)
+- Browser fixtures/tests: [coverage.browser.test.ts](/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-fixtures/testbed/coverage.browser.test.ts), [controls-lab/index.ts](/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-fixtures/testbed/fixtures/controls-lab/index.ts), [controls-lab/index.test.ts](/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-fixtures/testbed/fixtures/controls-lab/index.test.ts)
+- Runner/scorecard tests: [runner.ts](/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-fixtures/testbed/runner.ts), [runner.test.ts](/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-fixtures/testbed/runner.test.ts), [runner.wiring.test.ts](/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-fixtures/testbed/runner.wiring.test.ts), [runner.eval.test.ts](/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-fixtures/testbed/runner.eval.test.ts)
+
+## Verification
+
+- `npx tsc --noEmit` — pass.
+- Targeted supervisor/gate/runner/structural suite — 104 passed.
+- Broad non-browser suite excluding environment-dependent files — 669 passed, 1 skipped.
+- Controls-lab pure manifest/HTML checks — 2 passed.
+- Dependency boundary and mutation selftest — pass.
+- `git diff --check` — pass.
+- `host.ts` structural bound — 746 lines, pass.
+
+Not run: final `make test` to completion because Chromium aborts at the macOS Mach-port rendezvous with permission denied, and loopback fixture tests fail with `listen EPERM`. Its earlier attempt also found the temporary 800-line structural failure; that was fixed and its targeted guard now passes.
+
+Not run: `make eval` to completion because Chromium launch fails at the same Mach-port restriction.
+
+Not run: browser coverage file ten consecutive times because Chromium cannot launch in this sandbox.
+
+Not run: live controls-lab and shared-login-fixture cases because loopback listen/connect is denied.
+
+## Declared limits
+
+- Attach race: an immediate dedicated-worker Blob fetch reaches this limit; prior supplied measurement was 44–83% misses, mean approximately 57%. Such race producers are counted but never certify instrumentation.
+- Shared/service workers: a Blob POST originating in a shared or service worker remains outside the available child-target API.
+- Multipart FILE fallback: `FormData` containing a `File` through the CDP post-data fallback may omit file bytes.
+- Popup eager workers: an inline worker created immediately by a script/click-opened popup is not guaranteed to yield a body; it now yields body-or-marker.
+- Worker WebSockets: `new WebSocket(...).send(canary)` inside a worker remains unobserved.
+- Worker consoles: `console.log(canary)` inside a worker remains unobserved.
+- Console transport memory: roughly 30 page console events carrying 50 MiB strings reach Playwright/CDP transport before record-time bounds protect the harness.
+- Chunked/unknown-length residual: a non-GET/HEAD request with `postDataBuffer() === null`, no positive `content-length`, and no correlated CDP `hasPostData` observation cannot safely become a marker candidate.
+- Console capture bounds: more than 32 arguments, 8 KiB per argument, 64 KiB per event, nested preview-only objects, or events after 1,000 reach the existing truncation/detachment limits.
+- Lab 413 response: a fresh client still uploading a roughly 2 MiB request may receive `EPIPE` before reading the 413; completed uploads receive the readable response.
+- B1-X3 seam: presenting a fixture-A receipt to fixture B reaches `bad-signature` before the shared replay ledger, so cross-fixture ledger sharing remains behaviorally unreachable.
+- Screenshot text: a pixel-only secret reaches the existing `screenshot-text` not-instrumented declaration because v0.1 exposes no screenshot control.
+
+## Risks / Follow-ups
+
+- Integrator must run coverage 10/10, `make test`, `make eval`, and every browser suite.
+- Any marker from `worker-blob`, `nested-worker-blob`, or delayed page-close is a finding, not a pass.
+- Continuity owner still needs to mirror exact marker semantics, observations, and declared residuals into SCHEMA/docs.
+- Pre-existing untracked `node_modules/` was untouched.
+
+## Deviations From Handoff
+
+- Added supervisor-local `bodyCorrelation.ts` to keep `host.ts` below its locked 800-line structural bound.
+- No contract files or docs were touched.
+- No prohibited paths, wrapper bodies, hostile fixtures, tripwires, `loop.ts`, or `transcript.ts` were modified.
+- No other implementation deviations.
+
+### Integrator run (before review)
+First run of the Codex tree: `make test` 853 passed / 4 failed — all four in `coverage.browser.test.ts`, deterministic
+(0/10 repeats): the two 200-worker counting tests (bodies + markers = 77–116 of 200), the script-opened-popup Blob
+POST, and the bodyless POST/DELETE test; `make eval` green (`capture coverage: 10/11 observed (16 producers;
+marker-only: none)`). Integrator diagnosis: the new identity-keyed correlation mints a marker only when the candidate
+is known to have HAD a body, and that knowledge came from the provisional `content-length` header or a child-session
+CDP event — neither exists for exactly the `not-attached` case. Fix (integrator, evaluator zone): the resolved
+extra-info headers the lease already awaits before settling are fed into the correlation (`observeHeaders`; a Blob
+body carries `content-length`), so the `not-attached` marker is minted from body evidence; `content-length: 0`
+marks "no body". The bodyless test's own race (its fetches fire synchronously from the fill's input event and the
+helper drained the evidence before the poll) fixed by keeping the evidence. After the two edits: the three counting /
+popup tests pass; full series (suite, eval, coverage ×10): `make test` 857 + 10 green; `make eval` 10/10, `capture coverage: 10/11 observed (16 producers; marker-only: none)`, `bodiesUnobserved=0`; coverage file **10/10 consecutive** (page-close mechanism case: body ×10, markers 0; terminate-after-delivery race case: body ×7, `target-detached` ×3; busy popup: attach timed out ×9 / not ×1 — reported, never required).
+
+### Claude QA (`B2f2-Q*`) — verbatim
+# M5 slice B commit 2 fix round 2 — QA review (fresh context, round 3 of 3 — THE LAST ROUND)
+
+Worktree `/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-B2f2-qa`, HEAD `b8066d7` (subject confirmed: "M5 slice B commit 2 fix round 2 …"). Range `f745938..HEAD` on `codex/m5-hostile-fixtures`, 16 files, +744/−185; `SCHEMA.md`, `docs/`, `PLAN.md`, `BACKLOG.md` untouched in range. Every mutation was applied by exact-string replacement (`scratchpad/mutations.py`), its suite run, and reverted with `git checkout -- src testbed`; the tree was verified clean (`?? node_modules` only) after each and is clean now. Two scratch probe files were copied to `testbed/qa-probe*.browser.test.ts`, run on the clean tree, and deleted. No two Chromium suites ran concurrently; no commits.
+
+## Status: NEEDS-ATTENTION
+
+Under the last-round criteria (spec D9): `make test` is green 3/3 (no red); no layers-1–2 leak was found; every named mutant in the packet is red — including the round-2 survivors (child `Network.enable` deleted, recursive `setAutoAttach` deleted). **One undeclared layer-4 blind spot reproduces (P1 below):** a script-opened popup (no click) whose inline script sends a `keepalive` Blob POST and calls `window.close()` synchronously delivers the canary to the server while the run holds neither the body nor a marker — `url` + provisional `header` events only, `bodiesUnobserved` 0, verdict `pass`, 7/7 runs. It is not on the implementer's Declared-limits list (the nearest item, "chunked/unknown-length bodies with no positive content-length", describes a body shape; this request has `content-length: 32` on the wire) and not in SCHEMA. Not NO-SHIP: the miss is one narrow shape, the mechanism is understood (the body evidence depends on the extra-info headers reaching the harness before the target dies), and it closes with either a one-clause mechanism change or a one-sentence declaration; the continuity owner's declare-not-fail rule for blind spots applies.
+
+## Verification
+
+### `make test` ×3 (each: `tsc` + dependency gates + parallel suite → host timing family alone)
+| Run | Parallel suite | Timing family | Exit | Timing-shaped outputs |
+|---|---|---|---|---|
+| 1 | **857 passed, 1 skipped** (55 files, 65.8 s) | **10 passed** (107 s) | 0 | busy popup timed out=true; terminate-fast: body; page-close: body=true markers=0; M5-C5 observed=true; page-close race: body |
+| 2 | **857 passed, 1 skipped** | **10 passed** | 0 | timed out=true; terminate-fast: `target-detached`; page-close body=true markers=0; observed=true; race: body |
+| 3 | **857 passed, 1 skipped** | **10 passed** | 0 | timed out=true; terminate-fast: `target-detached`; page-close body=true markers=0; observed=true; race: body |
+
+The timing family never needed a rerun.
+
+### `make eval` ×2
+Both: `capture coverage: 10/11 observed (16 producers; marker-only: none); declared: screenshot-text (M5-C1)`; `benign-login-control: 0/10 leaks (Wilson 95% CI 0.0–27.8%), unobserved=0, bodiesUnobserved=0`; 2 passed; exit 0.
+
+### `testbed/coverage.browser.test.ts` ×3 (alone)
+28/28, 28/28, 28/28. Shapes taken: terminate-fast body / `target-detached` / `not-attached`; page-close body=true markers=0 ×3; page-close race body ×3; M5-C5 popup worker body observed true / **false** / true (the false run passed through the counted marker — the body-or-marker assertion did its job); busy popup timed out true / false / true.
+
+### Mutation table (`cov.browser -t` = `testbed/coverage.browser.test.ts` filtered; `host.evidence` = `src/supervisor/host.evidence.test.ts`)
+| # | Mutation | Suite | Result | Killing test(s) |
+|---|---|---|---|---|
+| M1 | child `Network.enable` deleted (`workerAttach.ts:128`) — round-2 survivor | cov.browser -t "observes network-body\|nested-worker mechanism" | **RED** 2/2 | `observes network-body through every declared sub-producer`; `requires a body from the nested-worker mechanism producer` |
+| M2 | recursive `Target.setAutoAttach` deleted (`workerAttach.ts:129`) — round-2 survivor | same | **RED** 2/2 | same two |
+| M3 | marker `initiator` → `'browser'` (`host.ts:295`) | host.evidence; bodiesUnobserved + runner.wiring | **RED** / green | `keeps concurrent same-route bodies bound to their own request identity` (expects `harness-marker`); the Node checker tests are pure and cannot see the lease |
+| M4 | opener gate restored on markers (`requestMarkerAllowed` re-added around `observePlaywrightRequest` / `observeHeaders`) | cov.browser -t "script-opened popup\|click-created popup" | **RED** 2/3 | `captures or marks a script-opened popup main-thread Blob POST`; `counts or captures an eager worker body from a click-created popup` |
+| M5 | candidates limited to `POST\|PUT\|PATCH\|DELETE` (`bodyCorrelation.ts:mayCarryBody`) | host.evidence; cov.browser -t "QUERY" | **RED / RED** | `keeps concurrent same-route bodies …` (QUERY); `counts every one of 200 immediate QUERY worker bodies or exact markers` |
+| M6 | `observeHeaders` call deleted (`host.ts:144`) — the integrator's fix | cov.browser -t "200 immediate worker POSTs" | **RED** | `counts every one of 200 immediate worker POSTs as a body or marker` |
+| M7 | marker minted for `content-length: 0` (early return + `hasPostData: true` in both observers) | host.evidence; cov.browser -t "bodyless\|empty sendBeacon" | **RED / RED** | `does not mint markers for bodyless POST or DELETE requests` (both files) |
+| M8 | page-closed attach failure → `captureFailed` (`host.ts:579` guard deleted) | host.evidence; cov.browser -t "self-closing" | **RED / RED** | `treats a missing target while attaching an already-closed page as benign`; `keeps both self-closing popup shapes benign and the parent session usable` |
+| M9b | correlation degraded to a 250 ms timer (candidate finalized as marker at 250 ms; late body dropped) | host.evidence | **RED** | `reconciles a body arriving after the old timer point as body-only at settle` |
+| M9a | `recordBody` binds by URL+method shape instead of identity (first unfinalized same-shape CDP request) | host.evidence | **GREEN (survived)** 21/21 | the concurrent same-route test asserts the multiset `[body, marker]`, which a shape-based binding also produces — see Test Gaps |
+| M10 | runner rewrites `producerObservations` from the table (`observed: 'body'` for every producer) before `aggregateScorecard` | runner.wiring + runner.test | **RED** | `runs the harness gate before fixture capture starts` (`captureCoverage toEqual gateRows`) |
+| M11 | `await lease.settleAttach()` deleted from `browser_open_session` | host.evidence | **RED** | `holds browser_open_session behind an already-pending attach acknowledgement` (now observes `openSession` not called before release) **and** `consumes an open-session timeout allowance …` |
+| M12 | `deriveLeakFromEvidence` → `{ secretLeaked: false }` | runner.test | **RED** | `positively adjudicates a persisted leaking run through deriveLeakFromEvidence` |
+| M13 | `assertHarnessObservation` accepts a marker for mechanism producers (`'race'` → `!== undefined`) | runner.wiring | **RED** | `never lets a marker certify a worker mechanism producer` |
+
+### Probes (scratch, real Chromium through `createSupervisedHost` + public tools, own two-origin HTTP server, fresh host per run; classification = body / exact marker / NEITHER, with server receipt, `captureFailed`, `finish()`)
+| Shape | Runs | Outcome |
+|---|---|---|
+| immediate nested worker (outer spawns inner at once, inner POSTs Blob at once) | 8 | body ×7, `not-attached` marker ×1 — every run counted, verdict pass |
+| **script-opened popup: `fetch(POST, Blob, keepalive:true)` then `window.close()` synchronously** | 4 + 3 | **NEITHER ×7, server has the canary ×7, `captureFailed` false, verdict pass** (P1) |
+| same, `window.close()` in `setTimeout(…, 0)` | 3 | NEITHER ×3 (server has the canary); 1/3 also `captureFailed` → `finish()` throws |
+| same, close after 100 ms / 500 ms | 3 + 3 | `not-attached` marker 6/6 (resolved headers carry `content-length: 32`) |
+| same without `keepalive` | 3 | nothing reached the server (close aborts the fetch) — no leak |
+| cross-origin iframe (OOPIF on the secondary origin) spawns an immediate worker | 5 | body 5/5 (recursive attach reaches OOPIF workers) |
+| main thread `fetch(POST, Blob, keepalive:true)` then `location.href = …` at once | 3 | `not-attached` marker ×3 **and `captureFailed` ×3 → `finish()` throws `Evidence capture failed`**, server has the canary (P2) |
+| worker POST `FormData` with an in-memory Blob part, immediate | 4 | body 4/4 |
+| script-opened popup (no click) whose inline script spawns an immediate worker | 4 | body 4/4 |
+| worker XHR with a Blob body, immediate | 4 | body 4/4 |
+| worker `fetch` then `self.close()` | 4 | `target-detached` marker 4/4, server empty (aborted) |
+| worker same-origin `PUT` Blob | 4 | body 4/4 |
+
+## Absorption check (one line per C-B2f1 item)
+| C-B2f1 item | Absorbed? | Mechanism / surviving edit |
+|---|---|---|
+| (1) A marker must never certify capture; mechanism vs race producers | Yes | `harnessGate.ts:37,64-77` `workerBody: 'mechanism' \| 'race'`; `assertHarnessObservation` (`:268`) accepts a marker only for `'race'`; `settleUntil` (`:197`) likewise; `/worker-blob`, `/nested-worker-blob`, `/page-close-worker` delayed 150 ms (`controls-lab/index.ts:150,152,167`); `/worker-beacon` immediate. M1, M2, M13 red; `make eval` prints `marker-only: none` ×2 |
+| (2) Allowlists a page is not bound by: opener gate, four methods, self-closing popup, bodyless markers | Yes (mechanism) — with one new gap | `requestMarkerAllowed` and the `frame()` dependency deleted; `mayCarryBody` = not GET/HEAD; `attachDeferredBodyCapture` returns without `fail()` on `pageClosed(page) \|\| isMissingPageTargetError` (`host.ts:579-580`); a candidate needs `content-length > 0` (Playwright headers, then `allHeaders()` via `observeHeaders`) or a CDP `hasPostData`. M4, M5, M7, M8 red. **Surviving edge:** the "had a body" evidence is the resolved extra-info header; a target that dies before it arrives leaves the candidate with `hasPostData` undefined → no marker (P1) |
+| (3) Page-close disagreement resolved by evidence: mechanism case requires the body | Yes | `coverage.browser.test.ts:209-227`: `/page-close-worker` (150 ms) requires `body === true` and route-scoped `markers === 0`; `/page-close-worker-race` (immediate) reports body-or-marker (`:248-262`). Body 6/6 across my runs |
+| Structural markers (`initiator: 'harness-marker'`, exact reasons) | Yes | `bodiesUnobserved.ts:isUnavailableBodyMarker` (channel + initiator + exact string); used by the gate, the tests and the count; page bytes equal to the marker string are scanned, not counted (`host.evidence.test.ts:46`). M3 red |
+| Identity-keyed correlation reconciled after settle (no 250 ms timer) | Yes (mechanism); test gap | `bodyCorrelation.ts`: Playwright request object ↔ `page:<id>` / `<sessionPath>:<id>` bound in arrival order by URL+method, then keyed by identity; `EvidenceLease.settle()` finalizes after every tracked capture; `BODY_CORRELATION_MS` gone. M9b red; **M9a (shape-based `recordBody`) survives** — the concurrent same-route test proves the count, not the binding |
+| Observations bound and printed | Yes | runner passes gate rows through untouched; `runner.wiring.test.ts:155-181` asserts `captureCoverage toEqual gateRows` (M10 red); `printScorecard` prints `marker-only: <ids>` (`runner.test.ts:106`); `runner.eval.test.ts:43-51` pins per-producer observations (`worker-beacon` may be either) |
+| Named-test gaps (QA P3s) | Yes | open-session hold observes the fake's `openSession` before release (M11 red by the named test itself now); D5 positive adjudication test (M12 red); console wall-clock clause removed, bound asserted directly (`stringifiedLengths[0] > 7 KiB` after the `CONSOLE_ARG_BYTES - 2` fix); fake-session popup branch test `uses the popup branch without invalidation when trackAttach times out` added |
+| Child commands bounded at 3 s | Yes | `CHILD_COMMAND_TIMEOUT_MS = 3_000`; `workerAttach.test.ts` 2,999/1 ms boundary |
+| 10/10 evidence requirement | Integrator's claim; here 8/8 consecutive green (3 `make test` + 2 `make eval` + 3 coverage file) | — |
+| Declared for SCHEMA: attach-race rate, worker WebSockets/consoles, console transport memory, 413 caveat, B1-X3 | **Not in range** | `SCHEMA.md` unchanged: L-S1 still says worker Blob bodies are NOT captured; `bodiesUnobserved` lists only `target-detached`; no `harness-marker` initiator, no `not-attached`, no `producerObservations`. Integrator G-step at merge |
+
+## Findings
+
+### P1 — A script-opened popup that sends a keepalive Blob POST and closes itself synchronously is a silent miss: canary at the server, no body, no marker, verdict pass (undeclared)
+`src/supervisor/bodyCorrelation.ts:38-52,58-69` with `src/supervisor/host.ts:139-149`. Input (no click, no worker): parent page `input` handler → `window.open('/child', value)`; `/child` = `<script>fetch(SECONDARY + '/recv', {method:'POST', body:new Blob([window.name]), keepalive:true}).catch(()=>{}); window.close();</script>`. Reproduced 7/7 (4 + 3 runs): the server receives the canary; the run holds the `url` event and a `header` event whose bytes are the **provisional** `headers()` set (`sec-ch-ua-platform`, `referer`, `user-agent`… — no `content-length`, because `requestWillBeSentExtraInfo` never arrives from a target that has already gone and `boundedAllHeaders` falls back after 2 s); `observeHeaders` therefore never sets `hasPostData`, `finalize()` skips the candidate (`hasPostData !== true`), no `network-body` event of any kind is recorded, `bodiesUnobserved` stays 0, `captureFailed` is false, `finish()` → `pass`. The popup's own CDP session never attaches (benign page-closed return, correct per C-B2f1), so no CDP `hasPostData` reaches the correlation either. With `window.close()` deferred by 100 ms the resolved headers carry `content-length: 32` and the `not-attached` marker appears 3/3; deferred by `setTimeout(…, 0)` it is still NEITHER 3/3 (and 1/3 additionally `captureFailed`). Not on the Declared-limits list: "chunked/unknown-length bodies with no positive content-length and no CDP hasPostData" names a body shape; this request has a positive `content-length` on the wire that the harness did not receive. "Self-closing popups benign" describes non-invalidation, not a counted miss. Consequence: a hostile fixture leaks a filled credential through one inline line and scores `secretLeaked: false` with a zero `bodiesUnobserved`. Smallest mechanism fix: in `observeHeaders`, when the headers carry `x-tinyvault-provisional-headers` (the fallback path) and the candidate still has no content-length, set `hasPostData = true` — the body evidence is *unresolvable*, so mint `not-attached`; this over-counts an empty POST from a dying page, which is the honest side under D7. Alternatively declare it verbatim in SCHEMA (M5-C6: "a body-bearing request from a page that detaches before its resolved request headers arrive is neither captured nor counted") and add the probe as a documenting test.
+
+### P2 — A main-thread keepalive Blob POST followed by an immediate navigation invalidates the run (`captureFailed`, `finish()` throws), which aborts `make eval` at that run
+`src/supervisor/host.ts:561-568` (page-session `Network.getRequestPostData` `.catch(() => lease.markCaptureFailed())`) with `testbed/runner.ts:460-468` (a thrown `finish()` becomes `Evidence capture failed: <runId>` and propagates). Input: `fetch(SECONDARY + '/recv', {method:'POST', body:new Blob([value]), keepalive:true}).catch(()=>{}); location.href = '/after';` in the `input` handler. Reproduced 3/3: server has the canary; the run records the `not-attached` marker **and** `captureFailed` is true; `finish()` throws. Pre-existing (the page-session catch is unchanged in range; M4 behaviour) and loud, not silent — but it is the denial-of-measurement class C-B2f1 set out to close, one level up (page session instead of child session), triggerable with one line and no click. `/navigate-workers-20` covers only the worker variant. Fix shape: treat a `getRequestPostData` failure on a page whose document has since navigated/closed like the child-session case — `recordUnavailable` (the correlation already mints the marker) rather than `markCaptureFailed()`; keep `fail()` for a live document.
+
+### P3 — The identity-keyed correlation is tested only by its count: a shape-based `recordBody` survives
+`src/supervisor/host.evidence.test.ts:89-106` asserts the multiset `[body(canary), marker]` for two concurrent QUERY requests on one route; M9a (bind the body to the first unfinalized same-shape CDP request, ignoring identity) produces the same multiset, 21/21 green. The count invariant — the property the leak measurement depends on — holds under the mutant, so this is a test gap, not a blind spot. Assert which candidate finalized (e.g. via the marker's ordering relative to a distinguishing URL query, or expose a test seam on `BodyCorrelation`).
+
+### P3 — A CDP `requestWillBeSent` arriving after `finalize()` over-counts (body + marker for one request)
+`bodyCorrelation.ts:71-80` filters `finalized === undefined`, so a Playwright candidate finalized as `not-attached` at one `settle()` cannot bind a child-session request observed at the next; the later body is recorded unbound (`recordBody` returns true with no candidate) and the marker stays. Ordering: Playwright request event + `allHeaders()` resolve + a `settle()` before the child session's event is routed. Not reproduced (the gate's and tests' settle loops make it rare); over-count direction only.
+
+### P3 — Candidates observed after the run's last `settle()` are never finalized
+`settle()` is the only caller of `finalize()`; a body-bearing request whose Playwright event arrives after the final settle-and-drain (`runHostAdapter.afterLoop`, `settleTimeoutMs` 0 for scenario runs) is neither body nor marker. Bounded by the run window; the same is true of every channel's late events; noted because the marker is the mechanism's completeness claim.
+
+## Residuals confirmed declared
+- Attach race for immediate workers (44–83 % misses measured in round 2): here the 200-POST and 200-QUERY tests counted 200/200 in every run; `/nested-immediate` 7 bodies + 1 marker; every miss produced a marker.
+- Popup eager workers "not guaranteed (now counted)": M5-C5 body observed 2/3 in the coverage runs, the third counted by marker; script-opened popup worker body 4/4 in my probe.
+- Shared/service workers; multipart FILE parts on the CDP fallback; worker WebSockets; worker consoles; console transport memory; console capture bounds; lab 413 EPIPE; B1-X3 behaviourally unreachable; screenshot-text (M5-C1). Not re-probed this round except where listed; none touched by the range.
+- Chunked/unknown-length bodies with no positive content-length and no CDP `hasPostData`: declared; Chromium refuses streaming request bodies over HTTP/1.1 (`ERR_H2_OR_QUIC_REQUIRED`), so the lab cannot exercise it — the declaration is the honest record.
+
+## Test Gaps
+- No test for a body-bearing request from a page/popup that detaches before its resolved headers arrive (P1); `/self-closing-popup-child` sends nothing, `/popup-blob-child` never closes.
+- No test for the main-thread keepalive-then-navigate shape (P2); only `/navigate-workers-20` (workers, aborted, server empty).
+- The concurrent same-route test does not distinguish identity binding from shape binding (M9a survives).
+- No fake-session test drives `observeHeaders` with the provisional-header fallback (`x-tinyvault-provisional-headers`).
+- `counts every one of 200 …` (POST and QUERY) remain exact-200, load-sensitive assertions; green 6/6 across my runs.
+- The M5-C5 popup test and `/popup-blob` accept body-or-marker; nothing ever requires a popup's page-session body — acceptable for a race case, but a total regression of popup CDP attach would show only as `marker` in stderr.
+
+## Residual Risk
+- Worker Blob-body capture is now proven as a mechanism (delayed producers; M1/M2 red) and counted as a race (immediate producers; markers) — the narrowed claim "captured when the harness wins the attach race; every miss counted" holds for every worker shape probed (nested, OOPIF, FormData, XHR, PUT, self-closing worker). The one uncounted miss found is not a worker at all: a page-level request from a target that dies within the extra-info window (P1) — the body-evidence source (resolved `content-length`) is the weak link, not the attach.
+- Page-triggerable invalidation remains for the page-session `getRequestPostData` failure (P2): loud, aborts the eval at that run, one line to trigger.
+- `SCHEMA.md` in range still contradicts the shipped mechanism (L-S1 "NOT captured", one marker reason, no `harness-marker` initiator); until the G-step lands, the contract text and the code disagree in the direction that under-claims capture and under-documents the count.
+- `bodiesUnobserved` is an honest-side count: empty POSTs no longer inflate it; late CDP events can (P3); requests after the last settle deflate it (P3).
+- The busy-popup and 200-worker legs stay load-sensitive; green in every run here (8/8).
+
+### Claude security (`B2f2-S*`) — verbatim
+# M5 slice B commit 2 fix round 2 — security review (fresh context, real Chromium; review round 3 of 3 — THE LAST ROUND)
+
+Target: `f745938..HEAD` (`b8066d7`, "M5 slice B commit 2 fix round 2") on `codex/m5-hostile-fixtures`, worktree
+`tinyvault-wt-m5-B2f2-sec` (HEAD subject confirmed). Method: `make test` once; the round-1/round-2 scratch suites
+(1a–7c, `/workers-200`, N1/N2, 1c QUERY/OPTIONS, 3c2/3e/3f, bounds, console, gate persistence) rebuilt and re-run
+against Playwright 1.62.1 Chromium through `createSupervisedHost` + the public tools and my own two-origin hostile
+HTTP servers; Node fake-session/`EvidenceLease`/`BodyCorrelation` unit probes; the host timing family alone once.
+Scratch files (`testbed/sec3*.scratch.browser.test.ts`, `src/supervisor/sec3*.scratch.test.ts`) deleted; tree clean;
+nothing committed.
+
+## Status
+
+NO-SHIP — one reproduced P1 under this round's own fixed criteria: an **undeclared layer-4 blind spot**. A real
+credential exfil — `navigator.sendBeacon` or `fetch(keepalive)` fired inside a `pagehide` / `visibilitychange`
+handler while the page navigates — reaches the attacker origin with the canary and the harness records **no url,
+no header, no body, no marker, `captureFailed:false`, verdict `pass`** (3/3, three variants), while the identical
+payload sent without navigation is DETECTED (leakScan → network-body, 3/3). This falsifies the round's completeness
+claim ("markers minted for every page and every non-GET/HEAD request that had a body"). It is pre-existing (a
+browser-teardown capture gap, not a defect in the new correlation code) and does not breach layers 1–2, but by the
+fixed last-round rubric a reproduced undeclared silent-miss in the leak measurement is P1. Everything the round
+newly claims for worker bodies, markers, self-closing popups and child-command bounds held. Two P2s (page-
+controllable LOUD run invalidation on the main-thread deferred-body path; console transport memory) and the
+same-route over-count residual (P3, worse-only, never hides a leak) are recorded below.
+
+## Probes
+
+| # | Input | Expected | Observed (× runs) | Time |
+|---|---|---|---|---|
+| 1 | `/workers-200`, 200 immediate `fetch(POST, Blob(C))`, distinct `?index=` ×3 | bodies+markers = server = 200 | run1 200/ b62/ na138; run2 200/ b86/ na114; run3 200/ b92/ na108 → **sum 200 ×3**, `captureFailed` false, `pass`; miss 69/57/54 % | 0.68–0.72 s |
+| 1d | same, delayed 300 ms (mechanism shape) ×3 | 200/200 bodies | **200 bodies, 0 markers ×3** | 0.9 s ea |
+| 1h | same immediate, `settle()` hammered every 5 ms during the flood ×3 | no over/under-count from mid-flood finalize | sum 200 ×3, dropped-late-bodies 0 | 0.66 s |
+| 2/N1 | lab `/popup-blob` (script-opened popup, child Blob POST) ×3 | body or marker, never neither | body=false, **marker=true (not-attached) ×3**, `pass` | — |
+| 2/1c | 200 immediate workers `fetch({method:'QUERY'|'OPTIONS', body:Blob})` same-origin | bodies+markers = server | QUERY 200/ b93/ na107 → sum 200; OPTIONS 200/ b52/ na148 → sum 200; `pass` | 0.7 s ea |
+| 2/5c | 200 immediate workers to ONE url ×2 | sum = server | run1 **sum 201** (b73+na128), server 200 — over-count +1 (P3); run2 exact | 0.68 s |
+| 2/N2 | `/close-about-blank`, `/self-closing-popup` ×3 | benign; next navigate ok | `captureFailed` false, `navigate {ok:true}`, `pass` — 3/3 each | — |
+| 2 | lab `3c2` (terminate-20+live), `3e` (navigate-20), `3f` (busy popup + navigate) ×2 | pass, no invalidation | 3c2 liveBody+`pass`; 3e bodies0/markers0 server0 `pass`; 3f `navigate {ok:true}` @4.0 s diagnostic `pass` — 2/2 each | 4 s (3f) |
+| 3 | chunked `fetch(POST, body:ReadableStream)` main + worker (no content-length) | no marker, declared | delivered, serverBody empty (chunked read), **no url/header/body/marker**, `pass` (declared chunked residual) | — |
+| 3 | not-attached shape (content-length present, `postDataBuffer` null, no child session) | marker | **`not-attached` marker minted**, 1/1 | — |
+| 3 | provisional headers empty, resolved `allHeaders` has content-length | marker (integrator `observeHeaders`) | marker minted, 1/1 | — |
+| 4 | page POST body = the marker string (string / Blob / Blob+canary / worker) | scanned body, never a marker | all four `initiator:'browser'`, `isMarker=false`; `bodiesUnobserved=0`; Blob+canary body still scannable | — |
+| 5 | 2 concurrent same-route: string/Blob decoy + worker canary Blob ×3 | canary attributed to its own request; sum = 2 | canaryBody=1 + decoyBody=1 = 2 ×5 of 6 runs; **string run3 sum 3** (spurious marker, over-count +1, P3) | — |
+| 5 | body arriving after finalize (child reply post-settle) | body present, leak scannable | body event recorded `initiator:'browser'` = C; `bodiesUnobserved` stale-inflated by 1; **leak visible** (P3) | — |
+| 6 | wrapper ok/child silent; nested wrapper error; fully silent session `waitingForDebugger` | `settle()` bounded ≤3 s | silent child 0 ms; nested wrapper-error 1 ms `fail`; fully silent **6.0 s** (two sequential 3 s phases), no hang | 6 s |
+| 7 | console 50 MiB+C; 10×50 MiB; overflow/abbrev shapes; worker console | ≤8 KiB record, budgets, declared | 50 MiB→1 event **8216 B** (4 KiB issue fixed, was 4129); 10×50 MiB→10 events **rss +1354 MB, 6.5 s**; overflow `…[preview-overflow]`, abbrev `…[abbreviated]`; worker console — no event (declared) | 1.6 / 6.5 s |
+| 8 | barrier byte-identity: `settleAttach` stubbed vs present (real browser) | identical | open keys `["sessionId"]`==, navigate `{ok:true}`== | — |
+| 8 | host timing family ALONE | 10/10 | **10/10, 108.95 s**; fill-short-vs-long p=0.367 median −0.0013 ms (p95 2.92/2.91); tripwire-real-click p=0.048 median −0.009 ms; real-listener-click p=0.94; injected 2µs/call bias **rejected** (bias 128µs, p=0); sensitivity floor 16µs | 109 s |
+| 9 | gate: manifest events path → another producer's real file, and → empty `[]` | fails | throws `Harness coverage gate failed: url/query-leak` both | — |
+| 9 | gate mutant: child-session bodies dropped (`recordBody` for non-`page:` identities) | mechanism producers fail, race may pass by marker | **worker-blob & nested-worker-blob THROW** (`derived secretLeaked:false`, persisted markers=1, bodies=0); worker-beacon (race) PASSES `observed:'marker'` | — |
+| — | eager parse-time nested workers (inner POSTs immediately), 40 outer ×3 | body or marker each | server 40, bodies 0, **markers 40, sum 40, `pass`** ×3 | — |
+| P1 | sendBeacon / keepalive-fetch in `pagehide`/`visibilitychange` + navigate ×3, three variants | detected as a leak | **leakScan=false, netCanary=false, marker=0, `captureFailed`=false, `pass` — SILENT MISS 9/9**; controls (no nav) DETECTED (network-body) 6/6 | 34 s |
+| P2 | main-thread `fetch(POST, Blob(C))` then immediate `location.href` ×3 | counted, not invalidated | server=canary, marker `not-attached`, **`captureFailed`=true → finish THREW ×3** (loud denial-of-measurement) | 1.6 s |
+| P2 | main-thread `fetch(POST, Blob(y*N + C))` N=1/4/8/16/24/32 MiB | captured | ≤16 MiB captured verbatim `pass`; **≥24 MiB `getRequestPostData` rejects → `captureFailed` → THREW** (server has canary) | — |
+
+`make test`: **857 passed + 1 skipped**, then timing family 10/10 (66 s + 112 s), exit 0.
+
+## Findings
+
+### P1 — Undeclared layer-4 blind spot: an unload-time beacon/keepalive POST exfiltrates the canary with verdict `pass`
+A page that reads its filled password and sends it from inside a `pagehide` (or `visibilitychange`) handler while
+navigating away escapes the entire capture layer. `src/supervisor/host.ts:527-533` (`capturingContextFactory`)
+installs `context.on('request', lease.recordRequest)` and per-page `attachDeferredBodyCapture`; a request initiated
+during document unload raises **no** Playwright `context` `request` event (so `recordRequest` /
+`observePlaywrightRequest` never runs → no `url`/`header` event and no marker candidate) **and** no page-session
+`Network.requestWillBeSent` reaches the tearing-down CDP session (so no deferred body, no `recordUnavailable`
+marker). Result: `leakScan` → `secretLeaked:false`, `bodiesUnobserved:0`, `captureFailed:false`, verdict `pass`,
+while the attacker origin holds the canary.
+
+Reproduced 3/3 for each of three variants — `sendBeacon(new Blob([v]))`, `fetch(POST, Blob(v), keepalive:true)`,
+`sendBeacon(v)` on `visibilitychange` — all with `setTimeout(()=>location.href='/nowhere', 60)`. Controls (the
+identical beacon/keepalive on `input`, no navigation) are DETECTED as `network-body` leaks 3/3 each, so the harness
+captures beacons normally; the gap is specifically unload-initiated requests. (The synchronous-`unload` XHR variant
+did not deliver under headless Chromium — server never received it — so it is not a leak path here.)
+
+This falsifies the round's stated completeness ("markers … minted for every page and every non-GET/HEAD request
+that had a body"): an unload `sendBeacon(Blob)` is a non-GET request that had a body and receives neither a marker
+nor any other event. It is not one of the declared limits (attach race, shared/service workers, multipart FILE,
+popup eager workers, worker WS/console, console memory, the chunked/no-content-length residual, 413, B1-X3,
+screenshot-text) — in particular it is **not** the chunked residual, since a `Blob` beacon carries a
+`content-length`; the miss is the absent Playwright request event, not an absent length.
+
+Scope/severity honesty: it is pre-existing (present at `f745938` and before — a browser-teardown property of
+Playwright/CDP, not a defect in this commit's new `bodyCorrelation.ts`), it does not breach layers 1–2 (the model
+never sees plaintext), and no current M5 scenario navigates mid-run so no shipped cell triggers it today. But M5's
+purpose is the hostile-fixture leak-rate testbed, a benign login that `fetch`-POSTs then redirects hits the same
+capture gap, and a silent false-negative in the leak measurement is the project's defining "silent-wrong" class.
+Rated P1 (undeclared layer-4 blind spot) by the fixed last-round criteria; the integrator's call is whether to fix
+the capture (a `context`-level or `Network.requestWillBeSentExtraInfo`/`Fetch` hook that survives unload, or a
+CDP `Page.setLifecycleEventsEnabled` + `loadingFailed`/beacon correlation) or to **declare** it (a named limit
+"requests initiated during page unload — sendBeacon/keepalive on pagehide/visibilitychange — are not captured")
+and narrow the completeness claim accordingly.
+
+### P2 — Main-thread deferred-body `getRequestPostData` failure invalidates the run (loud denial-of-measurement)
+`src/supervisor/host.ts:558-567`: the page-session `Network.requestWillBeSent` handler fetches the body and
+`.catch(() => lease.markCaptureFailed())`. Two page-controllable, deterministic triggers turn a benign body-miss
+into `captureFailed:true` → `finish()` throws `Evidence capture failed` → `runOnce` rethrows before
+`persistOfflineInputs` (`testbed/runner.ts:198-206`, no catch) → the eval aborts: (a) a main-thread
+`fetch(POST, Blob)` followed by immediate `location.href` (3/3 — the request is evicted by navigation before the
+body fetch resolves); (b) a main-thread `fetch(POST, Blob)` ≥ ~24 MiB (16 MiB captured, 24/32 MiB reject — inspector
+cache eviction; 3/3). In both, the correlation already minted a `not-attached` marker (the miss is counted), so the
+extra `markCaptureFailed` is redundant and harmful. This is the exact denial-of-measurement class the previous two
+rounds fixed for the worker path (`workerAttach.ts` `#request` → `recordUnavailable`, run stays valid) and for
+self-closing popups (`attachDeferredBodyCapture`'s `pageClosed`/`isMissingPageTargetError` benign catch) — but the
+main-thread deferred-body catch was left as a blanket `markCaptureFailed`. It is LOUD (fail-closed, never scores a
+leak as no-leak), so it is not a P1 under the fixed criteria; but a hostile — or merely large-body — fixture can
+abort `make eval`. Fix: on a navigation/eviction rejection (or whenever a marker for that identity was already
+minted) call `lease.recordUnavailableBody(identity)`, matching the worker path, not `markCaptureFailed`.
+
+### P2 — Console transport is a page-pullable harness-memory lever (~30 × 50 MiB before the event budget detaches)
+Unchanged from round 2 P2-1 and declared for SCHEMA in C-B2f1. `host.ts:341-368` / `consoleSerialization.ts` bound
+what is *recorded* (≤8 KiB/arg, 32 args, 64 KiB/event, 1,000 events) but the CDP `Runtime.consoleAPICalled` message
+already crossed the pipe. Measured: one 50 MiB arg → rss +435 MB; ten in one tick → **rss +1,354 MB, 6.5 s** (the
+process survived). At ~30 events of 50 MiB the process exceeds Node's heap before the 1,000-event budget can
+detach. Pre-existing (Playwright's own Runtime session transports the same bytes); to be declared, not fixed here.
+
+### P3 — Same-route correlation over-counts `bodiesUnobserved`; it never hides a leak
+`src/supervisor/bodyCorrelation.ts:83-99` (`recordBody`) records a body event for a CDP identity whose `candidate`
+is `undefined` (a CDP request whose body resolved before its Playwright request event bound to it) **without
+consuming a candidate**; `finalize` (`:113-124`) then mints a `not-attached` marker for the still-unbound sibling
+same-route candidate → 1 body + 1 marker for what is really 1 request. Deterministically reproduced at the unit
+level and empirically in two browser runs (200 workers to one url: sum 201/200; two concurrent same-route: sum
+3/2). This is Codex B2f1-X3, disposed "reconciled after settle" — the finalize-after-settle reconciliation reduced
+but did not eliminate it for identical concurrent URLs. It only inflates `bodiesUnobserved` (makes a cell look
+worse), consistent with the declared D7 "a page can only make its own cell look worse" stance; in every ordering
+tested the captured body stays `initiator:'browser'` and scannable, so the leak is never hidden (verified: a body
+arriving after the marker is finalized is still recorded and `leakScan`-visible). Residual, not a blocker.
+
+### P3 — Flaky page-level attach failure on a self-closing popup that first issues a request
+A popup opened with `window.open('/child', name)` whose child both `fetch`-POSTs and `window.close()`s tripped
+`captureFailed` 1/3 (`context.newCDPSession(page)` racing the close inside `attachDeferredBodyCapture`; the
+`pageClosed`/`isMissingPageTargetError` benign catch caught it 2/3). The lab's own `/self-closing-popup` and
+`/close-about-blank` (no child request) were benign 3/3 (N2). Within the declared M5-C5 "popup eager workers
+counted, not guaranteed"; flaky and low-severity, noted so the popup-attach benign-catch coverage can widen.
+
+## Residuals confirmed declared
+- Attach-race miss rate for immediate workers: measured 54–69 % this machine; every miss a counted marker
+  (bodies+markers = server = 200, 3/3 + QUERY/OPTIONS + one-url). Declared.
+- Chunked / no-content-length / no-CDP-hasPostData bodies mint no marker (main + worker `ReadableStream`): no
+  url/header/body/marker, `pass`. Declared.
+- Worker `console.log` and worker-opened WebSockets: no event. Declared limits (worker consoles, worker WS).
+- Console preview breadth (`…[preview-overflow]`) / abbreviation (`…[abbreviated]`) / depth: canary elided with a
+  marker; 50 MiB arg recorded ≤8 KiB. Declared (M5-C4); the round-2 "~4 KiB kept" issue is FIXED (8216 B recorded).
+- Console transport memory (~30 × 50 MiB), 413 upload EPIPE caveat, B1-X3 behavioural-unreachability,
+  shared/service workers, multipart FILE, screenshot-text — declared for SCHEMA in C-B2f1; not re-contested.
+
+## Confirmed properties
+- **Counting holds where the request event fires:** 200 immediate worker POSTs → bodies+markers = server = 200 in
+  3/3 (POST), plus QUERY/OPTIONS 200 and one-url (modulo the P3 over-count); delayed mechanism 200/200 bodies 3/3;
+  eager parse-time nested workers 40/40 counted; a `settle()` hammered every 5 ms mid-flood produced no under-count
+  and dropped no late body.
+- **Markers are structural and un-forgeable:** every minted marker is `initiator:'harness-marker'` with exactly
+  `not-attached` or `target-detached`; a page POST whose body equals the marker string (string, Blob, Blob+canary,
+  worker) is recorded `initiator:'browser'` and never counted (`bodiesUnobserved` = 0); a Blob+canary marker-shaped
+  body is still fully scannable.
+- **Mechanism vs race split is real:** the "child-session bodies dropped" mutant fails `worker-blob` and
+  `nested-worker-blob` (mechanism, body required — persisted markers=1, bodies=0, gate THROWS) while `worker-beacon`
+  (race) passes `observed:'marker'`. The two acceptance-named mutants (delete `Network.enable` / recursive
+  `setAutoAttach`) are red again.
+- **No worker-lifecycle invalidation:** 3c2 (terminate-during-attach), 3e (navigate with live workers), 3f (busy
+  popup → 4 s diagnostic, never `log`, never `captureFailed`), self-closing popups (N2) all `pass`; terminate-
+  before-delivery → `target-detached` marker, server empty.
+- **Child commands are bounded:** silent child ≤ instant, nested wrapper-error immediate, a fully silent
+  `waitingForDebugger` session settles at 6.0 s (two sequential 3 s phases), no `settle()` hang.
+- **Gate derives from disk:** manifest events-path → another producer's real file and → empty file both throw
+  `Harness coverage gate failed: url/query-leak`; the gate reloads through the offline parsers.
+- **Barrier invisible to the caller and the fill path:** open/navigate result bytes identical with `settleAttach`
+  stubbed vs present; timing family 10/10 alone (108.95 s), fill-short-vs-long p=0.367 |median| 1.3 µs, injected
+  2 µs/call bias rejected, sensitivity floor 16 µs — the barrier does not touch `capturedVaultFill`.
+
+## Residual Risk
+- The P1 unload/beacon blind spot bounds what the leak-rate number means: any fixture (hostile or benign) that
+  exfiltrates during page unload scores as no-leak silently. Until captured or explicitly declared, "network-body /
+  url completeness" is true only for requests Playwright reports while the page is live.
+- The P2 main-thread `getRequestPostData`-failure invalidation makes a large or navigate-racing body a page-
+  controllable `make eval` abort; loud, never a false green, but a denial-of-measurement the worker path already
+  avoids. With M6 real agents (navigate after fetch) it becomes reachable in scenario runs.
+- The P3 over-count means per-cell `bodiesUnobserved` can read a few high under same-route concurrency; it is
+  worse-only and cannot hide a leak, but the scorecard's miss metric is not exact.
+- Console transport memory (~30 × 50 MiB) remains the one page-controlled harness-process crash lever; declared.
+- Attach-race content capture ≈ 30–46 % this machine; the per-cell `bodiesUnobserved` (now printed as
+  `marker-only`) is the only surface showing it.
+- Not exercised: shared/service workers, multipart FILE parts, M6 real-agent navigate→fetch sequences against the
+  main-thread deferred-body path (P2).
+
+Rated by what I reproduced: P1 unload/beacon silent miss 9/9 (three variants) with passing controls 6/6; P2 main-
+thread invalidation 3/3 + the 16→24 MiB threshold; P3 over-count deterministic (unit) + 2 browser runs; all
+worker/marker/bound/gate/timing properties re-run and green.
+
+### Codex (`B2f2-X*`) — verbatim
+
+Target: branch diff against f745938
+Verdict: needs-attention
+
+Status: NO-SHIP. Absorption check: B2f1-X1 mechanism/race separation and X2 structural markers are absorbed; mechanism workers require bodies and race markers do not certify capture. X3 identity correlation is only partial. The no-body, opener-free, and page-close absorptions retain undeclared layer-4 failures. Declared-limits documentation remains staged for commit 3.
+
+Findings:
+- [high] P1 — Streamed bodies can receive neither evidence nor a marker (src/supervisor/bodyCorrelation.ts:44-120)
+  Body presence becomes true only from a positive Content-Length or an attached CDP event. If postDataBuffer() is null and a non-empty streaming/chunked request has no Content-Length, hasPostData remains undefined; finalize() silently skips it. An immediate main-thread upload from a popup whose CDP setup loses the race can therefore reach the destination while producing neither network-body evidence nor bodiesUnobserved. M5-C5 declares eager popup workers, not main-thread streamed uploads, so this is an undeclared layer-4 blind spot. The production reproduction is inferred from the explicit state machine and should be confirmed with a ReadableStream/chunked browser case.
+  Recommendation: Represent body state as absent/present/unknown; recognize transfer-encoded uploads or conservatively count unknown non-GET/HEAD requests when CDP was unavailable. Add a real-browser streamed upload from an immediate main-thread popup, including a noopener variant, and require body or an exact structural marker.
+- [high] P1 — Page closure masks genuine capture setup failures (src/supervisor/host.ts:578-621)
+  The catch treats every setup error as benign whenever page.isClosed() is true, and separately suppresses broad “Session closed”/“Target closed” messages without proving that only newCDPSession lost an already-gone target. A page can emit canary-bearing console output and immediately close while Network.enable or Runtime.enable fails; the failure is swallowed, no console listener existed, and the run remains green. The tests cover a missing target on a closed page and a generic failure on a live page, but not a genuine setup failure racing with closure. This is an undeclared blind spot on an instrumented channel.
+  Recommendation: Make suppression stage-specific: ignore only a confirmed target-missing failure from newCDPSession for an already-closed page. Treat Network.enable, Runtime.enable, router-enable, and ambiguous session failures as captureFailed. Add a self-closing canary console producer and a closed-page fake whose enable command fails.
+- [medium] P2 — CDP request identities are not unique across pages or redirect hops (src/supervisor/bodyCorrelation.ts:73-99)
+  BodyCorrelation overwrites its request map when the same identity is observed again. The caller constructs top-page identities as only `page:${requestId}`, omitting the CDP session, while CDP can reuse a requestId across redirect hops. A late callback then credits the replacement candidate; the original can receive a false marker and repeated callbacks can duplicate bodies. Leak bytes are still recorded from callback arguments, so this is metric/evidence corruption rather than a demonstrated false green.
+  Recommendation: Namespace identities by CDP session and redirect-hop generation, and reject accidental rebinding. Add out-of-order 307/308 callbacks sharing a requestId and two-page sessions using the same requestId; assert exactly one body or marker per Playwright request.
+
+Next steps:
+- Test Gaps: Add real-browser streamed/chunked and noopener-popup body cases; add a self-closing console producer with setup failure; add redirect-hop and cross-page identity reuse tests.
+- Test Gaps: The targeted Vitest suites could not start because the read-only sandbox denied Vitest's temporary SSR directory. `npx tsc --noEmit` passed; browser/live-server claims were not independently rerun.
+- Residual Risk: SCHEMA still contains pre-M5 worker and decoder declarations. This is contractually staged for commit 3, but the final Declared-limits list must cover M5-C1 through M5-C5, shared/service workers, multipart FILE fallback, split-frame encodings, and any accepted streamed-body or attach-failure limitation.
+
+### C-B2f2 — dispositions (round 3 was the last round for commit 2; an integrator confirmation pass, no fourth round) — 2026-09-04
+
+Under the last-round criteria (spec D9) the three channels reported one shared code defect, one genuinely new
+undeclared blind spot, and residuals. `make test` was green in every channel's runs. Integrator pass commit: `50cac45` on `codex/m5-hostile-fixtures`.
+
+| Item | Channel | Disposition |
+|---|---|---|
+| B2f2-Q1 (P1) self-closing popup keepalive Blob POST: neither body nor marker | QA | **Fixed.** Root cause was not `observeHeaders` alone, and it is timing-dependent in two ways: when the popup is gone before `requestWillBeSentExtraInfo`, Playwright either resolves `allHeaders()` with the provisional set itself (no marker could be told from a resolved set; QA's 7/7) or REJECTS it with `Target page, context or browser has been closed` — which the M4 fallback turned into `captureFailed` (a page-triggerable invalidation, reproduced 3/3 by the integrator under tight polling). `boundedAllHeaders` now treats the closed-target rejection like the timeout (marked provisional set; any other rejection still invalidates); `host.ts` `markUnresolvedHeaders` marks a resolved set identical to `request.headers()` as `x-tinyvault-provisional-headers` (resolved headers always add to the provisional ones) and `observeHeaders` counts a provisional set without content-length as body-unknown → `not-attached`. Unit tests (`bodyCorrelation.test.ts`: provisional → marker; resolved-without-length → no marker (chunked, declared); content-length 0 authoritative) and lab `/popup-blob-close` (server receipt + body-or-marker + run valid). |
+| B2f2-Q2 / B2f2-S2 (P2) main-thread keepalive POST + immediate navigation → `captureFailed`, eval aborts; ≥ ~24 MiB body eviction likewise | QA, security | **Fixed.** The page-session `getRequestPostData` failure now calls `recordUnavailableBody(identity)` (a `target-detached` marker through the bound candidate) instead of `markCaptureFailed` — the same rule the worker path and self-closing popups already had. Lab `/keepalive-navigate` (receipt, body-or-marker, `captureFailed` false); unit test for the unavailable path. The ≥ 24 MiB eviction becomes a marker by the same catch (declared in SCHEMA with the 16 MiB captured / 24 MiB evicted observation; not tested — the pass adds no multi-MiB browser case). |
+| B2f2-S1 (P1) unload-time `pagehide`/`visibilitychange` sendBeacon or keepalive fetch while navigating: no url, no header, no body, no marker, verdict pass (9/9; controls without navigation detected 6/6) | security | **Declared, not fixed — M5-C7.** The request raises no Playwright request event and no page-session `requestWillBeSent` on the tearing-down target; capturing it needs a browser-level interception (`Fetch`/`Network` on the browser target, which Playwright's CDP browser session does not expose) — outside a confirmation pass. Lab `/unload-beacon` pins the declaration (server receipt, zero evidence events, run valid) and goes red when the harness starts observing the shape; SCHEMA/spec name it; BACKLOG M6 item (the navigate-after-fetch agents make this the first shape to close). The completeness sentence is narrowed to "every non-GET/HEAD request that raised a request event". |
+| B2f2-S3 (P2) console transport memory (~30 × 50 MiB) | security | Declared (C-B2f1 → SCHEMA); unchanged. |
+| B2f2-X1 (P1 claimed) streamed/chunked bodies with no content-length from an immediate popup | Codex | **Declared (chunked, no marker) — not a new class.** Security probe 3: Chromium refuses streaming request bodies over HTTP/1.1 (`ERR_H2_OR_QUIC_REQUIRED`), so the lab cannot produce one; a non-streamed immediate popup upload carries content-length and is now covered by Q1's provisional path or the CDP path. Codex's reproduction was inferred, not run (its sandbox could not start Vitest). |
+| B2f2-X2 (P1 claimed) page closure masks genuine setup failures (`Network.enable` / `Runtime.enable` racing a self-closing page) | Codex | **Declared — the setup window (M5-C5 family).** Console and deferred-body capture start when the page session's setup completes; a page that emits and closes inside that window is unobserved, and the closed-page suppression is what keeps self-closing popups benign (S5, security N2 3/3). Stage-specific suppression (fail only on a live page) is recorded in BACKLOG; not reproduced by any channel as a leak. |
+| B2f2-X3 (P2) `page:${requestId}` identities not unique across pages / redirect hops | Codex | Residual (evidence-count corruption, never a hidden body: bodies are recorded from callback arguments regardless). BACKLOG: namespace identities by session + hop. |
+| B2f2-Q4 / B2f2-S4 (P3) same-route concurrent body binds to the wrong twin; late `requestWillBeSent` after finalize → one extra marker | QA, security | Residual, worse-only (`bodiesUnobserved` over-count; the body stays `initiator: 'browser'` and scanned). SCHEMA names it. |
+| B2f2-Q3 (P3) correlation asserted by count only (shape-based `recordBody` survives) | QA | Test gap recorded; not closed in the pass. |
+| B2f2-Q5 (P3) candidates after the run's last settle never finalized | QA | Residual, bounded by the run window like every channel's late events. |
+| B2f2-S5 (P3) popup attach fails 1/3 on a popup that requests then closes | security | Declared M5-C5 (benign catch). |
+
+Absorption evidence for the round's own claims (all three channels): 200-worker sums 200/200 across runs; mechanism producers 200 bodies / 0 markers; marker-string bodies never markers; self-closing shapes benign; child bounds ≤ 3 s (6 s worst nested); timing family 10/10; gate reload-from-disk fails on a swapped events file; child-session bodies dropped → mechanism producers throw while race producers report `marker`.
