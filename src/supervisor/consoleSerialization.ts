@@ -73,7 +73,8 @@ function serializeConsoleArgument(remote: RemoteObjectLike): unknown {
 }
 
 function boundedConsolePrimitive(value: unknown): unknown {
-  if (typeof value === 'string') return boundedString(value, CONSOLE_ARG_BYTES);
+  // Reserve the enclosing JSON string quotes so an ordinary long string uses the full argument budget once.
+  if (typeof value === 'string') return boundedString(value, CONSOLE_ARG_BYTES - 2);
   if (value === null || typeof value === 'boolean' || typeof value === 'number') return value;
   if (typeof value === 'bigint') return boundedString(String(value), CONSOLE_PREVIEW_VALUE_BYTES);
   return '';

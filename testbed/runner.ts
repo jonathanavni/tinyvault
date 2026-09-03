@@ -792,9 +792,12 @@ export function printScorecard(scorecard: Scorecard): void {
   const observed = scorecard.captureCoverage.filter((row) => row.status === 'instrumented');
   const declared = scorecard.captureCoverage.filter((row) => row.status === 'not-yet-instrumented');
   const producerCount = observed.reduce((sum, row) => sum + row.producers.length, 0);
+  const markerOnly = observed.flatMap((row) => row.producerObservations ?? [])
+    .filter((observation) => observation.observed === 'marker')
+    .map((observation) => observation.producer);
   console.log(
     `capture coverage: ${observed.length}/${scorecard.captureCoverage.length} observed`
-    + ` (${producerCount} producers); declared: ${declared.map((row) =>
+    + ` (${producerCount} producers; marker-only: ${markerOnly.join(', ') || 'none'}); declared: ${declared.map((row) =>
       `${row.channel} (${row.registerId})`).join(', ') || 'none'}`,
   );
   for (const agent of scorecard.perAgent) {

@@ -18,7 +18,11 @@ import {
   type ScenarioRegistry,
 } from './scenarios';
 import type { CapturedEvent, RunRecord } from './scorecard.schema';
-import { deriveLeakFromEvidence, type OfflineRunEvidence } from './checkers/offline';
+import {
+  deriveLeakFromEvidence,
+  loadPersistedCapturedEvents,
+  type OfflineRunEvidence,
+} from './checkers/offline';
 import { assertHarnessObservation } from './harnessGate';
 import {
   fakeBrowser,
@@ -153,16 +157,27 @@ describe('M5 harness gate ordering', () => {
     const harness = nodeEvalHarness(directory, vi.fn);
     const order: string[] = [];
     const startFixtures = harness.options.startFixtures!;
+    const gateRows = [{
+      channel: 'network-body' as const,
+      status: 'instrumented' as const,
+      producers: ['worker-blob', 'worker-beacon'],
+      producerObservations: [
+        { producer: 'worker-blob', observed: 'body' as const },
+        { producer: 'worker-beacon', observed: 'marker' as const },
+      ],
+      observedAt: '2026-09-03T00:00:00.000Z',
+    }];
     harness.options.runHarnessGate = vi.fn(async () => {
       order.push('gate');
-      return [];
+      return gateRows;
     });
     harness.options.startFixtures = async (captureDirectory) => {
       order.push('capture');
       return startFixtures(captureDirectory);
     };
-    await runEval(harness.options);
+    const result = await runEval(harness.options);
     expect(order.slice(0, 2)).toEqual(['gate', 'capture']);
+    expect(result.scorecard.captureCoverage).toEqual(gateRows);
   });
 
   it('aborts before every scenario run when the harness gate throws', async () => {
@@ -241,7 +256,62 @@ describe('M5 harness gate ordering', () => {
       derived, events: [], canary, auth,
     })).toThrow('Harness coverage gate failed: network-body/blob-leak');
   });
+
+  it('never lets a marker certify a worker mechanism producer', () => {
+    const canary = 'TVC_worker_mechanism_A234567BCDEF';
+    const auth = gateAuth();
+    const marker: CapturedEvent = {
+      t: 0, channel: 'network-body', direction: 'outbound', initiator: 'harness-marker',
+      route: '/worker-blob-receive', method: 'POST',
+      bytes: 'x-tinyvault-body-unavailable: not-attached',
+    };
+    expect(() => assertHarnessObservation({
+      channel: 'network-body', producer: 'worker-blob', route: marker.route, initiator: 'browser',
+      workerBody: 'mechanism', derived: { secretLeaked: false }, events: [marker], canary, auth,
+    })).toThrow('Harness coverage gate failed: network-body/worker-blob');
+    expect(assertHarnessObservation({
+      channel: 'network-body', producer: 'worker-beacon', route: marker.route, initiator: 'browser',
+      workerBody: 'race', derived: { secretLeaked: false }, events: [marker], canary, auth,
+    })).toBe('marker');
+  });
+
+  it('does not treat page-supplied marker-prefix bytes as a harness marker', () => {
+    const canary = 'TVC_page_marker_A234567BCDEF';
+    const auth = gateAuth();
+    const pageBody: CapturedEvent = {
+      t: 0, channel: 'network-body', direction: 'outbound', initiator: 'browser',
+      route: '/worker-beacon-receive', method: 'POST',
+      bytes: `x-tinyvault-body-unavailable: not-attached ${canary}`,
+    };
+    expect(() => assertHarnessObservation({
+      channel: 'network-body', producer: 'worker-beacon', route: pageBody.route, initiator: 'browser',
+      workerBody: 'race', derived: { secretLeaked: false }, events: [pageBody], canary, auth,
+    })).toThrow('Harness coverage gate failed: network-body/worker-beacon');
+  });
+
+  it('accepts the structural harness-marker initiator through offline event parsing', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-marker-shape-'));
+    const eventsPath = join(directory, 'events.json');
+    const events: CapturedEvent[] = [{
+      t: 0, channel: 'network-body', direction: 'outbound', initiator: 'harness-marker',
+      method: 'POST', route: '/worker-miss', bytes: 'x-tinyvault-body-unavailable: target-detached',
+    }];
+    await writeFile(eventsPath, JSON.stringify(events));
+    await expect(loadPersistedCapturedEvents(directory, eventsPath)).resolves.toEqual(events);
+  });
 });
+
+function gateAuth() {
+  return {
+    canonicalOrigin: 'https://fixture.test',
+    loginEndpoint: { method: 'POST', route: '/login' },
+    credentialControl: {
+      origin: 'https://fixture.test', initiator: 'fill-service' as const,
+      frameId: 'top', documentId: 'document', requestId: 'control',
+    },
+    secretSources: [],
+  };
+}
 
 function twoBenignScenarioRegistry(origins: FixtureOrigins): ScenarioRegistry {
   const benign = createBenignLoginScenario(origins['benign-login']);

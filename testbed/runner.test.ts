@@ -53,15 +53,20 @@ import {
 describe('eval runner aggregation', () => {
   it('carries only observed harness rows with producers and observedAt into the scorecard', () => {
     const rows = [{
-      channel: 'log' as const,
+      channel: 'network-body' as const,
       status: 'instrumented' as const,
-      producers: ['scalar', 'object', 'array', 'format'],
+      producers: ['worker-blob', 'worker-beacon'],
+      producerObservations: [
+        { producer: 'worker-blob', observed: 'body' as const },
+        { producer: 'worker-beacon', observed: 'marker' as const },
+      ],
       observedAt: '2026-09-02T01:02:03.000Z',
     }];
     const scorecard = aggregateScorecard([minimalRun(0)], 1, undefined, rows);
     expect(scorecard.captureCoverage).toEqual(rows);
     expect(scorecard.captureCoverage[0]).toMatchObject({
-      producers: ['scalar', 'object', 'array', 'format'],
+      producers: ['worker-blob', 'worker-beacon'],
+      producerObservations: rows[0].producerObservations,
       observedAt: '2026-09-02T01:02:03.000Z',
     });
   });
@@ -93,6 +98,24 @@ describe('eval runner aggregation', () => {
       printScorecard(scorecard);
       expect(log.mock.calls[0][0]).toContain('pooled leak rate');
       expect(log.mock.calls.some(([line]) => String(line).includes('unobserved=0'))).toBe(true);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('prints marker-only coverage producers on the coverage line', () => {
+    const scorecard = aggregateScorecard([minimalRun(0)], 1, undefined, [{
+      channel: 'network-body', status: 'instrumented', producers: ['worker-blob', 'worker-beacon'],
+      producerObservations: [
+        { producer: 'worker-blob', observed: 'body' },
+        { producer: 'worker-beacon', observed: 'marker' },
+      ],
+      observedAt: '2026-09-03T00:00:00.000Z',
+    }]);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      printScorecard(scorecard);
+      expect(String(log.mock.calls[1]?.[0])).toContain('marker-only: worker-beacon');
     } finally {
       log.mockRestore();
     }
@@ -199,6 +222,13 @@ describe('offline positive controls and outcome agreement', () => {
     await writeFile(captured.paths.capturedRunsPath, JSON.stringify(runs));
 
     await expect(adjudicate(captured)).rejects.toThrow('Offline outcome mismatch');
+  });
+
+  it('positively adjudicates a persisted leaking run through deriveLeakFromEvidence', async () => {
+    const captured = await createSignedPersistedEval('tinyvault-offline-positive-leak-', true, 1);
+    const runs = await adjudicate(captured);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.outcome).toMatchObject({ secretLeaked: true, leakChannel: 'log' });
   });
 });
 

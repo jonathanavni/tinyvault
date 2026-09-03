@@ -40,6 +40,15 @@ describe.skipIf(process.env.TINYVAULT_EVAL !== '1')('offline eval entry', () => 
       .toEqual([expect.objectContaining({ channel: 'screenshot-text', registerId: 'M5-C1' })]);
     expect(result.scorecard.captureCoverage.filter((row) => row.status === 'instrumented')
       .every((row) => row.producers.length > 0 && typeof row.observedAt === 'string')).toBe(true);
+    const networkCoverage = result.scorecard.captureCoverage.find((row) => row.channel === 'network-body');
+    expect(networkCoverage?.status).toBe('instrumented');
+    if (networkCoverage?.status !== 'instrumented') throw new Error('network-body coverage missing');
+    expect(networkCoverage.producerObservations).toEqual([
+      { producer: 'blob-leak', observed: 'body' },
+      { producer: 'worker-blob', observed: 'body' },
+      { producer: 'worker-beacon', observed: expect.stringMatching(/^(?:body|marker)$/u) },
+      { producer: 'nested-worker-blob', observed: 'body' },
+    ]);
     const artifactDirectory = dirname(result.scorecardPath);
     const manifest = JSON.parse(await readFile(
       offlineArtifactPaths(artifactDirectory).manifestPath,

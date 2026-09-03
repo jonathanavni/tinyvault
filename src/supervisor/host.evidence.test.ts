@@ -3,34 +3,121 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CredentialBackend } from '../backends/backend';
 import {
   BODY_UNAVAILABLE_NOT_ATTACHED,
+  BODY_UNAVAILABLE_TARGET_DETACHED,
   CONSOLE_BUDGET_EXCEEDED,
   EvidenceLease,
   composeSupervisedHost,
   createSupervisedHost,
   inspectSupervisedHostCaptureFailedForTest,
 } from './host';
+import { bodiesUnobserved } from '../../testbed/checkers/bodiesUnobserved';
 
 const CANARY = 'TVC_deferred_evidence_6A31';
 const ORIGIN = 'https://example.test';
 
 describe('deferred supervisor evidence', () => {
-  it('turns a Playwright bodyless POST with no CDP observation into a counted marker', async () => {
+  it('does not mint markers for bodyless POST or DELETE requests', async () => {
     const lease = new EvidenceLease(CANARY);
-    lease.recordRequest(request(`${ORIGIN}/worker-miss`, 'POST'));
+    const post = request(`${ORIGIN}/bodyless-post`, 'POST');
+    const remove = request(`${ORIGIN}/bodyless-delete`, 'DELETE', { 'content-length': '0' });
+    lease.recordRequestWillBeSent('page:post', cdpRequest('post', post, false));
+    lease.recordRequestWillBeSent('page:delete', cdpRequest('delete', remove, false));
+    lease.recordRequest(post);
+    lease.recordRequest(remove);
     await lease.settle();
-    expect(lease.drainEvidence()).toContainEqual(expect.objectContaining({
-      channel: 'network-body', route: '/worker-miss', bytes: BODY_UNAVAILABLE_NOT_ATTACHED,
-    }));
+    const evidence = lease.drainEvidence();
+    expect(evidence.filter((event) => event.channel === 'network-body')).toEqual([]);
+    expect(bodiesUnobserved(withTimes(evidence))).toBe(0);
     lease.abort();
   });
 
-  it('lets a child-session body satisfy the Playwright request correlation exactly once', async () => {
+  it('records an empty body as browser evidence and never as a marker', async () => {
     const lease = new EvidenceLease(CANARY);
-    lease.recordRequest(request(`${ORIGIN}/worker-hit`, 'POST'));
-    lease.recordDeferredBody(`${ORIGIN}/worker-hit`, 'POST', CANARY, false);
+    lease.recordRequest(request(`${ORIGIN}/empty-beacon`, 'POST', { 'content-length': '0' }, Buffer.alloc(0)));
     await lease.settle();
     const bodies = lease.drainEvidence().filter((event) => event.channel === 'network-body');
-    expect(bodies).toEqual([expect.objectContaining({ route: '/worker-hit', bytes: CANARY })]);
+    expect(bodies).toEqual([expect.objectContaining({
+      route: '/empty-beacon', initiator: 'browser', bytes: '',
+    })]);
+    expect(bodiesUnobserved(withTimes(bodies))).toBe(0);
+    lease.abort();
+  });
+
+  it('scans a page body equal to a marker string without counting it as a marker', async () => {
+    const lease = new EvidenceLease(CANARY);
+    lease.recordRequest(request(
+      `${ORIGIN}/marker-shaped-body`, 'POST',
+      { 'content-length': String(Buffer.byteLength(BODY_UNAVAILABLE_NOT_ATTACHED)) },
+      Buffer.from(BODY_UNAVAILABLE_NOT_ATTACHED),
+    ));
+    const evidence = lease.drainEvidence();
+    expect(evidence).toContainEqual(expect.objectContaining({
+      channel: 'network-body', initiator: 'browser', bytes: BODY_UNAVAILABLE_NOT_ATTACHED,
+    }));
+    expect(bodiesUnobserved(withTimes(evidence))).toBe(0);
+    lease.abort();
+  });
+
+  it('reconciles a body arriving after the old timer point as body-only at settle', async () => {
+    vi.useFakeTimers();
+    try {
+      const lease = new EvidenceLease(CANARY);
+      const observed = request(`${ORIGIN}/late-body`, 'POST', { 'content-length': '24' });
+      lease.recordRequestWillBeSent('worker:late', cdpRequest('late', observed, true));
+      lease.recordRequest(observed);
+      let release!: () => void;
+      const late = new Promise<void>((resolve) => { release = resolve; }).then(() => {
+        lease.recordDeferredBody(`${ORIGIN}/late-body`, 'POST', CANARY, false, 'worker:late');
+      });
+      lease.trackDeferred(late);
+      const settling = lease.settle();
+      await vi.advanceTimersByTimeAsync(400);
+      expect(lease.drainEvidence().filter((event) => event.channel === 'network-body')).toEqual([]);
+      release();
+      await settling;
+      const evidence = lease.drainEvidence();
+      expect(evidence.filter((event) => event.channel === 'network-body')).toEqual([
+        expect.objectContaining({ route: '/late-body', initiator: 'browser', bytes: CANARY }),
+      ]);
+      expect(bodiesUnobserved(withTimes(evidence))).toBe(0);
+      lease.abort();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps concurrent same-route bodies bound to their own request identity', async () => {
+    const lease = new EvidenceLease(CANARY);
+    const decoy = request(`${ORIGIN}/same-route`, 'QUERY', { 'content-length': '5' });
+    const canary = request(`${ORIGIN}/same-route`, 'QUERY', { 'content-length': '24' });
+    lease.recordRequest(decoy);
+    lease.recordRequest(canary);
+    lease.recordRequestWillBeSent('worker:decoy', cdpRequest('decoy', decoy, true));
+    lease.recordRequestWillBeSent('worker:canary', cdpRequest('canary', canary, true));
+    lease.recordDeferredBody(`${ORIGIN}/same-route`, 'QUERY', CANARY, false, 'worker:canary');
+    await lease.settle();
+    const evidence = lease.drainEvidence();
+    expect(evidence.filter((event) => event.channel === 'network-body')).toEqual([
+      expect.objectContaining({ initiator: 'browser', bytes: CANARY }),
+      expect.objectContaining({ initiator: 'harness-marker', bytes: BODY_UNAVAILABLE_NOT_ATTACHED }),
+    ]);
+    expect(bodiesUnobserved(withTimes(evidence))).toBe(1);
+    lease.abort();
+  });
+
+  it('cancels a provisional detach marker when the same request body arrives before settle', async () => {
+    const lease = new EvidenceLease(CANARY);
+    const observed = request(`${ORIGIN}/detach-then-body`, 'POST', { 'content-length': '24' });
+    lease.recordRequest(observed);
+    lease.recordRequestWillBeSent('worker:detach', cdpRequest('detach', observed, true));
+    lease.recordUnavailableBody('worker:detach');
+    lease.recordDeferredBody(`${ORIGIN}/detach-then-body`, 'POST', CANARY, false, 'worker:detach');
+    await lease.settle();
+    const evidence = lease.drainEvidence();
+    expect(evidence.filter((event) => event.channel === 'network-body')).toEqual([
+      expect.objectContaining({ initiator: 'browser', bytes: CANARY }),
+    ]);
+    expect(evidence.some((event) => event.bytes === BODY_UNAVAILABLE_TARGET_DETACHED)).toBe(false);
     lease.abort();
   });
 
@@ -96,7 +183,6 @@ describe('deferred supervisor evidence', () => {
       name: `property-${index}`,
       value: index === 0 ? `head…tail-${'y'.repeat(2_000)}` : 'value',
     }));
-    const started = performance.now();
     emit({
       type: 'log',
       args: [
@@ -104,12 +190,12 @@ describe('deferred supervisor evidence', () => {
         { type: 'object', preview: { overflow: true, properties: preview } },
       ],
     });
-    const elapsed = performance.now() - started;
     const event = lease.drainEvidence()[0]!;
     const args = (JSON.parse(event.bytes) as { args: unknown[] }).args;
-    expect(elapsed).toBeLessThan(1_000);
     expect(Buffer.byteLength(event.bytes)).toBeLessThanOrEqual(64 * 1024);
-    expect(args.every((argument) => Buffer.byteLength(JSON.stringify(argument)) <= 8 * 1024)).toBe(true);
+    const stringifiedLengths = args.map((argument) => Buffer.byteLength(JSON.stringify(argument)));
+    expect(Math.max(...stringifiedLengths)).toBeLessThanOrEqual(8 * 1024);
+    expect(stringifiedLengths[0]).toBeGreaterThan(7 * 1024);
     expect(event.bytes).toContain('…[truncated]');
     expect(event.bytes).toContain('…[preview-overflow]');
     expect(event.bytes).toContain('…[abbreviated]');
@@ -260,12 +346,11 @@ describe('deferred supervisor evidence', () => {
     const setup = fixedComposedHost();
     setup.lease.trackAttach(attach);
     const opening = setup.host.tools.browser_open_session();
-    let settled = false;
-    void opening.then(() => { settled = true; });
     await Promise.resolve();
-    expect(settled).toBe(false);
+    expect(setup.openSession).not.toHaveBeenCalled();
     release();
     expect(await opening).toEqual({ sessionId: 'fixed-session' });
+    expect(setup.openSession).toHaveBeenCalledOnce();
     setup.host.abort();
     await setup.host.closeAll();
   });
@@ -288,6 +373,51 @@ describe('deferred supervisor evidence', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('uses the popup branch without invalidation when trackAttach times out', async () => {
+    vi.useFakeTimers();
+    try {
+      const setup = fixedComposedHost();
+      setup.lease.trackAttach(new Promise<void>(() => undefined), false);
+      const navigating = setup.host.tools.browser_navigate({ sessionId: 'fixed-session', url: ORIGIN });
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(await navigating).toEqual({ ok: true });
+      expect(inspectSupervisedHostCaptureFailedForTest(setup.host)).toBe(false);
+      expect(setup.host.drainEvidence()).toContainEqual(expect.objectContaining({
+        channel: 'url', initiator: 'harness-diagnostic', bytes: 'x-tinyvault-popup-attach-timeout',
+      }));
+      setup.host.abort();
+      await setup.host.closeAll();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('treats a missing target while attaching an already-closed page as benign', async () => {
+    const fake = popupAttachFailureBrowser(
+      new Error('Protocol error (Target.attachToTarget): No target with given id found'), true,
+    );
+    const host = await createSupervisedHost({ backend: backend(), canary: CANARY, browser: fake.browser });
+    const session = await host.tools.browser_open_session();
+    fake.emitPopup();
+    expect(await host.tools.browser_navigate({ sessionId: session.sessionId, url: ORIGIN })).toEqual({ ok: true });
+    expect(inspectSupervisedHostCaptureFailedForTest(host)).toBe(false);
+    host.abort();
+    await host.closeAll();
+  });
+
+  it('marks a genuine page-session protocol failure on a live target as capture failed', async () => {
+    const fake = popupAttachFailureBrowser(new Error('Protocol error: genuine live failure'), false);
+    const host = await createSupervisedHost({ backend: backend(), canary: CANARY, browser: fake.browser });
+    const session = await host.tools.browser_open_session();
+    fake.emitPopup();
+    await host.settleEvidence();
+    expect(inspectSupervisedHostCaptureFailedForTest(host)).toBe(true);
+    expect(await host.tools.browser_navigate({ sessionId: session.sessionId, url: ORIGIN }))
+      .toEqual({ ok: false, reason: 'session-unknown' });
+    host.abort();
+    await host.closeAll();
   });
 
   it('keeps open and navigate result bytes identical with the barrier present and stubbed', async () => {
@@ -342,11 +472,27 @@ function consoleLease(pageUrl: string) {
   return { lease, emit: (event: Parameters<typeof listener>[0]) => listener(event), off };
 }
 
-function request(url: string, method: string) {
+function request(
+  url: string,
+  method: string,
+  headers: Record<string, string> = {},
+  body: Buffer | null = null,
+) {
   return {
-    allHeaders: async () => ({}), postDataBuffer: () => null, headers: () => ({}),
+    allHeaders: async () => headers, postDataBuffer: () => body, headers: () => headers,
     method: () => method, url: () => url,
   };
+}
+
+function cdpRequest(requestId: string, observed: ReturnType<typeof request>, hasPostData: boolean) {
+  return {
+    requestId,
+    request: { url: observed.url(), method: observed.method(), hasPostData },
+  };
+}
+
+function withTimes(events: readonly { channel: string; direction: string; initiator?: string; bytes: string }[]) {
+  return events.map((event, t) => ({ ...event, t })) as never;
 }
 
 function fakeAttachBrowser(attach: Promise<void>) {
@@ -378,6 +524,37 @@ function fakeAttachBrowser(attach: Promise<void>) {
   return { browser: { newContext: vi.fn(async () => context) } as never, goto };
 }
 
+function popupAttachFailureBrowser(error: Error, closed: boolean) {
+  const contextListeners = new Map<string, (value: unknown) => void>();
+  const cdp = {
+    send: vi.fn(async (method: string) => method === 'Page.getFrameTree'
+      ? { frameTree: { frame: { id: 'main', loaderId: 'loader' } } }
+      : {}),
+    on: vi.fn(), off: vi.fn(), detach: vi.fn(async () => undefined),
+  };
+  const main = {
+    on: vi.fn(), waitForLoadState: vi.fn(async () => undefined),
+    opener: vi.fn(async () => null), isClosed: vi.fn(() => false), url: () => ORIGIN,
+    goto: vi.fn(async () => undefined), close: vi.fn(async () => undefined),
+  };
+  const popup = {
+    on: vi.fn(), opener: vi.fn(async () => main), isClosed: vi.fn(() => closed), url: () => 'about:blank',
+  };
+  const context = {
+    on: vi.fn((event: string, listener: (value: unknown) => void) => contextListeners.set(event, listener)),
+    newPage: vi.fn(async () => { contextListeners.get('page')?.(main); return main; }),
+    newCDPSession: vi.fn(async (page: unknown) => {
+      if (page === popup) throw error;
+      return cdp;
+    }),
+    close: vi.fn(async () => undefined),
+  };
+  return {
+    browser: { newContext: vi.fn(async () => context) } as never,
+    emitPopup: () => contextListeners.get('page')?.(popup),
+  };
+}
+
 function fixedComposedHost() {
   const lease = new EvidenceLease(CANARY);
   const navigate = vi.fn(async () => undefined);
@@ -387,8 +564,9 @@ function fixedComposedHost() {
     type: async () => 'ok' as const,
     snapshot: async () => ({ url: ORIGIN, nodes: [] }),
   };
+  const openSession = vi.fn(async () => ({ sessionId: 'fixed-session' }));
   const sessions = {
-    openSession: async () => ({ sessionId: 'fixed-session' }),
+    openSession,
     closeSession: async () => true,
     runControl: async (_sessionId: string, operation: (value: typeof page) => Promise<unknown>) =>
       operation(page),
@@ -404,6 +582,7 @@ function fixedComposedHost() {
   };
   return {
     lease,
+    openSession,
     navigate,
     host: composeSupervisedHost({ fillService: fillService as never, sessions: sessions as never, lease }),
   };

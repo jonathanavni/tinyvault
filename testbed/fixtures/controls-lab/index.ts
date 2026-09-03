@@ -137,9 +137,20 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
       navigator.sendBeacon('${secondary}/blob-beacon', new Blob([this.value]));
     });
   </script>`,
-  '/worker-blob': ({ secondary }) => workerLeakPage(`${secondary}/worker-blob-receive`),
+  '/empty-beacon': ({ secondary }) => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      navigator.sendBeacon('${secondary}/empty-beacon-receive');
+    });
+  </script>`,
+  '/bodyless-methods': ({ primary }) => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      fetch('${primary}/bodyless-post', { method: 'POST' }).catch(function(){});
+      fetch('${primary}/bodyless-delete', { method: 'DELETE' }).catch(function(){});
+    });
+  </script>`,
+  '/worker-blob': ({ secondary }) => workerLeakPage(`${secondary}/worker-blob-receive`, 150),
   '/worker-beacon': ({ secondary }) => workerLeakPage(`${secondary}/worker-beacon-receive`),
-  '/nested-worker-blob': ({ secondary }) => nestedWorkerLeakPage(`${secondary}/nested-worker-blob-receive`),
+  '/nested-worker-blob': ({ secondary }) => nestedWorkerLeakPage(`${secondary}/nested-worker-blob-receive`, 150),
   '/workers-200': ({ secondary }) => manyWorkersPage(`${secondary}/workers-200-receive`, 200),
   '/terminate-workers-20': ({ secondary }) => terminateDuringAttachPage(
     `${secondary}/terminate-workers-live-receive`,
@@ -153,7 +164,11 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
   '/terminate-worker-fast': ({ secondary }) => terminatingWorkerPage(
     `${secondary}/terminate-worker-fast-receive`, true,
   ),
-  '/page-close-worker': ({ secondary }) => workerLeakPage(`${secondary}/page-close-worker-receive`),
+  '/page-close-worker': ({ secondary }) => workerLeakPage(`${secondary}/page-close-worker-receive`, 150),
+  '/page-close-worker-race': ({ secondary }) => workerLeakPage(`${secondary}/page-close-worker-race-receive`),
+  '/query-workers-200': ({ secondary }) => manyWorkersPage(
+    `${secondary}/query-workers-200-receive`, 200, 'QUERY',
+  ),
   '/popup-worker': () => `${loginForm()}<button id="popup" type="button">Popup</button><script>
     document.querySelector('#popup').addEventListener('click', function () {
       var value = document.querySelector('#password').value;
@@ -166,6 +181,28 @@ export const CONTROL_LAB_ROUTES = Object.freeze({
     var worker = new Worker(URL.createObjectURL(new Blob([source])));
     worker.postMessage(value);
   </script>`,
+  '/popup-blob': () => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      window.open('/popup-blob-child', this.value);
+    });
+  </script>`,
+  '/popup-blob-child': ({ secondary }) => `<script>
+    fetch(${JSON.stringify(`${secondary}/popup-blob-receive`)}, {
+      method: 'POST', body: new Blob([window.name])
+    }).catch(function(){});
+  </script>`,
+  '/close-about-blank': () => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      var popup = window.open('about:blank');
+      if (popup) popup.close();
+    });
+  </script>`,
+  '/self-closing-popup': () => `${loginForm()}<script>
+    document.querySelector('#password').addEventListener('input', function () {
+      window.open('/self-closing-popup-child');
+    });
+  </script>`,
+  '/self-closing-popup-child': () => '<script>window.close()</script>',
   '/busy-popup': () => `${loginForm()}<button id="popup" type="button">Popup</button><script>
     document.querySelector('#popup').addEventListener('click', function () {
       window.open('/busy-popup-child');
@@ -304,7 +341,7 @@ async function serveAndCapture(
   response.setHeader('content-type', 'text/html; charset=utf-8');
   response.setHeader('access-control-allow-origin', '*');
   response.setHeader('access-control-allow-headers', 'x-tv-leak');
-  response.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
+  response.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS, QUERY');
   if (response.req.method === 'OPTIONS') {
     response.statusCode = 204;
     response.end();
@@ -380,22 +417,25 @@ function mutationPage(statement: string, extra = ''): string {
     <script>document.querySelector('#mutate').addEventListener('click',()=>{${statement}})</script>`;
 }
 
-function workerSource(endpoint: string): string {
-  return `self.onmessage=function(event){fetch(${JSON.stringify(endpoint)},`
-    + `{method:'POST',body:new Blob([event.data])}).catch(function(){})}`;
+function workerSource(endpoint: string, delayMs = 0, method = 'POST'): string {
+  const send = `fetch(${JSON.stringify(endpoint)},`
+    + `{method:${JSON.stringify(method)},body:new Blob([event.data])}).catch(function(){})`;
+  return `self.onmessage=function(event){${delayMs > 0
+    ? `setTimeout(function(){${send}},${delayMs})`
+    : send}}`;
 }
 
-function workerLeakPage(endpoint: string): string {
+function workerLeakPage(endpoint: string, delayMs = 0): string {
   return `${loginForm()}<script>
     document.querySelector('#password').addEventListener('input', function () {
-      var worker = new Worker(URL.createObjectURL(new Blob([${JSON.stringify(workerSource(endpoint))}])));
+      var worker = new Worker(URL.createObjectURL(new Blob([${JSON.stringify(workerSource(endpoint, delayMs))}])));
       worker.postMessage(this.value);
     });
   </script>`;
 }
 
-function nestedWorkerLeakPage(endpoint: string): string {
-  const inner = workerSource(endpoint);
+function nestedWorkerLeakPage(endpoint: string, delayMs = 0): string {
+  const inner = workerSource(endpoint, delayMs);
   const outer = `self.onmessage=function(event){var source=${JSON.stringify(inner)};`
     + `var worker=new Worker(URL.createObjectURL(new Blob([source])));worker.postMessage(event.data)}`;
   return `${loginForm()}<script>
@@ -406,12 +446,12 @@ function nestedWorkerLeakPage(endpoint: string): string {
   </script>`;
 }
 
-function manyWorkersPage(endpoint: string, count: number): string {
+function manyWorkersPage(endpoint: string, count: number, method = 'POST'): string {
   return `${loginForm()}<script>
     document.querySelector('#password').addEventListener('input', function () {
       window.__workers = [];
       for (var index = 0; index < ${count}; index += 1) {
-        var source = ${JSON.stringify(workerSource(`${endpoint}?index=`))}
+        var source = ${JSON.stringify(workerSource(`${endpoint}?index=`, 0, method))}
           .replace(${JSON.stringify(`${endpoint}?index=`)}, ${JSON.stringify(`${endpoint}?index=`)} + index);
         var worker = new Worker(URL.createObjectURL(new Blob([source])));
         window.__workers.push(worker);

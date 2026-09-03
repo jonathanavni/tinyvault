@@ -16,7 +16,7 @@ describe('WorkerAttachRouter nested command settlement', () => {
     expect(fail).not.toHaveBeenCalled();
   });
 
-  it('treats a nested detach that arrives before setup sends as benign', async () => {
+  it('treats a setup failure caused by Target.detachedFromTarget as benign', async () => {
     const fake = fakeSession('wrapper-success');
     const tracked: Promise<void>[] = [];
     const fail = vi.fn();
@@ -29,7 +29,7 @@ describe('WorkerAttachRouter nested command settlement', () => {
     expect(fail).not.toHaveBeenCalled();
   });
 
-  it('rejects an inner command when its parent wrapper replies with an error', async () => {
+  it('marks capture failed for a genuine protocol setup failure on a live target', async () => {
     const fake = fakeSession('wrapper-error');
     const tracked: Promise<void>[] = [];
     const fail = vi.fn();
@@ -52,7 +52,7 @@ describe('WorkerAttachRouter nested command settlement', () => {
       fake.emitNested('Target.attachedToTarget', { sessionId: 'inner', waitingForDebugger: false });
       let settled = false;
       const settlement = Promise.allSettled(tracked).then(() => { settled = true; });
-      await vi.advanceTimersByTimeAsync(4_999);
+      await vi.advanceTimersByTimeAsync(2_999);
       expect(settled).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
       await settlement;
@@ -71,6 +71,7 @@ describe('WorkerAttachRouter nested command settlement', () => {
       const recordUnavailable = vi.fn<() => void>();
       const fail = vi.fn<() => void>();
       new WorkerAttachRouter(fake.cdp, {
+        observeRequest: vi.fn<() => void>(),
         recordBody: vi.fn<() => void>(),
         recordUnavailable,
         track: (capture) => { tracked.push(capture); },
@@ -87,10 +88,10 @@ describe('WorkerAttachRouter nested command settlement', () => {
           },
         }),
       });
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(3_000);
       await Promise.allSettled(tracked);
 
-      expect(recordUnavailable).toHaveBeenCalledWith('https://example.test/never', 'POST');
+      expect(recordUnavailable).toHaveBeenCalledWith(expect.stringContaining('request-1'));
       expect(fail).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
@@ -100,6 +101,7 @@ describe('WorkerAttachRouter nested command settlement', () => {
 
 function callbacks(tracked: Promise<void>[], fail: () => void) {
   return {
+    observeRequest: vi.fn<() => void>(),
     recordBody: vi.fn<() => void>(),
     recordUnavailable: vi.fn<() => void>(),
     track: (capture: Promise<void>) => { tracked.push(capture); },

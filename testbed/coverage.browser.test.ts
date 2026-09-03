@@ -15,7 +15,11 @@ import {
   inspectSupervisedHostCaptureFailedForTest,
   type SupervisedHost,
 } from '../src/supervisor/host';
-import { BODY_UNAVAILABLE_PREFIX, bodiesUnobserved } from './checkers/bodiesUnobserved';
+import {
+  BODY_UNAVAILABLE_MARKER,
+  bodiesUnobserved,
+  isUnavailableBodyMarker,
+} from './checkers/bodiesUnobserved';
 import { CHANNEL_COVERAGE } from './coverage';
 import { startControlsLab, type ControlsLab } from './fixtures/controls-lab';
 import { HARNESS_PRODUCERS, runHarnessGate } from './harnessGate';
@@ -94,7 +98,7 @@ describe.sequential('M5 harness coverage gate', () => {
     })).rejects.toThrow('Harness coverage gate failed: url/query-leak');
   });
 
-  it('reports whether the nested-worker producer yielded a body or a counted marker', async () => {
+  it('requires a body from the nested-worker mechanism producer', async () => {
     const rows = await runHarnessGate({ browser, lab, artifactDirectory: artifacts, channels: ['network-body'] });
     const events = await import('node:fs/promises').then(({ readFile }) => readFile(
       join(artifacts, 'harness-gate', 'network-body', 'nested-worker-blob', 'events.json'), 'utf8',
@@ -102,7 +106,7 @@ describe.sequential('M5 harness coverage gate', () => {
     expect(events).toContain('/nested-worker-blob-receive');
     expect(rows[0]).toMatchObject({
       producerObservations: expect.arrayContaining([
-        { producer: 'nested-worker-blob', observed: expect.stringMatching(/^(?:body|marker)$/u) },
+        { producer: 'nested-worker-blob', observed: 'body' },
       ]),
     });
   });
@@ -115,7 +119,9 @@ describe.sequential('M5 harness coverage gate', () => {
     await setup.host.settleEvidence();
     const events = setup.host.drainEvidence().filter((event) => event.channel === 'network-body'
       && event.route?.startsWith('/workers-200-receive') === true
-      && (event.bytes === CANARY || event.bytes.startsWith('x-tinyvault-body-unavailable:')));
+      && (event.bytes === CANARY || isUnavailableBodyMarker({
+        channel: event.channel, initiator: event.initiator, bytes: event.bytes,
+      })));
     expect(events).toHaveLength(200);
   });
 
@@ -138,7 +144,7 @@ describe.sequential('M5 harness coverage gate', () => {
     const setup = await captureRoute('/navigate-workers-20');
     await setup.host.settleEvidence();
     const events = setup.host.drainEvidence();
-    expect(events.filter((event) => event.bytes.startsWith('x-tinyvault-body-unavailable:'))
+    expect(events.filter((event) => isUnavailableBodyMarker(event))
       .every((event) => event.channel === 'network-body')).toBe(true);
     expect(inspectSupervisedHostCaptureFailedForTest(setup.host)).toBe(false);
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
@@ -171,7 +177,7 @@ describe.sequential('M5 harness coverage gate', () => {
     const before = lab.secondaryRequests().length;
     const setup = await captureRoute('/terminate-worker-slow');
     const events = await collectUntil(setup.host, (all) => all.some((event) =>
-      event.bytes === 'x-tinyvault-body-unavailable: target-detached'));
+      event.initiator === 'harness-marker' && event.bytes === BODY_UNAVAILABLE_MARKER));
     expect(bodiesUnobserved(events)).toBe(1);
     expect(lab.secondaryRequests().slice(before).filter((request) =>
       request.path === '/terminate-worker-slow-receive')).toEqual([]);
@@ -188,9 +194,9 @@ describe.sequential('M5 harness coverage gate', () => {
     // the marker dropped while the server holds the canary (the run would then hold neither body nor marker).
     const events = await collectUntil(setup.host, (all) => all.some((event) =>
       event.route === '/terminate-worker-fast-receive'
-      && (event.bytes.includes(CANARY) || event.bytes.startsWith(BODY_UNAVAILABLE_PREFIX))));
+      && (event.bytes.includes(CANARY) || isUnavailableBodyMarker(event))));
     const bodyOrMarker = events.find((event) => event.route === '/terminate-worker-fast-receive'
-      && (event.bytes.includes(CANARY) || event.bytes.startsWith(BODY_UNAVAILABLE_PREFIX)));
+      && (event.bytes.includes(CANARY) || isUnavailableBodyMarker(event)));
     expect(bodyOrMarker).toBeDefined();
     process.stderr.write(`terminate-fast after delivery: ${bodyOrMarker?.bytes.includes(CANARY) ? 'body' : bodyOrMarker?.bytes}\n`);
     if (bodyOrMarker !== undefined && !bodyOrMarker.bytes.includes(CANARY)) {
@@ -209,23 +215,18 @@ describe.sequential('M5 harness coverage gate', () => {
     const events = setup.host.drainEvidence();
     const body = events.some((event) => event.channel === 'network-body'
       && event.route === '/page-close-worker-receive' && event.bytes === CANARY);
-    const markers = bodiesUnobserved(events.map((event, index) => ({ ...event, t: index })));
-    // D7 r3 / register C-B2f1: after confirmed delivery the run holds the body when the harness won the attach race,
-    // otherwise exactly one counted marker — never neither (the delivered body would then be assumed absent).
-    // The integrator's 10-run series saw the marker in 1 of 9 runs; the count is the honest signal, not a pass.
+    const markers = bodiesUnobserved(events.filter((event) =>
+      event.route === '/page-close-worker-receive').map((event, index) => ({ ...event, t: index })));
+    // C-B2f1: this delayed mechanism producer must hold the body after confirmed delivery. A marker is a finding.
     process.stderr.write(`page-close after delivery: body=${body} markers=${markers}\n`);
-    expect(body || markers === 1).toBe(true);
-    expect(body ? markers : 1).toBe(body ? 0 : 1);
+    expect(body).toBe(true);
+    expect(markers).toBe(0);
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
     hosts.splice(hosts.indexOf(setup.host), 1);
     await setup.host.closeAll();
   });
 
-  // M5-C5: a click-created popup gets its CDP setup from the context's page listener with no wrapper barrier, so an
-  // eager worker in it is NOT GUARANTEED to be observed (the integrator's run observed it — the race is timing).
-  // The declared property is the weaker one: the run is never invalidated and the harness never claims a
-  // capture failure. Whether the body was observed is reported, not asserted.
-  it('documents M5-C5: a click-created popup worker never invalidates the run', async () => {
+  it('counts or captures an eager worker body from a click-created popup', async () => {
     const setup = await captureRoute('/popup-worker', false);
     await setup.host.tools.browser_click({ sessionId: setup.sessionId, selector: '#popup' });
     await expect.poll(() => lab.secondaryRequests().some((request) =>
@@ -236,12 +237,87 @@ describe.sequential('M5 harness coverage gate', () => {
       && event.route === '/popup-worker-receive' && event.bytes.includes(CANARY));
     process.stderr.write(`M5-C5 popup worker body observed: ${observed}\n`);
     expect(inspectSupervisedHostCaptureFailedForTest(setup.host)).toBe(false);
-    expect(events.some((event) => event.channel === 'network-body'
-      && event.route === '/popup-worker-receive'
-      && event.bytes.startsWith('x-tinyvault-body-unavailable:'))).toBe(false);
+    const marker = events.some((event) => event.route === '/popup-worker-receive'
+      && isUnavailableBodyMarker(event));
+    expect(observed || marker).toBe(true);
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
     hosts.splice(hosts.indexOf(setup.host), 1);
     await setup.host.closeAll();
+  });
+
+  it('reports body-or-marker for the immediate page-close race case', async () => {
+    const before = lab.secondaryRequests().length;
+    const setup = await captureRoute('/page-close-worker-race', false);
+    await expect.poll(() => lab.secondaryRequests().slice(before).some((request) =>
+      request.path === '/page-close-worker-race-receive' && request.body?.includes(CANARY))).toBe(true);
+    await setup.host.tools.browser_close_session({ sessionId: setup.sessionId });
+    await setup.host.settleEvidence();
+    const events = setup.host.drainEvidence();
+    const body = events.some((event) => event.route === '/page-close-worker-race-receive'
+      && event.initiator === 'browser' && event.bytes === CANARY);
+    const marker = events.some((event) => event.route === '/page-close-worker-race-receive'
+      && isUnavailableBodyMarker(event));
+    process.stderr.write(`page-close immediate race: observed=${body ? 'body' : 'marker'}\n`);
+    expect(body || marker).toBe(true);
+  });
+
+  it('counts every one of 200 immediate QUERY worker bodies or exact markers', async () => {
+    const before = lab.secondaryRequests().length;
+    const setup = await captureRoute('/query-workers-200');
+    await expect.poll(() => lab.secondaryRequests().slice(before).filter((request) =>
+      request.method === 'QUERY' && request.path === '/query-workers-200-receive').length,
+    { timeout: 20_000 }).toBe(200);
+    await setup.host.settleEvidence();
+    const events = setup.host.drainEvidence().filter((event) =>
+      event.channel === 'network-body'
+      && event.route?.startsWith('/query-workers-200-receive') === true
+      && (event.bytes === CANARY || isUnavailableBodyMarker(event)));
+    expect(events).toHaveLength(200);
+  });
+
+  it('captures or marks a script-opened popup main-thread Blob POST', async () => {
+    const before = lab.secondaryRequests().length;
+    const setup = await captureRoute('/popup-blob', false);
+    await expect.poll(() => lab.secondaryRequests().slice(before).some((request) =>
+      request.path === '/popup-blob-receive' && request.body?.includes(CANARY))).toBe(true);
+    await setup.host.settleEvidence();
+    const events = setup.host.drainEvidence();
+    expect(events.some((event) => event.route === '/popup-blob-receive'
+      && (event.bytes === CANARY || isUnavailableBodyMarker(event)))).toBe(true);
+    expect(inspectSupervisedHostCaptureFailedForTest(setup.host)).toBe(false);
+  });
+
+  it('keeps both self-closing popup shapes benign and the parent session usable', async () => {
+    for (const route of ['/close-about-blank', '/self-closing-popup']) {
+      const setup = await captureRoute(route, false);
+      await setup.host.settleEvidence();
+      expect(inspectSupervisedHostCaptureFailedForTest(setup.host)).toBe(false);
+      expect(await setup.host.tools.browser_navigate({
+        sessionId: setup.sessionId, url: `${lab.primaryOrigin}/nowhere`,
+      })).toEqual({ ok: true });
+    }
+  });
+
+  it('records empty sendBeacon data as an empty body with no marker', async () => {
+    const setup = await captureRoute('/empty-beacon', false);
+    await setup.host.settleEvidence();
+    const events = setup.host.drainEvidence().filter((event) => event.route === '/empty-beacon-receive');
+    expect(events).toContainEqual(expect.objectContaining({
+      channel: 'network-body', initiator: 'browser', bytes: '',
+    }));
+    expect(events.some((event) => isUnavailableBodyMarker(event))).toBe(false);
+  });
+
+  it('does not mint markers for bodyless POST and DELETE requests', async () => {
+    // The bodyless fetches fire synchronously from the fill's input event, so the evidence must be kept (draining
+    // right after the fill discarded their url events and the poll below waited for nothing — integrator).
+    const setup = await captureRoute('/bodyless-methods');
+    const events = await collectUntil(setup.host, (all) => ['/bodyless-post', '/bodyless-delete'].every((route) =>
+      all.some((event) => event.channel === 'url' && event.bytes === `${lab.primaryOrigin}${route}`)));
+    const bodyEvents = events.filter((event) => event.channel === 'network-body'
+      && (event.route === '/bodyless-post' || event.route === '/bodyless-delete'));
+    expect(bodyEvents).toEqual([]);
+    expect(bodiesUnobserved(events)).toBe(0);
   });
 });
 

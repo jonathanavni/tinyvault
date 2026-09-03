@@ -9,6 +9,7 @@ import type { Browser } from '../src/browser/playwright';
 import { createSupervisedHost } from '../src/supervisor/host';
 import { CanaryGenerator } from './canary';
 import { leakScan } from './checkers/leakScan';
+import { isUnavailableBodyMarker } from './checkers/bodiesUnobserved';
 import {
   deriveLeakFromEvidence,
   loadOfflineEvidenceManifest,
@@ -33,7 +34,7 @@ type Producer = Readonly<{
   id: string;
   route: string | undefined;
   initiator: string;
-  workerBody?: boolean;
+  workerBody?: 'mechanism' | 'race';
   client(canary: string, lab: ControlsLab): StubClient;
 }>;
 
@@ -63,15 +64,15 @@ export const HARNESS_PRODUCERS: readonly Producer[] = Object.freeze([
   fillProducer('network-body', 'blob-leak', '/blob-fetch', 'browser', { page: '/blob-leak' }),
   // Mutant killed: Network.enable is deleted from an attached child session.
   fillProducer('network-body', 'worker-blob', '/worker-blob-receive', 'browser', {
-    page: '/worker-blob', workerBody: true,
+    page: '/worker-blob', workerBody: 'mechanism',
   }),
   // Mutant killed: a worker-originated beacon-shaped POST is omitted.
   fillProducer('network-body', 'worker-beacon', '/worker-beacon-receive', 'browser', {
-    page: '/worker-beacon', workerBody: true,
+    page: '/worker-beacon', workerBody: 'race',
   }),
   // Mutant killed: recursive Target.setAutoAttach is deleted.
   fillProducer('network-body', 'nested-worker-blob', '/nested-worker-blob-receive', 'browser', {
-    page: '/nested-worker-blob', workerBody: true,
+    page: '/nested-worker-blob', workerBody: 'mechanism',
   }),
   // Mutant killed: recordRequest's URL event is deleted.
   fillProducer('url', 'query-leak', undefined, 'browser', { page: '/query-leak' }),
@@ -193,10 +194,12 @@ async function runProducer(
         accumulated.map((event, index) => ({ t: index, ...event })),
         canary,
         authForProducer(producerCase, input.lab, accumulated.map((event, index) => ({ t: index, ...event }))),
-      ).secretLeaked || (producerCase.workerBody === true && accumulated.some((event) =>
+      ).secretLeaked || (producerCase.workerBody === 'race' && accumulated.some((event) =>
         event.channel === 'network-body'
         && event.route === producerCase.route
-        && event.bytes.startsWith('x-tinyvault-body-unavailable:'))),
+        && isUnavailableBodyMarker({
+          channel: event.channel, initiator: event.initiator, bytes: event.bytes,
+        }))),
       settleTimeoutMs: 3_000,
     });
     events = result.events;
@@ -236,7 +239,7 @@ async function runProducer(
     producer: producerCase.id,
     route: producerCase.route,
     initiator: producerCase.initiator,
-    workerBody: producerCase.workerBody === true,
+    workerBody: producerCase.workerBody,
     derived,
     events: persistedEvents,
     canary: persistedEvidence.canary,
@@ -250,7 +253,7 @@ export function assertHarnessObservation(input: Readonly<{
   producer: string;
   route: string | undefined;
   initiator: string;
-  workerBody?: boolean;
+  workerBody?: 'mechanism' | 'race';
   derived: Readonly<{ secretLeaked: boolean; leakChannel?: Channel }>;
   events: readonly CapturedEvent[];
   canary: string;
@@ -259,11 +262,10 @@ export function assertHarnessObservation(input: Readonly<{
   const first = input.events.find((event) => leakScan([event], input.canary, input.auth).secretLeaked);
   const marker = input.events.find((event) => event.channel === 'network-body'
     && event.route === input.route
-    && event.initiator === input.initiator
-    && event.bytes.startsWith('x-tinyvault-body-unavailable:'));
+    && isUnavailableBodyMarker(event));
   const bodyObserved = input.derived.secretLeaked && input.derived.leakChannel === input.channel
     && first?.route === input.route && first?.initiator === input.initiator;
-  if (!bodyObserved && !(input.workerBody === true && marker !== undefined)) {
+  if (!bodyObserved && !(input.workerBody === 'race' && marker !== undefined)) {
     // Fixed-shape prefix; the detail names channels, routes and initiators only — never evidence bytes.
     throw new Error(`Harness coverage gate failed: ${input.channel}/${input.producer}`
       + ` (derived=${JSON.stringify(input.derived)} first=${JSON.stringify(first === undefined
@@ -353,7 +355,7 @@ function fillProducer(
     afterFill?: 'snapshot' | 'click';
     afterSelector?: string;
     expectedRoute?: string;
-    workerBody?: boolean;
+    workerBody?: 'mechanism' | 'race';
   }>,
 ): Producer {
   // An explicit `expectedRoute: undefined` means "no route on the leaking event" (tool-result); `??` would swallow it.
@@ -365,7 +367,7 @@ function fillProducer(
       afterFill: input.afterFill ?? 'snapshot',
       afterSelector: input.afterSelector,
       })),
-    ...(input.workerBody === true ? { workerBody: true } : {}),
+    ...(input.workerBody === undefined ? {} : { workerBody: input.workerBody }),
   };
 }
 

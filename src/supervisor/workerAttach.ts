@@ -5,7 +5,7 @@ const AUTO_ATTACH = Object.freeze({
   waitForDebuggerOnStart: true,
   flatten: false,
 });
-const CHILD_COMMAND_TIMEOUT_MS = 5_000;
+const CHILD_COMMAND_TIMEOUT_MS = 3_000;
 
 type SessionPath = readonly string[];
 
@@ -20,8 +20,9 @@ type RequestEvent = Readonly<{
 }>;
 
 type AttachCallbacks = Readonly<{
-  recordBody(url: string, method: string, postData: string, base64Encoded: boolean): void;
-  recordUnavailable(url: string, method: string): void;
+  observeRequest(identity: string, event: RequestEvent): void;
+  recordBody(identity: string, url: string, method: string, postData: string, base64Encoded: boolean): void;
+  recordUnavailable(identity: string): void;
   track(capture: Promise<void>): void;
   fail(): void;
 }>;
@@ -159,12 +160,15 @@ export class WorkerAttachRouter {
   }
 
   #request(path: SessionPath, event: RequestEvent): void {
+    const identity = `${pathKey(path)}:${event.requestId}`;
+    this.callbacks.observeRequest(identity, event);
     if (event.request?.hasPostData !== true || event.request.postData !== undefined) return;
     const capture = this.#send(path, 'Network.getRequestPostData', { requestId: event.requestId })
       .then((result) => {
         const postData = result.postData;
         if (typeof postData !== 'string') throw new Error('Child CDP body response omitted postData');
         this.callbacks.recordBody(
+          identity,
           event.request.url,
           event.request.method,
           postData,
@@ -173,7 +177,7 @@ export class WorkerAttachRouter {
       })
       .catch((error: unknown) => {
         if (this.#detached.has(pathKey(path)) || isDetachedError(error) || isCommandTimeout(error)) {
-          this.callbacks.recordUnavailable(event.request.url, event.request.method);
+          this.callbacks.recordUnavailable(identity);
           return;
         }
         this.callbacks.fail();

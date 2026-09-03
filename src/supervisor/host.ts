@@ -30,6 +30,12 @@ import { createLockdownDomain } from './lockdownDomain';
 import {
   TripwireRun,
 } from './tripwireSeam';
+import {
+  BodyCorrelation,
+  BODY_UNAVAILABLE_NOT_ATTACHED,
+  BODY_UNAVAILABLE_TARGET_DETACHED,
+  type RequestWillBeSentLike,
+} from './bodyCorrelation';
 import { WorkerAttachRouter } from './workerAttach';
 
 type TripwireVerdict = ReturnType<TripwireRun['adjudicate']>;
@@ -41,17 +47,14 @@ type RequestLike = Readonly<{
   headers(): Record<string, string>;
   method(): string;
   redirectedFrom?(): RequestLike | null;
-  frame?(): Readonly<{ page(): Page }>;
   url(): string;
 }>;
 
 const ALL_HEADERS_TIMEOUT_MS = 2_000;
 const ATTACH_TIMEOUT_MS = 2_000;
 const CONSOLE_EVENT_LIMIT = 1_000;
-const BODY_CORRELATION_MS = 250;
 export { CONSOLE_BUDGET_EXCEEDED } from './consoleSerialization';
-export const BODY_UNAVAILABLE_TARGET_DETACHED = 'x-tinyvault-body-unavailable: target-detached';
-export const BODY_UNAVAILABLE_NOT_ATTACHED = 'x-tinyvault-body-unavailable: not-attached';
+export { BODY_UNAVAILABLE_NOT_ATTACHED, BODY_UNAVAILABLE_TARGET_DETACHED } from './bodyCorrelation';
 export const POPUP_ATTACH_TIMEOUT_DIAGNOSTIC = 'x-tinyvault-popup-attach-timeout';
 
 function boundedAllHeaders(request: RequestLike): Promise<Record<string, string>> {
@@ -66,12 +69,6 @@ function boundedAllHeaders(request: RequestLike): Promise<Record<string, string>
       (error: unknown) => { clearTimeout(timer); reject(error); });
   });
 }
-
-/** The subset of CDP `Network.requestWillBeSent` the deferred-body capture reads. */
-type RequestWillBeSentLike = Readonly<{
-  requestId: string;
-  request: Readonly<{ url: string; method: string; hasPostData?: boolean; postData?: string }>;
-}>;
 
 type WebSocketLike = Readonly<{
   on(event: 'framesent', listener: (event: { payload: string | Buffer }) => void): void;
@@ -91,11 +88,7 @@ export class EvidenceLease {
   #active = true;
   readonly #pending = new Set<Promise<void>>();
   readonly #pendingAttach = new Map<Promise<void>, boolean | Promise<boolean>>();
-  readonly #bodyCandidates = new Set<Readonly<{
-    key: string;
-    finish(): void;
-  }>>();
-  readonly #bodyCredits = new Map<string, number>();
+  readonly #bodyCorrelation = new BodyCorrelation();
   #consoleEvents = 0;
   readonly #consoleDetachers = new Set<() => void>();
 
@@ -142,12 +135,13 @@ export class EvidenceLease {
       const body = request.postDataBuffer();
       if (body !== null) {
         this.#recordNetworkBody(rawUrl, method, requestBodyBytes(body));
-      } else if (isBodyBearingMethod(method)) {
-        this.#trackUnobservedBodyCandidate(rawUrl, method, requestMarkerAllowed(request));
+      } else {
+        this.#bodyCorrelation.observePlaywrightRequest(request, rawUrl, method, request.headers());
       }
       // allHeaders() never resolves for a WebSocket upgrade (no requestWillBeSentExtraInfo), so it is bounded:
       // after ALL_HEADERS_TIMEOUT_MS the provisional headers() are recorded instead (never a missing event).
       const capture = boundedAllHeaders(request).then((headers) => {
+        if (body === null) this.#bodyCorrelation.observeHeaders(request, headers);
         this.#record(Object.freeze({
           channel: 'header', direction: 'outbound',
           ...(origin === undefined ? {} : { origin }),
@@ -179,8 +173,18 @@ export class EvidenceLease {
    * recorded here with the same origin/route shape as `recordRequest`. Interception is NOT used: an active
    * route suppresses CORS preflights and would change what the page can reach.
    */
-  recordDeferredBody(rawUrl: string, method: string, postData: string, base64Encoded: boolean): void {
-    this.#observeCorrelatedBody(rawUrl, method);
+  recordRequestWillBeSent(identity: string, event: RequestWillBeSentLike): void {
+    this.#bodyCorrelation.observeCdpRequest(identity, event);
+  }
+
+  recordDeferredBody(
+    rawUrl: string,
+    method: string,
+    postData: string,
+    base64Encoded: boolean,
+    identity?: string,
+  ): void {
+    if (!this.#bodyCorrelation.recordBody(identity)) return;
     this.#recordNetworkBody(
       rawUrl,
       method,
@@ -188,7 +192,12 @@ export class EvidenceLease {
     );
   }
 
-  #recordNetworkBody(rawUrl: string, method: string, bytes: string): void {
+  #recordNetworkBody(
+    rawUrl: string,
+    method: string,
+    bytes: string,
+    initiator: 'browser' | 'harness-marker' = 'browser',
+  ): void {
     let parsed: URL;
     try {
       parsed = new URL(rawUrl);
@@ -204,50 +213,12 @@ export class EvidenceLease {
     }
     this.#record(Object.freeze({
       channel: 'network-body', direction: 'outbound', ...(origin === undefined ? {} : { origin }),
-      method, route: `${parsed.pathname}${parsed.search}`, initiator: 'browser', bytes,
+      method, route: `${parsed.pathname}${parsed.search}`, initiator, bytes,
     }));
   }
 
-  recordUnavailableBody(rawUrl: string, method: string): void {
-    this.recordDeferredBody(rawUrl, method, BODY_UNAVAILABLE_TARGET_DETACHED, false);
-  }
-
-  #trackUnobservedBodyCandidate(
-    rawUrl: string,
-    method: string,
-    markerAllowed: Promise<boolean>,
-  ): void {
-    const candidateKey = bodyKey(rawUrl, method);
-    const credits = this.#bodyCredits.get(candidateKey) ?? 0;
-    if (credits > 0) {
-      if (credits === 1) this.#bodyCredits.delete(candidateKey);
-      else this.#bodyCredits.set(candidateKey, credits - 1);
-      return;
-    }
-    let resolveCandidate!: () => void;
-    const correlation = new Promise<void>((resolve) => { resolveCandidate = resolve; });
-    const candidate = Object.freeze({ key: candidateKey, finish: resolveCandidate });
-    this.#bodyCandidates.add(candidate);
-    const timer = setTimeout(() => {
-      void markerAllowed.then((allowed) => {
-        if (this.#bodyCandidates.delete(candidate) && allowed) {
-          this.#recordNetworkBody(rawUrl, method, BODY_UNAVAILABLE_NOT_ATTACHED);
-        }
-      }).finally(resolveCandidate);
-    }, BODY_CORRELATION_MS);
-    const bounded = correlation.finally(() => clearTimeout(timer));
-    this.trackDeferred(bounded);
-  }
-
-  #observeCorrelatedBody(rawUrl: string, method: string): void {
-    const candidateKey = bodyKey(rawUrl, method);
-    const candidate = [...this.#bodyCandidates].find((item) => item.key === candidateKey);
-    if (candidate !== undefined) {
-      this.#bodyCandidates.delete(candidate);
-      candidate.finish();
-      return;
-    }
-    this.#bodyCredits.set(candidateKey, (this.#bodyCredits.get(candidateKey) ?? 0) + 1);
+  recordUnavailableBody(identity: string): void {
+    this.#bodyCorrelation.recordUnavailable(identity);
   }
 
   /** WebSocket handshakes raise no Playwright request event; their headers arrive through CDP
@@ -319,6 +290,9 @@ export class EvidenceLease {
 
   async settle(): Promise<void> {
     while (this.#pending.size > 0) await Promise.allSettled([...this.#pending]);
+    for (const marker of this.#bodyCorrelation.finalize()) {
+      this.#recordNetworkBody(marker.rawUrl, marker.method, marker.reason, 'harness-marker');
+    }
   }
 
   recordWebSocket(socket: WebSocketLike): void {
@@ -491,6 +465,7 @@ export class EvidenceLease {
     const evidence = leaseEvidence.get(this);
     if (evidence !== undefined) evidence.length = 0;
     leaseEvidence.delete(this);
+    this.#bodyCorrelation.clear();
   }
 }
 
@@ -552,7 +527,7 @@ function capturingContextFactory(browser: Browser, lease: EvidenceLease): () => 
     context.on('page', (page) => {
       page.on('websocket', lease.recordWebSocket);
       const wrapperOwned = attachTimeoutInvalidates(page, lease);
-      const attach = attachDeferredBodyCapture(context, page, lease, wrapperOwned);
+      const attach = attachDeferredBodyCapture(context, page, lease);
       lease.trackAttach(attach, wrapperOwned);
     });
     return context;
@@ -563,7 +538,6 @@ async function attachDeferredBodyCapture(
   context: BrowserContext,
   page: Page,
   lease: EvidenceLease,
-  workerMarkersAllowed: Promise<boolean>,
 ): Promise<void> {
   try {
     const cdp = await context.newCDPSession(page);
@@ -581,29 +555,28 @@ async function attachDeferredBodyCapture(
       if (url !== undefined) lease.recordHandshakeHeaders(url, event.request.headers);
     });
     cdp.on('Network.requestWillBeSent', (event: RequestWillBeSentLike) => {
+      const identity = `page:${event.requestId}`;
+      lease.recordRequestWillBeSent(identity, event);
       if (event.request.hasPostData !== true || event.request.postData !== undefined) return;
       const capture = cdp.send('Network.getRequestPostData', { requestId: event.requestId })
         .then((result) => lease.recordDeferredBody(
-          event.request.url, event.request.method, result.postData, result.base64Encoded === true,
+          event.request.url, event.request.method, result.postData, result.base64Encoded === true, identity,
         ))
         .catch(() => lease.markCaptureFailed());
       lease.trackDeferred(capture);
     });
     const router = new WorkerAttachRouter(cdp, {
-      recordBody: (url, method, postData, base64Encoded) => {
-        lease.recordDeferredBody(url, method, postData, base64Encoded);
+      observeRequest: (identity, event) => lease.recordRequestWillBeSent(identity, event),
+      recordBody: (identity, url, method, postData, base64Encoded) => {
+        lease.recordDeferredBody(url, method, postData, base64Encoded, identity);
       },
-      recordUnavailable: (url, method) => {
-        const marker = workerMarkersAllowed.then((allowed) => {
-          if (allowed) lease.recordUnavailableBody(url, method);
-        });
-        lease.trackDeferred(marker);
-      },
+      recordUnavailable: (identity) => lease.recordUnavailableBody(identity),
       track: (capture) => lease.trackDeferred(capture),
       fail: () => lease.markCaptureFailed(),
     });
     await router.enable();
-  } catch {
+  } catch (error) {
+    if (pageClosed(page) || isMissingPageTargetError(error)) return;
     lease.markCaptureFailed();
   }
 }
@@ -630,16 +603,6 @@ function attachTimeoutInvalidates(page: Page, lease: EvidenceLease): Promise<boo
   }
 }
 
-function requestMarkerAllowed(request: RequestLike): Promise<boolean> {
-  try {
-    const page = request.frame?.().page();
-    if (page === undefined) return Promise.resolve(true);
-    return page.opener().then((opener) => opener === null).catch(() => true);
-  } catch {
-    return Promise.resolve(true);
-  }
-}
-
 function requestBodyBytes(body: Buffer): string {
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(body);
@@ -648,12 +611,14 @@ function requestBodyBytes(body: Buffer): string {
   }
 }
 
-function bodyKey(rawUrl: string, method: string): string {
-  return JSON.stringify([method.toUpperCase(), rawUrl]);
+function pageClosed(page: Page): boolean {
+  try { return page.isClosed(); } catch { return false; }
 }
 
-function isBodyBearingMethod(method: string): boolean {
-  return /^(?:POST|PUT|PATCH|DELETE)$/u.test(method.toUpperCase());
+function isMissingPageTargetError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /No target with given id|Target closed|Session closed|Target page, context or browser has been closed/iu
+    .test(message);
 }
 
 function compose(
