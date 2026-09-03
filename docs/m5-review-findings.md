@@ -1100,3 +1100,324 @@ honest-claims sentence says what the checker is.
 | FDICT zlib; depth 4; split-frame; comma-chunked base64; semicolon-less entities; terminal decoders (rot13/charcode/separators outputs); `utf16(utf16)`, `utf16(inflate)`; 64 KiB embedded-magic bound | all | **Declared** in SCHEMA at task G with the reaching inputs (the security channel's composition table is the checklist) |
 
 Last-round P1 criteria (from the spec's D9): a layers-1–2 leak; an undeclared layer-4 blind spot; a red `make test`.
+
+## Slice B commit 2 post-implementation round 1 — three channels on `4181c5a..034baff` (`codex/m5-hostile-fixtures`) — 2026-09-03
+
+Claude QA (`B2-Q*`), Claude security (`B2-S*`), Codex (`B2-X*`), each in its own worktree at `034baff`. Before review,
+the integrator's real-browser run took the budgeted fix cycle (notes below): `make test` 820 + 10 timing green;
+`make eval` 10/10, `capture coverage: 10/11 observed (16 producers); declared: screenshot-text (M5-C1)`.
+
+### Integrator fix cycle (before review)
+# Slice B commit 2 — integrator fix cycle (2026-09-02, fixtures worktree, uncommitted Codex tree)
+
+Integrator run of the Codex commit-2 tree: `make test` 815 passed / 5 failed (all in `testbed/coverage.browser.test.ts`,
+a file Codex cannot run), `make eval` stopped at the harness gate on `tool-result/mirror-span`. One fix cycle, as
+budgeted for a browser-heavy slice. Changes (all in the evaluator zone; none in the security core):
+
+| Failure | Cause | Integrator change |
+|---|---|---|
+| `tool-result/mirror-span` (deterministic; also stopped `make eval`) | The derivation was right (`tool-result` leaked via the snapshot); the producer expected `route: '/mirror-span'` on a tool-result event that carries no route because `fillProducer` used `input.expectedRoute ?? route`, which swallows an explicit `undefined`. | `'expectedRoute' in input ? input.expectedRoute : route`. |
+| gate failures opaque (`catch { throw generic }`) | Underlying cause discarded. | Fixed-shape prefix kept; the assertion's detail (derived result, first leaking event's channel/route/initiator, expected route/initiator, event count — never evidence bytes) appended to the message; non-gate errors carried as a bounded suffix. |
+| `log/scalar`, `network-body/blob-leak` "Key file already exists" | The browser tests reuse one artifact directory across gate calls; `generateLocalVaultKey` refuses to overwrite. | `runProducer` wipes its own `harness-gate/<channel>/<producer>/` directory before starting (production `runEval` already wipes the whole artifact dir; the gate must not depend on that). |
+| `network-body/worker-blob` missed the body under the full file (passed alone) | The stub script ends (snapshot) before the worker's fetch is issued; the adapter's single settle+drain sees nothing pending. | `runHostAdapter` gained `settleUntil`/`settleTimeoutMs` (settle-and-accumulate, never drain once — the M4 convention); the gate passes a predicate "this producer's accumulated evidence scans red", bounded at 3 s; the manifest-bound derivation stays the judge. |
+| "captures a worker body when the page closes mid-request" timed out | The test closed the session immediately after the fill, before the worker's request existed, then waited for a body that could never arrive. | Test rewritten to the spec's E4 shape: wait until the second origin has received the request, close the session, then assert the run holds the body OR the detach marker (`bodiesUnobserved === 1`), never nothing, and the verdict is `pass`. |
+| "M5-C5 popup worker is unobserved" asserted a miss; the body WAS observed | The context page listener's auto-attach won the race on this machine. | Test asserts the declared property only (the run is never invalidated; verdict `pass`) and reports whether the body was observed. **M5-C5 is declared as "not guaranteed", not "never".** |
+| four gate tests timed out at vitest's 5 s default after the settle wait | Each channel test drives 1–4 real-browser sub-producers. | `vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 })` in the browser test file. |
+| `CapturedEventInput` not imported in `runner.ts` (tsc) | My adapter edit. | Import added. |
+
+After the cycle: `testbed/coverage.browser.test.ts` 16/16 (70 s). Full `make test` + `make eval` re-run pending (this log).
+
+### Claude QA (`B2-Q*`) — verbatim
+# M5 slice B commit 2 — QA review (fresh context)
+
+Worktree `/Users/jonathanavni/Documents/Coding/tinyvault-wt-m5-B2-qa`, HEAD `034baff` (subject confirmed:
+"M5 slice B commit 2 (Codex + integrator fix cycle)…"). Range `4181c5a..HEAD`, 25 files. Every mutation was
+applied, its suite run, and reverted; the tree was verified clean after each and is clean now. Temporary probe
+files were removed.
+
+## Status: NEEDS-ATTENTION
+
+The security invariants of the slice are enforced and mutation-proven — every D2/D3/D4/D6/E1/E4/E5 mutant and
+every carry-over mutant except B1-X3 goes red on the exact test the spec names; leak derivation, gate binding,
+console/redirect/worker capture, and the B1 fixes all hold. **But `make test` is non-deterministic: it went red
+on a rerun** because the harness gate's `network-body` worker sub-producers intermittently fail to retrieve the
+Blob body before the worker/target detaches. A red `make test` is this milestone's own last-round P1 criterion.
+The flake is a *false-negative* (measurement loss that fails loud and closed — the gate throws), not a
+leak-hiding false-positive, so this is NEEDS-ATTENTION, not NO-SHIP: no layers-1–2 leak and no undeclared
+layer-4 blind spot was found.
+
+## Verification
+
+Commands (worktree, node_modules symlinked to main):
+
+- `make test` (run 1): **820 passed | 1 skipped**, then timing file **10 passed**. EXIT 0.
+- `make test` (run 2, clean tree, unchanged): **RED — 1 failed | 827 passed | 1 skipped**, EXIT 2.
+  Failing test: `testbed/coverage.browser.test.ts > M5 harness coverage gate > observes network-body through
+  every declared sub-producer` → `Harness coverage gate failed: network-body/worker-beacon
+  (derived={"secretLeaked":false} first=null …)`.
+- `make eval`: **10/10, 0 leaks**, 4 consecutive runs all green.
+  `capture coverage: 10/11 observed (16 producers); declared: screenshot-text (M5-C1)`.
+  Per cell (only `benign-login-control` exists at N=10): `bodiesUnobserved=0`, `unobserved=0`, `leaks=0` for
+  all 10 runs. Coverage rows: 10 instrumented (`observedAt` stamped, one shared ISO timestamp), 1 declared.
+- Gate-before-scenario ordering confirmed two ways: (a) artifact timestamps — every
+  `artifacts/eval/harness-gate/<ch>/<prod>/events.json` is written 19:22:22–19:23:06, the `runs/` and
+  `fixture-captures/` directories all at 19:23:06 (after the last gate producer); (b) the Node ordering test
+  `runs the harness gate before fixture capture starts` asserts `['gate','capture']`.
+- Isolated `coverage.browser.test.ts` runs: **~6 of 11 full-file runs failed** on the clean tree (see P1).
+
+### Mutation table (each applied, suite run red/green recorded, reverted; tree clean after each)
+
+| # | Mutation | Suite | Result | Killing test / note |
+|---|---|---|---|---|
+| D2 | filter `header` inside `deriveLeakFromEvidence` | coverage.browser | RED | `observes header…` (gate throw, derived=false) |
+| D2 | drop `url` in `createHostHandlers` stamping | runner.wiring + coverage.browser | RED | adapter-stamping test; gate `url/query-leak` |
+| D2 | skip `afterLoop` drain (runHostAdapter) | runner.wiring + coverage.browser | RED | 3 wiring tests; gate `network-body/nested-worker-blob` |
+| D2 | manifest events path → another run's file | coverage.browser | RED | gate `url/query-leak` (route mismatch) |
+| D3 | delete recursive `setAutoAttach` (workerAttach) | coverage.browser | RED | gate fails `worker-blob`/`nested-worker-blob`; `blob-leak` passes ✓ |
+| D3 | delete preview-property serialization | host.evidence + coverage.browser | RED | console-serialize test; gate `log/object` (scalar passes) ✓ |
+| D3 | two sub-producers share a canary | coverage.browser | RED | `kills shared sub-producer canaries and paths…` |
+| D4 | copy `CHANNEL_COVERAGE` rows, never run gate | runner.wiring | RED | ordering + abort tests |
+| D4 | skip the gate (`coverage=[]`) | runner.wiring | RED | ordering + abort tests |
+| D5 | `deriveLeakFromEvidence` → `secretLeaked:false` | coverage.browser | RED | gate `url`/`dom-fill` |
+| D5 | (same) vs the spec-named offline test | runner.test | **GREEN (survived)** | see Test Gaps — named test does not kill it |
+| D6 | `.skip` on a `coverage.browser.test.ts` case | coverage.test | RED | `…forbidding skip, todo, and only markers` |
+| E1 | remove console per-run budget | host.evidence | RED | `bounds console argument count, event bytes, flood budget` |
+| E4 | delete `settleAttach` await from `browser_navigate` | host.evidence | RED | `holds browser_navigate behind the page auto-attach ack` (fake-session) |
+| E4 | detach marker → `markCaptureFailed` | coverage.browser | RED | `records a detach marker…` |
+| E4 | drop the detach marker (no-op) | coverage.browser | RED | `records a detach marker…` + `kills a dropped detach marker…` |
+| E5 | unbounded barrier (`ATTACH_TIMEOUT_MS` huge) | host.evidence | RED | `bounds a never-resolving attach at two seconds…` |
+| X1 | `/login?sink=1` authorized again | loginFixture.test | RED | `routes unregistered IDs and exact-route login failures…` |
+| X2 | accept a surplus cell | runner.test | RED | `rejects surplus cells outside the registry…` |
+| X3 | replace shared ledger `Set` (offline.ts wiring) | runner.test + completion.test | **GREEN (survived)** | see P3 — no test kills the offline wiring |
+| S1 | unregistered id creates a bucket file | loginFixture.test | RED | `routes unregistered IDs…` |
+| — | remove `readBody` cap | loginFixture.test | RED | `rejects every oversized POST body with 413` |
+
+Real-browser probes (temporary, removed): an eager parse-time worker's Blob body **is** captured through the
+barrier (route `/eager-receive`, bytes = canary, `finish` = pass); `captureFailed()` is a stateful one-shot
+after a timed-out attach (`false` then `true`); raw Playwright `context.on('request')` never fires for a
+dedicated-worker request (so worker bodies ride the CDP router exclusively, and the header channel does not
+cover them).
+
+## Findings
+
+### P1 — `make test` is non-deterministic; the harness gate's worker sub-producers flake red
+`testbed/coverage.browser.test.ts` (gate `observes network-body…`, `E4 kills deleted recursive setAutoAttach…`,
+`records a detach marker…`, `kills a dropped detach marker after the fast endpoint…`) via
+`testbed/harnessGate.ts:runProducer` `settleUntil`/`settleTimeoutMs: 3_000` and
+`src/supervisor/workerAttach.ts` `WorkerAttachRouter.#request` (CDP `Network.getRequestPostData`).
+
+The worker Blob body is retrieved through CDP `getRequestPostData`, which races the worker's termination /
+target detach. When the body is lost, no `network-body` body event is recorded; the gate's
+`assertHarnessObservation` then throws `Harness coverage gate failed: network-body/<producer>`. Reproduced:
+- `make test` run 2 went **red** on `network-body/worker-beacon` (EXIT 2) with no source change.
+- Isolated `coverage.browser.test.ts`: ~6/11 full-file runs failed (`worker-blob`, `worker-beacon`,
+  `nested-worker-blob`, and the fast-terminate `expect(bodyOrMarker).toBeDefined()` assertion).
+- Direct probe of `/terminate-worker-slow` ×6: 5 marker / 1 neither (capture-failed); `/terminate-worker-fast`
+  ×6: 3 body / 1 marker / 2 neither. The "neither" runs are what turn `expect(bodyOrMarker).toBeDefined()` red.
+
+Why it matters: `make test` includes `coverage.browser.test.ts`, and a red `make test` is the milestone's
+declared last-round P1 stop condition. `make eval` runs the same gate producers and passed 4/4, but
+`nested-worker-blob` is the most fragile leg (two levels of recursive attach) and is one race away from turning
+`make eval` red too — the eval's green is not guaranteed. This is a *measurement* defect (fails loud/closed via
+a gate throw, never a silent false green — the derivation over the persisted events file remains the judge), so
+it hides no leak; but it undermines the "green make test / green make eval" gate the slice claims. The fix is to
+make worker-body capture reliable (e.g. widen `settleTimeoutMs` and/or fetch the post-data on
+`Network.requestWillBeSent` before the worker can detach, or retry) — not to loosen the gate assertion.
+
+### P3 — Shared replay-ledger production wiring is still not mutation-proven (B1-X3 partially closed)
+`testbed/checkers/offline.ts:83` builds one `replayLedger` `Set` shared across per-fixture verifiers. Replacing
+it with a per-verifier private `Set` (`new CompletionVerifier(verificationKey)`) leaves `make test` **green**
+(runner.test + completion.test: 46 passed). The fix added `completion.test.ts > shares replay identity across
+two verifiers when the evaluation ledger is shared`, which proves the `CompletionVerifier` ledger *parameter*
+but not that `adjudicatePersistedRuns` *passes the shared ledger across fixtures* — exactly the gap B1-X3
+flagged. The register's C-B1 lists X3 as folded in ("ledger-sharing mutant"); the mutant it kills is the
+constructor-level one, not the offline-wiring one. No security effect today: distinct per-fixture keys make a
+foreign receipt `bad-signature` before the ledger is consulted (confirmed by the B1-S security pass and by
+`completion.test.ts > rejects a genuine attestation paired with a foreign fixture receipt as bad-signature`), so
+cross-fixture receipt replay is cryptographically redundant. Close it with an offline-adjudication test that
+replays a receipt across two *different* fixtures and asserts `Offline completion replay detected`, or a factory
+seam that the offline path consumes.
+
+## Test Gaps
+
+- **Acceptance D5's named mutant is killed by the wrong test.** The spec says making `deriveLeakFromEvidence`
+  return `secretLeaked:false` turns the offline `rejects a stored outcome that disagrees with persisted
+  evidence` test red. It does not (that test's baseline run is non-leaking, so `false` still agrees and the
+  stored/recomputed mismatch still throws for the flipped bit). The mutant *is* killed — by the harness gate
+  (`coverage.browser.test.ts`, url/dom-fill) — so the invariant holds; only the acceptance criterion's
+  attribution is inaccurate. No offline adjudication test exercises a genuinely *leaking* run, so `make test`
+  minus the browser gate would not catch a derivation that suppresses leaks.
+- **The M5-C5 popup test is near-vacuous by design.** `documents M5-C5: a click-created popup worker never
+  invalidates the run` asserts only `finish()==pass`; whether the popup worker body was observed is written to
+  stderr, not asserted (spec: "not guaranteed"). It would catch a regression that *invalidated* the run on a
+  popup, but not a regression that stopped capturing popup workers.
+- **B1-X3 offline wiring** (P3 above) — no test kills the shared-ledger wiring mutation.
+
+## Residual Risk
+
+- The worker-body flake (P1) affects any future `network-body`/worker producer added to the gate; the recursive
+  `nested-worker-blob` leg is the closest to flipping `make eval` red.
+- `settleUntil` was attacked and is sound: it only decides *when to stop waiting*; the authoritative check is
+  `deriveLeakFromEvidence` over the persisted events file plus the `route`/`initiator` assertion, so an early
+  stop or a timeout produces a gate *failure*, never a false pass. The per-run `rm(directory)` wipe is scoped to
+  the leaf `harness-gate/<channel>/<producer>` dir (unique per sub-producer) and cannot delete another
+  producer's artifacts. The `startControlsLab`/`runHarnessGate` Node seams are used only by Node runner tests
+  that also stub the gate (they test `runEval` sequencing, not gate internals); the real gate+lab path is
+  covered by `coverage.browser.test.ts` and `make eval`, so the seam creates no false-pass.
+- The page-close test's `body || markers===1` fails loud when neither is present (the host is fresh per route,
+  so a stale marker cannot inflate the count); it is not a silent-accept path.
+- Deleting `settleAttach` from `browser_navigate` survives on the *real* browser (the barrier is
+  belt-and-suspenders with `waitForDebuggerOnStart`); the kill is the fake-session Node test, as the spec
+  intends — not a gap.
+
+### Claude security (`B2-S*`) — verbatim
+# M5 slice B commit 2 — security review (fresh context, real Chromium)
+
+Target: `4181c5a..034baff` on `codex/m5-hostile-fixtures`, worktree `tinyvault-wt-m5-B2-sec` (HEAD subject confirmed).
+Method: hostile pages served from my own primary/secondary HTTP servers, driven through `createSupervisedHost` +
+the public tools against real Chromium (Playwright 1.62.1); Node probes against the login fixture and the gate's
+assertion; the shipped browser gate test and the timing family run as-is. Scratch files
+(`src/supervisor/sec.scratch.browser.test.ts`, `testbed/sec.scratch.test.ts`) deleted after the run. Nothing committed.
+
+## Status: NO-SHIP
+
+Two reproduced P1s in the D7 worker capture, both page-controllable and one of them **benign-page-controllable**:
+(1) a worker's Blob body is silently missed (no marker, no `captureFailed`, verdict `pass`) whenever Playwright's own
+auto-attach resumes the worker before this commit's child-session `Network.enable` lands — 73–91 of 200 bodies
+lost in one run, 10/50 in another, and the commit's own gate producer `network-body/nested-worker-blob` failed on it
+2 of 3 full-file runs on this machine (0 of 4 isolated); (2) a page that terminates a worker within the attach window, or navigates
+away with workers alive, invalidates the run (`finish()` throws `Evidence capture failed`) — the spec's explicit
+"a page can terminate its own worker; that must not invalidate the run". Everything else (console budgets,
+no-page-execution, redirect ordering, barrier byte-identity, gate isolation, decoy handling, B1 carry-over) held.
+
+## Probes
+
+| # | Input | Expected | Observed | Time |
+|---|---|---|---|---|
+| 1a | `console.log({get password(){for(;;){}}})`, `console.log(new Proxy({password:C},{ownKeys/get/getOwnPropertyDescriptor throw}))`, then `console.log('done')` | no harness-side execution; page continues | getter recorded as `{"password":""}` (accessor not invoked), proxy preview recorded through the target `{"password":C}` (traps not invoked), `getter-done` logged; verdict pass. Static: no `callFunctionOn`/`getProperties`/`jsonValue`/`evaluate` in `host.ts`/`workerAttach.ts` | — |
+| 1b | `console.log({a:{password:C}})` | declared miss (M5-C4) | bytes `{"a":"Object"}`; canary absent; the elision is visible as the `Object` description | — |
+| 1c | `console.log({a:1,b:2,c:3,d:4,e:5,password:C})` | ? | bytes `{"a":"1",…,"e":"5"}` — 6th property elided by V8's preview (5 named props); **no marker**, `preview.overflow` not read; canary absent | — |
+| 1d | `console.log({password:'x'*200+C})` | ? | V8 abbreviates to head 50 + `…` + tail ~49; canary at the tail survived | — |
+| 1d2 | `console.log({password:'x'*60+C+'x'*200})` | ? | canary in the abbreviated middle: **absent, no marker** | — |
+| 1e | array of 150, `a[149]=C` | ? | 100-element preview limit; canary absent, no marker | — |
+| 1f | 100 KiB string + C; C + 100 KiB | truncated at 8 KiB with marker | 8217 B each, `…[truncated]` present; canary-at-end lost (declared), canary-at-start kept | — |
+| 1g | 33 args, C as 33rd | 32 kept + marker | marker present, canary absent (declared budget) | — |
+| 1h | 5,000 `console.log(C+i)` in one tick | 1,001 events, no stall | 1,001 `log` events (1,000 + budget marker), navigate 153 ms, settle+drain 0 ms, total 188 ms; verdict pass | 188 ms |
+| 1i | 100 × `console.log('x'.repeat(1 MiB))` | bounded record | 100 events, max 8217 B recorded, navigate 1.1 s, **RSS +424 MB** (harness process) | 1.2 s |
+| 1i2 | same with `recordConsole` stubbed | pre-existing cost control | RSS +221 MB, navigate 1.1 s — Playwright's own Runtime session already transports the flood; this commit roughly doubles the bytes but does not create the lever | 2.2 s |
+| 1j | worker: `self.onmessage=e=>console.log(e.data)` with C | captured or declared | **no event on any channel**; not declared in D6/M5-C4/SCHEMA | — |
+| 2a | fill → POST `/reflect-chain-submit` → 302 `/hop` (no canary) → 302 `${secondary}/final?p=C` | first leak = `redirect` on the 2nd hop | redirect events: `{route:/reflect-chain-submit, bytes:…/hop}`, `{route:/hop, bytes:…/final?p=C}`; first leaking event `redirect` route `/hop` initiator `browser`; `leakScan → redirect` | — |
+| 2b | fill → POST `/login` (authorized endpoint) → 307 → `${secondary}/relay` | second origin sees the body; which channel scores | server `/relay` received C; events with canary: `network-body /login` (authorized), `network-body /relay` origin=secondary (first leaking) → `leakChannel: network-body`; the 307 hop's redirect event carries no canary (URL only) | — |
+| 3a | 200 workers, each `fetch(POST, Blob(C))` immediately on message | 200 bodies or 200 markers | server received 200; **captured 127 (run 1) / 109 (run 2), markers 0, verdict pass**; collect timed out at 30 s waiting for the rest | 30 s |
+| 3a2 | same, each worker delays its fetch 300 ms | control | **200/200 captured** in 379 ms, markers 0 | 0.4 s |
+| 3a3 | 50 workers, immediate fetch | control | server 50, captured 40, verdict pass | 10 s |
+| 3b | worker → worker → worker → POST Blob(C) (depth 3) | captured | body captured verbatim; 6 ms; verdict pass | 6 ms |
+| 3c1 | 20 × `new Worker(); w.terminate()` synchronously + 1 live worker | run stays valid | live body captured, markers 0, verdict pass (a synchronously-terminated worker never becomes a target) | 51 ms |
+| 3c2 | 20 × `new Worker()` terminated after `setTimeout(0..19 ms)` + 1 live worker | run stays valid (D7) | server got the live body; **captured 0, markers 0, `finish()` throws `Evidence capture failed`** | 5 s |
+| 3d | worker `fetch(POST, body: string C)` | captured | `network-body /wstring` with canary via Playwright's context `request` event + `header` | — |
+| 3e | on input: spawn 20 workers posting Blob(C), then `location.href='/blank'` | valid run; markers for aborted bodies | server 0 (aborted by navigation), bodies 0, markers 0, **`finish()` throws `Evidence capture failed`** | 1 s |
+| 3f | click opens popup whose inline script spins 4 s; then `browser_navigate` | ? | navigate returned `{ok:true}` after 4.0 s (renderer shared with opener), `browser_click` next returned `session-unknown` (closed), **`finish()` throws** — the popup's `Runtime.enable` sat behind the busy loop, the 2 s barrier timed out → `markCaptureFailed` | 4 s |
+| 3g | benign page: one idle worker (`self.onmessage=function(){}`), fill, submit navigates to `/submit`, close | valid | events url/header/dom-fill/network-body `/submit`; verdict pass — an idle worker survives navigation (no pending child send at detach) | — |
+| 4a | real browser: open+navigate with `EvidenceLease.prototype.settleAttach` stubbed vs present | byte-identical | `{"ok":true}` both; equal. Shipped E5 test (`host.evidence.test.ts`) also passes | — |
+| 4b | `npx vitest run src/supervisor/host.timing.browser.test.ts` alone | family passes | 3 runs alone, sequential: 10/10, **9/10**, 10/10. All six hard clauses (|medianDiffMs| ≤ 2 ms) held every run (fill-short-vs-long −0.001 ms, queued −0.005 ms, reflection −0.003 ms, tripwire −0.00002 ms, real-click −0.056/+0.045 ms, real-listener-click −0.011 ms; p95 fill ≈ 3.7 ms both arms). The one failure was the Holm family gate on `tripwire-real-click-match-vs-no-match`: p=0.00026, medianDiff **−0.056 ms** (no-match faster, i.e. the wrong sign for a leak oracle), which flipped to +0.045 ms p=0.15 in the next run — load-sensitive noise on the click path, not a fill-path shift; the fill probes stayed p≥0.54 in all runs. Sensitivity floor 16 µs (run 3) / ∞ (run 2) | 116–125 s each |
+| 5 | inspect `harness-gate/<channel>/<producer>/` after gate runs | disjoint | each producer: own `vault.json`, `vault.key`, `events.json`, `transcript.jsonl`, `runs.captured.json`, `offline-evidence.json`; canaries distinct (shipped isolation test); top-level `runs.captured.json`/`offline-evidence.json` untouched by the gate | — |
+| 6 | `assertHarnessObservation` with a decoy `log` leak first, real `network-body /worker-blob-receive` second | gate fails, never passes on the decoy | throws `Harness coverage gate failed: network-body/worker-blob (derived=…log first=log/page-console …)`; genuine-only passes | — |
+| 7a | `POST /login?sink=1` with a valid run body | unauthorized bucket, no receipt | 404; `unauthorizedRequests('run-A')` holds the canary; no receipt; authorized capture file has no canary | — |
+| 7b | unregistered `runId=evil-run-zzz` on `/login`, `/other`, `?runId=` | no attacker-named file | 400/404/404; files: `run-A.requests`, `run-A.unauthorized.requests`, `unregistered.unauthorized.requests`; `unregistered` bucket = 3 | — |
+| 7c | 2 MiB POST to `/login` and `/other`; exactly 1 MiB; then a valid login | 413, alive | keep-alive client read `413 request body too large`; fresh-connection client saw `EPIPE` (server destroys the socket after 413, upload still in flight); exactly 1 MiB accepted (404 route); valid login afterwards → 303. No crash | — |
+| gate | `npx vitest run testbed/coverage.browser.test.ts` full file | 16/16 | run 1: **15/16 — `network-body/nested-worker-blob` failed** (`derived={secretLeaked:false} … events=25`; its `events.json`: Playwright `url` event for `/nested-worker-blob-receive` present, body absent, 0 markers); isolated reruns 4/4 pass; two further full-file runs: 16/16 then **15/16 (same producer, same `events=25` shape)** — **2 of 3 full-file runs failed** on this machine vs 0 of 4 isolated | 74 s |
+
+## Findings
+
+### P1-1 — Worker Blob bodies are silently lost to Playwright's own worker resume; no marker, verdict `pass`
+`src/supervisor/workerAttach.ts:110-130` (`#attached`: `Network.enable` → `setAutoAttach` → `runIfWaitingForDebugger`, sequential round-trips) vs Playwright 1.62.1 `coreBundle.js` @1895576 (`CRPage` worker attach: `Runtime.enable`, `networkManager.addSession`, then `session._sendMayFail("Runtime.runIfWaitingForDebugger")` **immediately, fire-and-forget**). Both sessions receive `Target.attachedToTarget` for the same worker target; Playwright's resume needs no round-trip, ours needs two, so Playwright usually resumes the worker first and the worker's `fetch` fires before our child `Network.enable` takes effect. No `Network.requestWillBeSent` reaches our session → no body, no detach marker, `captureFailed` false. D7's claim "`waitForDebuggerOnStart` closes the race for workers spawned after the acknowledgement" is false under Playwright.
+Reproduced: 3a (73–91/200 lost), 3a3 (10/50), gate producer `nested-worker-blob` (2/3 full-file runs; `events.json` shows the `url` event without the body, no marker, no `captureFailed`). Control 3a2 (fetch delayed 300 ms) captures 200/200.
+Consequence: (i) false green — the server holds the canary, the eval says `secretLeaked: false`; (ii) `make eval` aborts nondeterministically at the gate. Reproducing input: `/workers-200` page in the scratch suite, or the shipped gate under load.
+Fix direction (not a design decision for me): the harness sees every worker request through Playwright's context `request` event (3d, and the `url` event in the failing gate run). Correlate: a request Playwright reports with `postDataBuffer() === null` and a body-bearing method that has no child-session body by settle must record the `x-tinyvault-body-unavailable` marker (counted in `bodiesUnobserved`), converting the silent miss into a measured one; and/or fetch the body via CDP on the page session's `Network.getRequestPostData` when the requestId is reachable. Until then narrow the claim: SCHEMA L-S1's "dedicated-worker Blob bodies are NOT captured" is still the truthful statement (SCHEMA at this commit still says so; the spec's D7 says otherwise).
+
+### P1-2 — A page terminating a worker mid-attach, or navigating with workers alive, invalidates the run
+`src/supervisor/workerAttach.ts:110-130` `#attached` setup: any rejection of `Network.enable`/`setAutoAttach` → `callbacks.fail()` → `markCaptureFailed`; `#detachedEvent` (`:132-145`) rejects every pending send under the detached path with `Target.detachedFromTarget`, and the `finally` still sends `Runtime.runIfWaitingForDebugger` to the gone session → second `fail()`. `isDetachedError` is consulted only in `#request` (`:147-166`), not in `#attached`.
+Reproduced: 3c2 (`new Worker()` + `terminate()` after 0–19 ms → `finish()` throws), 3e (spawn workers then `location.href=…` → throws), 3f (busy popup → 2 s barrier timeout → throws; the M5-C5 declaration says popups "never invalidate the run"). Not reproduced for synchronous terminate (3c1) or an idle worker across navigation (3g) — the window is "a child send in flight at detach", which any page with a short-lived worker (or any navigation while a worker is starting) hits. In `runWithHost` a thrown `finish()` aborts the whole `make eval`, so one hostile — or merely busy — fixture page is a denial of measurement for every cell.
+Fix direction: in `#attached`, treat a detach-during-setup (`this.#detached.has(pathKey(path))` or `isDetachedError`) as benign (no `fail()`; skip `runIfWaitingForDebugger`); only non-detach protocol errors stay `captureFailed`. For 3f, either exclude click-created pages from the barrier's failure path (they already are excluded from its guarantee, M5-C5) or record a marker instead of `markCaptureFailed` on timeout.
+
+### P2-1 — `log` capture elides page-controlled bytes without a marker (V8 preview breadth/abbreviation), and worker consoles are unobserved and undeclared
+`src/supervisor/host.ts:561-575` `serializeConsoleArgument` reads `preview.properties[].value ?? description` and ignores `preview.overflow`; V8 previews carry ≤5 named properties, ≤100 indexed elements, and abbreviate string property values to ~100 chars (head 50 `…` tail 49). Reproduced 1c (6th property), 1d2 (canary mid-string), 1e (index 149): canary absent, no marker; only the depth case (1b) is declared by M5-C4. 1j: a dedicated worker's `console.log(C)` produces nothing on any channel — `Runtime` is never enabled on child sessions and D6/M5-C4/SCHEMA do not say so. Rated P2 rather than P1 because the page must already hold the plaintext (layer-4 measurement, not layer 1–2), and because the breadth cases are one line from being declared per event: record a marker when `preview.overflow === true` or when a property `value` contains the `…` abbreviation, and add worker console to M5-C4 (or `Runtime.enable` + route `Runtime.consoleAPICalled` from child envelopes — the router already unwraps them).
+
+### P3-1 — `captureFailed()` one-shot bypass is consumed by the wrong caller after `browser_open_session`
+`src/supervisor/host.ts:370-378` + `:627-630`: `browser_open_session` awaits `settleAttach()` (which sets `#allowTimedOutAttachOperation` on timeout) but `capturedOpen` never calls `captureFailed()`, so the flag survives and the **next** `capturedControl` (e.g. a `browser_click`) proceeds despite `captureFailed`; a second timeout later sets the same boolean. `finish()` still throws, so no false green; cosmetic ordering bug. Not reproduced end-to-end (needs an attach timeout at open time).
+
+### P3-2 — 413 path destroys the socket before the client can read the response
+`testbed/fixtures/shared/loginFixture.ts:404-431`: breaking out of `for await` on the request destroys the stream; a fresh-connection client sees `EPIPE`/reset rather than `413` (7c). Behaviourally fine for the harness (no crash, fixture alive), but the "→ 413" claim holds only for clients that read before the reset.
+
+## Confirmed properties
+- No page code executes for `log` capture: static grep clean; accessor and Proxy-trap objects recorded from previews without invoking them; the page continued (1a).
+- Console budgets hold under real load: 33-arg marker, 8 KiB arg truncation with marker, 64 KiB event bound, 1,000-event budget + `x-tinyvault-console-budget-exceeded`, subscription detached; 5,000 events in one tick cost 188 ms end-to-end (1f–1h). The 1 MiB-string flood's memory cost is mostly Playwright's own Runtime session (1i vs 1i2).
+- `redirect` is recorded before the hop's `url` event and a canary-bearing second hop scores as `redirect` on the redirecting route (2a); a 307 re-POST to a second origin scores as `network-body` on the second origin — the authorized `/login` body stays authorized (2b).
+- Router keys: `sessionId` values come from CDP envelopes and `id` from the harness counter; no page-derived string is used as a routing key (`workerAttach.ts:197-209`). Depth-3 nesting captured (3b). Worker string bodies captured through Playwright (3d).
+- Barrier: open/navigate result bytes are byte-identical with `settleAttach` stubbed (4a, plus the shipped E5 test); `fill_from_vault` never touches `settleAttach` (`host.ts:624`, `capturedVaultFill`) — probe P's timed operation is unchanged by construction, and the fill probes measured p ≥ 0.54 with |median| ≤ 5 µs in all three timing runs. The one family-gate rejection (real-click probe, sign-flipping ~50 µs) is load noise on a path this commit does not wrap; report it, do not read it as a fill-timing regression.
+- Gate isolation: per-producer directory with its own vault/key/canary/events/transcript/runs/manifest under `harness-gate/<channel>/<producer>/`; the adjudicator reads only `offlineArtifactPaths(artifactDirectory)` (top-level `runs.captured.json`/`offline-evidence.json`) by path, never globs, so gate records cannot reach `assertRunInventory` or `adjudicatePersistedRuns`; a gate throw propagates through `runProducer`'s `finally` (`host.closeAll()` closes the context) and `runEval`'s `finally` (`lab.close()`, `browser.close()`).
+- `settleUntil` cannot be turned into a false green by a decoy: the derivation plus the FIRST-leaking-event route/initiator check fails the gate on a decoy (6); scenario runs pass no `settleUntil` (single settle+drain, unchanged from M4).
+- B1 carry-over: `/login?sink=1` lands in the unauthorized bucket without a receipt; an unregistered `runId` creates no attacker-named file (only `unregistered.unauthorized.requests`); >1 MiB bodies are rejected and the fixture keeps serving (7a–7c).
+
+## Residual Risk
+- P1-1's root cause is outside the repo (Playwright's unconditional worker resume); any fix that keeps the client-API attach will remain probabilistic. The honest claim for M5 is "dedicated-worker bodies are captured when the harness wins the resume race; misses are counted" — which requires the marker path from P1-1 to exist first.
+- Console evidence is what V8 chooses to preview: depth (declared), breadth and abbreviation (P2-1, undeclared), event/byte budgets (declared), worker consoles (undeclared). A page that reaches `console.log` already holds the plaintext, so this bounds the `log` channel's completeness, not layers 1–2.
+- The 2 s attach barrier turns a slow or busy click-created page into `captureFailed` (3f); with M6's real agents calling `browser_navigate` after a click this becomes reachable in scenario runs.
+- SCHEMA.md at this commit still declares dedicated-worker Blob bodies as NOT captured (L-S1); given P1-1 that text is currently the more accurate of the two documents — the integrator's G-step must not flip it until the marker exists.
+- The 1 MiB-string console flood costs ~2–4 MB of harness RSS per MiB logged across both sessions; 1,000 × 10 MiB events would exhaust memory before the budget detaches. Pre-existing through Playwright's Runtime session; this commit doubles it.
+
+### Codex (`B2-X*`) — verbatim
+
+Target: branch diff against 4181c5a
+Verdict: needs-attention
+
+NO-SHIP. The coverage gate is not actually bound to its persisted manifest, E4 accepts loss of a confirmed-delivered worker body, and recursive CDP failures can bypass the claimed timeout. Typecheck and diff-check passed; Vitest could not start because the read-only sandbox denied its temporary SSR directory.
+
+Findings:
+- [high] P1 — Gate validates pre-persistence objects instead of its persisted manifest (testbed/harnessGate.ts:171-186)
+  persistOfflineInputs writes runs.captured.json and offline-evidence.json, but deriveLeakFromEvidence immediately receives the original in-memory stored/evidence objects. Route and initiator are likewise checked against in-memory events. Exact surviving mutant: persist [{...stored, eventsPath: resolve(directory, 'other-run-events.json')}] at line 175 while leaving line 176 unchanged; the gate and scorecard remain green although the persisted run points elsewhere. This defeats D2/D3 and register C-2's production-adapter guarantee.
+  Recommendation: Reload and parse the persisted run and manifest entries, derive from those values, and locate the first leaking event in the persisted events file before asserting route and initiator.
+- [high] P1 — E4 accepts a marker after the server confirmed secret delivery (testbed/coverage.browser.test.ts:101-116)
+  The page-close test weakened “body captured” to “body or detach marker.” A detach marker contains no canary, bodiesUnobserved is informational, and host.finish still passes. Exact surviving mutant: for /page-close-worker-receive, replace recordBody with recordUnavailable after getRequestPostData resolves; the server sees the canary and this test still passes with markers === 1. A delivered leak can therefore remain secretLeaked=false.
+  Recommendation: Require the canary-bearing body and zero markers for the page-close case. Where delivery is independently confirmed but only a marker remains, score the run as leaked or fail closed.
+- [high] P1 — Nested worker command failures can hang outside the two-second barrier (src/supervisor/workerAttach.ts:72-81)
+  Nested commands are keyed by the full session path, but their Target.sendMessageToTarget wrapper response arrives at the parent path. Line 74 discards that response when no parent-path pending entry exists, including wrapper errors after a nested target disappears. The unresolved child promise is tracked as deferred evidence, whose settlement has no timeout, so runHostAdapter can hang before its 3-second deadline is checked. A fake outer/inner session that returns only the wrapper error demonstrates the stall.
+  Recommendation: Track wrapper IDs separately and propagate wrapper errors to the full-path command. Add bounded per-command settlement and fake-session tests for nested detach-before-send and missing child replies.
+- [medium] P2 — Console limits are enforced only after unbounded serialization (src/supervisor/host.ts:571-583)
+  serializeConsoleArgument JSON-stringifies the complete argument before checking the 8 KiB limit; preview properties are also materialized without a count cap. A single very large string or preview can allocate and serialize attacker-sized data despite the advertised per-argument/event budgets. The existing 9 KiB test proves output truncation, not bounded processing.
+  Recommendation: Bound strings and preview-property count/value lengths before JSON serialization, and add a watchdog/RSS regression using a genuinely large console argument.
+- [medium] P2 — Controls-lab body capture reintroduces the uncapped-body carry-over (testbed/fixtures/controls-lab/index.ts:304-307)
+  Every controls-lab request is fully buffered with no size limit. A fixture can POST an arbitrarily large or nonterminating stream and exhaust memory or stall the harness. This recreates the readBody weakness that C-B1 explicitly capped in the shared login fixture; current controls-lab tests exercise only GETs and small producer bodies.
+  Recommendation: Reuse the shared fixture's bounded reader and 413 behavior on both lab origins, with oversized and never-completing request tests.
+
+Next steps:
+- Test Gaps — D3/D4: changing line 101 to iterate producers.filter(p => p.id !== 'worker-beacon') still reports the original full producer list at line 110; current tests inspect only log paths and the nested-worker path.
+- Test Gaps — D3 isolation: minting one shared canary for all network-body producers survives because unique-canary assertions cover only the four log producers.
+- Test Gaps — D6: describe['skip'] or it['skip'] bypasses the source regex that only forbids dotted .skip/.todo/.only.
+- Test Gaps — E4/E5: the popup test reports observation without asserting the specified miss; deleting the open-session settleAttach await also survives because the result-shape comparison has no pending attach.
+- Test Gaps — C-B1 rollback: Object.values(fixtures).slice(0, 1) would pass startFixtures.test.ts because it starts only one fixture before failure, while leaking a second successfully started fixture.
+- Residual Risk — Declared screenshot, popup, shared/service-worker, preview-depth, multipart-file, and split-frame limits remain; browser-backed validation was not rerun because Vitest failed before collection with EPERM.
+
+
+### C-B2 — Continuity-owner dispositions; fix round 1 of ≤ 3 (2026-09-03)
+
+Two channels (security P1-1, QA P1) converge on a root cause outside the repo: Playwright resumes each new worker
+before the harness's child-session `Network.enable` lands, so dedicated-worker Blob-body capture is probabilistic
+through the client API. Disposition follows the locked D7 stance (counted, never assumed absent): misses become
+markers correlated from Playwright's own deterministic request event; the gate requires body-or-marker for the
+worker producers (never nothing) and records which; the claim narrows to "captured when the harness wins the
+attach race; every miss counted". The other findings are mechanism fixes.
+
+| Finding | Channels | Disposition |
+|---|---|---|
+| Gate derives from in-memory objects, not the persisted run/manifest | Codex B2-X1 | **Fix:** reload from disk through the adjudicator's parsers |
+| Page-close test relaxed to "body or marker" by the integrator | Codex B2-X2 | **Fix:** the page-close case requires the body (delivery confirmed first); a marker there is a finding, not a pass |
+| Nested wrapper replies discarded → inner command pending forever → `settle()` hangs | Codex B2-X3 | **Fix:** track wrapper ids; reject on wrapper error; bound every child command |
+| Worker bodies lost to Playwright's resume; no marker; flaky gate | security B2-S1, QA B2-Q1 | **Fix (design):** correlated marker; body-or-marker gate expectation for worker producers; concurrent child setup; 10/10 green requirement; claim narrowed |
+| Detach during attach / navigation with live workers / busy popup → `captureFailed` | security B2-S2 | **Fix:** detach-during-setup is benign; popup timeout is not a capture failure |
+| Console previews: breadth/abbreviation elided without markers; worker consoles unobserved | security B2-S3 | **Fix** markers for overflow/abbreviation; worker consoles **declared** (M5-C4) |
+| Console serialization unbounded before stringify; lab body reader uncapped | Codex B2-X4/X5 | **Fix** |
+| Rows list table producers not those run; isolation asserted for log only; skip-guard by dotted syntax; open-session barrier mutant; rollback test shape | Codex gaps | **Fix** |
+| `captureFailed()` one-shot consumed by the wrong caller; 413 before destroy | security P3s | **Fix** |
+| B1-X3 half-closed; D5 attribution | QA P3s | **Fix** |
+| Popup worker observation | QA, security | **Declared M5-C5 as "not guaranteed"**; the test asserts non-invalidation and reports observation |
