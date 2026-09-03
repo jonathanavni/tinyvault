@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { gunzipSync, inflateRawSync, inflateSync } from 'node:zlib';
+import { constants as zlibConstants, gunzipSync, inflateRawSync, inflateSync } from 'node:zlib';
 
 export const EVIDENCE_DECODER_NAMES = [
   'base64-run',
@@ -24,11 +24,27 @@ export const EVIDENCE_DECODER_LIMITS = Object.freeze({
   eventWallClockMs: 100,
   inflatedBytes: 1024 * 1024,
   inflateScanBytes: 64 * 1024,
-  inflateTrialsPerScan: 512,
+  // Integrator (round 3, A3-Q1): every budget is WORK, never wall-clock, so the same evidence recomputes the same
+  // way on any machine (offline adjudication compares stored and recomputed outcomes, scanTruncated included).
+  decodedBytesPerEvent: 64 * 1024 * 1024,
+  candidatesPerEvent: 2048,            // decoded outputs per event (work units); exhaustion marks truncation (A3-Q1)
+  wrapperInflateTrialsPerEvent: 512,   // gzip/zlib header trials; exhaustion marks truncation (A3-X1)
+  rawInflateTrialsPerEvent: 4096,      // speculative raw-DEFLATE trials; exhaustion is silent and declared
 });
 
+/** Per-event work counters shared by every decode call made for one event. */
+export type EventWork = {
+  decodedBytes: number;
+  candidates: number;
+  wrapperInflateTrials: number;
+  rawInflateTrials: number;
+};
+
+export function createEventWork(): EventWork {
+  return { decodedBytes: 0, candidates: 0, wrapperInflateTrials: 0, rawInflateTrials: 0 };
+}
+
 export type DecodeEvidenceWorkBudget = {
-  inflateTrialsRemaining: number;
   triedInflateSources: Set<string>;
 };
 
@@ -41,7 +57,7 @@ export type DecodeEvidenceScanResult = Readonly<{
 type DecodeEvidenceOptions = Readonly<{
   /** Meta-gate-only deletion seam. Production callers leave every decoder enabled. */
   disabled?: ReadonlySet<EvidenceDecoderName>;
-  deadline?: number;
+  eventWork?: EventWork;
   workBudget?: DecodeEvidenceWorkBudget;
 }>;
 
@@ -82,7 +98,6 @@ const BASE64_FIRST_SCAN_ORDER: readonly EvidenceDecoderName[] = [
 
 export function createDecodeEvidenceWorkBudget(): DecodeEvidenceWorkBudget {
   return {
-    inflateTrialsRemaining: EVIDENCE_DECODER_LIMITS.inflateTrialsPerScan,
     triedInflateSources: new Set<string>(),
   };
 }
@@ -176,11 +191,17 @@ function admitDecodedOutput(output: DecoderOutput, runtime: DecodeRuntime): bool
   const bytes = output.kind === 'binary'
     ? output.bytes.length
     : Buffer.byteLength(output.text);
-  if (runtime.decodedBytes + bytes > EVIDENCE_DECODER_LIMITS.decodedBytesPerValue) {
+  const eventWork = runtime.options.eventWork;
+  if (runtime.decodedBytes + bytes > EVIDENCE_DECODER_LIMITS.decodedBytesPerValue
+    || (eventWork !== undefined
+      && eventWork.decodedBytes + bytes > EVIDENCE_DECODER_LIMITS.decodedBytesPerEvent)) {
     runtime.truncated = true;
     return false;
   }
+  // Every decoded output is one unit of per-event work (A3-Q1: deterministic, never wall-clock).
+  if (!claimCandidate(runtime)) return false;
   runtime.decodedBytes += bytes;
+  if (eventWork !== undefined) eventWork.decodedBytes += bytes;
   return true;
 }
 
@@ -239,6 +260,7 @@ function addCandidate(
   if (seen.has(key)) return;
   seen.add(key);
   runtime.seenCandidates.set(decoder, seen);
+  if (!claimCandidate(runtime)) return;
   runtime.matched = runtime.onCandidate({ decoder, text });
 }
 
@@ -394,15 +416,18 @@ function isAsciiWhitespace(code: number): boolean {
 }
 
 function estimatedBase64Bytes(value: string): number | null {
-  if (value.length < MIN_BASE64_RUN || value.length % 4 === 1
-    || !/^[A-Za-z0-9+/_-]+={0,2}$/u.test(value)) return null;
-  const unpaddedLength = value.replace(/=+$/u, '').length;
+  // Integrator (round 3, A3-S P1-2): a run whose length ≡ 1 (mod 4) carries one glued trailing character
+  // (`base64(percent(canary))` is always unpadded); decode it with that character trimmed instead of rejecting it.
+  const aligned = value.length % 4 === 1 ? value.slice(0, -1) : value;
+  if (aligned.length < MIN_BASE64_RUN || !/^[A-Za-z0-9+/_-]+={0,2}$/u.test(aligned)) return null;
+  const unpaddedLength = aligned.replace(/=+$/u, '').length;
   return Math.floor(unpaddedLength * 3 / 4);
 }
 
 function decodeBase64(value: string): Buffer | null {
   if (estimatedBase64Bytes(value) === null) return null;
-  const normalized = value.replace(/-/gu, '+').replace(/_/gu, '/');
+  const aligned = value.length % 4 === 1 ? value.slice(0, -1) : value;
+  const normalized = aligned.replace(/-/gu, '+').replace(/_/gu, '/');
   const unpadded = normalized.replace(/=+$/u, '');
   const padding = '='.repeat((4 - (unpadded.length % 4)) % 4);
   return Buffer.from(unpadded + padding, 'base64');
@@ -573,11 +598,13 @@ function* embeddedCompressedSources(
     const first = text.charCodeAt(index);
     const second = text.charCodeAt(index + 1);
     if (!isGzipHeader(first, second) && !isZlibHeader(first, second)) continue;
-    if (index >= latin1RegionEnd) {
-      latin1RegionEnd = index;
-      while (latin1RegionEnd < text.length && text.charCodeAt(latin1RegionEnd) <= 0xff) {
-        latin1RegionEnd += 1;
-      }
+    // Integrator (round 3, A3-X1): one source per latin-1 region, from its FIRST header. `inflateEvidence` tries
+    // every header offset inside the region exactly once; yielding a suffix per header made the work quadratic and
+    // let 32 malformed headers in an earlier event exhaust the per-scan budget before a later event's real stream.
+    if (index < latin1RegionEnd) continue;
+    latin1RegionEnd = index;
+    while (latin1RegionEnd < text.length && text.charCodeAt(latin1RegionEnd) <= 0xff) {
+      latin1RegionEnd += 1;
     }
     if (latin1RegionEnd <= index + 1) continue;
     yield Buffer.from(text.slice(index, latin1RegionEnd), 'latin1');
@@ -590,7 +617,12 @@ function* inflateEvidence(
   runtime: DecodeRuntime,
   sourceKey: string,
 ): Generator<Buffer> {
-  const options = { maxOutputLength: EVIDENCE_DECODER_LIMITS.inflatedBytes };
+  // Integrator (round 3, A3-X2): Z_SYNC_FLUSH makes zlib stop at the member's end instead of rejecting a trailer
+  // (`gzip(...) + 'X'` threw Z_BUF_ERROR and hid the stream); exactly one bounded member is inflated per offset.
+  const options = {
+    maxOutputLength: EVIDENCE_DECODER_LIMITS.inflatedBytes,
+    finishFlush: zlibConstants.Z_SYNC_FLUSH,
+  };
   const limit = Math.min(bytes.length - 1, EVIDENCE_DECODER_LIMITS.inflateScanBytes);
   let hasWrapperSignature = false;
   for (let index = 0; index < limit; index += 1) {
@@ -599,7 +631,9 @@ function* inflateEvidence(
       hasWrapperSignature = true;
       const trialKey = `gzip:${sourceKey}:${index}`;
       if (!claimInflateTrial(runtime, trialKey)) return;
-      const output = safely(() => gunzipSync(bytes.subarray(index), options), null);
+      const member = bytes.subarray(index);
+      const output = safely(() => gunzipSync(member, options), null)
+        ?? safely(() => inflateRawSync(member.subarray(gzipPayloadOffset(member)), options), null);
       if (output !== null) yield output;
     } else if (isZlibHeader(bytes[index], bytes[index + 1])) {
       hasWrapperSignature = true;
@@ -619,14 +653,41 @@ function* inflateEvidence(
 
 function claimInflateTrial(runtime: DecodeRuntime, key: string): boolean {
   if (runtime.workBudget.triedInflateSources.has(key)) return false;
-  if (runtime.workBudget.inflateTrialsRemaining <= 0) return false;
+  const eventWork = runtime.options.eventWork ?? createEventWork();
+  if (key.startsWith('raw:')) {
+    // Speculative raw-DEFLATE trials are best-effort within a declared per-event bound; exhaustion is silent.
+    if (eventWork.rawInflateTrials >= EVIDENCE_DECODER_LIMITS.rawInflateTrialsPerEvent) return false;
+    eventWork.rawInflateTrials += 1;
+  } else {
+    // Integrator (round 3, A3-X1): wrapper (gzip/zlib header) trials are per EVENT — an earlier event cannot
+    // exhaust them — and exhaustion is a declared measurement limit reported as truncation, never a silent green.
+    if (eventWork.wrapperInflateTrials >= EVIDENCE_DECODER_LIMITS.wrapperInflateTrialsPerEvent) {
+      runtime.truncated = true;
+      return false;
+    }
+    eventWork.wrapperInflateTrials += 1;
+  }
   runtime.workBudget.triedInflateSources.add(key);
-  runtime.workBudget.inflateTrialsRemaining -= 1;
+  return true;
+}
+
+function claimCandidate(runtime: DecodeRuntime): boolean {
+  // Per-event candidate budget (deterministic work, A3-Q1): exhaustion is a declared, counted measurement limit.
+  const eventWork = runtime.options.eventWork;
+  if (eventWork === undefined) return true;
+  if (eventWork.candidates >= EVIDENCE_DECODER_LIMITS.candidatesPerEvent) {
+    runtime.truncated = true;
+    return false;
+  }
+  eventWork.candidates += 1;
   return true;
 }
 
 function withinDeadline(runtime: DecodeRuntime): boolean {
-  if (runtime.options.deadline === undefined || performance.now() <= runtime.options.deadline) return true;
+  // Work-based (deterministic): the per-event decoded-byte budget is the only "deadline".
+  const eventWork = runtime.options.eventWork;
+  if (eventWork === undefined || (eventWork.decodedBytes <= EVIDENCE_DECODER_LIMITS.decodedBytesPerEvent
+    && eventWork.candidates < EVIDENCE_DECODER_LIMITS.candidatesPerEvent)) return true;
   runtime.truncated = true;
   return false;
 }
@@ -645,4 +706,17 @@ function isZlibHeader(cmf: number, flg: number): boolean {
   const presetDictionary = (flg & 0x20) !== 0;
   return compressionMethod === 8 && compressionInfo <= 7 && !presetDictionary
     && ((cmf * 256 + flg) % 31 === 0);
+}
+
+/** RFC 1952 header length: 10 fixed bytes plus FEXTRA/FNAME/FCOMMENT/FHCRC fields per FLG. Node's gunzip rejects a
+ *  member followed by two or more trailer bytes (Z_DATA_ERROR: it expects another member), so the payload is
+ *  inflated raw from this offset when gunzip fails (integrator, round 3, A3-X2/A3-Q3). */
+function gzipPayloadOffset(member: Buffer): number {
+  const flags = member[3] ?? 0;
+  let offset = 10;
+  if (flags & 0x04) offset += 2 + ((member[offset] ?? 0) | ((member[offset + 1] ?? 0) << 8));
+  if (flags & 0x08) { while (offset < member.length && member[offset] !== 0) offset += 1; offset += 1; }
+  if (flags & 0x10) { while (offset < member.length && member[offset] !== 0) offset += 1; offset += 1; }
+  if (flags & 0x02) offset += 2;
+  return Math.min(offset, member.length);
 }

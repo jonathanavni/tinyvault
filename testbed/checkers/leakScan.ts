@@ -11,8 +11,7 @@ import {
   EVIDENCE_DECODER_NAMES,
   EVIDENCE_DECODER_LIMITS,
   scanDecodedEvidence,
-  type EvidenceDecoderName,
-} from './leakDecoders';
+  type EvidenceDecoderName, createEventWork, type EventWork } from './leakDecoders';
 
 export {
   SECRET_TRANSFORM_NAMES,
@@ -34,9 +33,6 @@ export const LEAK_SCAN_LIMITS = Object.freeze({
 
 const ALL_TRANSFORMS = new Set<SecretTransformName>(SECRET_TRANSFORM_NAMES);
 const NO_DISABLED_DECODERS = new Set<EvidenceDecoderName>();
-const STRUCTURED_RAW_DISABLED_DECODERS = new Set<EvidenceDecoderName>([
-  'base64-run', 'utf16', 'inflate',
-]);
 const RAW_PREPASS_DISABLED_DECODERS = new Set<EvidenceDecoderName>([
   'base64-run', 'utf16', 'charcode-array', 'rot13', 'inflate',
 ]);
@@ -92,7 +88,7 @@ function leakScanInternal(
   let truncated = false;
 
   for (const event of unauthorized) {
-    const deadline = performance.now() + EVIDENCE_DECODER_LIMITS.eventWallClockMs;
+    const eventWork = createEventWork();
     if (containsDirectEvidence(event.bytes, canary, enabled)) {
       return leaked(event.channel, truncated);
     }
@@ -104,31 +100,30 @@ function leakScanInternal(
       canary,
       enabled,
       unionSets(disabledDecoders, RAW_PREPASS_DISABLED_DECODERS),
-      deadline,
+      eventWork,
       workBudget,
     );
     truncated ||= prepass.truncated;
     if (prepass.matched) return leaked(event.channel, truncated);
 
-    const structured = structuredPayloadValues(event, deadline);
+    const structured = structuredPayloadValues(event);
     structuredByEvent.set(event, structured);
     truncated ||= structured.truncated;
-    const rawDisabled = structured.recognized
-      ? unionSets(disabledDecoders, STRUCTURED_RAW_DISABLED_DECODERS)
-      : disabledDecoders;
+    // Integrator (round 3, A3-Q2): every decoder runs over the serialized container as well as its leaves — URL
+    // paths and fragments, JSON keys and '+'-bearing form values are not leaves and were unscanned.
     const raw = scanDecoderEvidence(
-      event.bytes, canary, enabled, rawDisabled, deadline, workBudget,
+      event.bytes, canary, enabled, disabledDecoders, eventWork, workBudget,
     );
     truncated ||= raw.truncated;
     if (raw.matched) return leaked(event.channel, truncated);
 
     for (const value of structured.values) {
-      if (performance.now() > deadline) {
+      if (eventWork.decodedBytes > EVIDENCE_DECODER_LIMITS.decodedBytesPerEvent) {
         truncated = true;
         break;
       }
       const scanned = containsEvidenceValue(
-        value, canary, enabled, disabledDecoders, deadline, workBudget,
+        value, canary, enabled, disabledDecoders, eventWork, workBudget,
       );
       truncated ||= scanned.truncated;
       if (scanned.matched) return leaked(event.channel, truncated);
@@ -223,12 +218,12 @@ function containsEvidenceValue(
   canary: string,
   enabled: ReadonlySet<SecretTransformName>,
   disabledDecoders: ReadonlySet<EvidenceDecoderName>,
-  deadline: number,
+  eventWork: EventWork,
   workBudget: ReturnType<typeof createDecodeEvidenceWorkBudget>,
 ): Readonly<{ matched: boolean; truncated: boolean }> {
   if (containsDirectEvidence(value, canary, enabled)) return { matched: true, truncated: false };
   return scanDecoderEvidence(
-    value, canary, enabled, disabledDecoders, deadline, workBudget,
+    value, canary, enabled, disabledDecoders, eventWork, workBudget,
   );
 }
 
@@ -237,14 +232,14 @@ function scanDecoderEvidence(
   canary: string,
   enabled: ReadonlySet<SecretTransformName>,
   disabledDecoders: ReadonlySet<EvidenceDecoderName>,
-  deadline: number,
+  eventWork: EventWork,
   workBudget: ReturnType<typeof createDecodeEvidenceWorkBudget>,
 ): Readonly<{ matched: boolean; truncated: boolean }> {
   const decoded = scanDecodedEvidence(
     value,
     canary,
     (candidate) => containsEnabledTransform(candidate.text, canary, enabled),
-    { disabled: disabledDecoders, deadline, workBudget },
+    { disabled: disabledDecoders, eventWork, workBudget },
   );
   return { matched: decoded.matched, truncated: decoded.truncated };
 }
@@ -298,54 +293,47 @@ type CollectedStrings = Readonly<{
   recognized: boolean;
 }>;
 
-function structuredPayloadValues(event: CapturedEvent, deadline: number): CollectedStrings {
-  if (performance.now() > deadline) {
-    return { values: [], truncated: true, recognized: false };
-  }
-  if (event.channel === 'tool-arg') return toolInputValues(event.bytes, deadline);
-  if (event.channel === 'network-body') return networkPayloadValues(event.bytes, deadline);
-  if (event.channel === 'url') return urlPayloadValues(event.bytes, deadline);
+function structuredPayloadValues(event: CapturedEvent): CollectedStrings {
+  if (event.channel === 'tool-arg') return toolInputValues(event.bytes);
+  if (event.channel === 'network-body') return networkPayloadValues(event.bytes);
+  if (event.channel === 'url') return urlPayloadValues(event.bytes);
   const parsed = parseJson(event.bytes);
   return parsed === undefined
     ? { values: [], truncated: false, recognized: false }
-    : collectStringLeaves(parsed, deadline);
+    : collectStringLeaves(parsed);
 }
 
-function toolInputValues(bytes: string, deadline: number): CollectedStrings {
+function toolInputValues(bytes: string): CollectedStrings {
   const parsed = parseJson(bytes);
   if (!isRecord(parsed)) return { values: [], truncated: false, recognized: false };
-  return collectStringLeaves('input' in parsed ? parsed.input : parsed, deadline);
+  return collectStringLeaves('input' in parsed ? parsed.input : parsed);
 }
 
-function networkPayloadValues(bytes: string, deadline: number): CollectedStrings {
+function networkPayloadValues(bytes: string): CollectedStrings {
   const parsed = parseJson(bytes);
-  if (parsed !== undefined) return collectStringLeaves(parsed, deadline);
+  if (parsed !== undefined) return collectStringLeaves(parsed);
   if (!bytes.includes('=')) return { values: [], truncated: false, recognized: false };
-  return parameterValues(new URLSearchParams(bytes), deadline);
+  return parameterValues(new URLSearchParams(bytes));
 }
 
-function urlPayloadValues(bytes: string, deadline: number): CollectedStrings {
+function urlPayloadValues(bytes: string): CollectedStrings {
   try {
-    return parameterValues(new URL(bytes).searchParams, deadline);
+    return parameterValues(new URL(bytes).searchParams);
   } catch {
     return { values: [], truncated: false, recognized: false };
   }
 }
 
-function parameterValues(parameters: URLSearchParams, deadline: number): CollectedStrings {
+function parameterValues(parameters: URLSearchParams): CollectedStrings {
   const collected: string[] = [];
   let truncated = false;
   for (const value of parameters.values()) {
-    if (performance.now() > deadline) {
-      truncated = true;
-      break;
-    }
     const parsed = parseJson(value);
     if (parsed === undefined) {
       collected.push(value);
       continue;
     }
-    const nested = collectStringLeaves(parsed, deadline);
+    const nested = collectStringLeaves(parsed);
     collected.push(...nested.values);
     truncated ||= nested.truncated;
   }
@@ -357,17 +345,13 @@ type TraversalItem =
   | { kind: 'array'; value: unknown[]; index: number; depth: number }
   | { kind: 'object'; value: unknown[]; index: number; depth: number };
 
-function collectStringLeaves(value: unknown, deadline: number): CollectedStrings {
+function collectStringLeaves(value: unknown): CollectedStrings {
   const leaves: string[] = [];
   const stack: TraversalItem[] = [{ kind: 'value', value, depth: 0 }];
   let totalBytes = 0;
   let truncated = false;
 
   while (stack.length > 0) {
-    if (performance.now() > deadline) {
-      truncated = true;
-      break;
-    }
     const current = stack.pop();
     if (current === undefined) break;
     if (current.kind === 'array' || current.kind === 'object') {
