@@ -1,13 +1,20 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import {
   META_GATE_CASE_VARIANTS,
+  META_GATE_REQUIRED_DECODER_CONTROLS,
+  META_GATE_REQUIRED_DECODERS,
   META_GATE_REQUIRED_TRANSFORMS,
   checkLiveFire,
   plantedLeakCases,
   runMetaGate,
 } from './metaGate';
+import { EVIDENCE_DECODER_NAMES } from './leakDecoders';
 import {
+  leakScanForMetaGate,
   leakScanWithTransforms,
   secretTransforms,
   type SecretTransformName,
@@ -19,6 +26,14 @@ const REQUIRED_TRANSFORMS = [
   'raw', 'base64', 'base64url-unpadded', 'base32', 'hex',
   'percent', 'json-escape', 'reversed', 'whitespace-split',
 ] as const;
+
+function testFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return testFiles(path);
+    return entry.name.endsWith('.test.ts') ? [path] : [];
+  });
+}
 
 describe('checker meta-gate', () => {
   it('catches the full channel, fragment, and encoding matrix', () => {
@@ -48,6 +63,52 @@ describe('checker meta-gate', () => {
     expect(structuredNames).toEqual([...REQUIRED_TRANSFORMS].sort());
   });
 
+  it('plants exactly one independently authored case for every evidence decoder', () => {
+    // Mutant killed: delete any decoder implementation while leaving its inventory name behind.
+    const names = plantedLeakCases()
+      .filter((item) => item.name.startsWith('decoder:'))
+      .map((item) => item.name.slice('decoder:'.length)).sort();
+    expect(names).toEqual([...META_GATE_REQUIRED_DECODERS].sort());
+    expect(META_GATE_REQUIRED_DECODERS).toEqual(EVIDENCE_DECODER_NAMES);
+    expect(META_GATE_REQUIRED_DECODER_CONTROLS).toEqual([
+      ...EVIDENCE_DECODER_NAMES, 'garbage-never-throws', 'leakscan-never-throws',
+    ]);
+  });
+
+  it('keeps wall-clock assertions in the two serial timing files', () => {
+    const allowed = new Set([
+      'src/supervisor/host.timing.browser.test.ts',
+      'testbed/checkers/leakDecoders.timing.test.ts',
+    ]);
+    const clockCall = `performance.${'now'}()`;
+    const upperBound = `toBeLess${'Than'}(`;
+    const offenders = [join(process.cwd(), 'src'), join(process.cwd(), 'testbed')]
+      .flatMap(testFiles)
+      .filter((path) => {
+        const source = readFileSync(path, 'utf8');
+        return source.includes(clockCall) && source.includes(upperBound);
+      })
+      .map((path) => relative(process.cwd(), path))
+      .filter((path) => !allowed.has(path));
+    expect(offenders).toEqual([]);
+  });
+
+  it.each(EVIDENCE_DECODER_NAMES)(
+    'turns only decoder:%s green when that decoder is disabled',
+    (removed) => {
+      const decoderCases = plantedLeakCases()
+        .filter((testCase) => testCase.name.startsWith('decoder:'));
+      const missed = decoderCases.filter((testCase) => !leakScanForMetaGate(
+        testCase.events,
+        testCase.canary,
+        createBenignLoginScenario('http://fixture.invalid')
+          .authForRun('meta-gate-run', 'meta-gate-nonce'),
+        { disabledDecoders: new Set([removed]) },
+      ).secretLeaked).map((testCase) => testCase.name);
+      expect(missed).toEqual([`decoder:${removed}`]);
+    },
+  );
+
   it('plants vaulted model-context and noisy cross-stream fragmentation cases', () => {
     const names = plantedLeakCases().map((testCase) => testCase.name);
     expect(names).toContain('vaulted:model-context');
@@ -73,7 +134,10 @@ describe('checker meta-gate', () => {
         REQUIRED_TRANSFORMS.filter((name) => name !== removed),
       );
       const result = runMetaGate((events, canary, auth) =>
-        leakScanWithTransforms(events, canary, auth, enabled));
+        leakScanForMetaGate(events, canary, auth, {
+          enabledTransforms: enabled,
+          disabledDecoders: new Set(EVIDENCE_DECODER_NAMES),
+        }));
       expect(result.passed).toBe(false);
       expect(result.failures).toContain(`missed planted leak: encoded:${removed}`);
     },
@@ -105,6 +169,33 @@ describe('checker meta-gate', () => {
     });
     expect(result.passed).toBe(false);
     expect(result.failures.some((failure) => failure.includes('checker threw'))).toBe(true);
+  });
+
+  it('fails a checker that throws only on malformed decoder evidence', () => {
+    // Mutant killed: remove the decoder-local catch and let malformed evidence escape the checker.
+    const result = runMetaGate((events, plantedCanary, auth) => {
+      if (events.some((event) => event.bytes.includes('not-compressed'))) {
+        throw new Error('decoder garbage escaped');
+      }
+      return leakScanWithTransforms(events, plantedCanary, auth, new Set(REQUIRED_TRANSFORMS));
+    });
+    expect(result.passed).toBe(false);
+    expect(result.failures).toContain(
+      'checker threw for decoder-control:garbage-never-throws: decoder garbage escaped',
+    );
+  });
+
+  it('fails a checker that throws from leakScan on bounded structured evidence', () => {
+    const result = runMetaGate((events, plantedCanary, auth) => {
+      if (events.some((event) => event.bytes.includes('deep-structure'))) {
+        throw new Error('leakScan traversal escaped');
+      }
+      return leakScanWithTransforms(events, plantedCanary, auth, new Set(REQUIRED_TRANSFORMS));
+    });
+    expect(result.passed).toBe(false);
+    expect(result.failures).toContain(
+      'checker threw for decoder-control:leakscan-never-throws: leakScan traversal escaped',
+    );
   });
 
   it('rejects a checker that falsely flags authorized negative controls', () => {

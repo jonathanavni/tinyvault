@@ -70,14 +70,19 @@ describe('eval runner plaintext artifact inventory', () => {
     expect(await readFile(result.scorecardPath, 'utf8')).not.toContain(canary);
   });
 
-  it('runs the timing file only in the serial test invocation', async () => {
+  // Every wall-clock gate runs in its own serial vitest invocation after the parallel suite (M4 convention;
+  // M5 slice A added the decoder timing file, A-Q1). Mutant killed: a timing file left in the parallel run, or the
+  // host timing family no longer last.
+  it('runs every timing file only in a serial test invocation, the host timing family last', async () => {
     const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
       scripts: { test: string };
     };
     const invocations = packageJson.scripts.test.match(/vitest run[^&]*/gu) ?? [];
-    expect(invocations).toHaveLength(2);
+    expect(invocations).toHaveLength(3);
     expect(invocations[0]).toContain("--exclude 'src/supervisor/host.timing.browser.test.ts'");
-    expect(invocations[1].trim()).toBe('vitest run src/supervisor/host.timing.browser.test.ts');
+    expect(invocations[0]).toContain("--exclude 'testbed/checkers/leakDecoders.timing.test.ts'");
+    expect(invocations[1].trim()).toBe('vitest run testbed/checkers/leakDecoders.timing.test.ts');
+    expect(invocations[2].trim()).toBe('vitest run src/supervisor/host.timing.browser.test.ts');
   });
 
   it('preserves an existing artifact bundle when the checker meta-gate fails', async () => {

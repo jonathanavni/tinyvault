@@ -24,6 +24,13 @@ page-readable token and a laundered control is scored at the network layer only.
 **Later slice — readiness barrier for click-created pages (M5-C5):** a bounded post-click attach barrier so eager
 workers in popups are instrumented; needs the click wrapper, outside M5's ownership grant.
 
+**Slice A residuals (leak-checker decoders, register C-A3, declared in SCHEMA):** a transform applied OVER decoder
+output (`percent(base64(secret))`, `hex(base64(·))`, `reversed(base64(·))`, JSON-escape of a blob, incl.
+`encodeURIComponent(btoa(secret))` when the base64 contains `+`/`/`) is not undone — adding percent as a
+node-extending decoder is the natural next step; the per-event decoded-output budget (2,048) is a declared,
+counted ordering lever (~1,000 base64-shaped leaves ahead of the credential) — per-candidate cost reduction would
+raise it; the artifact-corpus half of the F5 timing test is count-only (QA A3 P3-1).
+
 M4 shipped residuals — disposition decided in `docs/m5-slice-spec.md` §D8 (2026-09-02); items marked IN are M5
 work in flight, the rest stay parked here (register "Final5 round"):
 

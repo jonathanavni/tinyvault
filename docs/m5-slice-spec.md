@@ -82,9 +82,12 @@ uninstrumented because v0.1 has no screenshot control. The `dom-fill` sink is id
 so a page at the authorized origin can label a decoy control as authorized; plaintext leaving such a control for
 any destination other than the exact canonical login endpoint is scored at the network layer, and a laundered
 control posting to that exact endpoint is indistinguishable from the legitimate login and is not scored. A worker
-body the harness could not retrieve is counted, never assumed absent. The checker's decoder inventory, the
-console-argument capture depth and budgets, and the worker-attach coverage are finite and enumerated in
-`SCHEMA.md`; what is outside them is declared, not claimed.*
+body the harness could not retrieve is counted, never assumed absent. The checker's decoder inventory is finite and
+enumerated in `SCHEMA.md`: every candidate it produces is scanned as it is produced under deterministic work
+budgets (never wall-clock), a budget that is hit is counted per run as `scanTruncated`, and what is outside the
+inventory or past a budget is declared with the input that reaches it (register C-A3). The console-argument capture
+depth and budgets and the worker-attach coverage are likewise finite and enumerated; what is outside them is
+declared, not claimed.*
 
 ## Branch / Worktree
 

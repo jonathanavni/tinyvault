@@ -141,11 +141,34 @@ type Channel =
   // Worker are NOT captured — the deferred-body CDP session is page-scoped and postDataBuffer() is null for Blob
   // bodies; the url and header events are still recorded. String and multipart worker bodies and Blob bodies
   // from cross-site iframes are captured. Per-target CDP attach is M5 work.
-  // DECLARED LIMIT (register L-S3): leakScan's transform inventory is finite — unkeyed page-side encodings outside
-  // it (gzip/deflate, UTF-16, charCode arrays, rot13, HTML entities, non-whitespace separators, base64 that
-  // continues past the canary inside a larger text body, CRLF/line-wrapped base64, base64 nested more than
-  // twice) are not detected; base64 decoding is per event (a canary split across frames evades). Extending the
-  // inventory is M5 work (register L-S2/L-X1).
+  // DECODER INVENTORY (M5 slice A, after three review rounds; register C-A1/C-A2 and the round-3 section). leakScan
+  // scans every unauthorized event's bytes and every structured string leaf (JSON tool inputs, form and query
+  // values) as themselves and as every candidate produced by a FINITE decoder inventory, scanning each candidate the
+  // moment it is produced (no candidate cap decides detection) and short-circuiting on the first match. Decoders:
+  // base64 (standard and url alphabets; whitespace/CRLF-joined runs AND each whitespace-delimited segment; all four
+  // alignments; a run ends at a non-trailing '='), UTF-16 LE/BE (interleaved NUL runs, odd tail included), charCode
+  // sequences (comma/space-separated integers, ≥ 8), numeric HTML entities (semicolon-terminated), rot13, exactly-one-
+  // code-point separators (any non-whitespace code point incl. controls, NUL, DEL, astral), and inflate (gzip and zlib
+  // by header validation — CM/CINFO/FCHECK — and raw DEFLATE by bounded trial on decoded-binary buffers ≥ 32 bytes).
+  // Every decoder runs over the serialized event AND over each extracted string leaf, so URL paths/fragments, keys and
+  // '+'-bearing form values are covered; a base64 run with a glued trailing character (length ≡ 1 mod 4) is decoded
+  // with that character trimmed; a gzip member followed by a trailer is inflated alone (header-aware raw inflate).
+  // Composition graph: base64, inflate, entities and UTF-16 outputs feed every decoder again to depth 3; rot13,
+  // charCode and separator outputs are terminal. ALL BUDGETS ARE DETERMINISTIC WORK, never wall-clock, so the same
+  // evidence recomputes identically anywhere. DECLARED LIMITS (each reached by the named input in the register):
+  // per event — 2,048 decoded outputs (≈ 1,000 base64-shaped leaves or identifiers ahead of the credential exhaust it),
+  // 64 MiB decoded bytes, 512 gzip/zlib header trials (exhaustion sets truncation), 4,096 speculative raw-DEFLATE
+  // trials (exhaustion silent); per value — 8 MiB decoded bytes; 1 MiB inflate output; embedded gzip/zlib headers
+  // searched within the first 64 KiB of a value, one trial per header offset; structured traversal bounded by 4 MiB of
+  // leaf text and depth 64. When any counted budget is hit the raw bytes are still scanned and the run is counted in
+  // `outcome.scanTruncated` (printed per cell, never read as clean). Not detected and declared: base64 nested four
+  // deep; a transform applied OVER decoder output (percent/hex/reversed/JSON-escape of a base64 or gzip blob, incl.
+  // encodeURIComponent(btoa(secret)) when the base64 contains '+' or '/'); split-frame base64 across events or across
+  // two leaves; UTF-16 odd tail not at the end of a value; `<blob>=` (an unpadded blob directly followed by '=');
+  // rot13(base64(·)),
+  // charCode(base64(·)), utf16(utf16(·)), utf16(inflate(·)); raw DEFLATE on latin-1 text values (their base64 form is
+  // trialled); FDICT (preset-dictionary) zlib; split-frame base64 across events; comma-chunked base64; entities without
+  // semicolons; multi-character separators. SECRET_TRANSFORM_NAMES (the tripwire's encoder set) is unchanged by M5.
   // The controls lab answers every route with permissive CORS headers so hostile pages can reach the second origin.
   // so layer 4 scans query-string exfiltration (register H-S1). leakScan scans `bytes` only; requestId/documentId/
   // route/origin are never scanned — a field that could carry plaintext must be put in `bytes`.
