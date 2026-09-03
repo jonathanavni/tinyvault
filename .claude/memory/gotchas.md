@@ -153,3 +153,16 @@ Example:
   worker-body capture as best-effort and count every miss (correlate Playwright's own request event with the
   absent child body → marker). (2026-09-03)
 
+- **Playwright's `request.allHeaders()` is unreliable for a target that closed before the network layer reported
+  (a self-closing popup's keepalive POST):** it either resolves with the PROVISIONAL set as if final (no
+  `content-length`, indistinguishable by content) or rejects with `Target page, context or browser has been
+  closed` — timing decides which. Detect the first by identity (resolved sets always add to `request.headers()`)
+  and treat the second like the timeout fallback, never as a capture failure (register C-B2f2). (2026-09-04)
+- **A `cd <worktree> && …` chain leaves later commands in that worktree** — the C-B2f2 register commit landed on the
+  fixtures branch instead of main and had to be reset and redone. Run each git write from an explicit `git -C <path>`
+  or start the command with the intended `cd`. (2026-09-04)
+- **`src/supervisor/host.test.ts` sits at the 800-line auditability gate (`fillService.structure.test.ts`)**; new
+  lease-level tests go in `host.evidence.test.ts` (bare `new EvidenceLease(CANARY)` + fake requests). (2026-09-04)
+- **A long-lived Codex branch drifts behind main's merges** — `codex/m5-hostile-fixtures` forked before slice A's merge
+  and the `scanTruncated` amendment, so its `make test`/`make eval` never certify the merged tree; run the merge gate
+  on the merged tree and `git merge-tree --write-tree main <branch>` for conflicts before the merge. (2026-09-04)
