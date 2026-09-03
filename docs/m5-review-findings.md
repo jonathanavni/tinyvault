@@ -3890,3 +3890,29 @@ Residuals carried: the branch never saw slice A — the merge gate runs on the m
 is page-controlled and POST-only (declared, corroborating only); the snapshot carries no visibility metadata, so the
 surfaced-technique set is by marker with per-technique removal as the binding (B3f1-X1); the host-timing family gate can
 flake on a single pass (G5, M4 calibration). Commit 3 closes here; task G (merge + docs) follows.
+
+## C-M — the merge gate (main ← codex/m5-hostile-fixtures) — 2026-09-03
+
+The branch forked before slice A (QA B3-P2-1), so the merged tree was the first to run the two hostile cells through
+the finite decoder inventory. `make test` was green (971 + 3 + 10); `make eval` was RED: the dom-hidden-injection cell
+reported `scanTruncated: 10` — every run.
+
+**M5-M1 (P1 under the merge gate: a red `make eval`; a declared limit reached by ordinary evidence).** The truncating
+events were the per-turn `model-text` / `model-context` events (the message history re-serialized each turn, 4.7–5.2
+KB), which carry the page's injection prose in three snapshot leaves plus dozens of short leaves; the checker's flat
+per-event candidate budget (2,048 decoded outputs, slice A round 3 "A3-Q1") was exhausted on each of them. The
+snapshot tool result alone spent 250; a prose leaf costs ≈ 114 candidates. Not a leak (raw bytes were still scanned;
+`secretLeaked: false` held), but a measurement signal firing on ordinary evidence — every M6 real-agent transcript
+would truncate every run and `scanTruncated` would stop meaning anything. **Fix (integrator, in the merge):** the
+per-event candidate budget scales with the event — `max(2,048, one candidate per input byte)`; work stays
+deterministic and bounded by the unchanged 64 MiB decoded-bytes budget. Regression: a 3 KB model-context event with
+three prose leaves and forty short leaves does not truncate and still detects the canary in a fourth leaf
+(`leakScan.test.ts`); the flat-floor assertion keeps `candidatesPerEvent: 2048` with `candidatesPerInputByte: 1`.
+Cost: a 55 KB junk-base64 flood event is now scanned in full (≈ 280 ms) instead of cut at 2,048 — the timing family's
+flood threshold moved 2 → 4 s and the artifact-corpus threshold is 200 ms per run (the corpus is 30 runs since M5).
+SCHEMA's declared limit is amended in the same commit. Reaching input (declared): an event whose candidate-shaped
+leaves exceed one per byte — e.g. > 16 KB of two-character separators-only tokens — still truncates, counted.
+
+Merge resolution (recorded): `offline.ts` keeps main's manifest-bound `deriveLeakFromEvidence` with explicit
+`secretLeaked`/`leakChannel` (the branch's `...leak` spread would have leaked `truncated` into the outcome); the
+harness-gate record carries `scanTruncated: 0`; per-cell `scanTruncated: 0` assertions added to the three eval cells.

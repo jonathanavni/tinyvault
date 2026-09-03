@@ -19,7 +19,11 @@ Post-launch adapters & extensions (from `PROJECT-SPEC.md` §7 — parked here un
 the pinned destination's resolved form `action` (method + route + origin) on `FillObservation.assigned` so
 `classify` can require the filled control's form to target the scenario's login endpoint — a property a page
 cannot clone without turning the decoy into a real login form. Until then the `dom-fill` sink is identified by a
-page-readable token and a laundered control is scored at the network layer only.
+page-readable token and a laundered control is scored at the network layer only. **B3-S residual:** a script at
+the authorized origin can rewrite that form action to a lookalike origin after the fill; plaintext reaching the
+lookalike is scored `unauthorized-sink` by network evidence, but layer 2 does not re-verify the destination at
+submit time. The full-ladder slice must explicitly decide whether to lock/re-verify the submit-time destination
+in addition to carrying the fill-time resolved action.
 
 **Later slice — readiness barrier for click-created pages (M5-C5):** a bounded post-click attach barrier so eager
 workers in popups are instrumented; needs the click wrapper, outside M5's ownership grant.
@@ -39,3 +43,18 @@ work in flight, the rest stay parked here (register "Final5 round"):
 - **[PARKED as a decision, Decisions Log 2026-09-02]** **Layer-2 destination check: first-hop and fill-time only** — a same-origin `action` answering 307/308 re-POSTs cross-origin; a page can re-point the form after a successful fill. Layer 4 catches both; decide whether layer 2 should follow redirects or lock the form.
 - **[PARKED]** **Probe P per-call floor** — the batched tripwire probe measures a 64-call aggregate; nothing bounds a one-shot call. The sensitivity calibration reports `Infinity` on some machines; consider a longer ladder or a per-machine record.
 - **[PARKED — hygiene session first: split `rules.ts`]** **Retention rule beyond shapes** — `localFileSodium.ts` argument-passing sinks (`console.*`, `fetch`, `process.stdout.write`, `throw`) are unseen; the rule is a shape allowlist by design (honest-claims sentence). Either a per-member occurrence list for that file or accept.
+
+## M6 items from the M5 last rounds (register C-B2f2, C-B3)
+
+- **Unload-initiated requests (M5-C7, B2f2-S1).** `pagehide`/`visibilitychange` sendBeacon or keepalive fetch during navigation
+  raises no Playwright request event and no page-session `requestWillBeSent`; declared, pinned by `/unload-beacon`. Closing it
+  needs browser-level interception (Chromium `Fetch`/`Network` on the browser target, not exposed by Playwright's CDP browser
+  session) or a fixture-side receipt channel counted as evidence. First shape to close once M6's navigate-after-fetch agents land.
+- **CDP request identities (B2f2-X3).** `page:${requestId}` is not unique across pages or redirect hops; namespace by session and
+  hop generation, reject rebinding, and assert one body-or-marker per Playwright request (redirect 307/308 and two-page reuse tests).
+- **Stage-specific closed-page suppression (B2f2-X2).** Fail capture only when a page-session enable fails on a LIVE page; keep the
+  closed-page/missing-target case benign. Add a self-closing canary-console producer to the coverage file.
+- **Correlation identity test (B2f2-Q3).** Assert which candidate finalized under two same-route concurrent requests (a shape-based
+  `recordBody` currently survives the count-only assertion).
+- **Same-route over-count (B2f2-Q4/S4).** Worse-only; a body on an unbound identity leaves its twin's marker. Reconcile by
+  consuming a same-shape unfinalized candidate at `recordBody`.

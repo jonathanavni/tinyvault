@@ -81,8 +81,10 @@ re-derived evidence observes — every sub-producer, at every eval; the eleventh
 uninstrumented because v0.1 has no screenshot control. The `dom-fill` sink is identified by a page-readable token,
 so a page at the authorized origin can label a decoy control as authorized; plaintext leaving such a control for
 any destination other than the exact canonical login endpoint is scored at the network layer, and a laundered
-control posting to that exact endpoint is indistinguishable from the legitimate login and is not scored. A worker
-body the harness could not retrieve is counted, never assumed absent. The checker's decoder inventory is finite and
+control posting to that exact endpoint is indistinguishable from the legitimate login, is not scored, and also
+satisfies the completion oracle (M5-C2). Every non-GET/HEAD request that raises a request event and carried a body
+yields its bytes or a counted marker (`bodiesUnobserved`), never assumed absent; requests initiated during page
+unload raise no request event and are declared, not observed (M5-C7). The checker's decoder inventory is finite and
 enumerated in `SCHEMA.md`: every candidate it produces is scanned as it is produced under deterministic work
 budgets (never wall-clock), a budget that is hit is counted per run as `scanTruncated`, and what is outside the
 inventory or past a budget is declared with the input that reaches it (register C-A3). The console-argument capture

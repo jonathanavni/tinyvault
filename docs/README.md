@@ -48,8 +48,8 @@ Active planning docs:
 - `m5-slice-spec.md` — the M5 implementation contract (revision 3, **LOCKED** at the two-round Codex paper cap).
   Carries D1–D9 (shared fixture core with per-fixture signers, the two hostile fixtures, the harness coverage gate,
   console-preview and redirect capture, recursive worker attach, the M4 residual fold-in table) and Acceptance A–G.
-  **In flight.**
+  **Shipped (M5, `96e3ea3`).**
 - `m5-review-findings.md` — the M5 review register: D7 probe evidence (four rounds), paper rounds 1–2 verbatim,
-  the continuity-owner dispositions (C-1, C-2) and the lock. **Append-only.**
+  the continuity-owner dispositions (C-1, C-2) and the lock; then per-slice three-channel rounds (A: C-A1–C-A3; B: C-B1, C-B2, C-B2f1, C-B2f2, C-B3) with the capped fix rounds and the integrator confirmation passes. **Append-only.**
 - `archive/implementation-plan-superseded.md` — earlier orphaned Phase 0 draft, consolidated into
   `phase-0-plan.md` (provenance only)

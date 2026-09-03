@@ -35,7 +35,8 @@ credential fill service itself is not built yet.
 | M2 — security primitives (`Secret<string>`, origin validator, lockdown, mutex, results, tripwire detector + dependency boundary) | done (`6a6b67c`) |
 | M3 — backend interface + libsodium local-file backend (never-cache contract, policy-bound sealing) | **done** — three pre-impl and three post-impl review rounds; the dependency gate now scans runtime modules, not `.d.ts` |
 | M4 — the fill service and its integration gates | **done** (`b8a9396`) — four commits + five fix slices, each three-channel reviewed with real-Chromium exploits; probe P is a paired Holm-corrected family gate; layer-4 blind spots declared in `SCHEMA.md`; residuals with proof in `docs/m4-review-findings.md` |
-| M5–M7 — hostile fixtures, reference + naive agents | not started |
+| M5 — hostile fixtures #1–#2 (`lookalike-origin`, `dom-hidden-injection`), the capture-coverage gate, the finite decoder inventory, worker-body markers | **done** (`96e3ea3`) — three slices, each three-channel reviewed with real-Chromium probes and capped fix rounds; register `docs/m5-review-findings.md` |
+| M6–M7 — reference + naive agents | not started |
 | M8–M10 — MCP adapter, 1Password backend, demo | not started |
 
 `make eval` runs today and produces a scorecard, but it drives a **scripted stub agent** against a benign
@@ -60,10 +61,11 @@ Honesty matters more here than in most projects, because the deliverable *is* a 
 - The leak checker's own competence is gated: `make eval` fails if the checker cannot catch a planted
   leak on every locked encoding, or if it flags an authorized login as a leak.
 - Run outcomes are **recomputed offline** from persisted evidence rather than trusted from the runner.
-- **Capture coverage is currently partial.** Of the declared evidence channels, several (`url`, `header`,
-  `websocket`, `redirect`, `screenshot-text`, `log`) have no producer yet, so a leak over those routes
-  would not be observed. Until that is closed, a zero is bounded by what is instrumented — the eval
-  measures the channels it watches, not every channel that exists.
+- **Capture coverage is measured, not assumed.** Ten of eleven declared evidence channels have real producers
+  that a harness gate runs through the production adapter at every eval and re-derives from the persisted evidence;
+  the eleventh (`screenshot-text`) is declared uninstrumented. Worker request bodies the harness could not retrieve
+  are counted per cell (`bodiesUnobserved`), never assumed absent; requests initiated during page unload are
+  declared unobserved (M5-C7). The scorecard prints the coverage line and every declared limit is in `SCHEMA.md`.
 - A reported `0/N` is an observed rate with a Wilson 95% interval. It **bounds** the leak rate; it does
   not prove zero.
 - The published artifacts are **evidence you can re-derive, not evidence you must trust**. Outcomes are
