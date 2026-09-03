@@ -14,8 +14,8 @@ Active planning docs:
 - `spec-amendment-2026-08-31.md` — planning-side proposal (external intelligence since kickoff).
   **Triaged 2026-08-31** — all 8 outcomes in the `PLAN.md` Decisions Log. **Fact-checked 2026-09-01**
   (`0876589`). **A1 and A3 absorbed into `PROJECT-SPEC.md` 2026-09-01** (§2, §3, §7, §8); the remaining
-  outcomes stay where triage put them (A2 accepted but not yet written into the spec; A4 at M10, B1 at
-  M2/M3, C1 at M7+, D1 at roadmap step 5).
+  outcomes stay where triage put them (**A2 and D1's spec halves written 2026-09-03** — §3 non-goals, §4 item 5,
+  §7 step 5; A4 at M10, B1 shipped in M2/M3, C1 at M7+, D1's implementation at roadmap step 5).
 - `spec-amendment-factcheck.md` — verification of every external claim in the amendment: 27 confirmed,
   7 partial, 3 wrong, 3 unverifiable, with sources and replacement wording. Its corrections are applied
   in the absorbed A1/A3 text; apply them again to anything else lifted into the spec or the README.

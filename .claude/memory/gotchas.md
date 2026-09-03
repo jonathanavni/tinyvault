@@ -166,3 +166,7 @@ Example:
 - **A long-lived Codex branch drifts behind main's merges** — `codex/m5-hostile-fixtures` forked before slice A's merge
   and the `scanTruncated` amendment, so its `make test`/`make eval` never certify the merged tree; run the merge gate
   on the merged tree and `git merge-tree --write-tree main <branch>` for conflicts before the merge. (2026-09-04)
+- **This shell's `grep` is `ugrep` and rejects wide bounded quantifiers on UTF-8 (`{0,400}` → "exceeds complexity
+  limits"); use `command grep` or python for transcript/JSONL mining.** Two more zsh traps met the same night: `$T:testbed/…`
+  applies the `:t` modifier (path tail) — write `${T}:…`; and `set -- $VAR` does NOT word-split in zsh — use
+  `read A B C <<< "$VAR"` (a status monitor misparsed "running" as terminal until fixed). (2026-09-03)

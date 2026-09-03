@@ -125,3 +125,9 @@ Example:
 - **Never run two browser-timing suites concurrently on the machine.** The probe-P family flipped red in the one
   run that overlapped another worktree's ten coverage repeats; rerun alone on a quiet box and report both.
 
+- **A merged-tree gate is part of every merge, and docs Codex writes on a branch are parked and applied on main.** The
+  M5 fixtures branch forked before slice A's merge; its own green counts certified nothing about the combination, and
+  the first merged `make eval` was red (M5-M1). Run `make test` + `make eval` on the merge commit's tree before
+  committing it, and pre-check conflicts with `git merge-tree`. Register/BACKLOG/SCHEMA paragraphs an implementer adds
+  on the branch are moved to the scratchpad and applied on main, where those files are homed (avoids conflicts and
+  keeps one home per fact). (2026-09-03)

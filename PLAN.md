@@ -11,7 +11,7 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-02-m5` — focus: M5 per the locked plan (hostile fixtures #1–#2 `lookalike-origin` + `dom-hidden-injection` wired into the spine, the Opus 5 capture-coverage gate) through the Codex ladder — **outcome: M5 shipped (`96e3ea3`, 2026-09-03); M4 residuals folded in per spec §D8; hygiene (branch prune, `rules.ts` split, A2/D1 spec paragraphs) deferred.**, parallelized where safe; then fold the M4 residuals (BACKLOG "M5 work") into M5 scope explicitly. Hygiene (branch prune, `rules.ts` split, A2/D1 spec paragraphs) deferred.
+`2026-09-02-m5` — focus: M5 per the locked plan (hostile fixtures #1–#2 `lookalike-origin` + `dom-hidden-injection` wired into the spine, the Opus 5 capture-coverage gate) through the Codex ladder — **outcome: M5 shipped (`96e3ea3`, 2026-09-03); M4 residuals folded in per spec §D8; hygiene done the same day (`codex/*` branches pruned; `rules.ts` → `rules.ts` + `taintHelpers.ts`; `runner.ts` → `runner.ts` + `evalAgents.ts` + `scorecardAggregate.ts`, all three under the 800-line gate now enforced for them; A2/D1 written into `PROJECT-SPEC.md` §3/§4/§7).**, parallelized where safe; then fold the M4 residuals (BACKLOG "M5 work") into M5 scope explicitly. Hygiene (branch prune, `rules.ts` split, A2/D1 spec paragraphs) deferred.
 
 **M5 as shipped (one paragraph; the register `docs/m5-review-findings.md` holds everything else):** three slices on two
 Codex branches — A (the leak checker's finite decoder inventory, three rounds + an integrator confirmation pass, merged
@@ -26,30 +26,21 @@ M5-C7; M5-C2 incl. the completion oracle; shared/service workers; worker console
 attribution). BACKLOG carries the M6 items (unload capture, requestId namespacing, stage-specific closed-page suppression,
 the non-cloneable destination slice).
 
-`2026-09-01-m4` — focus: M4 (fill service end-to-end + all integration security gates, 🔴) through the full Codex ladder; in parallel: absorb A1/A3 + fact-check corrections into `PROJECT-SPEC.md`, prune merged agent branches, schedule the §9.1 LOC-budget question. **Outcome (2026-09-02): M4 shipped — `main` fast-forwarded to `b8a9396`; every parallel item done.**
-
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
 **M4 ✅** (`b8a9396`, 2026-09-02) · **M5 ✅** (`96e3ea3`, 2026-09-03).
 
-**M4 as shipped (one paragraph; the register `docs/m4-review-findings.md` holds everything else):** four commits plus
-five fix slices on `codex/m4-fill-service`, each reviewed by three channels (Claude QA, Claude security, Codex) with
-real-Chromium probes; a whole-codebase audit; a user-authorized probe P amendment (paired counterbalanced Wilcoxon,
-500 pairs, Holm–Bonferroni family gate, report-only calibration). Final state on `main`: `make test` green (773 tests
-+ 10-test timing family, gate 53/48, selftest), `make eval` 10/10 with 0 leaks. **Claims = the amended honest-claims
-sentence in `docs/m4-slice-spec.md`, no more.** Shipped residuals with proof: register section "Final5 round"
-(worker Blob bodies, the finite transform inventory, first-hop/fill-time destination check, the retention rule as a
-shape allowlist, the batched timing probe, ordered-use evidence settlement) — all declared in `SCHEMA.md`, M5 items
-in `BACKLOG.md`.
+**Next session:** `/start`; **M6** per `docs/phase-0-plan.md` §8 (reference agent + naive baseline; the baseline leaks on
+camera) through the same ladder — spec first (evals before specs: the naive baseline's expected leak cells and the
+`checkLiveFire` alarm are the eval), then Codex paper rounds, then slices. Carry into the M6 spec: the BACKLOG "M6 items from
+the M5 last rounds" (unload-time requests M5-C7 first — M6's navigate-after-fetch agents hit it; requestId namespacing;
+stage-specific closed-page suppression; the correlation identity test), the form-selection obligation (the compliant
+dom-hidden script names its form), and the retention-rule-beyond-shapes item now unparked (`rules.ts` split).
 
-**Next session:** `/start`; M5 per `docs/phase-0-plan.md` §8 (evaluator breadth — per-target CDP capture, transform
-inventory, `browser_snapshot` end-to-end, the BACKLOG residuals) through the same ladder. Hygiene first: the docs
-index (`docs/README.md`) M4 entries flipped to shipped; `docs/m4-review-findings.md` is 1,400+ lines and
-append-only — leave it.
-
-**Blocked / needs attention:** nothing blocking. Threads: A2 (payments non-goal) still not written into the spec
-(triaged accept); D1's spec half not written; deferred M2/M3 residuals unchanged (`docs/m3-review-findings.md` §D);
-`scripts/retention/rules.ts` is at 788/800 lines (split before adding a rule).
+**Blocked / needs attention:** nothing blocking. Threads: deferred M2/M3 residuals unchanged (`docs/m3-review-findings.md`
+§D); the 🔴 non-cloneable `dom-fill` destination slice (BACKLOG) is the strongest surviving lookalike path (a script at the
+authorized origin rewriting the form action after the fill — scored at layer 4, not refused at layer 2); shipped slice
+specs (m2–m5) stay at the docs root by precedent because the honest-claims sentences live there.
 
 ## Decisions Log
 
