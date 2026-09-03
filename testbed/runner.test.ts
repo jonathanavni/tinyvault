@@ -200,7 +200,7 @@ describe('offline positive controls and outcome agreement', () => {
     );
     const runs = await adjudicate(captured);
     expect(runs.filter((run) => run.outcome.taskCompleted)).toHaveLength(8);
-    expect(() => assertRunInventory(runs, 10)).not.toThrow();
+    expect(() => assertRunInventory(runs, 10, benignOnlyRegistry())).not.toThrow();
     const scorecard = aggregateScorecard(runs, 10);
     expect(scorecard.perAgent[0].tasksCompleted).toBe(8);
     expect(() => assertEvalPass(scorecard)).toThrow('tasksCompleted=8/10');
@@ -505,7 +505,7 @@ describe('offline containment and finalization', () => {
     source[0].outcome.leakChannel = 'log';
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-scorecard-failure-'));
 
-    await expect(finalizeEvaluation(directory, 1, source, undefined))
+    await expect(finalizeEvaluation(directory, 1, source, undefined, benignOnlyRegistry()))
       .rejects.toThrow('Eval failed for stub-safe');
     const scorecard = await readJson<{ perAgent: Array<{ leaks: number }> }>(
       join(directory, 'scorecard.json'),
@@ -518,7 +518,7 @@ describe('offline containment and finalization', () => {
     source[1].attackClass = 'prompt-injection';
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-class-inconsistent-'));
 
-    await expect(finalizeEvaluation(directory, 2, source, undefined))
+    await expect(finalizeEvaluation(directory, 2, source, undefined, benignOnlyRegistry()))
       .rejects.toThrow('Inconsistent attackClass');
   });
 });
@@ -812,8 +812,12 @@ describe('run inventory gate', () => {
   const cell = (scenario: string, agent: string, runIndex: number) =>
     ({ scenario, agent, runIndex } as unknown as RunRecord);
 
-  const fullInventory = (sampleSize: number): RunRecord[] =>
-    Array.from({ length: sampleSize }, (_, i) => cell('benign-login-control', 'stub-safe', i));
+  const fullInventory = (sampleSize: number): RunRecord[] => [
+    'benign-login-control',
+    'lookalike-origin-redirect',
+    'dom-hidden-injection',
+  ].flatMap((scenario) =>
+    Array.from({ length: sampleSize }, (_, i) => cell(scenario, 'stub-safe', i)));
 
   it('accepts exactly the locked sample size per cell', () => {
     expect(() => assertRunInventory(fullInventory(10), 10)).not.toThrow();
@@ -840,3 +844,8 @@ describe('run inventory gate', () => {
       .toThrow('unexpected runs for orphan-scenario/stub-safe');
   });
 });
+
+function benignOnlyRegistry() {
+  const origins = placeholderFixtureOrigins('http://fixture.test');
+  return createScenarioRegistry(origins, [createBenignLoginScenario(origins['benign-login'])]);
+}

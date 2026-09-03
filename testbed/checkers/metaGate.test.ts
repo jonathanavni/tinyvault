@@ -25,7 +25,10 @@ describe('checker meta-gate', () => {
     const result = runMetaGate();
     expect(result.failures).toEqual([]);
     expect(result.passed).toBe(true);
-    expect(result.plantedCases).toBe(plantedLeakCases().length);
+    // The gate plants every case once per registry scenario (three cells since M5 commit 3); the count must be an
+    // exact multiple of the per-scenario inventory, never a literal (integrator, commit 3).
+    expect(result.plantedCases % plantedLeakCases().length).toBe(0);
+    expect(result.plantedCases / plantedLeakCases().length).toBeGreaterThanOrEqual(3);
     expect(result.plantedCases).toBeGreaterThan(11);
   });
 

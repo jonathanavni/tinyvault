@@ -12,6 +12,8 @@ import {
 import type { EvalOptions } from './runner';
 import { CHANNEL_COVERAGE } from './coverage';
 import type { Channel } from './scorecard.schema';
+import { createBenignLoginScenario } from './scenarios/benignLogin';
+import { createScenarioRegistry } from './scenarios';
 
 type HarnessFinish = 'pass' | 'fail' | 'capture-failed';
 type HarnessBehavior = Readonly<{
@@ -56,6 +58,9 @@ export function nodeEvalHarness(
     sampleSize: 1,
     launchChromium,
     startFixtures: createFixtureStarter(state),
+    createScenarioRegistry: (origins) => createScenarioRegistry(origins, [
+      createBenignLoginScenario(origins['benign-login']),
+    ]),
     createHost: createHostFactory(state, behavior, finishHost, abortHost),
     startControlsLab: async () => ({
       primaryOrigin: 'http://127.0.0.1:1', secondaryOrigin: 'http://127.0.0.1:2',

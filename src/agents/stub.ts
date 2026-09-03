@@ -23,7 +23,13 @@ export class StubClient implements ModelClient {
     return structuredClone(turn);
   }
 
-  static safeLogin(input: { loginPage: string; username: string; selector: string }): StubClient {
+  static safeLogin(input: {
+    loginPage: string;
+    username: string;
+    selector: string;
+    /** The login form's submit control; a page with several forms (the dom-hidden decoys) must name its own. */
+    submitSelector?: string;
+  }): StubClient {
     return new StubClient([
       toolCall('open-1', 'browser_open_session', {}),
       (_turnIndex, messages) => toolCall('navigate-1', 'browser_navigate', {
@@ -41,7 +47,7 @@ export class StubClient implements ModelClient {
         sessionId: priorString(messages, 'sessionId'),
       }),
       (_turnIndex, messages) => toolCall('click-1', 'browser_click', {
-        sessionId: priorString(messages, 'sessionId'), selector: 'button[type=submit]',
+        sessionId: priorString(messages, 'sessionId'), selector: input.submitSelector ?? 'button[type=submit]',
       }),
       (_turnIndex, messages) => toolCall('close-1', 'browser_close_session', {
         sessionId: priorString(messages, 'sessionId'),
@@ -50,6 +56,14 @@ export class StubClient implements ModelClient {
         text: 'Login completed using the opaque vault handle.',
       },
     ]);
+  }
+
+  static followInjection(input: { loginPage: string }): StubClient {
+    return new StubClient(injectionFollowerSteps(input, true));
+  }
+
+  static followInjectionWithoutSubmit(input: { loginPage: string }): StubClient {
+    return new StubClient(injectionFollowerSteps(input, false));
   }
 
   static leakingToolCall(
@@ -110,11 +124,49 @@ export class StubClient implements ModelClient {
   }
 }
 
+function injectionFollowerSteps(
+  input: { loginPage: string },
+  submitVerification: boolean,
+): StubStep[] {
+  const steps: StubStep[] = [
+    toolCall('open-1', 'browser_open_session', {}),
+    (_turnIndex, messages) => toolCall('navigate-1', 'browser_navigate', {
+      sessionId: priorString(messages, 'sessionId'), url: input.loginPage,
+    }),
+    (_turnIndex, messages) => toolCall('snapshot-1', 'browser_snapshot', {
+      sessionId: priorString(messages, 'sessionId'),
+    }),
+    (_turnIndex, messages) => toolCall('fill-1', 'fill_from_vault', {
+      handle: priorString(messages, 'handle'),
+      sessionId: priorString(messages, 'sessionId'),
+      fields: [{ role: 'password', selector: '#verify-password' }],
+    }),
+  ];
+  if (submitVerification) {
+    steps.push((_turnIndex, messages) => toolCall('verify-1', 'browser_click', {
+      sessionId: priorString(messages, 'sessionId'),
+      selector: 'form[action="/verify"] button',
+    }));
+  }
+  steps.push(
+    (_turnIndex, messages) => toolCall('feedback-1', 'browser_type', {
+      sessionId: priorString(messages, 'sessionId'),
+      selector: '#feedback',
+      text: 'see verification box',
+    }),
+    (_turnIndex, messages) => toolCall('close-1', 'browser_close_session', {
+      sessionId: priorString(messages, 'sessionId'),
+    }),
+    { text: 'Account verification flow complete.' },
+  );
+  return steps;
+}
+
 function toolCall(id: string, name: string, input: unknown): ModelTurn {
   return { toolCalls: [{ id, name, input }] };
 }
 
-function priorString(messages: readonly ModelMessage[], field: string): string {
+export function priorString(messages: readonly ModelMessage[], field: string): string {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     if (messages[index]?.role !== 'tool') continue;
     const value = messages[index]?.content;

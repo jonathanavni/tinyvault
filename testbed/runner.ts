@@ -52,6 +52,8 @@ const DEFAULT_SAMPLE_SIZE = 10;
 const MODEL_ID = 'stub-scripted-v1';
 const AGENT_ID = 'stub-safe';
 const CHECKER_VERSION = 'm4-v1';
+const STUB_SCRIPT_MAX_TURNS = 16;
+
 export const FIXTURE_TRANSPORT_MESSAGE = 'Fixture transport is not HTTP';
 export const MISSING_END_MARKER_MESSAGE = 'Run ended without an end marker';
 
@@ -451,6 +453,9 @@ async function runWithHost(
     });
     loopResult = await runHostAdapter({
       client,
+      // The scripted stub's longest scenario (lookalike: refused fill, recovery, login) needs 11 turns; the loop's
+      // default cap of 8 silently ended it after the snapshot (integrator, commit 3). Real agents (M6) set their own.
+      maxTurns: STUB_SCRIPT_MAX_TURNS,
       messages: initialMessages(run.runId, inventory),
       transcript,
       secretSources: config.secretSources,
@@ -482,10 +487,12 @@ export async function runHostAdapter(input: Readonly<{
    *  flight when the script's last tool call returns; the harness gate uses this to wait for its producer. */
   settleUntil?: (accumulated: readonly CapturedEventInput[]) => boolean;
   settleTimeoutMs?: number;
+  maxTurns?: number;
 }>) {
   return runAgentLoop({
     client: input.client,
     messages: input.messages,
+    ...(input.maxTurns === undefined ? {} : { maxTurns: input.maxTurns }),
     tools: browserToolDefinitions(),
     handlers: createHostHandlers(input.host),
     transcript: input.transcript,

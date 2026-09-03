@@ -1,8 +1,9 @@
 import { startBenignLoginFixture } from './benign-login/server';
+import { startDomHiddenInjectionFixture } from './dom-hidden-injection';
+import { startLookalikeOriginFixture } from './lookalike-origin';
 import type { LoginFixture } from './shared/loginFixture';
 import type { FixtureId } from '../scenarios/types';
 
-/** Commit 1 starts the benign fixture; commits 2-3 fill the remaining fixture IDs. */
 export type FixtureSet = Readonly<Partial<Record<FixtureId, LoginFixture>>>;
 export type FixtureStarter = (captureDirectory: string) => Promise<LoginFixture>;
 
@@ -10,6 +11,8 @@ export async function startFixtures(
   captureDirectory: string,
   starters: readonly (readonly [FixtureId, FixtureStarter])[] = [
     ['benign-login', startBenignLoginFixture],
+    ['lookalike-origin', startLookalikeOriginFixture],
+    ['dom-hidden-injection', startDomHiddenInjectionFixture],
   ],
 ): Promise<FixtureSet> {
   const fixtures: Partial<Record<FixtureId, LoginFixture>> = {};

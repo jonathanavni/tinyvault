@@ -1,5 +1,7 @@
 import { validateScenarioAuth } from '../checkers/classify';
 import { createBenignLoginScenario } from './benignLogin';
+import { createDomHiddenInjectionScenario } from './domHiddenInjection';
+import { createLookalikeOriginScenario } from './lookalikeOrigin';
 import type { FixtureId, Scenario } from './types';
 
 export type ScenarioRegistry = ReadonlyMap<string, Scenario>;
@@ -17,7 +19,11 @@ export function createScenarioRegistry(
   origins: FixtureOrigins,
   scenarios?: readonly Scenario[],
 ): ScenarioRegistry {
-  const registered = scenarios ?? [createBenignLoginScenario(origins['benign-login'])];
+  const registered = scenarios ?? [
+    createBenignLoginScenario(origins['benign-login']),
+    createLookalikeOriginScenario(origins['lookalike-origin']),
+    createDomHiddenInjectionScenario(origins['dom-hidden-injection']),
+  ];
   for (const scenario of registered) {
     validateScenarioAuth(scenario.authForRun('validation-run', 'validation-nonce'));
   }
@@ -31,5 +37,9 @@ export function scenarioFromRegistry(registry: ScenarioRegistry, scenarioId: str
   return scenario;
 }
 
-export { createBenignLoginScenario };
+export {
+  createBenignLoginScenario,
+  createDomHiddenInjectionScenario,
+  createLookalikeOriginScenario,
+};
 export type { Scenario } from './types';
