@@ -3940,3 +3940,32 @@ eval` Docker-backed with no silent fallback, canonical (not byte) parity between
 from the hostile page by network topology with authenticated run-scoped registration, and the deviation preserved in the
 Decisions Log as resolved by M5.2. The locked spec is unchanged. M5 stays shipped (`96e3ea3`); its acceptance on the
 Docker path is M5.2's exit criterion.
+
+## C-Q — M5.1 gate repair (integrator, 2026-09-04) — the two P0s, and a guard that did not guard
+
+Closes the two P0 gate defects C-P recorded. Acceptance was a **literal clean clone** (`git clone` into a temp
+directory → `npm ci` → `make browsers` → `make test`), not a green run on the development machine — the check the
+assessment ran, and the one `CLAUDE.md`'s clean-clone rule names.
+
+| Defect | Fix | Mutant |
+|---|---|---|
+| P0-1 `leakDecoders.timing.test.ts` red on its own clock (65.8 s against a 60 s cap) | The 200-event stress scan is split out of the ten-event benchmark into its own test with its own bound. The benchmark is unchanged (10 × 2,048-leaf junk events, < 4 s, arrayBuffers < 256 MiB). The stress test keeps its 200 events at a smaller per-event payload and asserts the two properties the count was there for: budgets are per-event, and cost is linear in event count (200 events ≤ 15 × the 20-event scan; measured ratio 9.99–10.07). File: 64.3 s red → 15.2 s green. | The old configuration — the stress scan sharing the benchmark's 60 s cap at full payload size — is red; reproduced before the change, not argued from. Never a timeout bump. |
+| P0-2 the corpus benchmark required 30 persisted runs under gitignored `artifacts/eval/runs` | Generated, not checked in: `testbed/checkers/syntheticCorpus.ts` builds 30 runs (3 cells × 10) by replaying the agent loop, so the `model-context` events grow turn by turn exactly as the real ones do. Shape against the persisted corpus — events 41/41/59 (exact), channel and initiator distribution (identical), total bytes 25.6/31.2/42.0 KB vs 26.5/31.8/43.2 KB, largest context 3.9/5.3/5.0 KB vs 3.9/5.2/5.0 KB. Byte-identical across builds. | `syntheticCorpus.test.ts` pins the shape, and plants a canary in one run per cell: a green benchmark must mean "scanned and found nothing", never "scanned nothing". |
+
+**New finding — the M5-M1 regression guard did not kill its own mutant.** `leakScan.test.ts`'s "does not truncate an
+ordinary model-context event whose prose leaves exceed the flat candidate floor" is the declared guard for merge
+finding M5-M1 (the candidate budget scaling with event size). Restoring the pre-M5-M1 flat 2,048 budget left the
+**entire file green — 88/88**. Its hand-built context lands ~130 string leaves, just *under* the flat floor; a real
+run's last context event is ~5.3 KB across ~144 leaves and truncates. The guard is now pinned to the generated
+corpus's dom-hidden context event, and goes red under the mutant (verified both ways: red with the flat budget
+applied, green with it reverted). Recorded here because a guard that runs green without detecting its regression is
+the "silent-wrong is an observability gap" case, and it was found only because the mutant was actually run.
+
+**Correction to a shipped assumption.** Decoder truncation on run-shaped junk is driven by the **event's size, not
+the scan's length**: a single 64-leaf (~1.7 KB) junk event truncates exactly as 200 do, and `{secretLeaked: false,
+truncated: true}` is the declared, counted state at every size past that. The stress test therefore asserts
+*count-invariance* — one event's result must deep-equal two hundred events' result — which is the per-event-budget
+claim stated precisely; asserting an absent `truncated` flag would have been asserting something false.
+
+**Not changed:** the decoder budgets themselves, the 800-line structure gate, `SCHEMA.md`'s declared limits, and the
+locked spec. No claim grew.

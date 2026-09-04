@@ -11,6 +11,8 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
+`2026-09-04-m5.1-m5.2` — focus: M5.1 gate repair, accepted by a **literal clean clone** (`git clone` → `npm ci` → `make browsers` → `make test` in a temp dir) — the timing file split so the stress scan carries its own bound, and the gitignored `artifacts/eval/runs` prerequisite replaced by a deterministic synthetic corpus of the same shape; then the **M5.2 spec** (Docker-composed fixtures) through the Codex ladder with the control-plane network shape locked on paper before anything is built.
+
 `2026-09-02-m5` — focus: M5 per the locked plan (hostile fixtures #1–#2 `lookalike-origin` + `dom-hidden-injection` wired into the spine, the Opus 5 capture-coverage gate) through the Codex ladder — **outcome: M5 shipped (`96e3ea3`, 2026-09-03); M4 residuals folded in per spec §D8; hygiene done the same day (`codex/*` branches pruned; `rules.ts` → `rules.ts` + `taintHelpers.ts`; `runner.ts` → `runner.ts` + `evalAgents.ts` + `scorecardAggregate.ts`, all three under the 800-line gate now enforced for them; A2/D1 written into `PROJECT-SPEC.md` §3/§4/§7).**
 
 **M5 as shipped (one paragraph; the register `docs/m5-review-findings.md` holds everything else):** three slices on two
@@ -40,11 +42,21 @@ Node pinning, lint gate, license or version. Already declared and unchanged: the
 contract, the writer durability notes, every measurement residual. The assessment's own milestone table mislabels M1–M3 and calls
 the decoder budgets time-based (they are work-based); do not copy it.
 
-**M5.1 — gate repair (next, before M6; small, integrator-owned, verified by a clean clone):**
-- Split the timing file: keep the ten-event benchmark assertion; give the 200-event stress scan its own test with its own
-  bound (or a smaller corpus) — never a timeout bump. Mutant: the flat 2,048 budget restored → the model-context regression red.
-- Remove the hidden prerequisite: the corpus timing test builds its own corpus (or a checked-in minimal one); `make test` passes
-  from `git clone` + `npm ci` + `make browsers`. Recorded as a rule in `CLAUDE.md`.
+**M5.1 — gate repair ✅ (2026-09-04; register C-Q). Both P0s closed; accepted by a literal clean clone.**
+- Timing file split: the ten-event benchmark keeps its assertion (< 4 s, arrayBuffers < 256 MiB); the 200-event stress
+  scan is its own test with its own bound — 200 events at a smaller per-event payload, asserting count-invariance
+  (one event's result deep-equals two hundred events') and linearity (200 events ≤ 15 × the 20-event scan; measured
+  9.99–10.07). File 64.3 s red → 15.2 s green. Never a timeout bump; the old configuration was reproduced red first.
+- Hidden prerequisite removed: `testbed/checkers/syntheticCorpus.ts` generates 30 runs by replaying the agent loop, so
+  `model-context` events grow turn by turn as the real ones do — events 41/41/59 exact, identical channel/initiator mix,
+  largest context 3.9/5.3/5.0 KB vs the persisted 3.9/5.2/5.0, byte-identical across builds. `syntheticCorpus.test.ts`
+  pins the shape and plants a canary per cell (a green benchmark must mean "scanned and found nothing").
+- **The M5-M1 guard did not kill its own mutant** — restoring the flat 2,048 budget left `leakScan.test.ts` 88/88 green
+  (its hand-built context lands ~130 leaves, just under the flat floor; a real run's last context is ~5.3 KB / ~144
+  leaves). Now pinned to the generated corpus; verified red under the mutant, green reverted.
+- Correction recorded: decoder truncation is driven by event **size**, not scan length — `truncated: true` is the
+  declared state for run-shaped junk past ~1.7 KB, so count-invariance, not an absent flag, is the per-event claim.
+- The clean-clone rule was already in `CLAUDE.md` Core Principles; no change needed.
 - Fixture topology — **decided (Decisions Log 2026-09-03): Docker-composed fixtures are the M5 acceptance path, built as
   M5.2 right after M5.1**; the spec is unchanged.
 - Docs already refreshed in this pass (README status, `ORIENT.md`, phase-plan build note, spec §5 as-built note); the leak-rate
