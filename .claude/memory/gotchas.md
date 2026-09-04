@@ -204,3 +204,22 @@ Example:
   body would make the count 0. The current evidence does not authorize changing that assertion. Treat a lone red
   here the way the probe-P entry above requires: not as a code defect **without the other channel's numbers**, and
   not as a load report either. (2026-09-04)
+- **A symlinked `node_modules` in a mutant workspace produces false reds.** A reviewer's `git archive` copy that
+  symlinked `node_modules` back into the real repo started failing with "Worker exited unexpectedly" **on pristine
+  source** after several parallel vitest runs. They discarded the results and rebuilt with a real copy. If you build
+  throwaway trees to test mutants, copy `node_modules` or accept that a red may be the workspace, not the code.
+  (2026-09-04)
+- **A malformed mutant looks exactly like a passing gate.** Verifying the Acceptance J wiring pin, a `node -e`
+  mutant reported "no tests" — which reads as "the gate didn't fire". It was invalid JSON written by the mutant
+  script, not the assertion failing; rewritten through Python's `json` module it failed cleanly on the intended
+  assertion. **Always confirm a mutant produced a valid tree before recording it as red or green.** (2026-09-04)
+- **`git merge` with no branch argument silently merges the upstream, not your branch.** `git checkout main && git
+  merge --no-ff -m "…"` reported "Already up to date" because the branch name was omitted; it tried `origin/main`.
+  Caught only by reading the log afterwards. Name the branch, and verify the merge commit exists. (2026-09-04)
+- **Codex's safety classifier can flag an attack-framed review packet, and Codex is this project's mitigation for
+  exactly that.** A packet dense with attack vocabulary (`run_shell`, prototype pollution, exploit, bypass,
+  adversary) was refused mid-review with "flagged for possible cybersecurity risk" and produced no findings.
+  Re-dispatched with accurate defensive framing — stating what the code is, why the harness exists, and asking the
+  same substantive questions, nothing obscured — it completed normally. Write review packets in defensive framing
+  from the start; per `PROJECT-SPEC.md` §11 the mitigation is accurate framing plus model choice, never
+  obfuscation. (2026-09-04)

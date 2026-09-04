@@ -42,7 +42,7 @@ deployment requirement noted below.
 | M4 — the fill service and its integration gates | **done** (`b8a9396`) — four commits + five fix slices, each three-channel reviewed with real-Chromium exploits; probe P is a paired Holm-corrected family gate; layer-4 blind spots declared in `SCHEMA.md`; residuals with proof in `docs/m4-review-findings.md` |
 | M5 — hostile fixtures #1–#2 (`lookalike-origin`, `dom-hidden-injection`), the capture-coverage gate, the finite decoder inventory, worker-body markers | **done** (`96e3ea3`) — three slices, each three-channel reviewed with real-Chromium probes and capped fix rounds; register `docs/m5-review-findings.md` |
 | M5.1 — test-gate repair (timing file split, generated run corpus, clean-clone acceptance) | **done** — accepted by a literal `git clone` + `npm ci` + `make browsers` + `make test`; register `docs/m5-review-findings.md` §C-Q |
-| M5.2 — Docker-composed fixtures behind one implementation, two transports | spec **locked** (revision 4); four review passes; implementation next |
+| M5.2 — Docker-composed fixtures behind one implementation, two transports | spec **locked** (revision 4); slice 1 of 6 **merged** (`ab52f8e`) — the transport seam and a runtime-enforced agent tool boundary; slice 2 (daemon-channel preflight) next |
 | M6–M7 — reference + naive agents | not started |
 | M8–M10 — MCP adapter, 1Password backend, demo | not started |
 

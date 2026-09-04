@@ -57,6 +57,9 @@ Active planning docs:
   Unix socket; the `docker exec -T` bridge, its provenance chain and framing; per-operation capabilities;
   fixture-control-only attestation; the daemon-channel preflight and fail-closed construction; the canonical parity
   gate; capture transfer without shared mounts; the frozen agent tool surface) and Acceptance A–P.
+- `m5-2-implementation-plan.md` — how the locked M5.2 contract is sequenced: six independently-green commits, the
+  Codex/integrator ownership split, and which Acceptance criteria each commit gates. Docker enters at commit 3 and
+  never on the `make test` path. **Slice 1 merged (`ab52f8e`); slice 2 next.**
 - `m5-2-review-findings.md` — the M5.2 register: C-R1 (seam recon), C-R2/C-R3/C-R5 (three adversarial paper rounds,
   which killed the original network shape, then the sidecar split and exec bridge, then found the Docker daemon was
   an unguarded alternate control transport), C-R4 and C-R6 (the user's threat-model lock and bounded cap

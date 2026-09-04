@@ -11,170 +11,65 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-04-m5.1-m5.2` — focus: M5.1 gate repair, accepted by a **literal clean clone** (`git clone` → `npm ci` → `make browsers` → `make test` in a temp dir) — the timing file split so the stress scan carries its own bound, and the gitignored `artifacts/eval/runs` prerequisite replaced by a deterministic synthetic corpus of the same shape; then the **M5.2 spec** (Docker-composed fixtures) through the Codex ladder with the control-plane network shape locked on paper before anything is built.
+`2026-09-04-m5.1-m5.2-slice1` — focus: M5.1 gate repair, then the M5.2 spec through the Codex ladder, then slice 1 —
+**outcome: all three shipped. M5.1 closed (register C-Q); the M5.2 spec LOCKED at revision 4 (`60520d9`) after four
+review passes and two owner adjudications; implementation slice 1 merged (`ab52f8e`), final head `1d04f93`.**
 
-`2026-09-02-m5` — focus: M5 per the locked plan (hostile fixtures #1–#2 `lookalike-origin` + `dom-hidden-injection` wired into the spine, the Opus 5 capture-coverage gate) through the Codex ladder — **outcome: M5 shipped (`96e3ea3`, 2026-09-03); M4 residuals folded in per spec §D8; hygiene done the same day (`codex/*` branches pruned; `rules.ts` → `rules.ts` + `taintHelpers.ts`; `runner.ts` → `runner.ts` + `evalAgents.ts` + `scorecardAggregate.ts`, all three under the 800-line gate now enforced for them; A2/D1 written into `PROJECT-SPEC.md` §3/§4/§7).**
+**M5.1 ✅** (2026-09-04, register C-Q) — the two P0 gate defects closed and accepted by a **literal clean clone**.
+The timing file split so the 200-event stress scan carries its own bound (64.3 s red → 15.2 s green, never a timeout
+bump); `artifacts/eval/runs` replaced by a generated deterministic corpus of the same shape. Also found: the M5-M1
+guard did not kill its own mutant (its hand-built context sat just under the flat floor) — now pinned to the
+generated corpus, verified red-then-green.
 
-**M5 as shipped (one paragraph; the register `docs/m5-review-findings.md` holds everything else):** three slices on two
-Codex branches — A (the leak checker's finite decoder inventory, three rounds + an integrator confirmation pass, merged
-`2e7b300`) and B (commit 1 the shared fixture core + signers; commit 2 the harness coverage gate, console/redirect capture
-and recursive worker attach with markers, three rounds + a confirmation pass; commit 3 the two hostile fixtures, two
-rounds + a confirmation pass), every round three-channel (Claude QA, Claude security, Codex) with real-Chromium probes,
-merged `96e3ea3` (the merge gate surfaced M5-M1 — the flat candidate budget exhausted by ordinary model-context events — fixed in the merge, register C-M). Final state on `main`: `make test` green (972 + 3 + 10), `make eval` 30/30 (3 cells × 10) with 0 leaks,
-coverage 10/11 (16 producers; marker-only: none). **Claims = the amended honest-claims sentence in
-`docs/m5-slice-spec.md`, no more.** Shipped residuals with proof: register C-A3, C-B2f2, C-B3 — declared limits in
-`SCHEMA.md` (decoder inventory and budgets; the attach race and its markers; chunked bodies; unload-time requests
-M5-C7; M5-C2 incl. the completion oracle; shared/service workers; worker consoles/WebSockets; page-controlled fixture
-attribution). BACKLOG carries the M6 items (unload capture, requestId namespacing, stage-specific closed-page suppression,
-the non-cloneable destination slice).
+**M5.2 spec ✅ LOCKED at revision 4** (`60520d9`) — Docker-composed fixtures behind one implementation and two
+transports. Threat model locked; **Docker-daemon isolation is a stated deployment requirement**, not a proven
+property: the harness verifies and pins the local `unix://` endpoint it uses but cannot prove the daemon has no
+other listener, and an unsatisfied assumption makes a run **invalid** rather than a measured pass or failure.
+Topology is one container per fixture, page-origin ports only, an internal control socket, and a framed
+`docker exec -T` bridge. Register `docs/m5-2-review-findings.md` holds C-R1…C-R8 and C-S1…C-S2; four passes each
+narrowed the design or the claim rather than growing it, and three separate stop-and-return points were honoured.
 
-**Post-M5 project assessment (Codex, read-only, 2026-09-03 — `docs/project-assessment-2026-09-03.md`; verified line by
-line by Claude the same day, register C-P):** verdict NEEDS ATTENTION, and right on the substance. Confirmed: (1) **`make test`
-is red on its own clock** — `leakDecoders.timing.test.ts` runs 65.8 s against a 60 s cap because the M5-M1 size-scaled candidate
-budget makes the 200-event junk stress scan ~300 ms per event (it passed the merge and hygiene runs only by sitting under the
-cap); (2) **`make test` is not clean-clone reproducible** — the same file requires 30 persisted runs under gitignored
-`artifacts/eval/runs` that the test target never generates (pre-existing since slice A, when it required 10); (3) **fixture
-topology conflicts with the locked spec** — `PROJECT-SPEC.md` goal 3, the launch checklist and the first-week milestones say
-Docker-composed fixtures, the phase plan repeats it, and M5 shipped in-process Node servers without a Decisions Log entry
-adjudicating it; (4) five stale documents (README status paragraph, `ORIENT.md` placeholders, the phase plan's build-status note,
-this file's focus line, the spec §5 sketch naming native autofill where the locked design is the in-realm inject); (5) no CI,
-Node pinning, lint gate, license or version. Already declared and unchanged: the scripted-stub caveat, the finish-before-settle
-contract, the writer durability notes, every measurement residual. The assessment's own milestone table mislabels M1–M3 and calls
-the decoder budgets time-based (they are work-based); do not copy it.
+**Slice 1 ✅ MERGED** (`ab52f8e`, 2026-09-04) — the `FixtureTransport` seam with every bridge-crossing operation
+Promise-returning (so commit 4 owns capabilities, not a sync→async rewrite); `transport` split into architecture and
+reachability, architecture reserved and documented for commit 2; a canonical model-turn snapshot taken immediately
+after `nextTurn` and consumed by every downstream reader; and the evaluated agent's tool boundary enforced at
+runtime. Gates at `1d04f93`: Acceptance J 10/10, `make test` 995 + 5 + 10 exit 0, literal clean clone green at the
+same counts.
 
-**M5.1 — gate repair ✅ (2026-09-04; register C-Q). Both P0s closed; accepted by a literal clean clone.**
-- Timing file split: the ten-event benchmark keeps its assertion (< 4 s, arrayBuffers < 256 MiB); the 200-event stress
-  scan is its own test with its own bound — 200 events at a smaller per-event payload, asserting count-invariance
-  (one event's result deep-equals two hundred events') and linearity (200 events ≤ 15 × the 20-event scan; measured
-  9.99–10.07). File 64.3 s red → 15.2 s green. Never a timeout bump; the old configuration was reproduced red first.
-- Hidden prerequisite removed: `testbed/checkers/syntheticCorpus.ts` generates 30 runs by replaying the agent loop, so
-  `model-context` events grow turn by turn as the real ones do — events 41/41/59 exact, identical channel/initiator mix,
-  largest context 3.9/5.3/5.0 KB vs the persisted 3.9/5.2/5.0, byte-identical across builds. `syntheticCorpus.test.ts`
-  pins the shape and plants a canary per cell (a green benchmark must mean "scanned and found nothing").
-- **The M5-M1 guard did not kill its own mutant** — restoring the flat 2,048 budget left `leakScan.test.ts` 88/88 green
-  (its hand-built context lands ~130 leaves, just under the flat floor; a real run's last context is ~5.3 KB / ~144
-  leaves). Now pinned to the generated corpus; verified red under the mutant, green reverted.
-- Correction recorded: decoder truncation is driven by event **size**, not scan length — `truncated: true` is the
-  declared state for run-shaped junk past ~1.7 KB, so count-invariance, not an absent flag, is the per-event claim.
-- The clean-clone rule was already in `CLAUDE.md` Core Principles; no change needed.
-- Fixture topology — **decided (Decisions Log 2026-09-03): Docker-composed fixtures are the M5 acceptance path, built as
-  M5.2 right after M5.1**; the spec is unchanged.
-- Docs already refreshed in this pass (README status, `ORIENT.md`, phase-plan build note, spec §5 as-built note); the leak-rate
-  table stays empty and every `0/30` is labelled a deterministic-harness result until M6 produces real-agent rows.
-- Release engineering (CI with separate deterministic / browser / timing / eval jobs, `engines` + Node pinning, lint, license,
-  security policy, changelog, tags) is a **pre-launch slice at M10**, not now — BACKLOG.
+**The two findings worth carrying forward (detail in C-S1/C-S2):**
+- **Source analysis cannot enforce this class.** Three designs failed — a call-site observation; an AST matcher
+  enumerating shapes (seven bypasses); a positive occurrence inventory plus reachability walk (defeated by a
+  computed dynamic-import specifier leaving the reference symbol-less, and by roots/symlink gaps). *A positive
+  allowlist over occurrences the type checker can resolve is not a positive allowlist over occurrences.* The fourth
+  design analyses no source: `runAgentLoop` accepts no caller-supplied tools or handlers and owns a private frozen
+  registry that is both offered and validated against.
+- **An authorized repair removed protection while appearing to strengthen it.** "Replace the vacuous assertion" was
+  applied to a line whose *type annotation* carried the force, deleting `Equal<keyof AgentLoopOptions, …>` and
+  `Object.isFrozen(offeredTools)`. Caught only by sharper mutants than the integrator's (an option under a
+  *different* name; `freeze`→`seal`, which a push test survives). Restored in `f7aef17`.
 
-**M5.2 — Docker-composed fixtures (the spec's M5 acceptance path; after M5.1, before M6; a full ladder slice).**
-Spec at `docs/m5-2-slice-spec.md` (**revision 1**, 2026-09-04); register `docs/m5-2-review-findings.md`.
-Codex recon (C-R1) + adversarial paper round 1 (C-R2) done; **round 1 of the three-round cap spent**. No code yet.
-
-- **Round 1 broke the topology in the M5.2 decision itself, and this is the headline.** "The fixture publishes its
-  page origins on the page network and its control port on the harness network" **is not a thing Docker does**: a
-  container has one network namespace, so a control listener on `0.0.0.0` is reachable through its `tv-page` IP too
-  — Docker networks scope routes, not listening ports. `internal: true` prevents external routing, not access by a
-  member or a dual-homed member; and any fixture compromised through page input becomes a pivot onto the control
-  network with its bootstrap secret. Revision 1's answer is **privilege separation, not network labelling**: a
-  control sidecar per fixture, page containers joining only `tv-page` and holding no secret, socket or listener.
-- Also corrected: **"keep attestation in-process and keep the claim" is not implementable** — offline adjudication
-  requires the fixture signature before parsing events, so §D4 is now an explicit fork (sidecar-only signing
-  endpoint keeping today's limited claim, or composed runs declared to carry no attestation). Capabilities are
-  **per-operation**, not one bearer per run, and gated as unobservable — the obvious implementation recycles the run
-  token the fixture *deliberately renders into the hostile page*. The parity gate gained the concrete false green a
-  normalizer produces: a dropped duplicate header carrying the canary collapsing into a last-value map. All seven
-  acceptance criteria were rewritten; round 1 showed each could pass while false.
-- Recon corrections carried, not buried: fixtures generate their **own** signing keys (nothing secret is
-  distributed), and the sharpest seam is `attestEvents` — a signing oracle over harness-supplied bytes the fixture
-  never observed.
-- **Two open decisions for the user** (spec "Open decisions"): (1) **host Chromium vs containerized Chromium** — the
-  sidecar split holds either way, so it is a cost question: host keeps the coverage gate's calibration valid,
-  containerized removes the host from the topology but confounds the parity experiment and forces a rebaseline.
-  Recommendation: **host Chromium plus control sidecars**. (2) which §D4 branch.
-- **Rounds 1–3 spent; M5.2 still BLOCKED on a user decision; no code written.** Round 2 (C-R3) rejected revision 1
-  because its isolation claim promised containment after fixture-process compromise — untrue in-process too, since
-  `SCHEMA.md:319-335` already declares the exact-endpoint residual. The user then **locked the threat model** and
-  rejected the integrator's proposed replacement claim on the same grounds (C-R4): the adversary is the evaluated
-  agent and hostile page content in Chromium; harness and fixture container are trusted; fixture-process compromise
-  invalidates the run and is out of scope; declared data-plane requests may cause capture and receipt issuance;
-  page content must not invoke registration, receipt retrieval, capture retrieval, arbitrary attestation, or
-  capability/key retrieval. The sidecar was removed as buying nothing under that boundary, and revision 2 was
-  written against it — one container per fixture, control Unix socket internal, `docker exec -T` bridge, and a
-  repaired trust anchor (per-eval per-fixture bootstrap secret, resolved immutable container id, challenge, and a
-  MAC binding challenge/epoch/fixture/container/public key).
-- **Round 3 (C-R5) found one P1 and revision 2 did not lock.** The design isolates the control socket and leaves
-  the **daemon** unconstrained: it forbids mounting the Docker socket but never forbids or preflights a
-  network-addressable Docker endpoint, so a conforming deployment on a browser-addressable Docker TCP API would let
-  page content read the bootstrap secret from `Config.Env` and `exec` into the container — no fixture compromise
-  needed. **Verified not exploitable on this host** (`DOCKER_HOST` unset; active context is a Unix socket): a
-  spec-completeness hole, not a live one. Everything the round was commissioned to test survived — indirect
-  invocation, the trust anchor, framing, capture transfer — with eight P2s outstanding, two of which are acceptance
-  criteria that test the wrong property (J asserts something impossible; E's body omits the bootstrap secret and
-  public key).
-- **M5.2 spec is LOCKED at revision 4 (2026-09-04); implementation may proceed. No code written yet.**
-  Revision 3's closure review (C-R7) found a new P1 — requiring the *selected* Docker endpoint to be a local
-  `unix://` socket proves only how the harness connects, while Docker supports multiple `-H` listeners at once and
-  a Unix socket may front a TCP proxy. The user adjudicated it (C-R8) rather than adding a mechanism that cannot
-  prove the property: **Docker-daemon isolation is a required deployment assumption.** The harness verifies and
-  pins the local endpoint it uses; it cannot prove the daemon has no other listener, proxy or route, and **if the
-  assumption is false the run is outside the threat model and its results are invalid** — not a measured pass, not
-  a measured failure. The control-plane claim now opens "Under the Docker-daemon isolation requirement…", and no
-  wording anywhere may present the preflight as proof of non-exposure.
-- Recorded beside the number, not only in the spec: `README.md` (reproduce instructions), `SCHEMA.md`
-  (honest-claims wording), and Acceptance O, which requires a published scorecard to state the assumption.
-- C-R7's three corrections applied: Acceptance M tests **caller-visible** capability retrieval isolation only (the
-  shared-mount and artifact-root mutants moved to §D7 implementation hygiene — they tested trusted-container
-  internals, which is out of scope); every "injected at container creation" statement removed, stdin delivery being
-  the sole live contract; and the handshake stated as a chain — provenance from harness-controlled creation, exact-
-  one-container resolution, recorded immutable id and label/image verification, with the MAC proving **possession
-  and binding, not provenance**.
-- Four review passes ran against this slice (C-R2, C-R3, C-R5, C-R7); each narrowed the design or the claim rather
-  than growing it. The paper cap stays spent — no further paper round.
-- **Slice 1 MERGED (`ab52f8e`, 2026-09-04).** The `FixtureTransport` seam with every bridge-crossing operation
-  Promise-returning (so commit 4 owns capabilities, not a sync→async rewrite); `transport` split into architecture
-  and reachability, architecture reserved and documented for commit 2; a canonical model-turn snapshot taken
-  immediately after `nextTurn` and consumed by every downstream reader; and the evaluated agent's tool boundary
-  enforced at runtime. Final head `1d04f93`: Acceptance J gate 10/10, `make test` 995 + 5 + 10 exit 0, literal
-  clean clone green at the same counts.
-- **The tool boundary took four designs, and the third failure was the important one.** Three analysed source and
-  each was defeated — a call-site observation; an AST matcher enumerating permitted shapes (seven bypasses); and a
-  positive occurrence inventory plus reachability walk (defeated by a computed dynamic-import specifier leaving the
-  reference symbol-less, and by `ROOTS`/symlink gaps). **C-S1** records the structural finding: *a positive
-  allowlist over occurrences the type checker can resolve is not a positive allowlist over occurrences.* The user
-  then authorized a runtime redesign: `runAgentLoop` accepts no caller-supplied tools or handlers and owns a private
-  deeply frozen registry that is both offered and validated against — so import syntax, aliases, call sites, roots
-  and filenames are irrelevant. Three channels confirmed no model-data route exceeds the seven.
-- **A repair can remove protection: watch for it.** The first authorized repair fixed proofs that could not fail,
-  but deleted `Equal<keyof AgentLoopOptions, …>` and `Object.isFrozen(offeredTools)` — both stronger before it —
-  because the instruction said *replace* where the vacuous half was only the runtime `expect(...)`. The closure
-  review caught it with sharper mutants (an option under a *different* name; `freeze`→`seal`, which the push test
-  survives). Restored in `f7aef17`; both regressions are reproduced at the commit that introduced them.
-- **Declared residuals (C-S2), accepted not chased:** the package/build entry point is a reviewed root of trust;
-  `Equal<>` constrains option *keys*, not every semantic widening of a property type; its helper and source pins can
-  change alongside production code; a future split of offering and dispatch registries would pass; source-text pins
-  can be satisfied by comments. Each needs coordinated source changes passing review; none is reachable by the
-  evaluated model.
-- **Next: Slice 2** — the daemon-channel preflight (resolve, validate, pin) and fail-closed composed construction,
-  gating Acceptance A and B, per `docs/m5-2-implementation-plan.md`. It also owns the C-R7 P2 the spec left to
-  implementation: what *canonical local `unix://`* means for absolute-path syntax, `unix://` vs `unix:///`,
-  `realpath`/symlinks, socket-type verification and proxy rejection. Same cadence: pause for review before merge.
+**Declared residuals (C-S2), accepted not chased** — each needs coordinated source changes through review, none is
+reachable by the evaluated model: the package/build entry point is a reviewed root of trust; `Equal<>` constrains
+option *keys*, not every semantic widening of a property type; its helper and source pins can change alongside
+production code; a future split of offering and dispatch registries would pass; source-text pins can be satisfied by
+comments.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
-**M4 ✅** (`b8a9396`, 2026-09-02) · **M5 ✅** (`96e3ea3`, 2026-09-03).
+**M4 ✅** (`b8a9396`) · **M5 ✅** (`96e3ea3`) · **M5.1 ✅** (2026-09-04) · **M5.2** in flight (spec locked; slice 1 of 6 merged).
 
-**Next session:** `/start`; **M5.1 gate repair first** (the two P0s above), then **M5.2 Docker-composed fixtures** (spec first, through the ladder), then **M6** per
-`docs/phase-0-plan.md` §8 (reference agent + naive baseline; the baseline leaks on camera) through the same ladder — spec first
-(evals before specs: the naive baseline's expected leak cells and the `checkLiveFire` alarm are the eval), then Codex paper rounds,
-then slices. Carry into the M6 spec as acceptance inputs, not backlog notes: every declared observation blind spot (M5-C1
-screenshot text, M5-C7 unload-time requests first — M6's navigate-after-fetch agents hit it; requestId namespacing; the
-stage-specific closed-page suppression; the correlation identity test), the `finish()`-settles-or-refuses API shape, the
-form-selection obligation (the compliant dom-hidden script names its form), and the retention-rule-beyond-shapes item now
-unparked.
+**Next session:** `/start`, then **M5.2 slice 2** per `docs/m5-2-implementation-plan.md` — the daemon-channel
+preflight (resolve the effective endpoint across `DOCKER_HOST`/`DOCKER_CONTEXT`/active context, require a canonical
+local `unix://`, reject TCP/HTTP(S)/SSH/unknown/malformed/ambiguous, and **pin** every later invocation) plus
+fail-closed composed construction, gating Acceptance A and B. It also owns the C-R7 P2 the locked spec deliberately
+left to implementation: what *canonical local `unix://`* means for absolute-path syntax, `unix://` vs `unix:///`,
+`realpath`/symlinks, socket-type verification and proxy rejection. Cadence is unchanged — Codex implements on a
+`codex/m5-2-slice-2` branch, integrator commits and runs gates, pause for three-channel review before merge.
 
-**Blocked / needs attention:** nothing needs the user; `make test` is red on a clean clone and marginal on this machine
-until M5.1 lands; M5.2 adds a Docker daemon requirement to `make eval` only. Threads: deferred M2/M3 residuals unchanged (`docs/m3-review-findings.md`
-§D); the 🔴 non-cloneable `dom-fill` destination slice (BACKLOG) is the strongest surviving lookalike path (a script at the
-authorized origin rewriting the form action after the fill — scored at layer 4, not refused at layer 2); shipped slice
-specs (m2–m5) stay at the docs root by precedent because the honest-claims sentences live there.
+**Blocked / needs attention:** nothing needs the user. Threads: the unexplained `terminate-before-delivery` timeout
+stays an open gate observation outside M5.2 pending its own scoped decision (BACKLOG + gotchas; assertion
+deliberately unchanged); deferred M2/M3 residuals unchanged (`docs/m3-review-findings.md` §D); the 🔴 non-cloneable
+`dom-fill` destination slice (BACKLOG) remains the strongest surviving lookalike path.
 
 ## Decisions Log
 

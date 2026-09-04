@@ -102,3 +102,47 @@ data/control-plane boundary and **fails closed on anything it cannot follow**. `
 
 
 
+
+---
+
+## M5 shipped, the post-M5 assessment, M5.1, and the M5.2 spec rounds (archived 2026-09-04)
+
+Collapsed from `PLAN.md` Current State once M5.1 shipped, the assessment's items were dispositioned, and the M5.2
+spec locked. The authoritative detail lives in the registers; this is the index.
+
+**M5 ✅ (`96e3ea3`, 2026-09-03)** — three slices on two Codex branches: A, the leak checker's finite decoder
+inventory (three rounds + integrator confirmation, merged `2e7b300`); B, the shared fixture core and signers, then
+the harness coverage gate with console/redirect capture and recursive worker attach, then the two hostile fixtures.
+Every round three-channel with real-Chromium probes. The merge gate surfaced M5-M1 — the flat candidate budget
+exhausted by ordinary model-context events — fixed in the merge. Final state: `make test` 972 + 3 + 10, `make eval`
+30/30 with 0 leaks, coverage 10/11. Shipped residuals with proof: register C-A3, C-B2f2, C-B3; declared limits in
+`SCHEMA.md`. Full detail: `docs/m5-review-findings.md`, claims in `docs/m5-slice-spec.md`.
+
+**Post-M5 assessment (Codex, read-only, 2026-09-03)** — `docs/project-assessment-2026-09-03.md`, verified line by
+line (register C-P). Verdict NEEDS ATTENTION and right on substance: two P0 gate defects (the timing file at its own
+cap; a gitignored artifact prerequisite), the fixture-topology conflict with the locked spec, five stale documents,
+and absent release engineering. All dispositioned: the P0s became M5.1; the topology became M5.2; the docs were
+refreshed; release engineering is an M10 pre-launch slice in BACKLOG. Its own milestone table mislabels M1–M3 and
+calls the decoder budgets time-based (they are work-based) — do not copy it.
+
+**M5.1 ✅ (2026-09-04, register C-Q)** — timing file split (64.3 s red → 15.2 s green; the stress scan given its own
+bound and count-invariance assertion, never a timeout bump); `artifacts/eval/runs` replaced by
+`testbed/checkers/syntheticCorpus.ts`, which replays the agent loop so `model-context` events grow as the real ones
+do (events 41/41/59 exact, identical channel mix, byte-identical across builds). Third finding: the M5-M1 regression
+guard did not kill its own mutant — restoring the flat 2,048 budget left `leakScan.test.ts` 88/88 green, because its
+hand-built context landed ~130 leaves just under the flat floor while a real run's last context is ~5.3 KB across
+~144. Now pinned to the generated corpus. Correction recorded: decoder truncation is driven by event **size**, not
+scan length, so count-invariance rather than an absent `truncated` flag is the per-event-budget claim.
+
+**M5.2 spec, four review passes to lock (registers C-R1…C-R8)** — each pass narrowed the design or the claim:
+- **C-R2 (round 1)** killed the network shape the decision itself was written from: a dual-homed container has one
+  network namespace, so "publish page origins on one network and the control port on another" is not a thing Docker
+  does. Also: "keep attestation in-process" was not implementable, since offline adjudication needs the fixture
+  signature before parsing events.
+- **C-R3 (round 2)** rejected the sidecar split and the exec bridge. The isolation claim promised containment after
+  fixture-process compromise, which the design cannot establish and which `SCHEMA.md:319-335` already contradicted.
+- **C-R4** — the user locked the threat model and removed the sidecar as buying nothing under it.
+- **C-R5 (round 3)** found the Docker daemon endpoint was an unguarded alternate control transport.
+- **C-R7 (closure)** found the daemon repair validated the *client's* connection, not the daemon's exposure.
+- **C-R8** — the user adjudicated daemon isolation into a stated deployment requirement rather than a proven
+  property, and revision 4 locked (`60520d9`).

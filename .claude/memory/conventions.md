@@ -135,3 +135,23 @@ Example:
   silently required 30 gitignored eval runs since slice A. A read-only cross-model project assessment after each milestone
   close (`/review`-class, doc in `docs/`, verified findings in the register) is now part of the milestone close — it caught
   what per-slice rounds cannot (gate variance, contract drift against the locked spec). (2026-09-03)
+
+## Repair and mutant discipline (from the M5.2 slice 1 review cycle, 2026-09-04)
+
+- **Say "add alongside", not "replace", when a repair touches a load-bearing assertion.** An authorized repair
+  deleted `Equal<keyof AgentLoopOptions, …>` and `Object.isFrozen(offeredTools)` because the instruction said
+  *replace the vacuous assertion* — but the vacuous half was only the runtime `expect(...)`; the type annotation
+  carried the force. Net coverage went **down** under a commit message claiming the opposite. When an assertion has
+  a compile-time and a runtime half, name which half is vacuous.
+- **Pick mutants from outside the test's own fixtures.** An "eighth tool name" mutant went red only because the
+  chosen name happened to be in `CANDIDATE_TOOL_NAMES`; a name outside the list passed everything. A mutant drawn
+  from the data the test already enumerates proves less than it appears to.
+- **Reviewer verdicts diverge when mutant sets are not supersets.** Two competent channels split MERGEABLE vs NOT
+  MERGEABLE on the same commit purely because one tested the two *named* options and a push-throws test while the
+  other tested a *differently-named* option and `freeze`→`seal`. Neither was wrong about what it ran. When channels
+  disagree, compare their mutants before their conclusions.
+- **A gate must detect its own removal, and "detect" means execution, not text.** A source-text pin was satisfied by
+  `describe.skip` (assertions present, never run) and by commenting a line out. The replacement runs the tests with
+  a machine-readable reporter and requires the exact named set to have executed and passed with zero
+  skipped/todo/absent — and the command's presence *and* fail-closed `&&` composition are pinned in `package.json`,
+  since presence and position alone leave `|| true`, `;`, `echo` and `node -e` as green no-ops.

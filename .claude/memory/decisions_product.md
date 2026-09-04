@@ -55,3 +55,25 @@ See `PROJECT-SPEC.md` §4 (the mechanism/invariants) and §11 (model/safeguards)
   `make eval` is Docker-backed with no silent fallback; parity between transports is canonical, not byte-for-byte; the
   control plane is unreachable from the hostile page by network topology, with authenticated run-scoped registration.
   (Decisions Log 2026-09-03; M5.2)
+- **Docker-daemon isolation is a stated DEPLOYMENT REQUIREMENT, not a proven property.** A valid TinyVault
+  evaluation requires that the Docker Engine API not be reachable by the evaluated browser, page content, or agent.
+  The harness resolves, validates and pins the local `unix://` endpoint *it* uses, but cannot prove the same daemon
+  has no additional TCP listener, proxy, or externally configured route — Docker supports multiple `-H` listeners
+  and the listener set is not reliably queryable. **If the assumption is false the run is outside the threat model
+  and its results are INVALID — not a measured pass, not a measured failure.** Chosen over adding a mechanism that
+  would assert an uncheckable property. Published scorecards state it; recorded beside the number in `README.md`
+  and `SCHEMA.md`, not only in the spec. (user, 2026-09-04; M5.2 revision 4, register C-R8)
+- **The evaluated agent's tool boundary is enforced by runtime non-acceptance, never by source analysis.**
+  `runAgentLoop` accepts no caller-supplied `tools` or `handlers`; it owns a private deeply frozen registry of the
+  seven approved operations, and the *same object* is what is offered to the model and what dispatch validates
+  against — so the offered set equals the validated set by construction. Three source-analysis designs failed first
+  (register C-S1); the structural reason is that **a positive allowlist over occurrences the type checker can
+  resolve is not a positive allowlist over occurrences**. Because there is no `tools` parameter, import syntax,
+  aliases, call sites, roots and filenames are all irrelevant. (user, 2026-09-04; M5.2 slice 1)
+- **M5.2 threat boundary (locked):** the adversary is the evaluated model/agent and hostile page content in
+  Chromium; the harness and fixture container are trusted infrastructure; **compromise of a fixture process
+  invalidates the run and is out of scope**; a declared data-plane request MAY legitimately cause capture and
+  completion-receipt issuance (including the declared M5-C2 residual); and page content must not be able to invoke
+  registration, receipt retrieval, capture retrieval, arbitrary event attestation, or capability/key retrieval.
+  Accessor/prototype tests are robustness probes, not evidence that in-process compromise is contained.
+  (user, 2026-09-04; register C-R4)
