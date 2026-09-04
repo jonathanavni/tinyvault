@@ -6,19 +6,13 @@ import { scriptWasTruncated } from '../src/agents/loop';
 
 import { classify } from './checkers/classify';
 import type { OfflineEvidenceManifest } from './checkers/offline';
-import { browserToolDefinitions, offlineArtifactPaths, printScorecard, runEval } from './runner';
+import { offlineArtifactPaths, printScorecard, runEval } from './runner';
 import {
   createScenarioRegistry,
   placeholderFixtureOrigins,
   scenarioFromRegistry,
 } from './scenarios';
 import type { CapturedEvent } from './scorecard.schema';
-
-describe('eval browser tool exposure', () => {
-  it('offers browser_snapshot to the evaluated agent', () => {
-    expect(browserToolDefinitions().map(({ name }) => name)).toContain('browser_snapshot');
-  });
-});
 
 describe.skipIf(process.env.TINYVAULT_EVAL !== '1')('offline eval entry', () => {
   it('kills the fake fill and missing post-loop drain with the real meta-gated browser scorecard', async () => {

@@ -2,7 +2,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   DUPLICATE_TOOL_CALL_ID_MESSAGE,
@@ -232,5 +232,49 @@ describe('agent loop and transcript', () => {
       transcript,
       maxTurns: 2,
     })).rejects.toThrow(DUPLICATE_TOOL_CALL_ID_MESSAGE);
+  });
+
+  it.each([
+    [{ safe_tool: () => ({ result: 'safe' }), extra_handler: () => ({ result: 'extra' }) },
+      'missing handlers []; unexpected handlers [extra_handler]'],
+    [{}, 'missing handlers [safe_tool]; unexpected handlers []'],
+  ])('requires the offered tools and own handler keys to be the same exact set', async (
+    handlers,
+    difference,
+  ) => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-tool-set-'));
+    const transcript = await TranscriptWriter.create(
+      join(directory, 'transcript.jsonl'), join(directory, 'events.json'),
+    );
+    await expect(runAgentLoop({
+      client: new StubClient([{}]),
+      messages: [],
+      tools: [{ name: 'safe_tool', description: 'test', inputSchema: {} }],
+      handlers,
+      transcript,
+    })).rejects.toThrow(`Agent tool/handler set mismatch: ${difference}`);
+  });
+
+  it.each([
+    'toString',
+    'constructor',
+    '__proto__',
+    'valueOf',
+    'hasOwnProperty',
+    'undeclared_tool',
+  ])('rejects undeclared model tool %s without invoking an inherited handler', async (name) => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-unknown-tool-'));
+    const transcript = await TranscriptWriter.create(
+      join(directory, 'transcript.jsonl'), join(directory, 'events.json'),
+    );
+    const safeHandler = vi.fn(() => ({ result: 'safe' }));
+    await expect(runAgentLoop({
+      client: new StubClient([{ toolCalls: [{ id: 'unknown-1', name, input: {} }] }]),
+      messages: [],
+      tools: [{ name: 'safe_tool', description: 'test', inputSchema: {} }],
+      handlers: { safe_tool: safeHandler },
+      transcript,
+    })).rejects.toHaveProperty('message', `No handler registered for tool: ${name}`);
+    expect(safeHandler).not.toHaveBeenCalled();
   });
 });

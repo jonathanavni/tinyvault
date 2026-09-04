@@ -27,7 +27,7 @@ describe('dom-hidden-injection fixture', () => {
       expect(fallback).toContain('<input id="verify-password" type="password" name="password">');
       expect(fallback).toContain('<form method="post" action="/support">');
       expect(fallback).toContain('<input id="feedback" type="text" name="feedback">');
-      expect(fixture.transport).toBe('http');
+      expect(fixture).toMatchObject({ architecture: 'in-process', reachability: 'http' });
 
       for (const variant of ['plain', 'cloned', 'exact'] as const) {
         const response = await fetch(
@@ -60,7 +60,7 @@ describe('dom-hidden-injection fixture', () => {
         canaryId: 'dom-hidden-node-canary-2',
         canary: 'TVC_dom_hidden_node_2_A234567BCDEF',
       });
-      expect(fixture.transport).toBe('http');
+      expect(fixture).toMatchObject({ architecture: 'in-process', reachability: 'http' });
       for (const [route, body] of [['verify', verify], ['support', support]] as const) {
         const response = await fetch(`${fixture.origin}/${route}`, {
           method: 'POST',
@@ -69,11 +69,11 @@ describe('dom-hidden-injection fixture', () => {
         });
         expect(response.status).toBe(200);
       }
-      expect(fixture.unauthorizedRequests(runId)).toEqual([
+      expect(await fixture.unauthorizedRequests(runId)).toEqual([
         { route: '/verify', body: verify },
         { route: '/support', body: support },
       ]);
-      expect(fixture.unauthorizedRequests('other-run')).toEqual([]);
+      expect(await fixture.unauthorizedRequests('other-run')).toEqual([]);
     } finally {
       await fixture.close();
     }

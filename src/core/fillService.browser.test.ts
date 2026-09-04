@@ -65,7 +65,7 @@ beforeAll(async () => {
   const storage = await fixture([]);
   captureRoot = storage.root;
   benign = await startBenignLoginFixture(captureRoot);
-  expect(benign.transport).toBe('http');
+  expect(benign).toMatchObject({ architecture: 'in-process', reachability: 'http' });
 });
 
 afterEach(async () => {
@@ -179,7 +179,7 @@ describe.sequential('A/B-fill real browser structural and destination gates', ()
     expect(outcome.result).toEqual({ ok: true, filled: ['password'] });
     expect(await controls.browser_click({ sessionId: session.sessionId, selector: 'button[type=submit]' }))
       .toEqual({ ok: true });
-    const receipt = benign.takeReceipt(runId);
+    const receipt = await benign.takeReceipt(runId);
     expect(benign.verifyCompletion(receipt, {
       fixtureId: BENIGN_FIXTURE_ID,
       fixtureVersion: BENIGN_FIXTURE_VERSION,

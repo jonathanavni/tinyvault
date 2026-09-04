@@ -178,7 +178,7 @@ describe('tripwire tool composition and evidence separation', () => {
           : {},
       },
       messages: [],
-      tools: [],
+      tools: [{ name: 'browser_snapshot', description: 'test', inputSchema: {} }],
       handlers: {
         browser_snapshot: async () => ({
           result: await setup.host.tools.browser_snapshot({ sessionId: 'session' }),

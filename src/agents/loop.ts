@@ -73,6 +73,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   let completion: LoopCompletion | undefined;
   let failure: unknown;
   try {
+    assertToolHandlerSet(options.tools, options.handlers);
     completion = await executeLoop(options);
   } catch (error) {
     failure = error;
@@ -232,9 +233,28 @@ async function dispatchTool(
   call: ToolCall,
   handlers: Record<string, ToolHandler>,
 ): Promise<ToolExecution> {
+  if (!Object.hasOwn(handlers, call.name)) {
+    throw new Error(`No handler registered for tool: ${call.name}`);
+  }
   const handler = handlers[call.name];
-  if (!handler) throw new Error(`No handler registered for tool: ${call.name}`);
+  if (typeof handler !== 'function') throw new Error(`No handler registered for tool: ${call.name}`);
   return handler(call.input, call);
+}
+
+function assertToolHandlerSet(
+  tools: readonly ToolDefinition[],
+  handlers: Record<string, ToolHandler>,
+): void {
+  const toolNames = new Set(tools.map(({ name }) => name));
+  const handlerNames = new Set(Object.getOwnPropertyNames(handlers));
+  const missingHandlers = [...toolNames].filter((name) => !handlerNames.has(name)).sort();
+  const unexpectedHandlers = [...handlerNames].filter((name) => !toolNames.has(name)).sort();
+  if (missingHandlers.length === 0 && unexpectedHandlers.length === 0) return;
+  throw new Error(
+    'Agent tool/handler set mismatch: '
+      + `missing handlers [${missingHandlers.join(', ')}]; `
+      + `unexpected handlers [${unexpectedHandlers.join(', ')}]`,
+  );
 }
 
 function eventLocation(input: unknown): Pick<CapturedEvent, 'origin' | 'route' | 'method'> {

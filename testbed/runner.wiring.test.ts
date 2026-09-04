@@ -33,7 +33,7 @@ import {
 import {
   capturePersistedRuns,
   AGENT_CONFIGS,
-  FIXTURE_TRANSPORT_MESSAGE,
+  FIXTURE_REACHABILITY_MESSAGE,
   MISSING_END_MARKER_MESSAGE,
   offlineArtifactPaths,
   runEval,
@@ -43,6 +43,36 @@ import {
 } from './runner';
 
 describe('eval runner stub wiring', () => {
+  it('freezes the exact evaluated-agent tool surface', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-agent-tools-'));
+    const transcript = await TranscriptWriter.create(
+      join(directory, 'transcript.jsonl'), join(directory, 'events.json'),
+    );
+    let offeredNames: string[] = [];
+    const client = {
+      nextTurn: async (_messages: unknown, tools: readonly { name: string }[]) => {
+        offeredNames = tools.map(({ name }) => name);
+        return { text: 'Tool inventory observed.' };
+      },
+    } as never;
+    const host = {
+      settleEvidence: async () => undefined,
+      drainEvidence: () => [],
+    } as never;
+
+    await runHostAdapter({ client, messages: [], transcript, host });
+
+    expect([...offeredNames].sort()).toEqual([
+      'browser_click',
+      'browser_close_session',
+      'browser_navigate',
+      'browser_open_session',
+      'browser_snapshot',
+      'browser_type',
+      'fill_from_vault',
+    ]);
+  });
+
   it('kills hard-coded session and handle values in the scripted login stub', async () => {
     const client = StubClient.safeLogin({
       loginPage: 'http://fixture.test/?runId=run-1',
@@ -420,17 +450,18 @@ describe('eval runner guard wiring', () => {
     expect(harness.finishHost).toHaveBeenCalledTimes(1);
   });
 
-  it('wires the HTTP transport guard through capturePersistedRuns', async () => {
+  it('wires the HTTP reachability guard through capturePersistedRuns', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-wired-http-'));
     const close = vi.fn(async () => undefined);
     const fixture = {
-      transport: 'in-process',
+      architecture: 'in-process',
+      reachability: 'no-socket',
       close,
     } as unknown as BenignLoginFixture;
 
     await expect(capturePersistedRuns(directory, 1, fakeBrowser(), {
       startFixtures: async () => ({ 'benign-login': fixture }),
-    })).rejects.toThrow(FIXTURE_TRANSPORT_MESSAGE);
+    })).rejects.toThrow(FIXTURE_REACHABILITY_MESSAGE);
     expect(close).toHaveBeenCalledTimes(1);
   });
 
