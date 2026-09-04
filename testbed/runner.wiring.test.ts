@@ -43,36 +43,6 @@ import {
 } from './runner';
 
 describe('eval runner stub wiring', () => {
-  it('freezes the exact evaluated-agent tool surface', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-agent-tools-'));
-    const transcript = await TranscriptWriter.create(
-      join(directory, 'transcript.jsonl'), join(directory, 'events.json'),
-    );
-    let offeredNames: string[] = [];
-    const client = {
-      nextTurn: async (_messages: unknown, tools: readonly { name: string }[]) => {
-        offeredNames = tools.map(({ name }) => name);
-        return { text: 'Tool inventory observed.' };
-      },
-    } as never;
-    const host = {
-      settleEvidence: async () => undefined,
-      drainEvidence: () => [],
-    } as never;
-
-    await runHostAdapter({ client, messages: [], transcript, host });
-
-    expect([...offeredNames].sort()).toEqual([
-      'browser_click',
-      'browser_close_session',
-      'browser_navigate',
-      'browser_open_session',
-      'browser_snapshot',
-      'browser_type',
-      'fill_from_vault',
-    ]);
-  });
-
   it('kills hard-coded session and handle values in the scripted login stub', async () => {
     const client = StubClient.safeLogin({
       loginPage: 'http://fixture.test/?runId=run-1',
@@ -228,7 +198,7 @@ describe('M5 harness gate ordering', () => {
     expect(harness.closeBrowser).toHaveBeenCalledOnce();
   });
 
-  it('uses createHostHandlers stamping and the afterLoop drain in the shared adapter', async () => {
+  it('uses host-executor stamping and the afterLoop drain in the shared adapter', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-gate-adapter-'));
     const transcript = await TranscriptWriter.create(
       join(directory, 'transcript.jsonl'), join(directory, 'events.json'),
@@ -360,11 +330,10 @@ describe('eval runner initiator wiring', () => {
     );
     const result = await runAgentLoop({
       client: new StubClient([{
-        toolCalls: [{ id: 'safe-1', name: 'safe_tool', input: { value: 'public' } }],
+        toolCalls: [{ id: 'safe-1', name: 'browser_snapshot', input: { value: 'public' } }],
       }]),
       messages: [],
-      tools: [{ name: 'safe_tool', description: 'test', inputSchema: {} }],
-      handlers: { safe_tool: () => ({ result: { ok: true } }) },
+      executeTool: () => ({ result: { ok: true } }),
       transcript,
       maxTurns: 1,
     });
@@ -372,8 +341,8 @@ describe('eval runner initiator wiring', () => {
     expect(result.events.filter((event) =>
       event.channel === 'tool-arg' || event.channel === 'tool-result'))
       .toEqual([
-        expect.objectContaining({ channel: 'tool-arg', initiator: 'tool:safe_tool' }),
-        expect.objectContaining({ channel: 'tool-result', initiator: 'tool:safe_tool' }),
+        expect.objectContaining({ channel: 'tool-arg', initiator: 'tool:browser_snapshot' }),
+        expect.objectContaining({ channel: 'tool-result', initiator: 'tool:browser_snapshot' }),
       ]);
   });
 });
@@ -394,16 +363,15 @@ describe('eval runner source and browser wiring', () => {
 
     await expect(runAgentLoop({
       client: new StubClient([{
-        toolCalls: [{ id: 'source-1', name: 'source_tool', input: {} }],
+        toolCalls: [{ id: 'source-1', name: 'browser_snapshot', input: {} }],
       }]),
       messages: [],
-      tools: [{ name: 'source_tool', description: 'test', inputSchema: {} }],
-      handlers: { source_tool: () => ({ result: { ok: true } }) },
+      executeTool: () => ({ result: { ok: true } }),
       transcript,
       secretSources: [{
         channel,
         direction,
-        initiator: 'tool:source_tool',
+        initiator: 'tool:browser_snapshot',
         requestId: 'source-1',
       }],
       maxTurns: 1,

@@ -7,8 +7,7 @@ import {
   scriptWasTruncated,
   type ModelMessage,
   type ToolCall,
-  type ToolDefinition,
-  type ToolHandler,
+  type ToolExecution,
 } from '../src/agents/loop';
 import { TranscriptWriter, type CapturedEventInput } from '../src/agents/transcript';
 import { createLocalFileBackend } from '../src/backends/localFile';
@@ -493,8 +492,7 @@ export async function runHostAdapter(input: Readonly<{
     client: input.client,
     messages: input.messages,
     maxTurns: input.maxTurns,
-    tools: evaluatedAgentToolDefinitions(),
-    handlers: createHostHandlers(input.host),
+    executeTool: (call) => executeHostTool(input.host, call),
     transcript: input.transcript,
     secretSources: input.secretSources,
     afterLoop: async () => {
@@ -568,12 +566,11 @@ export function initialMessages(runId: string, inventory: unknown): ModelMessage
   }];
 }
 
-export function createHostHandlers(host: SupervisedHost): Record<string, ToolHandler> {
-  const handler: ToolHandler = async (_input, call) => ({
+async function executeHostTool(host: SupervisedHost, call: ToolCall): Promise<ToolExecution> {
+  return {
     result: await invokeHostTool(host, call),
     events: correlateToolEvidence(host.drainEvidence(), call.id),
-  });
-  return Object.fromEntries(evaluatedAgentToolDefinitions().map(({ name }) => [name, handler]));
+  };
 }
 
 export function correlateToolEvidence<T extends Readonly<{ requestId?: string }>>(
@@ -602,26 +599,6 @@ function invokeHostTool(host: SupervisedHost, call: ToolCall): Promise<unknown> 
     case 'browser_close_session': return host.tools.browser_close_session(call.input as never);
     default: throw new Error(`No supervised handler for tool: ${call.name}`);
   }
-}
-
-function evaluatedAgentToolDefinitions(): ToolDefinition[] {
-  return [
-    toolDefinition('browser_open_session', []),
-    toolDefinition('browser_navigate', ['sessionId', 'url']),
-    toolDefinition('browser_type', ['sessionId', 'selector', 'text']),
-    toolDefinition('fill_from_vault', ['handle', 'sessionId', 'fields']),
-    toolDefinition('browser_click', ['sessionId', 'selector']),
-    toolDefinition('browser_snapshot', ['sessionId']),
-    toolDefinition('browser_close_session', ['sessionId']),
-  ];
-}
-
-function toolDefinition(name: string, required: string[]): ToolDefinition {
-  return {
-    name,
-    description: `TinyVault supervised ${name} operation.`,
-    inputSchema: { type: 'object', required },
-  };
 }
 
 export function assertHostFinished(

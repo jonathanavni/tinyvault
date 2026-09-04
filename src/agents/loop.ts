@@ -14,17 +14,17 @@ export type ModelMessage = {
   content: unknown;
 };
 
-export type ToolDefinition = {
+export type ToolDefinition = Readonly<{
   name: string;
   description: string;
-  inputSchema: Record<string, unknown>;
-};
+  inputSchema: Readonly<Record<string, unknown>>;
+}>;
 
-export type ToolCall = {
+export type ToolCall = Readonly<{
   id: string;
   name: string;
   input: unknown;
-};
+}>;
 
 export type ModelTurn = {
   text?: string;
@@ -41,16 +41,12 @@ export type ToolExecution = {
   events?: CapturedEventInput[];
 };
 
-export type ToolHandler = (
-  input: unknown,
-  call: ToolCall,
-) => Promise<ToolExecution> | ToolExecution;
+export type ToolExecutor = (call: ToolCall) => Promise<ToolExecution> | ToolExecution;
 
 export type AgentLoopOptions = {
   client: ModelClient;
   messages: ModelMessage[];
-  tools: ToolDefinition[];
-  handlers: Record<string, ToolHandler>;
+  executeTool: ToolExecutor;
   transcript: TranscriptWriter;
   secretSources?: readonly EventIdentity[];
   maxTurns?: number;
@@ -69,11 +65,20 @@ export const SCRIPT_TRUNCATED_MARKER = 'x-tinyvault-script-truncated';
 
 type LoopCompletion = Omit<AgentLoopResult, 'events'>;
 
+const EVALUATED_AGENT_TOOLS: readonly ToolDefinition[] = Object.freeze([
+  toolDefinition('browser_open_session', []),
+  toolDefinition('browser_navigate', ['sessionId', 'url']),
+  toolDefinition('browser_type', ['sessionId', 'selector', 'text']),
+  toolDefinition('fill_from_vault', ['handle', 'sessionId', 'fields']),
+  toolDefinition('browser_click', ['sessionId', 'selector']),
+  toolDefinition('browser_snapshot', ['sessionId']),
+  toolDefinition('browser_close_session', ['sessionId']),
+]);
+
 export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoopResult> {
   let completion: LoopCompletion | undefined;
   let failure: unknown;
   try {
-    assertToolHandlerSet(options.tools, options.handlers);
     completion = await executeLoop(options);
   } catch (error) {
     failure = error;
@@ -103,7 +108,7 @@ async function executeLoop(options: AgentLoopOptions): Promise<LoopCompletion> {
   await options.transcript.append('meta', { event: 'loop-start', maxTurns });
 
   for (let turnIndex = 0; turnIndex < maxTurns; turnIndex += 1) {
-    const request = { messages, tools: options.tools };
+    const request = { messages, tools: EVALUATED_AGENT_TOOLS };
     const requestBytes = serializeExact(request);
     await options.transcript.append('request', request, [{
       channel: 'model-text',
@@ -112,7 +117,7 @@ async function executeLoop(options: AgentLoopOptions): Promise<LoopCompletion> {
       bytes: requestBytes,
     }]);
 
-    const turn = await options.client.nextTurn(messages, options.tools);
+    const turn = await options.client.nextTurn(messages, EVALUATED_AGENT_TOOLS);
     const responseEvents = responseEventsFor(turn);
     rejectSelfDeclaredSecretSources(responseEvents, options.secretSources ?? []);
     await captureResponse(options.transcript, turn, responseEvents);
@@ -127,7 +132,7 @@ async function executeLoop(options: AgentLoopOptions): Promise<LoopCompletion> {
     for (const call of calls) {
       if (callIds.has(call.id)) throw new Error(DUPLICATE_TOOL_CALL_ID_MESSAGE);
       callIds.add(call.id);
-      const execution = await dispatchTool(call, options.handlers);
+      const execution = await dispatchTool(call, options.executeTool);
       const resultEvent = toolResultEvent(call, execution.result);
       rejectSelfDeclaredSecretSources(
         [...(execution.events ?? []), resultEvent],
@@ -231,30 +236,25 @@ function toolInitiator(name: string): string {
 
 async function dispatchTool(
   call: ToolCall,
-  handlers: Record<string, ToolHandler>,
+  executeTool: ToolExecutor,
 ): Promise<ToolExecution> {
-  if (!Object.hasOwn(handlers, call.name)) {
-    throw new Error(`No handler registered for tool: ${call.name}`);
+  const name = call.name;
+  if (!EVALUATED_AGENT_TOOLS.some((definition) => definition.name === name)) {
+    throw new Error(`No handler registered for tool: ${name}`);
   }
-  const handler = handlers[call.name];
-  if (typeof handler !== 'function') throw new Error(`No handler registered for tool: ${call.name}`);
-  return handler(call.input, call);
+  const validatedCall = Object.freeze({ id: call.id, name, input: call.input });
+  return executeTool(validatedCall);
 }
 
-function assertToolHandlerSet(
-  tools: readonly ToolDefinition[],
-  handlers: Record<string, ToolHandler>,
-): void {
-  const toolNames = new Set(tools.map(({ name }) => name));
-  const handlerNames = new Set(Object.getOwnPropertyNames(handlers));
-  const missingHandlers = [...toolNames].filter((name) => !handlerNames.has(name)).sort();
-  const unexpectedHandlers = [...handlerNames].filter((name) => !toolNames.has(name)).sort();
-  if (missingHandlers.length === 0 && unexpectedHandlers.length === 0) return;
-  throw new Error(
-    'Agent tool/handler set mismatch: '
-      + `missing handlers [${missingHandlers.join(', ')}]; `
-      + `unexpected handlers [${unexpectedHandlers.join(', ')}]`,
-  );
+function toolDefinition(name: string, required: readonly string[]): ToolDefinition {
+  return Object.freeze({
+    name,
+    description: `TinyVault supervised ${name} operation.`,
+    inputSchema: Object.freeze({
+      type: 'object',
+      required: Object.freeze([...required]),
+    }),
+  });
 }
 
 function eventLocation(input: unknown): Pick<CapturedEvent, 'origin' | 'route' | 'method'> {
