@@ -51,14 +51,17 @@ Active planning docs:
   **Shipped (M5, `96e3ea3`).**
 - `m5-review-findings.md` — the M5 review register: D7 probe evidence (four rounds), paper rounds 1–2 verbatim,
   the continuity-owner dispositions (C-1, C-2) and the lock; then per-slice three-channel rounds (A: C-A1–C-A3; B: C-B1, C-B2, C-B2f1, C-B2f2, C-B3) with the capped fix rounds and the integrator confirmation passes. **Append-only.**
-- `m5-2-slice-spec.md` — the M5.2 implementation contract (**revision 1, NOT locked**): Docker-composed fixtures
-  behind one implementation and two transports. D1–D6 (the transport seam, the control-sidecar topology,
-  per-operation run capabilities, the attestation fork, the daemon preflight plus fail-closed construction, the
-  canonical parity gate) and Acceptance A–H. Two decisions are open for the user; round 2 must attack §D2.
-- `m5-2-review-findings.md` — the M5.2 register: C-R1 (the read-only seam reconnaissance, whose two corrections the
-  spec carries) and C-R2 (adversarial paper round 1, which found that the decision's own network shape — a control
-  port "on the harness network" — is not a thing Docker does, that "keep attestation in-process" is not
-  implementable, and that all seven of revision 0's acceptance criteria could pass while false). **Append-only.**
+- `m5-2-slice-spec.md` — the M5.2 implementation contract (**revision 4, LOCKED** 2026-09-04): Docker-composed
+  fixtures behind one implementation and two transports. Carries the **locked threat model**, the **Docker-daemon
+  isolation deployment requirement**, D1–D8 (the transport seam; one container per fixture with an internal control
+  Unix socket; the `docker exec -T` bridge, its provenance chain and framing; per-operation capabilities;
+  fixture-control-only attestation; the daemon-channel preflight and fail-closed construction; the canonical parity
+  gate; capture transfer without shared mounts; the frozen agent tool surface) and Acceptance A–P.
+- `m5-2-review-findings.md` — the M5.2 register: C-R1 (seam recon), C-R2/C-R3/C-R5 (three adversarial paper rounds,
+  which killed the original network shape, then the sidecar split and exec bridge, then found the Docker daemon was
+  an unguarded alternate control transport), C-R4 and C-R6 (the user's threat-model lock and bounded cap
+  extension), C-R7 (the focused closure review, **preserved as the reason daemon exclusivity became an explicit
+  deployment assumption**) and C-R8 (the continuity-owner adjudication that locked revision 4). **Append-only.**
 - `project-assessment-2026-09-03.md` — Codex's read-only project teardown at `e69259d` (post-M5): two P0 gate defects, the
   fixture-topology conflict, stale docs, missing release engineering. Verified by Claude the same day; dispositions in
   `m5-review-findings.md` §C-P and the M5.1 slice in `PLAN.md`. Its milestone table is inaccurate for M1–M3 — read `PLAN.md` for those.

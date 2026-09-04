@@ -26,10 +26,12 @@ and the repository and CI must contain no real credentials.
 ## Status
 
 **Pre-release, under construction.** The contracts are frozen, the fill service and its integration gates are built
-(M4), and the measurement harness runs the first two hostile fixtures (M5). What does not exist yet: a real agent in front
-of those fixtures (M6), the MCP adapter (M8) and the 1Password backend (M9). A read-only project assessment
-(`docs/project-assessment-2026-09-03.md`) found two test-gate defects being repaired next (M5.1 in `PLAN.md`), followed by the Docker-composed fixture path the spec requires (M5.2): the decoder
-timing file runs at its own 60 s cap, and `make test` needs generated eval artifacts a clean clone does not have.
+(M4), and the measurement harness runs the first two hostile fixtures (M5). What does not exist yet: a real agent in
+front of those fixtures (M6), the MCP adapter (M8) and the 1Password backend (M9). The two test-gate defects a
+read-only project assessment found (`docs/project-assessment-2026-09-03.md`) are **fixed** — `make test` now passes
+from a literal clean clone, verified by one. Next is the Docker-composed fixture path the spec requires (M5.2),
+whose contract is locked at `docs/m5-2-slice-spec.md` revision 4 and which adds the Docker-daemon isolation
+deployment requirement noted below.
 
 | Milestone | State |
 |---|---|
@@ -39,6 +41,8 @@ timing file runs at its own 60 s cap, and `make test` needs generated eval artif
 | M3 — backend interface + libsodium local-file backend (never-cache contract, policy-bound sealing) | **done** — three pre-impl and three post-impl review rounds; the dependency gate now scans runtime modules, not `.d.ts` |
 | M4 — the fill service and its integration gates | **done** (`b8a9396`) — four commits + five fix slices, each three-channel reviewed with real-Chromium exploits; probe P is a paired Holm-corrected family gate; layer-4 blind spots declared in `SCHEMA.md`; residuals with proof in `docs/m4-review-findings.md` |
 | M5 — hostile fixtures #1–#2 (`lookalike-origin`, `dom-hidden-injection`), the capture-coverage gate, the finite decoder inventory, worker-body markers | **done** (`96e3ea3`) — three slices, each three-channel reviewed with real-Chromium probes and capped fix rounds; register `docs/m5-review-findings.md` |
+| M5.1 — test-gate repair (timing file split, generated run corpus, clean-clone acceptance) | **done** — accepted by a literal `git clone` + `npm ci` + `make browsers` + `make test`; register `docs/m5-review-findings.md` §C-Q |
+| M5.2 — Docker-composed fixtures behind one implementation, two transports | spec **locked** (revision 4); four review passes; implementation next |
 | M6–M7 — reference + naive agents | not started |
 | M8–M10 — MCP adapter, 1Password backend, demo | not started |
 
@@ -56,6 +60,14 @@ Reproduce with:
 ```sh
 make eval
 ```
+
+> **Deployment requirement — Docker-daemon isolation.** Once `make eval` runs its fixtures Docker-composed (M5.2), a
+> valid evaluation requires that **the Docker Engine API not be reachable by the evaluated browser, page content, or
+> agent**. The harness validates and pins the local `unix://` endpoint it uses, but cannot prove the same daemon has
+> no additional TCP listener, proxy, or externally configured route — so this is an assumption about your
+> environment, not something TinyVault checks for you. **If it does not hold, the run is outside the threat model
+> and its results are invalid** — not a pass, not a failure. Published scorecards state the assumption. See
+> `SCHEMA.md` and `docs/m5-2-slice-spec.md`.
 
 ### What a green scorecard does and does not prove
 

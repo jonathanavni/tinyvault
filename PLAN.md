@@ -109,24 +109,29 @@ Codex recon (C-R1) + adversarial paper round 1 (C-R2) done; **round 1 of the thr
   invocation, the trust anchor, framing, capture transfer — with eight P2s outstanding, two of which are acceptance
   criteria that test the wrong property (J asserts something impossible; E's body omits the bootstrap secret and
   public key).
-- **Revision 3 (C-R6) spent the user's bounded cap extension on C-R5's P1 and the eight P2s; its focused closure
-  review (C-R7) returned a NEW P1, so revision 3 did not lock and M5.2 remains BLOCKED. No code written.**
-  The repair conflated two things: requiring the *selected* Docker endpoint to be a local `unix://` socket proves
-  only how the harness connects, while Docker supports multiple `-H` listeners at once — the same daemon may also
-  listen on TCP, and a Unix socket may front a TCP proxy. So C-R5's P1 is half closed (stdin delivery keeps the
-  secret out of `Config.Env`; a browser-addressable daemon still exposes `exec`). Verified not live on this host
-  (no 2375/2376 listener, no `hosts` key in `~/.docker/daemon.json`).
-- **Why it is not obviously repairable in place:** closing it needs the daemon's own listener set, which is not
-  reliably queryable — `/info` does not report listeners, and under Docker Desktop the daemon runs in a VM whose
-  `-H` flags the API does not expose. The honest options are a different mechanism or a narrower claim.
-- Passed in the closure review: preflight ordering, CLI-precedence policy and endpoint pinning; the frozen
-  evaluated-agent tool surface (§D8); and six of eight P2 dispositions with their mutants. Six P2s stay open,
-  two of them this spec's own errors — Acceptance M reintroduced the out-of-scope internal-access property it was
-  written to remove, and two revision-2 statements still say the bootstrap secret is injected "at container
-  creation" (`m5-2-slice-spec.md:41-44`, `:546-548`).
-- **The decision the user owes:** how to treat a daemon whose exposure the harness cannot verify — narrow the claim
-  to what is verifiable plus a stated deployment requirement, or adopt a different mechanism. There is no automatic
-  further extension; four review passes (C-R2, C-R3, C-R5, C-R7) have now run against this slice.
+- **M5.2 spec is LOCKED at revision 4 (2026-09-04); implementation may proceed. No code written yet.**
+  Revision 3's closure review (C-R7) found a new P1 — requiring the *selected* Docker endpoint to be a local
+  `unix://` socket proves only how the harness connects, while Docker supports multiple `-H` listeners at once and
+  a Unix socket may front a TCP proxy. The user adjudicated it (C-R8) rather than adding a mechanism that cannot
+  prove the property: **Docker-daemon isolation is a required deployment assumption.** The harness verifies and
+  pins the local endpoint it uses; it cannot prove the daemon has no other listener, proxy or route, and **if the
+  assumption is false the run is outside the threat model and its results are invalid** — not a measured pass, not
+  a measured failure. The control-plane claim now opens "Under the Docker-daemon isolation requirement…", and no
+  wording anywhere may present the preflight as proof of non-exposure.
+- Recorded beside the number, not only in the spec: `README.md` (reproduce instructions), `SCHEMA.md`
+  (honest-claims wording), and Acceptance O, which requires a published scorecard to state the assumption.
+- C-R7's three corrections applied: Acceptance M tests **caller-visible** capability retrieval isolation only (the
+  shared-mount and artifact-root mutants moved to §D7 implementation hygiene — they tested trusted-container
+  internals, which is out of scope); every "injected at container creation" statement removed, stdin delivery being
+  the sole live contract; and the handshake stated as a chain — provenance from harness-controlled creation, exact-
+  one-container resolution, recorded immutable id and label/image verification, with the MAC proving **possession
+  and binding, not provenance**.
+- Four review passes ran against this slice (C-R2, C-R3, C-R5, C-R7); each narrowed the design or the claim rather
+  than growing it. The paper cap stays spent — no further paper round.
+- **Next: implementation** through `docs/handoff-pattern.md` §4 with the security third channel (§7.1), since this
+  is security-core surface. Acceptance A–P are validated in the implementation-review ladder, not on paper. If
+  implementation shows a locked decision needs a new mechanism, or a claim stronger than the deployment assumption
+  supports, stop and return to the user.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·

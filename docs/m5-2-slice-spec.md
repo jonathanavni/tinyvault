@@ -1,25 +1,28 @@
 # M5.2 slice spec — Docker-composed fixtures behind one implementation, two transports
 
-**Status: BLOCKED — revision 3 did NOT lock. The focused closure review returned a new P1**
-(`docs/m5-2-review-findings.md`, C-R7). The user's outcome rule applies: a new P1 returns to the user, with no
-automatic further extension. **Do not implement.**
+**Status: LOCKED (revision 4) — continuity-owner adjudication, user, 2026-09-04. Implementation may proceed.**
+The paper cap stays spent; there is no further paper round. Executable guarantees are validated in the
+implementation-review ladder, not on paper.
 
-**The P1 in one paragraph.** §D5.0 conflates two things and states the stronger one. Requiring the *selected*
-endpoint to be a canonical local `unix://` socket proves only **how the harness connects** — Docker supports
-multiple `-H` listeners at once, so the same daemon may also be listening on TCP and remain browser-addressable,
-and a Unix socket may itself front a TCP proxy. §D5.0's conclusion that this "keeps the API itself off the network"
-is false as written, and Acceptance B's positive control would falsely pass a dual-listener or proxy configuration
-because it inspects only the selected endpoint. C-R5's P1 is therefore **half closed**: stdin delivery (§D2.1)
-keeps the secret out of `Config.Env`, but a browser-addressable daemon still exposes `exec`. Verified not live on
-this host (no listener on 2375/2376; no `hosts` key in `~/.docker/daemon.json`). Closing it properly needs the
-daemon's **own listener set**, which is not reliably queryable — `/info` does not report listeners, and under
-Docker Desktop the daemon runs in a VM whose `-H` flags the API does not expose — so the options are a different
-mechanism or a narrower claim, and both are the user's call.
+## What changed from revision 3
 
-**What passed:** preflight ordering, CLI-precedence policy and pinning (§D5.0); the frozen agent tool surface
-(§D8); and six of the eight P2 dispositions with their mutants. Six P2s remain open, including two that are this
-spec's own errors: Acceptance M reintroduces the out-of-scope internal-access property it was written to remove,
-and two revision-2 statements still say the bootstrap secret is injected "at container creation".
+The closure review (C-R7) established that **exclusive Docker-daemon non-exposure cannot be established by the
+harness**: Docker supports multiple `-H` listeners at once, a Unix socket may front a TCP proxy, and the daemon's
+own listener set is not reliably queryable. Rather than add a mechanism that cannot prove the property, the user
+adjudicated it into an explicit **deployment requirement** (next section) and narrowed the claim to what the
+harness can actually verify.
+
+1. **New "Deployment requirement" section**, and the §D2 claim now opens *"Under the Docker-daemon isolation
+   requirement…"*.
+2. **§D5.0 no longer says the preflight "keeps the API itself off the network."** It proves only that TinyVault
+   selected and consistently uses a validated local Unix channel. An optional exposure probe is permitted as a
+   **diagnostic labelled incomplete**, never as proof of non-exposure.
+3. **Acceptance M is narrowed to caller-visible capability retrieval isolation.** The shared-mount and
+   artifact-root mutants are removed from that claim — they test containment from trusted fixture internals, which
+   is out of scope — and survive as implementation-hygiene constraints under §D7.
+4. **Every "injected at container creation" statement is gone.** Stdin delivery is the sole live contract.
+5. **The handshake proof is stated as a chain** (§D2.1): provenance comes from harness-controlled creation, not
+   from the MAC.
 
 ## What changed from revision 2
 
@@ -54,10 +57,10 @@ key-retrieval operation.
 4. **The control transport is a Unix socket entirely inside the fixture container** — never published, never
    bind-mounted (bind-mounting is also non-functional on this host; see §D2.1) — reached by a long-lived
    `docker exec -T` bridge that connects to it from inside.
-5. **The exec trust anchor is repaired** (§D2.1): a fresh per-eval, per-fixture bootstrap secret injected at
-   container creation, exec against a resolved immutable container id rather than a service selector, a fresh
-   challenge, and a MAC binding challenge, epoch, fixture identity, container identity and public key. A
-   self-announced key is not trust.
+5. **The exec trust anchor is repaired** (§D2.1): a fresh per-eval, per-fixture bootstrap secret **delivered over
+   the bridge's stdin** (revision 3; never at container creation), exec against a resolved immutable container id
+   rather than a service selector, a fresh challenge, and a MAC binding challenge, epoch, fixture identity,
+   container identity and public key. A self-announced key is not trust.
 6. **Round 2's other valid findings are absorbed**: capability entropy/epoch/expiry/single-use/restart-invalidation
    (§D3); captures transferred over the authenticated control transport with **no shared artifact-root or
    cross-fixture mount** (§D7); framing with request ids, one stdout writer, and close-on-desynchronisation
@@ -82,6 +85,36 @@ Everything in this spec is claimed against this boundary and nothing beyond it.
   capture retrieval, arbitrary event attestation, or capability/key retrieval.
 
 That last line is the whole security question for this slice. Round 3 attacks it and nothing else.
+
+---
+
+## Deployment requirement — Docker-daemon isolation (LOCKED)
+
+**A valid TinyVault evaluation requires that the Docker Engine API not be reachable by the evaluated browser, page
+content, or agent.**
+
+The harness verifies and pins the local Unix endpoint *it* uses (§D5.0). It **cannot** prove that the same daemon
+has no additional TCP listener, no proxy in front of its socket, and no externally configured route — Docker
+supports multiple `-H` listeners simultaneously, and the daemon's own listener set is not reliably queryable
+(`/info` does not report it, and under Docker Desktop the daemon runs in a VM whose flags the API does not expose).
+
+**If that environmental assumption is false, the run is outside the threat model and its results are invalid.** It
+does not become a measured TinyVault pass or a measured TinyVault failure — it is not a measurement at all. This is
+the honest position: the alternative would be asserting a property the harness cannot check.
+
+A published scorecard must state this assumption. It is recorded next to the reproduce instructions (`README.md`)
+and beside the honest-claims wording (`SCHEMA.md`), not only here.
+
+**What stays enforceable, and is gated:**
+
+- Reject any selected Docker endpoint other than the approved local `unix://` endpoint (§D5.0).
+- Pin all Docker operations to the validated endpoint (§D5.0).
+- Keep the bootstrap secret out of Compose environment, labels, arguments, files, inspection output and artifacts;
+  deliver it over bridge stdin (§D2.1).
+- Preserve the exact evaluated-agent tool allowlist, with no shell, filesystem, raw-network, process or Docker
+  capability (§D8).
+- **Optionally** detect common Docker TCP exposures as a diagnostic — labelled incomplete, and **never** presented
+  as proof of non-exposure. A green diagnostic is not evidence; only its red is informative.
 
 ---
 
@@ -181,8 +214,9 @@ enforced on the first and today's capture-red rule on the second.
 
 **The claim (locked wording, user 2026-09-04):**
 
-> Hostile page content and the evaluated agent cannot directly address the fixture control transport, obtain its
-> capabilities, retrieve control-plane state, or request event attestation. Declared data-plane requests may cause
+> **Under the Docker-daemon isolation requirement**, hostile page content and the evaluated agent cannot directly
+> address the fixture control transport, obtain its capabilities, retrieve control-plane state, or request event
+> attestation. Declared data-plane requests may cause
 > the trusted fixture to record captures and issue completion receipts according to the fixture semantics,
 > including M5-C2. Compromise of the trusted fixture process is outside the evaluation threat model and
 > invalidates the run.
@@ -227,9 +261,17 @@ first trust path. Repaired as:
   exec bridge's stdin**. It is never placed in Compose environment, labels, command arguments, image layers, files,
   logs, diagnostics, artifacts, or error text, and is therefore absent from container inspection. It lives **only in
   harness and bridge memory, for the bridge's lifetime.**
-- What makes delivery trustworthy is the pinned local daemon channel (§D5.0) plus the exec against a **resolved
-  immutable container id**, never a service selector. A resolution yielding zero or more than one container is a
-  hard failure — which is also what makes `scale > 1` unambiguous rather than merely unlikely.
+**Where provenance comes from, and where it does not.** The secret is delivered before the MAC is received, so the
+MAC cannot be what establishes the peer's identity. The chain is:
+
+1. **Provenance first, from harness-controlled creation**: the harness creates the container itself under a fresh
+   Compose project and eval epoch, resolves **exactly one** container (zero or more than one is a hard failure —
+   this is also what makes `scale > 1` unambiguous rather than merely unlikely), **records that immutable container
+   id**, and **verifies the expected labels and image identity**.
+2. **Exec targets that exact id**, over the endpoint pinned by §D5.0 — never a service selector.
+3. **The challenge MAC then proves possession of the delivered secret and binds the session and public key to that
+   already-established container.** It does **not** establish the container's provenance by itself, and no comment,
+   test name or claim may say that it does.
 - The harness sends a **fresh challenge**; the control process replies with a **MAC under the bootstrap secret over
   an injective transcript** binding: the challenge, the eval epoch, the fixture identity, the **full canonical
   container id**, and the generated public key.
@@ -331,11 +373,19 @@ Runs **first** — before the daemon is contacted, before any artifact is delete
   and executing against another is the failure this repair exists to prevent, and it is the likeliest way to
   implement the check and still be vulnerable.
 
-Why this is the P1 repair: the fixture control socket is internal and unreachable from a page, but the **daemon**
-is an alternate route to it — a browser-addressable Docker API exposes container inspection and `exec`, which under
-revision 2 would have disclosed the bootstrap secret from `Config.Env` and permitted entry into the container. §D2.1
-now keeps the secret out of every inspectable surface, and §D5.0 keeps the API itself off the network. Neither alone
-is sufficient; both are required, and each is separately gated.
+**What this proves, and what it does not.** It proves that TinyVault *selected* and *consistently uses* a validated
+local Unix channel. It does **not** prove the daemon is off the network: the same daemon may carry additional `-H`
+listeners, its socket may front a TCP proxy, and its listener set is not reliably queryable. Daemon non-exposure is
+a **deployment requirement** (see that section), not something this preflight establishes — and no wording in the
+implementation, `SCHEMA.md`, or the scorecard may imply otherwise.
+
+Why it is still required: §D2.1 keeps the bootstrap secret out of every inspectable surface, and §D5.0 keeps
+TinyVault's own Docker usage on a validated, pinned local channel. Together they remove the paths TinyVault
+controls; the deployment requirement covers the one it does not.
+
+**Optional exposure diagnostic.** Detecting common Docker TCP exposures (a listener on 2375/2376, a `hosts` entry in
+`daemon.json`) is permitted as a diagnostic. It must be **labelled incomplete** and must never be presented as
+proof of non-exposure — a red is informative, a green is not evidence.
 
 This is a v0.1 restriction, not a claim that remote daemons are unsupportable. Widening it is a new threat-model
 decision, not an implementation detail.
@@ -386,8 +436,11 @@ harness over the authenticated control transport under a capture-retrieval capab
 them** into the artifact tree the offline checker already expects (`testbed/checkers/offline.ts:244-267`). A
 container's filesystem is its own.
 
-This is not a containment claim about a compromised fixture — that is out of scope — it is that the composed
-transport must not *introduce* a cross-run or cross-fixture read path that the in-process transport does not have.
+This is not a containment claim about a compromised fixture — that is out of scope. It is **implementation
+hygiene**: the composed transport must not *introduce* a cross-run or cross-fixture read path the in-process
+transport does not have. No shared capture mount, no artifact-root mount. Revision 4 moved these here from
+Acceptance M, because they constrain the implementation without proving anything about what a caller can retrieve;
+M tests that, and only that.
 
 ### D8 — The evaluated agent's tool surface is frozen and tested
 
@@ -448,7 +501,9 @@ bypassing `runEval`; daemon killed after the preflight but before container crea
 container creation failure; exec failure; handshake failure; MAC failure; protocol error. Each must be red, and a
 fallback for any one of them must be caught.
 
-**B. The daemon channel is resolved, validated and pinned.** *Mutants:* `DOCKER_HOST` set to a `tcp://` endpoint;
+**B. The daemon channel is resolved, validated and pinned.** *This proves TinyVault's own Docker usage stays on a
+validated local channel. It does not prove daemon non-exposure — that is the deployment requirement, and no test
+here may be labelled or reported as establishing it.* *Mutants:* `DOCKER_HOST` set to a `tcp://` endpoint;
 `DOCKER_CONTEXT` naming a context whose endpoint is `tcp://`, `http(s)://` or `ssh://`; an unknown scheme; a
 malformed endpoint; two sources disagreeing. Each must fail **before any Docker API operation and before any other
 eval side effect** — no artifact deletion, no Chromium launch, no container created. And the pinning mutant, which
@@ -482,12 +537,16 @@ for a predictable registered run id. *Mutant:* the implementation recycles the r
 (`loginFixture.ts:355-363`) and the scan finds it. **The public verification key is explicitly not in this set:
 its visibility is not a failure.**
 
-**G. The bridge's trust anchor is authenticated and injective.** The harness resolves exactly one container id and
-execs it; the control process returns a MAC under the stdin-delivered bootstrap secret over an injective transcript
-binding challenge, eval epoch, fixture identity, **full canonical container id**, and public key; only then is the
-key trusted. *Mutants:* a valid announcement with no MAC; **an independent deletion mutant for each of the five
+**G. The bridge's trust anchor is authenticated and injective — with provenance established before the MAC.** The
+harness creates the container under a fresh project and epoch, resolves **exactly one** container, records its
+immutable id, and verifies expected labels and image identity; it execs that exact id; the control process then
+returns a MAC under the stdin-delivered bootstrap secret over an injective transcript binding challenge, eval
+epoch, fixture identity, **full canonical container id**, and public key, which **proves possession and binds the
+session and key to that already-established container — it does not establish provenance**. *Mutants:* a valid announcement with no MAC; **an independent deletion mutant for each of the five
 bound fields**; a replayed MAC from an earlier eval or container instance; a service selector instead of a resolved
-id; a resolution yielding zero or two containers; a stale container answering with internally consistent metadata;
+id; a resolution yielding zero or two containers; **a container whose labels or image identity do not match** (the
+mutant that catches a stale container, since the MAC alone cannot — a stale container can MAC its own internally
+consistent identity);
 and a **delimiter-free or ambiguous transcript encoding admitting tuple confusion** — the mutant that distinguishes
 an injective transcript from a concatenation. Bridge death fails the run and rejects the outstanding operation on
 EOF.
@@ -523,18 +582,26 @@ accepted for receipt retrieval; a second attestation succeeding; a pre-finalizat
 attestation succeeding after a control-process restart.
 
 **M. Retrieval isolation is caller-visible.** A caller holding run A's capability cannot retrieve run B's captures
-or receipt, nor another fixture's. *This tests what a caller can obtain, not what the trusted container holds:* one
-long-lived fixture container necessarily has several runs' captures in shared process state
-(`loginFixture.ts:85-97`, `:154-163`), and a compromised fixture abusing that access is out of scope. Page content
-must additionally be unable to invoke the key-retrieval operation at all. *Mutants:* a shared capture mount; an
-artifact-root mount; a capability check that authorizes by run existence rather than by capability.
+or receipt, nor another fixture's. *This tests only what a caller can obtain.* One long-lived fixture container
+necessarily holds several runs' captures in shared process state (`loginFixture.ts:85-97`, `:154-163`), and a
+compromised fixture abusing that access is out of scope — so this criterion makes **no claim about containment from
+trusted fixture internals**. Page content must additionally be unable to invoke the key-retrieval operation at all.
+*Mutant:* a capability check that authorizes by run existence rather than by capability. (The shared-capture-mount
+and artifact-root-mount constraints are **implementation hygiene under §D7**, not evidence for this claim, and were
+removed from it in revision 4 — they do not change what a caller can retrieve.)
 
 **N. `make test` stays Docker-free and clean-clone green**, verified by a **literal clean clone** — `git clone` into
 a temp directory, `npm ci`, `make browsers`, `make test`. *Mutants:* a Docker import reachable from the `make test`
 path; a conditional `spawn("docker")` or shell invocation; direct daemon-socket access. None of the three
 substitutes for the others.
 
-**O. The claim did not grow — each row linked to a test that dies.** A behaviour-to-claim table maps each
+**O. The deployment assumption is stated wherever the number is.** A published scorecard states the
+Docker-daemon isolation requirement; the reproduce instructions and the honest-claims wording carry it too.
+*Mutants:* a scorecard produced without the assumption line; wording anywhere — code comment, `SCHEMA.md`,
+scorecard, README — that presents the §D5.0 preflight as proof of non-exposure. An unsatisfied assumption makes the
+run **invalid**, and must be reported as invalid rather than as a measured pass or a measured failure.
+
+**P. The claim did not grow — each row linked to a test that dies.** A behaviour-to-claim table maps each
 `SCHEMA.md` integrity claim to what each transport implements, and each row is linked to the test exercising it.
 **Each linked test must die under its own row's claim-breaking mutant** — *mutant:* a row linked to a test that
 stays green when that row's claim is broken, which is how a table of prose rows passes.
@@ -559,9 +626,9 @@ branch (i); a framed `docker exec -T` bridge with no published control port.
   control-network port; no silent fallback.
 - Attestation stays branch (i), renamed **fixture-control-only**; post-capture integrity only, never independent
   capture authenticity.
-- The exec trust anchor is repaired with a fresh per-eval, per-fixture bootstrap secret injected at container
-  creation, a resolved immutable container id, a fresh challenge, and a MAC binding challenge, epoch, fixture
-  identity, container identity and public key.
+- The exec trust anchor is repaired with a fresh per-eval, per-fixture bootstrap secret (delivered over bridge
+  stdin as of revision 3, never at container creation), a resolved immutable container id, a fresh challenge, and a
+  MAC binding challenge, epoch, fixture identity, container identity and public key.
 - Round 2's valid findings are absorbed: capability entropy/epoch/expiry/scope/single-use/restart-invalidation; no
   shared artifact-root or cross-fixture capture mount, captures transferred over the authenticated control
   transport and persisted by the harness; framing with request ids, one stdout writer, rejection of
@@ -582,29 +649,21 @@ failure** — prove its authenticated binding and that page content cannot invok
 
 ---
 
-## For the focused closure review
+## Lock record
 
-**Not an unrestricted fourth paper round.** The user authorized one focused closure review with exactly this scope:
+**Revision 4 is LOCKED** (continuity-owner adjudication, user, 2026-09-04). The paper cap is spent and stays spent:
+there is no further paper round. Four review passes ran against this slice — C-R2, C-R3, C-R5 and C-R7 — and each
+narrowed the design or the claim rather than growing it.
 
-1. **Effective-daemon selection and pinning** (§D5.0) — including the validate-one-context-execute-against-another
-   failure, which is the likeliest way to implement the check and remain vulnerable.
-2. **Stdin-only bootstrap handling** (§D2.1) — that the secret reaches no inspectable surface and no persistent
-   store.
-3. **Evaluated-agent tool confinement** (§D8).
-4. **The eight P2 dispositions and their named mutants** (C-R5): injective MAC transcript; quantified capability
-   entropy and expiry; the two framing mutants plus partial-frame EOF; independent domain-prefix mutants asserting
-   exact preimages; actual-dispatch observation in D; the corrected retrieval-isolation criterion M; the corrected
-   scan set in F with the public key excluded; and claim-breaking mutants per closure-table row in O.
-5. **An absorption sweep for stale revision-1 / revision-2 language** — any surviving sidecar reference, any
-   containment-after-compromise phrasing, any claim stronger than the locked §D2 sentence.
+The adjudication that closed it: **exclusive Docker-daemon non-exposure cannot be established by the harness**, so
+it became an explicit deployment requirement rather than a mechanism that would assert an uncheckable property.
+`docs/m5-2-review-findings.md` §C-R7 is preserved as the reason.
 
-**Out of scope:** the architecture, the threat model, and anything not in that list. A finding that assumes a
-compromised fixture process is out of scope by the locked threat model and should be reported in one line, not
-argued.
-
-**Outcome rule (the user's).** If the review finds these properties correctly specified and **no new P1**, revision
-3 locks and implementation proceeds. If it finds a new P1, or if closing it would require another architectural
-mechanism, **stop and return it to the user — there is no automatic further extension.**
+**Implementation may now proceed**, through the ladder in `docs/handoff-pattern.md` §4 and the security third
+channel §7.1 — this is security-core surface. The executable guarantees (Acceptance A–P) are validated in the
+**implementation-review** ladder, not on paper. If implementation shows that a locked decision needs a new
+mechanism, or a claim stronger than the deployment assumption supports, **stop and return it to the user** rather
+than widening the claim.
 
 ---
 

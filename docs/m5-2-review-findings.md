@@ -357,3 +357,57 @@ requires amending it before completion — correctly flagged, not a defect.
 
 The bounded cap extension is spent, and its closure review returned a new P1. **No automatic further extension**:
 this goes back to the user.
+
+---
+
+## C-R8 — continuity-owner adjudication: daemon isolation becomes a deployment requirement (user, 2026-09-04)
+
+**C-R7 is preserved above as the reason this became an explicit deployment assumption.** Its P1 stands accepted and
+is not repaired by mechanism: exclusive Docker-daemon non-exposure **cannot be established by the harness**, because
+Docker supports multiple `-H` listeners simultaneously, a Unix socket may front a TCP proxy, and the daemon's own
+listener set is not reliably queryable (`/info` does not report it; under Docker Desktop the daemon runs in a VM
+whose flags the API does not expose).
+
+**No further mechanism and no further paper round.** The paper cap stays spent. Spec revision 4 is **LOCKED** and
+implementation may proceed, with executable guarantees validated in the implementation-review ladder.
+
+### The adjudication
+
+**Docker-daemon isolation is a required deployment assumption.** A valid TinyVault evaluation requires that the
+Docker Engine API not be reachable by the evaluated browser, page content, or agent. The harness verifies and pins
+the local Unix endpoint it uses but cannot prove the same daemon has no additional listener, proxy, or externally
+configured route. **If the assumption is false, the run is outside the threat model and its results are invalid** —
+it does not become a measured TinyVault pass or a measured TinyVault failure.
+
+The control-plane claim now opens *"Under the Docker-daemon isolation requirement…"*, and the §D5.0 wording no
+longer says the preflight "keeps the API itself off the network": it proves only that TinyVault selected and
+consistently uses a validated local Unix channel.
+
+**Enforceable protections retained and gated:** reject any selected endpoint other than the approved local
+`unix://` one; pin all Docker operations to it; keep the bootstrap secret out of Compose environment, labels,
+arguments, files, inspection output and artifacts and deliver it over bridge stdin; preserve the exact
+evaluated-agent tool allowlist with no shell, filesystem, raw-network, process or Docker capability. An exposure
+diagnostic is optional, **labelled incomplete**, and never proof of non-exposure — its red is informative, its
+green is not evidence.
+
+### The three C-R7 corrections applied
+
+| # | Correction | Where |
+|---|---|---|
+| 1 | **Acceptance M tests caller-visible capability retrieval isolation only.** The shared-mount and artifact-root mutants are removed from that claim — they test containment from trusted fixture internals, which the threat model puts out of scope — and survive as **implementation-hygiene constraints under §D7**. This was the review's finding that M had reintroduced the very property it was rewritten to remove. | Acceptance M, §D7 |
+| 2 | **Every "injected at container creation" statement removed.** Stdin delivery is the sole live contract; the two surviving revision-2 sentences are corrected, and the remaining mentions are explicit negations. | §D2.1, changelog, Decisions taken |
+| 3 | **The handshake proof is stated as a chain, and the MAC's role is bounded.** Provenance comes first from harness-controlled creation under a fresh project/epoch, exact-one-container resolution, a recorded immutable container id, and verification of expected labels and image identity; exec targets that exact id; the challenge MAC then **proves possession and binds the session and public key to that already-established container — it does not establish provenance by itself**. Acceptance G gains the labels/image-identity mutant, which is what actually catches a stale container, since a stale container can MAC its own internally consistent identity. | §D2.1, Acceptance G |
+
+### Absorption-completion sweep (revision 4)
+
+`docs/m5-2-slice-spec.md` (claim, §D2.1, §D5.0, §D7, Acceptance B/G/M, new Acceptance O, lock record), this
+register, `PLAN.md`, `SCHEMA.md` (deployment requirement beside the honest-claims wording) and `README.md`
+(beside the reproduce instructions). Acceptance is now **A–P**; the new O requires the assumption to be stated
+wherever the number is published, with a mutant for wording anywhere that presents the preflight as proof of
+non-exposure.
+
+### Status
+
+**Revision 4 LOCKED.** Implementation proceeds through `docs/handoff-pattern.md` §4 with the security third channel
+(§7.1) — this is security-core surface. If implementation shows a locked decision needs a new mechanism, or a claim
+stronger than the deployment assumption supports, **stop and return to the user** rather than widening the claim.
