@@ -437,10 +437,11 @@ function dependencies(file, source) {
   const edges = [];
   const unsupported = [];
   const isGateImplementation = isGateImplementationFile(file);
+  const isTestHarness = isTestHarnessLoaderFile(file);
   const addLiteral = (node, syntax) => {
     if (node && ts.isStringLiteralLike(node)) {
       edges.push({ specifier: node.text, syntax });
-      if (['module', 'node:module'].includes(node.text) && !isGateImplementation) {
+      if (['module', 'node:module'].includes(node.text) && !isGateImplementation && !isTestHarness) {
         unsupported.push(`module loader ${syntax}`);
       }
     } else {
@@ -476,6 +477,19 @@ function dependencies(file, source) {
   visit(sourceFile);
   return { edges, unsupported };
 }
+// Test-harness files exempt from the module-loader prohibition, listed one by one rather than by
+// pattern so the exemption cannot silently widen. `no-docker.setup.ts` is a Vitest setup module, not a
+// production module: it must call syncBuiltinESMExports to patch the ESM *named* exports of
+// node:child_process, because those are snapshot bindings that a plain CJS mutation does not reach —
+// which is precisely the computed-import bypass the Docker-free guard exists to catch.
+const TEST_HARNESS_LOADER_EXEMPTIONS = ['testbed/docker/no-docker.setup.ts'];
+
+function isTestHarnessLoaderFile(file) {
+  const real = realFilePath(file);
+  if (real === undefined) return false;
+  return TEST_HARNESS_LOADER_EXEMPTIONS.some((relative) => realpathEndsWith(real, relative));
+}
+
 function isGateImplementationFile(file) {
   const real = realFilePath(file);
   return real !== undefined
