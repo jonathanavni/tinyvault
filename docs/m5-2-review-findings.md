@@ -252,3 +252,44 @@ inaccessible to Chromium and fail loudly otherwise, and Acceptance B must cover 
 other way is the user's decision. `CLAUDE.md`'s convention — when a channel beats the same invariant repeatedly,
 narrow the claim before adding code — has already been applied once here (C-R4); this P1 is a different shape, an
 unclosed transport rather than an overstated claim, and it has a bounded repair.
+
+---
+
+## C-R6 — bounded cap extension: spec revision 3 (user, 2026-09-04)
+
+The user accepted round 3's stop and authorized **one bounded cap extension**, scoped to C-R5's P1, the eight
+recorded P2s, and consequent consistency edits. Explicitly **not** permission to reopen the architecture or begin
+implementation.
+
+### The P1 repair, as authorized — four requirements, all inside the existing architecture
+
+| # | Requirement | Where |
+|---|---|---|
+| 1 | **Daemon-channel preflight.** Before contacting the daemon, deleting artifacts or launching Chromium: resolve the *effective* endpoint across `DOCKER_HOST`, `DOCKER_CONTEXT` and the active context; require a canonical local `unix://` endpoint for v0.1; reject TCP, HTTP(S), SSH, unknown schemes, and anything malformed or ambiguous; and **pin every later Docker/Compose invocation to the endpoint that passed** — validating one context and executing against another is the specific failure to prevent. | new §D5.0 |
+| 2 | **Acceptance coverage.** Mutate both `DOCKER_HOST` and context selection to network endpoints and prove failure occurs before any Docker API operation or other eval side effect. This host's Unix endpoint is the positive control. | Acceptance B |
+| 3 | **Bootstrap delivery over the already-open bridge's stdin.** Never Compose environment, labels, command arguments, container inspection, files, logs, diagnostics, artifacts or error text. Held only in harness/bridge memory for the bridge lifetime. This closes the disclosure half of the P1 independently of the daemon half. | §D2.1, Acceptance E |
+| 4 | **Frozen evaluated-agent tool allowlist.** Only supervised browser and vault tools; shell, filesystem, raw network/socket, process, Docker and generic code-execution tools absent, asserted on the **exact set**. Any expansion is a new threat-model decision. | new §D8, Acceptance J |
+
+### The eight P2s, with the user's clarifications
+
+| C-R5 P2 | Disposition |
+|---|---|
+| J asserted an impossible property | **Corrected** (now Acceptance M): tests **caller-visible retrieval isolation** — run A's capability cannot fetch run B's or another fixture's — not trusted-container internal separation. A compromised fixture abusing internal access is out of scope. |
+| E's scan set incomplete | **Corrected** (now F): covers the **bootstrap secret, capabilities, capability-derived values and private signing material** across container inspection and every existing surface. **User's clarification: the public verification key is NOT secret — its mere visibility must not be a failure.** What is proven instead is its authenticated binding to challenge, eval epoch, fixture identity, full container id and bootstrap MAC (G), and separately that page content cannot invoke key retrieval (M). |
+| MAC transcript not injective | **Accepted**: fixed protocol prefix, byte-length framing per field, fixed field order, one canonical encoding, full canonical container id; independent deletion mutants per field plus a tuple-confusion mutant (G). |
+| Capabilities unquantified | **Accepted**: CSPRNG with ≥ 128-bit security strength, and an explicit latest expiry stated as a duration — an effectively run-long lifetime is called out as passing every mutant while making expiry meaningless (H). |
+| Framing mutants missing | **Accepted**: request-id reuse within a bridge lifetime, a correctly correlated response carrying the wrong operation/type, and EOF with a partial frame outstanding all close the bridge (I). |
+| Domain-prefix mutant singular | **Accepted**: receipt and attestation prefixes removed **independently**, each asserting the exact signed preimage (L). |
+| C needed dispatch observation | **Accepted** (now D): the assertion observes **actual control dispatch**, including fire-and-discard calls and idempotent reads, not returned page content. |
+| L could link to a false-green row | **Accepted** (now O): each linked test must **die under its own row's claim-breaking mutant**. |
+
+Acceptance is now A–O (fifteen). Scope fences were added to "Do not implement": remote/networked Docker daemon
+support and any agent-tool-surface widening are new threat-model decisions, not implementation details.
+
+### Next, and the outcome rule
+
+**One focused closure review, not a fourth paper round.** Scope: effective-daemon selection and pinning;
+stdin-only bootstrap handling; agent tool confinement; the eight P2 dispositions and their named mutants; and an
+absorption sweep for stale revision-1/revision-2 language. If it finds these correctly specified and **no new P1**,
+revision 3 locks and implementation proceeds. If it finds a new P1, or closing one would need another architectural
+mechanism, **stop and return to the user — no automatic further extension.**
