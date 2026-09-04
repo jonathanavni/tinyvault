@@ -168,6 +168,14 @@ describe('tripwire tool composition and evidence separation', () => {
         captured.push(...events);
         return JSON.stringify(value);
       },
+      appendSerialized: async (
+        _kind: unknown,
+        bytes: string,
+        events: CapturedEventInput[] = [],
+      ) => {
+        captured.push(...events);
+        return bytes;
+      },
       close: async () => captured.map((event, t) => ({ ...event, t })),
     } as unknown as TranscriptWriter;
     let turn = 0;

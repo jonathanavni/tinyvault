@@ -47,10 +47,6 @@ export function serializeToolCallEnvelope(call: {
   return serializeExact({ id: call.id, name: call.name, input: call.input });
 }
 
-export function serializeModelResponseEnvelope(response: unknown): string {
-  return serializeExact(response);
-}
-
 /**
  * Append-only within a run. `create` owns fresh per-run paths; after creation no
  * transcript byte is rewritten. The future Anthropic client uses this same sink.

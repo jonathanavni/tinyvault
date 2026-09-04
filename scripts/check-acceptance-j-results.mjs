@@ -12,7 +12,7 @@ const EXPECTED_TEST_NAMES = [
   'Acceptance J runtime tool boundary rejects mutation of the offered array and preserves exactly seven tools',
   'Acceptance J runtime rejection rejects an unoffered run_shell call before invoking the executor',
   'Acceptance J runtime rejection cannot reach an executor that is capable of handling run_shell',
-  'Acceptance J runtime rejection lets exactly the seven approved candidate names reach the executor',
+  'Acceptance J runtime rejection lets approved names reach the executor and rejects representative forbidden names',
   'Acceptance J canonical model-turn snapshot reads an accessor-backed call once before passing a frozen call to the executor',
   'Acceptance J canonical model-turn snapshot keeps changing call fields coherent across evidence execution result and history',
   'Acceptance J canonical model-turn snapshot detects duplicate accessor-backed ids from the same canonical snapshot',

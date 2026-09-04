@@ -51,6 +51,7 @@ describe('Acceptance J runtime tool boundary', () => {
 
     const offeredNames = offeredTools.map(({ name }) => name);
     expect(offeredNames).toEqual(APPROVED_TOOL_NAMES);
+    expect(Object.isFrozen(offeredTools)).toBe(true);
     expect(offeredTools.every(isDeeplyFrozenDefinition)).toBe(true);
   });
 
@@ -106,7 +107,7 @@ describe('Acceptance J runtime rejection', () => {
     expect(capableExecutor).not.toHaveBeenCalled();
   });
 
-  it('lets exactly the seven approved candidate names reach the executor', async () => {
+  it('lets approved names reach the executor and rejects representative forbidden names', async () => {
     const executedNames: string[] = [];
     for (const name of CANDIDATE_TOOL_NAMES) {
       const run = runAgentLoop({

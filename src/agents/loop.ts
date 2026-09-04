@@ -122,7 +122,7 @@ async function executeLoop(options: AgentLoopOptions): Promise<LoopCompletion> {
     const { turn, bytes: responseBytes } = snapshotModelTurn(rawTurn);
     const responseEvents = responseEventsFor(turn, responseBytes);
     rejectSelfDeclaredSecretSources(responseEvents, options.secretSources ?? []);
-    await captureResponse(options.transcript, turn, responseBytes, responseEvents);
+    await captureResponse(options.transcript, responseBytes, responseEvents);
     messages.push({ role: 'assistant', content: turn });
 
     const calls = turn.toolCalls ?? [];
@@ -208,15 +208,10 @@ function responseEventsFor(turn: ModelTurn, responseBytes: string): CapturedEven
 
 async function captureResponse(
   transcript: TranscriptWriter,
-  turn: ModelTurn,
   responseBytes: string,
   events: CapturedEventInput[],
 ): Promise<void> {
-  if (typeof transcript.appendSerialized === 'function') {
-    await transcript.appendSerialized('response', responseBytes, events);
-    return;
-  }
-  await transcript.append('response', turn, events);
+  await transcript.appendSerialized('response', responseBytes, events);
 }
 
 async function captureToolExecution(

@@ -6,6 +6,7 @@ const ACCEPTANCE_J_TEST = 'src/agents/loop.acceptance-j.test.ts';
 const OPTION_COMPILE_FIXTURE = 'src/agents/loop.options.negative.ts';
 const REQUIRED_ACCEPTANCE_J_ASSERTIONS = [
   'expect(offeredNames).toEqual(APPROVED_TOOL_NAMES);',
+  'expect(Object.isFrozen(offeredTools)).toBe(true);',
   'expect(offeredTools.every(isDeeplyFrozenDefinition)).toBe(true);',
   'expect(pushError).toBeInstanceOf(TypeError);',
   'expect(executeTool).not.toHaveBeenCalled();',
@@ -19,13 +20,15 @@ const REQUIRED_ACCEPTANCE_J_ASSERTIONS = [
 const REQUIRED_COMPILE_FIXTURE_TEXT = [
   '// @ts-expect-error The evaluated tool registry is runtime-owned',
   '// @ts-expect-error Callers provide one executor',
+  'const PUBLIC_OPTION_KEYS_ARE_EXACT: Equal<keyof AgentLoopOptions, ExpectedOptionKeys> = true;',
   'tools: [],',
   'handlers: {},',
 ];
 
 describe('Acceptance J source-text integrity pin', () => {
-  // This proves source-text presence only. scripts/check-acceptance-j-results.mjs separately
-  // proves that the exact required runtime tests executed and passed without skip or todo.
+  // This proves source-text presence only: comments or coordinated edits to code and tests can satisfy it.
+  // scripts/check-acceptance-j-results.mjs proves that the ten named runtime tests ran and passed,
+  // not that every pinned assertion executed. This limitation is a declared residual.
   it('pins required Acceptance J assertions and negative compile fixtures by source text', async () => {
     const [acceptanceSource, compileSource] = await Promise.all([
       readFile(ACCEPTANCE_J_TEST, 'utf8'),

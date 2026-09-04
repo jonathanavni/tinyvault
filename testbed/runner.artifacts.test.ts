@@ -79,7 +79,11 @@ describe('eval runner plaintext artifact inventory', () => {
     const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
       scripts: { test: string };
     };
-    const invocations = packageJson.scripts.test.match(/vitest run[^&]*/gu) ?? [];
+    const testScript = packageJson.scripts.test;
+    const acceptanceJGate = 'node scripts/check-acceptance-j-results.mjs';
+    const invocations = testScript.match(/vitest run[^&]*/gu) ?? [];
+    expect(testScript).toContain(acceptanceJGate);
+    expect(testScript.indexOf(acceptanceJGate)).toBeLessThan(testScript.indexOf('vitest run'));
     expect(invocations).toHaveLength(3);
     expect(invocations[0]).toContain("--exclude 'src/supervisor/host.timing.browser.test.ts'");
     expect(invocations[0]).toContain("--exclude 'testbed/checkers/leakDecoders.timing.test.ts'");
