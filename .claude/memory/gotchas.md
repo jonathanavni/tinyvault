@@ -4,7 +4,7 @@ Sharp edges and footguns discovered the hard way — environment quirks, library
 
 Pin the **working Codex dispatch invocation for this machine** here (companion-script path, flag set, model-availability notes), since that's owned by the plugin and drifts across versions — see `docs/handoff-pattern.md` §1.
 
-- **Codex dispatch invocation (this machine)** — companion script: `node /Users/jonathanavni/.claude/plugins/cache/openai-codex/codex/1.0.4/scripts/codex-companion.mjs <mode>`. Modes: `task [--background] [--write] [--model <m>] [--effort <e>] [prompt]`, `adversarial-review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [focus text]`, `review`, `status`, `result [job-id]`, `cancel`. Verified ready 2026-08-31: codex-cli 0.144.5, ChatGPT login active, advanced runtime available. Path drifts on plugin update — re-`find ~/.claude/plugins/cache -name codex-companion.mjs` if it 404s. (2026-08-31)
+- **Codex dispatch invocation (this machine)** — companion script: `node /Users/jonathanavni/.claude/plugins/cache/openai-codex/codex/1.0.4/scripts/codex-companion.mjs <mode>`. Modes: `task [--background] [--write] [--model <m>] [--effort <e>] [prompt]`, `adversarial-review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [focus text]`, `review`, `status`, `result [job-id]`, `cancel`. **Model: `gpt-6-astra` for all modes; requires codex-cli >= 0.153.3.** Verified 2026-09-04: codex-cli 0.153.3, `adversarial-review` and `task --model gpt-6-astra` both green (`ASTRA_TASK_OK`). Path drifts on plugin update — re-`find ~/.claude/plugins/cache -name codex-companion.mjs` if it 404s. (2026-08-31)
 
 <!-- One entry per gotcha. Format:
 - **<short title>** — <the trap>, <how to detect it>, <the fix>. (<date>)
@@ -84,7 +84,7 @@ Example:
   fallback and reported a job that had died at 53 s as still running for ten minutes. Parse `job.status`,
   treat anything not in the known-running set as terminal, and print the raw status on parse failure. Same
   class as the zsh word-splitting monitor bug from M3: a monitor whose failure mode is silence. (2026-09-01)
-- **`gpt-5.6-sol` returns "Selected model is at capacity" within a minute of dispatch, sometimes.** The job
+- **(Fallback model only, since 2026-09-04 — the default is now `gpt-6-astra`.) `gpt-5.6-sol` returns "Selected model is at capacity" within a minute of dispatch, sometimes.** The job
   shows `failed` with the review never started. Retry once with the same arguments before changing anything.
   (2026-09-01)
 - **The authoring hazard recurred: a NUL pad character written as a JS escape inside a spec code block landed as
@@ -226,12 +226,18 @@ Example:
 
 ## M5.2 slice-2 session (2026-09-04)
 
-- **The Codex plugin's `adversarial-review` / `review` modes are UNUSABLE on this machine, and they fail
-  silently.** Their default model is `gpt-6-astra`, which codex-cli 0.144.5 is too old to run: the API returns
-  `400 invalid_request_error — "The 'gpt-6-astra' model requires a newer version of Codex."` Neither mode accepts
-  a `--model` flag (only `task` does), so there is no in-mode workaround. **Workaround: run adversarial reviews
-  through `task --fresh --model gpt-5.6-sol --effort high` with an explicit "READ-ONLY, do not edit" preamble and
-  an explicit output format.** Real fix: upgrade codex-cli (user's call — it changes their toolchain). (2026-09-04)
+- **RESOLVED 2026-09-04, but the failure shape is the durable lesson: a Codex CLI upgrade does NOT take effect
+  until the shared runtime broker is restarted, and the symptom is an error telling you to upgrade what you just
+  upgraded.** `gpt-6-astra` (now the default for `adversarial-review` / `review`) returned
+  `400 invalid_request_error — "The 'gpt-6-astra' model requires a newer version of Codex"` on codex-cli 0.144.5.
+  Upgrading to 0.153.3 (`npm install -g @openai/codex@latest`; installs to `~/.npm-global`, no sudo) **did not fix
+  it** — the identical 400 persisted, because `scripts/app-server-broker.mjs` was still running from before the
+  upgrade and holding a stale `codex app-server`. **Fix: kill the broker and its `codex app-server` children
+  (`ps -Ao pid,lstart,command | grep app-server-broker`), then redispatch; they respawn automatically.** Astra
+  answered immediately afterwards. Check the broker's `lstart` against the upgrade time before believing a
+  version-related error. Also: only `task` accepts `--model`, so when a *mode's* default model is unrunnable there
+  is no in-mode workaround — `task --fresh --model <id>` is the escape hatch that keeps the cross-model channel
+  alive. (2026-09-04)
 - **`status` reports dead Codex jobs as `running` indefinitely — trust log mtime, never the status list.** A job
   whose pid was gone and whose log had been frozen for 33 minutes was still listed `running` with a live-looking
   `elapsed: 36m 52s`, and `result <id>` answered "No job found" for that same id. Monitors must key on

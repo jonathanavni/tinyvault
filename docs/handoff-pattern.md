@@ -30,6 +30,8 @@ node "<path-to>/codex-companion.mjs" <mode> "<prompt>"
 
 > The exact companion-script path and flag set are owned by the plugin and change across versions. Treat the plugin's own docs as the source of truth, and pin the working invocation for your machine in `.claude/memory/gotchas.md`.
 
+> **Pin the model explicitly, not by mode default.** A mode's built-in default model changes when the plugin updates, and a default your CLI cannot run fails as an HTTP 400 at dispatch — silently, if you are not watching. Record the intended model and the minimum CLI version alongside the invocation, and keep `task --model <id>` documented as the escape hatch: it is the only mode that accepts a model flag, so it is what keeps the cross-model channel alive when a mode default breaks.
+
 Modes (current plugin):
 
 - **`task`** — rescue-equivalent. Use for: deeper-investigation passes, second-opinion debugging, scoped implementation when Codex is the better-suited writer, "I'm stuck, let the other model try."
