@@ -1,9 +1,13 @@
 # M5.2 slice spec — Docker-composed fixtures behind one implementation, two transports
 
-**Status: DRAFT (revision 1) — revised after paper round 1. Still not locked.** Round 1 broke both of revision 0's
-proposed topologies and every one of its acceptance criteria; the findings and dispositions are in
-`docs/m5-2-review-findings.md` (C-R2). Revision 1 answers them. It is not self-certifying: the sidecar split in §D2
-is a design round 1 *proposed* rather than *tested*, so round 2 must attack it before anything is built.
+**Status: DRAFT (revision 1) — revised after paper round 1, with the user's decisions taken. Not locked; round 2
+gates the lock.** Round 1 broke both of revision 0's proposed topologies and every one of its acceptance criteria
+(`docs/m5-2-review-findings.md`, C-R2). Revision 1 answers them, and the three open questions are now decided —
+host Chromium plus per-fixture control sidecars, attestation branch (i), and a framed `docker compose exec -T`
+stdio bridge for the host-harness↔sidecar transport. It is not self-certifying: the sidecar split (§D2) is a design
+round 1 *proposed* rather than tested, and the exec bridge (§D2.1) is newer still, so round 2 attacks both before
+anything is built. If either fails, the rule is stop and report — never a published control port, never a
+fallback.
 
 ## What changed from revision 0 (read first)
 
@@ -148,19 +152,50 @@ Host Chromium is a *second*, independent problem: Playwright launches the browse
 Compromise of a page container must therefore cost the attacker only that fixture's page surface — never another
 run, never another fixture, never the signing path.
 
-**The host-browser question stays open, and it is now a cost question, not a security one**, because the sidecar
-split holds whether the browser runs on the host or in a container:
+**DECIDED (user, 2026-09-04): host Chromium plus per-fixture control sidecars.** The calibrated browser
+environment is preserved, so **transport is the only changed variable in the parity experiment** — which is what
+makes §D6's comparison mean anything. Containerized Chromium is **deferred**, and if it is ever introduced it comes
+in as a *separately rebaselined environment*, never as a swap underneath the existing calibration (SCHEMA's 44–83 %
+miss range and ≥ 150 ms figures are host-browser observations, `SCHEMA.md:140-155`).
 
-- **Host Chromium (cheaper).** Keeps the coverage gate's calibration valid. Requires that no control port is ever
-  published to the host — enforced statically, see Acceptance B.
-- **Containerized Chromium (stronger, and confounded).** Removes the host from the topology entirely, but changes
-  **two** variables in the parity experiment at once — transport *and* browser — and SCHEMA's 44–83 % miss range
-  and ≥ 150 ms calibration are host-browser observations (`SCHEMA.md:140-155`), so it needs a container-specific
-  rebaseline and M6 would then measure a different browser environment. Round 1's read: this does not invalidate
-  the gate's logic, only the use of the existing calibration as evidence for that environment.
+The cost of that decision is that the host is inside the topology, so **no control port may be published to the
+host, ever** — enforced statically (Acceptance B) and structurally by §D2.1.
 
-**Recommendation: host Chromium plus control sidecars**, with the containerized-browser move deferred and named.
-The user takes this call; it is the one open decision in this spec.
+### D2.1 — The host-harness ↔ sidecar transport: a framed `docker compose exec -T` stdio bridge
+
+Host Chromium means the harness is on the host, and the sidecar's control surface must be reachable by the harness
+and by nothing the page can address. Two candidate mechanisms are ruled out before the bridge is specified:
+
+- **A published control port is forbidden** by the decision above — a host page reaches any `127.0.0.1` port.
+- **A bind-mounted, container-created Unix socket does not work on this host** — verified by the user on Docker
+  Desktop for macOS, 2026-09-04: the socket file *appears* on the host side of the bind mount, but a host
+  connection returns `ECONNREFUSED`. The macOS Docker Desktop file-sharing layer does not proxy `AF_UNIX`
+  connect() across the VM boundary. Revision 0's Option B is therefore not merely weaker, it is **non-functional on
+  the development host**, and no amount of sidecar re-siting fixes it.
+
+**The transport is a long-lived, framed `docker compose exec -T` stdio bridge** into a control process inside the
+sidecar (or into a container-local Unix socket that process fronts). The page cannot reach the Docker exec API, its
+stdio, or the container-local socket: none of them is a network endpoint reachable from a page's origin, and the
+sidecar publishes nothing.
+
+Requirements on the bridge, each of which round 2 should try to break:
+
+- **`-T` is mandatory.** A TTY would mangle the byte stream and echo input; framing must run over a raw pipe.
+- **Explicit framing.** Exec stdio is a byte stream with no message boundaries: length-prefixed frames, one
+  request/response per frame, with a declared maximum frame size. Malformed or oversized frames close the bridge
+  rather than resynchronising — a resynchronising parser is a request-smuggling surface.
+- **`stderr` is not the frame stream.** Diagnostics go to `stderr` and are never parsed as control responses.
+- **One long-lived bridge per fixture per eval run**, not one exec per operation — repeated exec is both a cost and
+  a race, and a per-operation exec multiplies the binding checks below.
+- **The bridge must prove where it landed.** An exec that succeeds is not evidence that it reached the intended
+  container. On open, the sidecar announces its Compose project, service name, container id, `fixtureId`, and its
+  **public key**; the harness verifies every field against what it expects and **binds the public key to that
+  fixture identity for the run**. A mismatch is a hard failure, never a retry against whatever answered. Cross-
+  fixture key inequality (§D6) is checked across these announcements.
+- **Bridge death is a red, not a fallback.** If the bridge closes mid-run, the run fails loudly; there is no
+  reconnection that silently rebinds to a different container, and no downgrade to the in-process transport (§D5).
+
+Round 2 attacks this bridge directly: see "For paper round 2".
 
 ### D3 — Per-operation, run-scoped capabilities
 
@@ -168,7 +203,8 @@ The user takes this call; it is the one open decision in this spec.
   sidecar only. A single shared Compose secret is rejected: it would let one compromised fixture register
   predictable ids on every other fixture ahead of the harness.
 - Registration returns **one capability per operation** — receipt retrieval, capture retrieval, attestation — each
-  bound to `(fixtureId, runId, operation)`. Revision 0's single `(fixtureId, runId)` bearer is withdrawn: it would
+  bound to `(fixtureId, runId, operation)`; the attestation capability additionally carries §D4's bounded,
+  single-use-after-finalization rule. Revision 0's single `(fixtureId, runId)` bearer is withdrawn: it would
   let a capture-read capability destructively drain the receipt or drive the signing oracle, and it contradicted
   §D2's own requirement.
 - **Capabilities must be unobservable to the page, and this is gated, not asserted.** The obvious implementation
@@ -188,27 +224,36 @@ The user takes this call; it is the one open decision in this spec.
 - The page-controlled attribution residual (`SCHEMA.md:332-335`) stays exactly as declared, corroborating only, and
   **neither its form-body path nor its query path** may feed any authorization decision (`loginFixture.ts:371-378`).
 
-### D4 — Attestation: an explicit fork, because "keep it in-process" is not implementable
+### D4 — Attestation: sidecar-only, operation-scoped **(DECIDED — branch (i))**
 
-Revision 0 preferred "do not expose `attestEvents`; keep the single-process claim". That cannot be done. Offline
+Revision 0 preferred "do not expose `attestEvents`; keep the single-process claim". That cannot be done: offline
 adjudication **requires the fixture signature before it parses events** (`testbed/checkers/offline.ts:244-267`), so
-in composed mode the choice is real:
+in composed mode the fixture either signs or there is no attestation.
 
-1. **Sidecar-only, operation-scoped signing endpoint**, reachable only over `tv-control` under an attestation
-   capability, keeping today's limited claim word for word.
-2. **Composed runs carry no event attestation**, stated plainly, with adjudication's signature requirement relaxed
-   for that transport and the weaker guarantee written into `SCHEMA.md`.
+**DECIDED (user, 2026-09-04): branch (i) — sidecar-only, operation-scoped event attestation, keeping the existing
+limited post-capture-integrity guarantee.** The claim does not grow. In particular:
 
-A harness-local substitute is neither: it is not "the fixture signs bytes", and presenting it as attestation would
-be the exact dishonesty this project exists to avoid. Whichever branch is taken, this sentence changes in the same
-commit — containers make its stated premise false even though arbitrary-byte signing still prevents independent
-authenticity:
+> **Do not describe this as independent authenticity.** The sidecar still signs a digest of runner-supplied bytes
+> it did not observe. Moving that signer into a container changes *who can reach the signer*, not *what the
+> signature proves*.
 
-> "the fixture signs bytes the runner handed it, so this is post-capture integrity … Closing that would need an
-> attestor independent of the capture layer, which does not exist in a single-process local harness."
-> (`SCHEMA.md:351-355`)
+Constraints on the operation, all of which are acceptance-gated:
 
-Fixture-observed attestation — the real fix — stays out of scope.
+- **Domain separation from completion receipts.** Event attestations and completion receipts are signed over
+  distinct, explicitly prefixed domains, so no attestation can be verified as a receipt and no receipt as an
+  attestation. This is the "domain confusion" surface round 2 attacks; today both are Ed25519 signatures from the
+  same fixture key, and only the payload shape distinguishes them.
+- **Capability-scoped to `(fixtureId, runId, attest)`.** An attestation capability authorizes attestation, for that
+  run, on that fixture — nothing else. It cannot sign for another run, another fixture, or another operation.
+- **Bounded and single-use after run finalization.** Attestation is available once, after the run is finalized;
+  it is not a standing oracle for the life of the sidecar. Repeat or pre-finalization requests are refused.
+- **Private keys never leave the sidecar.** The page container never holds one; the harness holds only public keys,
+  bound to fixture identity by the §D2.1 bridge handshake.
+- **Cross-fixture key inequality stays gated** (§D6): reusing one key across fixtures must go red, because
+  verification would still succeed while compromising one fixture forged another.
+
+Fixture-observed attestation — the real fix, which would let the claim actually grow — stays out of scope and stays
+named as the thing that would close it.
 
 ### D5 — Daemon preflight, plus fail-closed construction
 
@@ -268,7 +313,9 @@ preserve the result and the count, and never normalize "no evidence" into either
 - The `FixtureTransport` seam and the two implementations (§D1), plus the `transport` field rename.
 - Dockerfile(s) and a Compose file for the fixture set in the §D2 topology: page container plus control
   sidecar per fixture, `tv-page` and `tv-control`, and the static Compose lint Acceptance B requires.
-- The control protocol and per-operation run capabilities (§D3), including the idempotent receipt read.
+- The framed `docker compose exec -T` stdio bridge and its landing-verification handshake (§D2.1).
+- The control protocol and per-operation run capabilities (§D3), including the idempotent receipt read, and §D4's
+  domain-separated, bounded, single-use attestation.
 - The daemon preflight at the one placement (§D5).
 - The parity gate and its normalizer (§D6), plus the `SCHEMA.md` amendment §D4 requires.
 
@@ -296,7 +343,9 @@ served by the hostile origin, every control operation is attempted across: the f
 page-network IP, loopback, the Docker gateway, `host.docker.internal`, IPv4 and IPv6, a DNS-rebound name, and each
 of `fetch`, form POST, image, WebSocket and worker — and separately from a *compromised fixture* pivot. All fail at
 the transport layer, with no route, never at an authorization check. A static Compose lint rejects `network_mode:
-host`, any published control or CDP port, any control mount into a page container, and any wildcard control bind.
+host`, **any published port other than the fixtures' page origins**, any control mount into a page container, and
+any wildcard control bind — the control plane is reachable only over the §D2.1 exec bridge, so a published control
+port is a lint failure by construction, not a judgement call.
 *Mutant:* a single-probe version of this test passes while the page-network IP still answers. (The controls lab's
 deliberately permissive CORS means any accidental TCP exposure is immediately readable —
 `controls-lab/index.ts:350-383` — so reachability alone is the failure.)
@@ -330,26 +379,55 @@ the clone; both are required.)
 `SCHEMA.md` integrity claim to what each transport actually implements, including §D4's chosen branch. *Mutant:* a
 prose assertion passes while the composed attestation path implements nothing.
 
+**I. The bridge proves where it landed.** On open, the harness verifies the sidecar's announced Compose project,
+service, container id, `fixtureId` and public key against what it expects, and binds that key to that fixture for
+the run. *Mutants:* an exec that lands in a different service, a second container of the same service, a sidecar
+announcing another fixture's id, and a sidecar announcing a key the harness did not expect — each must be a hard
+failure, and none may retry against whatever answered. A closed bridge mid-run fails the run; it never reconnects
+onto a different container and never falls back to the in-process transport.
+
+**J. Attestation is domain-separated, scoped, bounded and single-use.** An event attestation cannot be verified as a
+completion receipt, nor a receipt as an attestation. An attestation capability for `(fixtureId, runId, attest)` is
+refused for another run, another fixture, and every other operation; attestation is refused before run
+finalization and on any repeat. *Mutants:* both signatures over a shared, un-prefixed domain; the attestation
+capability accepted for receipt retrieval; a second attestation call succeeding; a pre-finalization call
+succeeding. Private keys never appear outside the sidecar — asserted by scanning the page container, the harness
+process, artifacts and logs.
+
 ---
 
-## Open decisions
+## Decisions taken (user, 2026-09-04)
 
-1. **Host Chromium or containerized Chromium** (§D2). The sidecar split holds either way, so this is now a cost
-   question: host keeps the coverage gate's calibration valid; containerized removes the host from the topology but
-   confounds the parity experiment and forces a rebaseline. **Recommendation: host Chromium plus control
-   sidecars.** The user's call.
-2. **§D4 branch (i) or (ii)** — a sidecar-only signing endpoint keeping today's limited claim, or composed runs
-   declared to carry no event attestation. Round 2 should say which is more honest given what composed mode can
-   actually prove.
+1. **Host Chromium plus per-fixture control sidecars** (§D2). Preserves the calibrated browser environment and keeps
+   **transport as the only changed variable** in the parity experiment. Containerized Chromium is deferred, and is
+   only ever introduced later as a *separately rebaselined* environment.
+2. **Attestation branch (i)** (§D4): sidecar-only, operation-scoped, keeping the existing limited
+   post-capture-integrity guarantee, explicitly **not** described as independent authenticity.
+3. **The host-harness ↔ sidecar transport is a framed `docker compose exec -T` stdio bridge** (§D2.1). No control
+   port may be published. A bind-mounted container-created Unix socket is **not viable on this host** — verified on
+   Docker Desktop for macOS: the socket file appears on the host side of the mount but connecting returns
+   `ECONNREFUSED`.
+
+Nothing else in this spec is locked. Revision 1 locks only after paper round 2.
 
 ## For paper round 2
 
-Round 1 proposed the sidecar split; it has not been attacked. Round 2's primary job is to break it — in particular
-the page-container↔sidecar channel (§D2), which is the new trust boundary and therefore the new candidate hole.
-Also: whether per-operation capabilities can leak through the L→C read oracle; whether a shared capture volume
-reintroduces the cross-run reads §D3 just closed (round 1: yes, if one volume is shared among fixture containers —
-prefer sidecar retrieval with harness-owned persistence, or a private per-fixture volume); and whether Acceptance
-B's matrix has a hole.
+Round 1 *proposed* the sidecar split and never attacked it, and the exec bridge (§D2.1) is newer still. Round 2's
+job is to break both. The user set the attack surface:
+
+1. **The page-container ↔ sidecar state channel** — the new trust boundary, and therefore the new candidate hole.
+2. **Whether page-controlled input can cause receipt or attestation signing indirectly** — not "can the page call
+   the signer", but "can the page make the fixture ask the signer on its behalf".
+3. **The Docker-exec bridge's binding** to the intended Compose project, service, container, fixture identity and
+   public key — including what an exec that lands somewhere else looks like, and whether anything retries.
+4. **Capability leakage and replay** — including through the L→C read oracle, artifacts, logs and error text.
+5. **Shared-volume and cross-fixture access** — whether the filesystem reintroduces the cross-run reads §D3 closes.
+6. **Domain confusion between event attestations and completion receipts** — both are Ed25519 signatures from the
+   same fixture key today.
+
+**Stop-and-report rule (user, 2026-09-04).** If the sidecar split or the exec bridge fails this attack, **stop and
+report**. Do not repair it by publishing a control port, and do not add a silent fallback. A design that cannot
+survive round 2 goes back to the user, not into code.
 
 ## Reporting
 

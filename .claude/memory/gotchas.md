@@ -174,3 +174,16 @@ Example:
   `leakDecoders.timing.test.ts` runs ~60 s — under the 60 s cap on some runs, over on others (65.8 s alone). The merge and
   hygiene gates were green by variance. Benchmarks assert a bound on a small corpus; stress scans get their own test and
   their own bound. Found by the post-M5 assessment, not by the ladder. (2026-09-03)
+- **A bind-mounted, container-created Unix socket is not connectable from the macOS host (Docker Desktop).** The
+  socket file *appears* on the host side of the bind mount, but `connect()` from the host returns `ECONNREFUSED` —
+  Docker Desktop's file-sharing layer does not proxy `AF_UNIX` across the VM boundary. Verified by the user
+  2026-09-04 while choosing the M5.2 control-plane transport; it killed the "UDS instead of a published port"
+  option outright, not just weakened it. The working substitute is a long-lived, framed `docker compose exec -T`
+  stdio bridge into a control process inside the container (`-T` is required; a TTY mangles and echoes the byte
+  stream). See `docs/m5-2-slice-spec.md` §D2.1. (2026-09-04)
+- **Docker networks scope routes, not listening ports.** A container has ONE network namespace, so a listener bound
+  to `0.0.0.0` is reachable on *every* network the container joins. "Publish the page origins on one network and
+  the control port on another" is not a thing Compose can do, and `internal: true` prevents external routing, not
+  access by a member or a dual-homed member. Isolating a control plane from a hostile page needs **privilege
+  separation** (a separate sidecar the page process cannot address), never network labelling. Found by Codex paper
+  round 1 against a design that was about to be built (register C-R2). (2026-09-04)
