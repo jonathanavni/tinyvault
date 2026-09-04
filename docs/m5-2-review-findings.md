@@ -411,3 +411,81 @@ non-exposure.
 **Revision 4 LOCKED.** Implementation proceeds through `docs/handoff-pattern.md` §4 with the security third channel
 (§7.1) — this is security-core surface. If implementation shows a locked decision needs a new mechanism, or a claim
 stronger than the deployment assumption supports, **stop and return to the user** rather than widening the claim.
+
+---
+
+## C-S1 — M5.2 slice 1: F-ALT failed three enforcement designs (2026-09-04)
+
+**STOP.** Per the user's standing rule, a third F-ALT failure ends the work: no fourth matcher iteration, no Slice 2.
+Slice 1 is unmerged on `codex/m5-2-slice-1` at `3c91a39`. **The enforcement primitive needs redesign, not another
+recognized syntax case.**
+
+### What Acceptance J requires
+
+The evaluated agent is a declared adversary in the locked threat model. §D8 freezes its tool surface to exactly
+seven supervised browser/vault tools, and Acceptance J asserts the **exact set**. The property is load-bearing for
+the locked §D2 claim.
+
+### Three designs, three failures
+
+| Round | Design | Defeated by |
+|---|---|---|
+| 1 | A test observing the array `runHostAdapter` passes to the client | An alternate production construction — the test wasn't at the production call site |
+| 2 | An AST matcher enumerating permitted call shapes | **Seven** bypasses: barrel re-export, local alias, `.call`, construction under `src/`, production code in a `*.test.ts`-named file, dynamic import, trailing spread in the options literal |
+| 3 | A positive occurrence inventory + suffix-blind reachability walk | **Eighth-class bypasses, found independently by two channels** (below) |
+
+Round 3 followed `.claude/memory/conventions.md:82` — "an AST allowlist rule must end with a positive pass over
+every occurrence, not an enumeration of forbidden shapes." The convention was applied correctly and still failed.
+
+### Why round 3 failed — the structural finding
+
+**A positive allowlist over "occurrences the type checker can resolve" is not a positive allowlist over
+"occurrences."** Two independent gaps, both verified by reading the gate and by end-to-end mutants:
+
+1. **Symbol-less references.** `nodeRefersToTarget` returns false when `checker.getSymbolAtLocation` yields
+   `undefined` (`runner.agent-tools.test.ts:337`), and `isStaticDynamicImport` requires a string-literal specifier
+   (`:377`). A dynamic `import()` with a **computed** specifier types the namespace `any`, so `mod.runAgentLoop`
+   carries no symbol: invisible to the inventory, unrecognised by the construction finder, and still executable.
+   Driven end-to-end inside `testbed/`: the gate reported green while the loop dispatched `run_shell` to the
+   evaluated agent. Control: replacing the computed import with a plain one turns the gate red, proving the file is
+   genuinely scanned and the green is a true evasion.
+2. **The `ROOTS` boundary and symlinked directories.** The walk only retains modules already in
+   `sourcePaths` (`ROOTS = ['src','testbed']`), skipping anything outside with no error, and `sourceFiles()` never
+   descends a symlinked directory because `entry.isDirectory()` is false for one. A second, wholly unvalidated
+   construction in `scripts/`, a new top-level directory, or behind a symlink is invisible to **both** checks.
+
+The set of symbol-resolvable, root-contained references is not closed under the language's import mechanisms. That
+is why an eighth or ninth recognised form would not end this.
+
+### The qualifier that belongs with the finding
+
+**`scripts/check-dependency-boundary.mjs` — pre-existing, already on the `make test` path — catches all four of the
+root-boundary mutants** (`production-to-tooling re-export`, `unresolved relative re-export`, `non-literal dynamic
+import()`). So `make test` still goes red on those exact routes today. **The F-ALT gate is defeated; the
+enforcement system is not, by an unrelated gate.** Both halves of that sentence are needed to judge the risk.
+
+### Two further defects in the round-3 gate
+
+- **It has no deletion-detection.** Nothing in the repo references `runner.agent-tools.test.ts`; deleting either
+  `it()` block, or the whole file, turns nothing red. The only signal is an unasserted total test count. A gate that
+  cannot detect its own removal is the silent-wrong shape.
+- **Its own text overclaims, and so does the integrator's commit message.** The gate says "This is the complete
+  positive inventory" and "exactly one reachable direct construction"; `d7418d5` repeats the reachability sentence
+  unqualified. Both are false outside `ROOTS` and for symbol-less occurrences inside them. The inventory paragraph
+  does state its `src/`+`testbed/` scope honestly; the reachability sentence does not.
+
+### Verified closed and expected to survive a redesign
+
+F-ASYNC (every `FixtureTransport` operation and `lookalikeRequests` awaited at all 46 call sites; `verifyCompletion`
+correctly sync; `readCaptureRequests` rejects rather than throwing, with its own absence-detection test); F-PROTO
+(own-property dispatch, equality-asserted unknown-tool message across `toString`/`constructor`/`__proto__`/
+`valueOf`/`hasOwnProperty`, with the safe handler asserted not called); F-FLAKE; F-MINOR including the corrected
+`child_process` count; and `architecture` honestly documented as reserved for commit 2 with no manufactured proof.
+
+### The direction the evidence points
+
+Not a syntactic patch. Move the property from **source shape** to **value identity or non-acceptance of input**:
+have `runAgentLoop` derive the tool surface from an internal registry rather than accept a `tools` parameter, or
+accept only a frozen module-level allowlist compared by identity. Such a property holds however the module is
+imported, because it never depends on recognising a reference. **This is a redesign decision and belongs to the
+user**, per the stop rule.
