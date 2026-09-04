@@ -128,10 +128,34 @@ Codex recon (C-R1) + adversarial paper round 1 (C-R2) done; **round 1 of the thr
   and binding, not provenance**.
 - Four review passes ran against this slice (C-R2, C-R3, C-R5, C-R7); each narrowed the design or the claim rather
   than growing it. The paper cap stays spent — no further paper round.
-- **Next: implementation** through `docs/handoff-pattern.md` §4 with the security third channel (§7.1), since this
-  is security-core surface. Acceptance A–P are validated in the implementation-review ladder, not on paper. If
-  implementation shows a locked decision needs a new mechanism, or a claim stronger than the deployment assumption
-  supports, stop and return to the user.
+- **Slice 1 MERGED (`ab52f8e`, 2026-09-04).** The `FixtureTransport` seam with every bridge-crossing operation
+  Promise-returning (so commit 4 owns capabilities, not a sync→async rewrite); `transport` split into architecture
+  and reachability, architecture reserved and documented for commit 2; a canonical model-turn snapshot taken
+  immediately after `nextTurn` and consumed by every downstream reader; and the evaluated agent's tool boundary
+  enforced at runtime. Final head `1d04f93`: Acceptance J gate 10/10, `make test` 995 + 5 + 10 exit 0, literal
+  clean clone green at the same counts.
+- **The tool boundary took four designs, and the third failure was the important one.** Three analysed source and
+  each was defeated — a call-site observation; an AST matcher enumerating permitted shapes (seven bypasses); and a
+  positive occurrence inventory plus reachability walk (defeated by a computed dynamic-import specifier leaving the
+  reference symbol-less, and by `ROOTS`/symlink gaps). **C-S1** records the structural finding: *a positive
+  allowlist over occurrences the type checker can resolve is not a positive allowlist over occurrences.* The user
+  then authorized a runtime redesign: `runAgentLoop` accepts no caller-supplied tools or handlers and owns a private
+  deeply frozen registry that is both offered and validated against — so import syntax, aliases, call sites, roots
+  and filenames are irrelevant. Three channels confirmed no model-data route exceeds the seven.
+- **A repair can remove protection: watch for it.** The first authorized repair fixed proofs that could not fail,
+  but deleted `Equal<keyof AgentLoopOptions, …>` and `Object.isFrozen(offeredTools)` — both stronger before it —
+  because the instruction said *replace* where the vacuous half was only the runtime `expect(...)`. The closure
+  review caught it with sharper mutants (an option under a *different* name; `freeze`→`seal`, which the push test
+  survives). Restored in `f7aef17`; both regressions are reproduced at the commit that introduced them.
+- **Declared residuals (C-S2), accepted not chased:** the package/build entry point is a reviewed root of trust;
+  `Equal<>` constrains option *keys*, not every semantic widening of a property type; its helper and source pins can
+  change alongside production code; a future split of offering and dispatch registries would pass; source-text pins
+  can be satisfied by comments. Each needs coordinated source changes passing review; none is reachable by the
+  evaluated model.
+- **Next: Slice 2** — the daemon-channel preflight (resolve, validate, pin) and fail-closed composed construction,
+  gating Acceptance A and B, per `docs/m5-2-implementation-plan.md`. It also owns the C-R7 P2 the spec left to
+  implementation: what *canonical local `unix://`* means for absolute-path syntax, `unix://` vs `unix:///`,
+  `realpath`/symlinks, socket-type verification and proxy rejection. Same cadence: pause for review before merge.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
