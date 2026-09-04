@@ -1,42 +1,51 @@
 # M5.2 slice spec — Docker-composed fixtures behind one implementation, two transports
 
-**Status: BLOCKED — revision 1 did NOT lock. Paper round 2 rejected both the sidecar split and the exec bridge**
-(`docs/m5-2-review-findings.md`, C-R3). Round 2 of the three-round cap is spent. The stop-and-report rule applies:
-no published control port, no silent fallback, no repair without the user.
+**Status: DRAFT (revision 2) — the threat boundary is LOCKED by the user; the design is rewritten against it.
+Round 3 gates the lock.** Revision 1 was rejected by paper round 2 (`docs/m5-2-review-findings.md`, C-R3) because
+its isolation claim was false: it promised containment after compromise of the fixture process, which the design
+cannot establish, and which the project had already contradicted in `SCHEMA.md:319-335`.
 
-**Why it is blocked, in one paragraph.** §D2 promised that compromising a page container could never reach the
-signing path. **Receipt signing is triggered by a page request by design** — the page POSTs the login body, and the
-right username plus the registered canary is what makes the fixture capture and sign
-(`testbed/fixtures/shared/loginFixture.ts:385-411`) — and `SCHEMA.md:319-335` already declares that an
-exact-endpoint follower can obtain a real receipt. So §D2's claim exceeded a residual the project had already
-declared; it was not true in-process either, and the sidecar inherited the gap while promising to close it. Every
-candidate page↔sidecar state channel therefore fails identically: the page container must be able to say "a login
-arrived with this body", so a compromised one can forge exactly that. The only semantic escape — the sidecar
-observing the browser request itself — puts page-input parsing back beside the signing path and contradicts §D2's
-own argument. **This is a claim problem, not a mechanism problem, and narrowing the claim is the user's decision.**
-Separately, the exec bridge's landing handshake is circular: it cannot verify an "expected" public key, because the
-bridge is that key's first trust path.
+## What changed from revision 1 (read first)
 
-**Read the sections below as the rejected design plus the constraints that survived**, not as a plan. Everything
-below §D1 is subject to whatever the user decides about the claim.
+1. **A threat model is stated and locked** (next section). Revision 1 had none, which is how an unsupportable
+   absolute got written into §D2 and survived a round.
+2. **The §D2 claim is replaced with the user's exact sentence.** It no longer promises anything about a
+   compromised fixture process, and it explicitly admits that declared data-plane requests may cause capture and
+   receipt issuance, M5-C2 included.
+3. **The sidecar is removed as a required security mechanism.** Under the locked boundary it buys nothing: it
+   defends against fixture-process compromise, which is out of scope, while introducing an unsound page↔sidecar
+   state-transfer boundary that round 2 showed has no surviving implementation. One container per fixture.
+4. **The control transport is a Unix socket entirely inside the fixture container** — never published, never
+   bind-mounted (bind-mounting is also non-functional on this host; see §D2.1) — reached by a long-lived
+   `docker exec -T` bridge that connects to it from inside.
+5. **The exec trust anchor is repaired** (§D2.1): a fresh per-eval, per-fixture bootstrap secret injected at
+   container creation, exec against a resolved immutable container id rather than a service selector, a fresh
+   challenge, and a MAC binding challenge, epoch, fixture identity, container identity and public key. A
+   self-announced key is not trust.
+6. **Round 2's other valid findings are absorbed**: capability entropy/epoch/expiry/single-use/restart-invalidation
+   (§D3); captures transferred over the authenticated control transport with **no shared artifact-root or
+   cross-fixture mount** (§D7); framing with request ids, one stdout writer, and close-on-desynchronisation
+   (§D2.1); and testable domain separation inside the signed bytes (§D4).
+7. **§D4 branch (i) is kept and renamed** from "sidecar-only" to **fixture-control-only, operation-scoped
+   attestation**.
 
-## What changed from revision 0 (read first)
+---
 
-1. **§D2 is rewritten, and the correction is load-bearing.** Revision 0 — and the topology sketch it was written
-   from — assumed a fixture container could "publish its page origins on the page network and its control port on
-   the harness network". **Docker does not work that way.** A dual-homed container has one network namespace; a
-   control listener on `0.0.0.0` is reachable through its `tv-page` IP too, because Docker networks scope routes,
-   not listening ports. The isolation must come from **privilege separation** — a control sidecar the page-serving
-   process cannot reach — not from network labelling.
-2. **§D4's preferred option was not implementable.** "Keep attestation in-process and keep the claim" cannot be
-   done: offline adjudication requires the fixture signature *before* it parses events. §D4 is now an explicit
-   fork, both branches honest about what composed runs prove.
-3. **§D3 contradicted itself** — §D2 demanded a capability bound to run *and operation*, §D3 issued one bearer for
-   all operations. Capabilities are now per-operation, with a non-observability gate, because the obvious
-   implementation recycles a token the fixture **deliberately renders into the hostile page**.
-4. **§D6 gained the specific false green** a normalizer would produce: duplicate-header multiplicity.
-5. **§D5 gained a second enforcement point** — the preflight is necessary but not sufficient.
-6. **Every acceptance criterion was rewritten**; round 1 showed all seven could pass while false.
+## Threat model (LOCKED — user, 2026-09-04)
+
+Everything in this spec is claimed against this boundary and nothing beyond it.
+
+- **The adversary is the evaluated model/agent and hostile page content executing in Chromium.**
+- **The harness and the fixture server/container are trusted evaluation infrastructure.**
+- **Compromise of a fixture process invalidates the run and is out of scope.** M5.2 must not claim containment
+  after that compromise. Any acceptance criterion that appears to test it is testing the wrong thing.
+- **A request through the declared page data plane may legitimately cause capture and completion-receipt
+  issuance**, including the already-declared M5-C2 exact-endpoint residual (`SCHEMA.md:319-335`). This is fixture
+  semantics, not a defect, and not something the composed transport is expected to change.
+- **Page content must not be able to invoke administrative control operations**: registration, receipt retrieval,
+  capture retrieval, arbitrary event attestation, or capability/key retrieval.
+
+That last line is the whole security question for this slice. Round 3 attacks it and nothing else.
 
 ---
 
@@ -111,7 +120,7 @@ reachability plus a runId; **use the signing oracle** — reachability, a regist
 
 ---
 
-## Design decisions (revision 1 — answered against paper round 1; round 2 must attack §D2)
+## Design decisions (revision 2 — rewritten against the locked threat model)
 
 ### D1 — One implementation, two transports, chosen at the seam not in the fixture
 
@@ -120,151 +129,136 @@ the harness reaches it. Introduce a `FixtureTransport` with two implementations:
 
 - `in-process` — today's direct object, unchanged in behavior. Used by `make test`, the coverage gate and the
   hostile browser suite. Docker never enters that path.
-- `composed` — a client that speaks the control protocol (§D3) to a fixture running in a container.
+- `composed` — a client that speaks the control protocol (§D3) over the §D2.1 bridge to a fixture in a container.
 
 The fixture object the runner consumes becomes a **client interface**, not a closure bundle. Today's `LoginFixture`
-is a live API whose methods close over server state (recon §7); the in-process transport keeps that by
-implementing the same interface directly.
+is a live API whose methods close over server state; the in-process transport keeps that by implementing the same
+interface directly.
 
-Note the existing `transport` field is a trap: it currently means "HTTP available vs the EPERM no-socket fallback",
-and the fallback is *named* `in-process` (`testbed/fixtures/shared/loginFixture.ts:137-151`). Docker-over-HTTP would
+The existing `transport` field is a trap: it currently means "HTTP available vs the EPERM no-socket fallback", and
+the fallback is *named* `in-process` (`testbed/fixtures/shared/loginFixture.ts:137-151`). Docker-over-HTTP would
 satisfy today's `assertHttpFixture` guard unchanged. **Renaming is in scope**; the guard must distinguish
 *architecture* (in-process / composed) from *reachability* (http / no-socket), because §D5's no-fallback rule is
 enforced on the first and today's capture-red rule on the second.
 
-### D2 — The network shape: privilege separation, not network labelling **(round 2 must attack this)**
+### D2 — The claim, and the topology that supports it
 
-The constraint is unchanged and is the user's: the control plane must be unreachable from the hostile page **by
-topology, not by CORS**, with authenticated, run-scoped registration. What changed is the mechanism, because the
-mechanism first proposed does not exist.
+**The claim (locked wording, user 2026-09-04):**
 
-**Why the obvious shape fails.** "The fixture publishes its page origins on the page network and its control port on
-the harness network" describes something Docker cannot do. A container has **one network namespace**. A listener
-bound to `0.0.0.0:<control-port>` is reachable on *every* network the container joins, including `tv-page`; Compose
-attaching a container to two networks scopes its **routes**, not its **ports**. So a hostile page reaches
-`http://<fixture-service>:<control-port>/register` over the page network, and `internal: true` on `tv-control`
-changes nothing — it prevents external routing, not access by a member or a dual-homed member. Worse, any fixture
-compromised through page-supplied input becomes a pivot onto `tv-control` with its bootstrap secret in hand.
+> Hostile page content and the evaluated agent cannot directly address the fixture control transport, obtain its
+> capabilities, retrieve control-plane state, or request event attestation. Declared data-plane requests may cause
+> the trusted fixture to record captures and issue completion receipts according to the fixture semantics,
+> including M5-C2. Compromise of the trusted fixture process is outside the evaluation threat model and
+> invalidates the run.
 
-Host Chromium is a *second*, independent problem: Playwright launches the browser on the host today
-(`testbed/runner.ts:110-149`), and a host page reaches any published `127.0.0.1` port and the Docker gateway.
+Nothing in this spec may state a stronger guarantee than that sentence, in code comments, `SCHEMA.md`, or the
+scorecard.
 
-**The design: one control sidecar per fixture, and the page process is not in it.**
+**The sidecar is removed.** Round 2 established that no page↔sidecar state channel survives a compromised page
+process — but under the locked boundary that compromise is out of scope, so the sidecar was defending against a
+threat this slice does not carry, at the cost of an unsound state-transfer boundary. It adds no strength to the
+claim above. Dropping it also drops every finding that existed only because of it.
 
-- The **page container** serves the fixture's origins and joins **only** `tv-page`. It holds no bootstrap secret, no
-  control socket, no control listener, and no capability material.
-- The **control sidecar** holds registration, receipt retrieval, capture retrieval and (per §D4) attestation. It
-  joins **only** `tv-control`, or exposes only a Unix socket the page container does not mount.
-- Page container and sidecar share exactly one thing: the fixture's own state, over a channel the sidecar defines
-  and the page container cannot use to issue control operations. Round 2's job is to attack that channel.
-- `tv-control` is `internal: true`, but that is defence in depth, not the argument. **The argument is that nothing
-  which parses page-supplied input can address the control plane at all.**
+**The topology:**
 
-Compromise of a page container must therefore cost the attacker only that fixture's page surface — never another
-run, never another fixture, never the signing path.
+- **One container per fixture.** The fixture server and its control process live together; both are trusted.
+- **Only page-origin TCP ports are published.** The lookalike fixture publishes its two page origins; nothing else
+  is published, ever.
+- **The control transport is a Unix socket entirely inside the container.** Never published, never bind-mounted.
+- **The harness reaches it over a long-lived `docker exec -T` bridge** that connects to that internal socket from
+  inside the container (§D2.1).
+- **No control network port and no silent fallback** (§D5).
 
-**DECIDED (user, 2026-09-04): host Chromium plus per-fixture control sidecars.** The calibrated browser
-environment is preserved, so **transport is the only changed variable in the parity experiment** — which is what
-makes §D6's comparison mean anything. Containerized Chromium is **deferred**, and if it is ever introduced it comes
-in as a *separately rebaselined environment*, never as a swap underneath the existing calibration (SCHEMA's 44–83 %
-miss range and ≥ 150 ms figures are host-browser observations, `SCHEMA.md:140-155`).
+Why this satisfies the claim: page content executes in host Chromium and can address only published TCP ports. The
+control socket has no TCP endpoint, no published port, and no host-side path — it is not addressable from a page at
+any layer, which is topology rather than a header check. The remaining question is *indirect* invocation, and that
+is §D3's job and round 3's target.
 
-The cost of that decision is that the host is inside the topology, so **no control port may be published to the
-host, ever** — enforced statically (Acceptance B) and structurally by §D2.1.
+### D2.1 — The exec bridge, and a trust anchor that is not self-asserted
 
-### D2.1 — The host-harness ↔ sidecar transport: a framed `docker compose exec -T` stdio bridge
+**Ruled out first:** a published control port (forbidden above), and a bind-mounted container-created Unix socket —
+verified non-functional on this host (Docker Desktop for macOS, user, 2026-09-04): the socket file appears on the
+host side of the mount but connecting returns `ECONNREFUSED`, because the file-sharing layer does not proxy
+`AF_UNIX` across the VM boundary. The socket therefore stays *inside* and the bridge comes to it.
 
-Host Chromium means the harness is on the host, and the sidecar's control surface must be reachable by the harness
-and by nothing the page can address. Two candidate mechanisms are ruled out before the bridge is specified:
+**Trust anchor.** Round 2 killed revision 1's handshake as circular: the sidecar self-announced its public key, and
+the bridge was that key's first trust path, so "unexpected key" could not be checked. Repaired as:
 
-- **A published control port is forbidden** by the decision above — a host page reaches any `127.0.0.1` port.
-- **A bind-mounted, container-created Unix socket does not work on this host** — verified by the user on Docker
-  Desktop for macOS, 2026-09-04: the socket file *appears* on the host side of the bind mount, but a host
-  connection returns `ECONNREFUSED`. The macOS Docker Desktop file-sharing layer does not proxy `AF_UNIX`
-  connect() across the VM boundary. Revision 0's Option B is therefore not merely weaker, it is **non-functional on
-  the development host**, and no amount of sidecar re-siting fixes it.
+- The harness generates a **fresh bootstrap secret per eval and per fixture** and injects it **when Compose creates
+  the container** — before the container is reachable, and never derived from anything page-visible.
+- The harness **resolves exactly one container id** for the fixture and **execs that immutable id**, never a
+  service selector. A resolution that yields zero or more than one container is a hard failure (this is also what
+  makes `scale > 1` safe rather than ambiguous).
+- The harness sends a **fresh challenge**, and the fixture control process returns a **MAC under the bootstrap
+  secret binding: the challenge, the eval epoch, the fixture identity, the container identity, and the generated
+  public key.** Only then is that public key trusted for the run.
+- **A self-announced key alone is not trust.** Any announcement without a valid MAC over all five values is a hard
+  failure, never a retry against whatever answered.
+- Bridge death is a red: the run fails, the outstanding operation is rejected on EOF, and there is no reconnection
+  that silently rebinds and no downgrade to the in-process transport.
 
-**The transport is a long-lived, framed `docker compose exec -T` stdio bridge** into a control process inside the
-sidecar (or into a container-local Unix socket that process fronts). The page cannot reach the Docker exec API, its
-stdio, or the container-local socket: none of them is a network endpoint reachable from a page's origin, and the
-sidecar publishes nothing.
+**Framing** (round 2, absorbed): length-prefixed frames with a declared maximum size; **request ids** correlating
+each response to its request; **exactly one writer on stdout**; unsolicited, duplicate and late responses are
+rejected rather than consumed as the next answer; `stderr` carries diagnostics only and is never parsed as a frame,
+and stdout diagnostics must corrupt-and-close rather than be skipped; malformed or oversized frames **close the
+bridge** — no resynchronisation, because a resynchronising parser is a request-smuggling surface; an operation
+timeout closes the bridge rather than leaving a frame outstanding.
 
-Requirements on the bridge, each of which round 2 should try to break:
+The Docker socket is **not** mounted into any container: the trusted host harness invokes the Docker CLI itself.
 
-- **`-T` is mandatory.** A TTY would mangle the byte stream and echo input; framing must run over a raw pipe.
-- **Explicit framing.** Exec stdio is a byte stream with no message boundaries: length-prefixed frames, one
-  request/response per frame, with a declared maximum frame size. Malformed or oversized frames close the bridge
-  rather than resynchronising — a resynchronising parser is a request-smuggling surface.
-- **`stderr` is not the frame stream.** Diagnostics go to `stderr` and are never parsed as control responses.
-- **One long-lived bridge per fixture per eval run**, not one exec per operation — repeated exec is both a cost and
-  a race, and a per-operation exec multiplies the binding checks below.
-- **The bridge must prove where it landed.** An exec that succeeds is not evidence that it reached the intended
-  container. On open, the sidecar announces its Compose project, service name, container id, `fixtureId`, and its
-  **public key**; the harness verifies every field against what it expects and **binds the public key to that
-  fixture identity for the run**. A mismatch is a hard failure, never a retry against whatever answered. Cross-
-  fixture key inequality (§D6) is checked across these announcements.
-- **Bridge death is a red, not a fallback.** If the bridge closes mid-run, the run fails loudly; there is no
-  reconnection that silently rebinds to a different container, and no downgrade to the in-process transport (§D5).
+### D3 — Control operations and per-operation capabilities
 
-Round 2 attacks this bridge directly: see "For paper round 2".
+The five administrative operations the locked claim names — registration, receipt retrieval, capture retrieval,
+arbitrary event attestation, capability/key retrieval — are reachable **only** over the §D2.1 bridge, and only
+under a capability.
 
-### D3 — Per-operation, run-scoped capabilities
+- Registration is authenticated by the per-eval, per-fixture bootstrap secret (§D2.1).
+- Registration returns **one capability per operation**, bound to `(fixtureId, runId, operation)`.
+- **Capabilities carry cryptographic entropy** — never derived from a run id, a nonce, or anything rendered.
+- **Bound to an eval/instance epoch**, so a capability from an earlier eval or an earlier container instance is
+  invalid even for a recurring run id (run ids deterministically recur, `testbed/runner.ts:380-388`).
+- **Expiry**, **per-operation scope**, and **single use** where the operation is single-use (§D4).
+- **Restart invalidation:** a restarted control process must reject every capability minted before the restart. In-
+  memory "used" state that resets on restart is a round-2 finding, not an implementation detail.
+- **Unobservable to the page, and gated rather than asserted.** No capability or derived value may appear in page
+  HTML, page URLs or headers, captured evidence, transcripts, artifacts, fixture access logs, bridge error text, or
+  stdout diagnostics. The obvious wrong implementation recycles the run token the fixture *deliberately renders
+  into the page* (`loginFixture.ts:355-363`), which the lookalike then copies (`lookalike-origin/index.ts:112-120`)
+  — and that rendering is a read oracle for any predictable registered run id.
+- Receipt retrieval becomes an **idempotent authenticated read** plus an optional acknowledgement; today's
+  `takeReceipt` deletes on read (`loginFixture.ts:192-195`), so over a transport a dropped response would turn a
+  completed run into an incomplete one. Offline replay protection already makes repeated retrieval harmless
+  (`testbed/completion.ts:107-117`).
+- The page-controlled attribution residual (`SCHEMA.md:332-335`) stays corroborating-only, and **neither its
+  form-body path nor its query path** may feed any authorization decision (`loginFixture.ts:371-378`). Note the
+  locked boundary makes the distinction sharp: a data-plane POST *may* cause capture and receipt issuance; it may
+  never cause registration, retrieval, arbitrary attestation, or capability disclosure.
 
-- Registration is authenticated by a bootstrap secret **unique per control sidecar**, delivered by Compose to the
-  sidecar only. A single shared Compose secret is rejected: it would let one compromised fixture register
-  predictable ids on every other fixture ahead of the harness.
-- Registration returns **one capability per operation** — receipt retrieval, capture retrieval, attestation — each
-  bound to `(fixtureId, runId, operation)`; the attestation capability additionally carries §D4's bounded,
-  single-use-after-finalization rule. Revision 0's single `(fixtureId, runId)` bearer is withdrawn: it would
-  let a capture-read capability destructively drain the receipt or drive the signing oracle, and it contradicted
-  §D2's own requirement.
-- **Capabilities must be unobservable to the page, and this is gated, not asserted.** The obvious implementation
-  recycles the existing run token — which the fixture *deliberately renders into the hostile page*
-  (`loginFixture.ts:355-363`) and which the lookalike copies into its own rendering
-  (`lookalike-origin/index.ts:112-120`). No capability or capability-derived value may appear in page HTML, page
-  URLs or headers, captured evidence, transcripts, artifacts, fixture access logs, or error text.
-- The L→C server-side fetch is **not** destination-steerable — fixed `/login`, closure-held canonical origin, only
-  the query copied (`lookalike-origin/index.ts:102-120`) — but it *is* a read oracle on whatever registration
-  renders for any predictable registered `runId`. That is precisely why the rule above is absolute.
-- Run ids stay predictable; **predictability must not be authorization**. The registration race closes on the
-  bootstrap secret.
-- Receipt retrieval becomes an **idempotent authenticated read** plus an optional explicit acknowledgement.
-  Today's `takeReceipt` deletes on read (`loginFixture.ts:192-195`): over a network, a dropped response turns a
-  completed run into an incomplete one on retry. Offline replay protection already makes repeated retrieval
-  harmless (`testbed/completion.ts:107-117`).
-- The page-controlled attribution residual (`SCHEMA.md:332-335`) stays exactly as declared, corroborating only, and
-  **neither its form-body path nor its query path** may feed any authorization decision (`loginFixture.ts:371-378`).
+### D4 — Fixture-control-only, operation-scoped attestation **(branch (i), locked)**
 
-### D4 — Attestation: sidecar-only, operation-scoped **(DECIDED — branch (i))**
+"Keep attestation in-process and keep the claim" is not implementable: offline adjudication requires the fixture
+signature **before** it parses events (`testbed/checkers/offline.ts:244-267`).
 
-Revision 0 preferred "do not expose `attestEvents`; keep the single-process claim". That cannot be done: offline
-adjudication **requires the fixture signature before it parses events** (`testbed/checkers/offline.ts:244-267`), so
-in composed mode the fixture either signs or there is no attestation.
+**Decided (user):** attestation is served by the fixture's control process, over the §D2.1 bridge, under an
+attestation capability. Renamed from "sidecar-only" to **fixture-control-only** now that the sidecar is gone.
 
-**DECIDED (user, 2026-09-04): branch (i) — sidecar-only, operation-scoped event attestation, keeping the existing
-limited post-capture-integrity guarantee.** The claim does not grow. In particular:
+> **It retains only post-capture integrity. It does not establish independent capture authenticity.** The control
+> process signs a digest of runner-supplied bytes it did not observe. Containerizing the signer changes who can
+> reach it, not what the signature proves.
 
-> **Do not describe this as independent authenticity.** The sidecar still signs a digest of runner-supplied bytes
-> it did not observe. Moving that signer into a container changes *who can reach the signer*, not *what the
-> signature proves*.
+- **Domain separation must be explicit and testable, inside the signed bytes.** Round 2's point is that today's
+  attestation and receipt payload *shapes* are already disjoint (`loginFixture.ts:258-275`, `completion.ts:138-150`,
+  `:188-210`), so a test that merely shows "an attestation does not verify as a receipt" stays green even when the
+  named separation is absent. The signed transcript must therefore carry: a distinct fixed prefix naming protocol,
+  artifact kind and version; unambiguous length framing; fixed field ordering; one canonical encoding including
+  string/Unicode and numeric rules; schemas rejecting duplicate and unknown fields; and operation, `fixtureId` and
+  `runId` scope **inside the signed bytes**. Version and type are signed, not carried in an outer envelope.
+- Capability-scoped to `(fixtureId, runId, attest)`; bounded; **single use after run finalization**; refused before
+  finalization, on repeat, and after a control-process restart.
+- Private keys never leave the fixture container. The harness holds only public keys, trusted via the §D2.1 MAC.
+- Cross-fixture key inequality stays gated (§D6).
 
-Constraints on the operation, all of which are acceptance-gated:
-
-- **Domain separation from completion receipts.** Event attestations and completion receipts are signed over
-  distinct, explicitly prefixed domains, so no attestation can be verified as a receipt and no receipt as an
-  attestation. This is the "domain confusion" surface round 2 attacks; today both are Ed25519 signatures from the
-  same fixture key, and only the payload shape distinguishes them.
-- **Capability-scoped to `(fixtureId, runId, attest)`.** An attestation capability authorizes attestation, for that
-  run, on that fixture — nothing else. It cannot sign for another run, another fixture, or another operation.
-- **Bounded and single-use after run finalization.** Attestation is available once, after the run is finalized;
-  it is not a standing oracle for the life of the sidecar. Repeat or pre-finalization requests are refused.
-- **Private keys never leave the sidecar.** The page container never holds one; the harness holds only public keys,
-  bound to fixture identity by the §D2.1 bridge handshake.
-- **Cross-fixture key inequality stays gated** (§D6): reusing one key across fixtures must go red, because
-  verification would still succeed while compromising one fixture forged another.
-
-Fixture-observed attestation — the real fix, which would let the claim actually grow — stays out of scope and stays
-named as the thing that would close it.
+Fixture-observed attestation — the only thing that would let the claim grow — stays out of scope and stays named.
 
 ### D5 — Daemon preflight, plus fail-closed construction
 
@@ -272,48 +266,48 @@ The preflight sits after the synchronous checker meta-gate and before artifact d
 controls-lab startup and `runHarnessGate()` — between `testbed/runner.ts:118` and `:119`. A preflight in the `npm`
 script is bypassed by every direct `runEval()` caller, and the eval entry is one (`runner.eval.test.ts:23-30`).
 
-That placement is **necessary but not sufficient**: `capturePersistedRuns` is exported, launches Chromium itself and
-runs scenarios without ever entering `runEval` (`runner.ts:157-203`), and the hostile suite calls it directly. So
-composed-transport **construction** must also fail closed, independently. Three mutants, all of which must go red:
-
-- a direct composed `capturePersistedRuns` that never passes the preflight;
-- the daemon lost *after* the preflight but before Compose startup;
-- composed startup catching a failure and returning the fast transport.
-
-The EPERM no-socket substitution (`loginFixture.ts:137-151`) must be unreachable from the composed path — it is the
-existing silent-downgrade shape.
+Necessary but not sufficient: `capturePersistedRuns` is exported, launches Chromium itself and runs scenarios
+without entering `runEval` (`runner.ts:157-203`), and the hostile suite calls it directly. Composed-transport
+**construction** must therefore also fail closed, independently. **Every** composed-construction failure is a red —
+daemon absent, image build failure, container creation failure, exec failure, handshake or MAC failure, protocol
+error — with no selective fallback for any of them. The EPERM no-socket substitution
+(`loginFixture.ts:137-151`) must be unreachable from the composed path.
 
 ### D6 — The canonical parity gate
 
 **Normalize:** physical origins → logical roles (`C`, `L`, `controls-primary`, `controls-secondary`), preserving
 origin equality/inequality and `C ≠ L`; random values (canary, nonce, vault handle and key material) by
-alpha-renaming that preserves every equality, uniqueness and leak-presence relationship; signature and public-key
-*bytes*; wall-clock fields (`issuedAt`, run start/end, coverage `observedAt`, scorecard `generatedAt`) while
-retaining the predicate that receipt time falls inside the run window; browser/CDP session, frame, document and
-request ids by alpha-renaming that preserves the correlation graph; header name **casing**; absolute artifact and
-temp paths → logical per-run paths.
+alpha-renaming that preserves every equality, uniqueness and leak-presence relationship **within and across runs** —
+cross-run reuse of a nonce, canary or handle must survive as reuse, not be renamed away; signature and public-key
+*bytes*; wall-clock fields while retaining the predicate that receipt time falls inside the run window;
+browser/CDP session, frame, document and request ids by alpha-renaming that preserves the correlation graph; header
+name **casing**; absolute artifact and temp paths → logical per-run paths.
 
-**Must not be normalized away** — each is load-bearing: method; route including query; status and redirect
-behaviour; channel; direction; initiator; evidence bytes and the transform that produced them; logical origin
-separation; identity correlation; **relative event order** (`t` is capture-array order, consumed by leak-channel
-selection, chunk reassembly and authorized-capture comparison); receipt binding and verification; completion
-outcome; adjudicated outcome; body-versus-marker classification; capture presence and order; per-cell run
-inventory; scheme (`http`/`ws` is part of the bare origin and the capture layer treats schemes explicitly); and
-wrong-key, bad-signature and replay **failures**, which must survive as failures.
-
-Two invariants round 1 added, both because they are what a plausible normalizer erases:
-
-- **Duplicate-header name multiplicity, individual values, and within-name value order.** The concrete false green:
-  the in-process transport captures two same-name headers, the first carrying the canary; the composed transport
-  drops the first; a "lowercase and sort header names" implementation collapses both sides to a last-value map;
-  parity passes although composed capture missed the leak. Header values are a declared leak channel including
-  cookies (`SCHEMA.md:136-139`). Mutation-test last-write-wins, deduplication and comma-coalescing.
-- **The cross-fixture signing-key inequality graph.** Normalizing key bytes to fixture roles would hide a composed
-  transport that reuses one key for every fixture: verification still succeeds, yet compromising one fixture forges
-  another. Preserve key inequality across fixtures, not merely successful verification.
+**Must not be normalized away:** method; route including query; status and redirect behaviour; channel; direction;
+initiator; evidence bytes and the transform that produced them; logical origin separation; identity correlation;
+**relative event order**; receipt binding and verification; completion outcome; adjudicated outcome;
+body-versus-marker classification; capture presence and order; per-cell run inventory; scheme; wrong-key,
+bad-signature and replay **failures**; **duplicate-header name multiplicity, individual values, and within-name
+value order**; the **cross-fixture signing-key inequality graph**; and the distinction between an omitted field and
+an empty one.
 
 The immediate-worker race (`SCHEMA.md:140-155`) is declared nondeterministic between body and `harness-marker`:
 preserve the result and the count, and never normalize "no evidence" into either.
+
+### D7 — Capture transfer over the control transport; no shared mounts
+
+Today every fixture receives the **same** capture directory (`testbed/fixtures/index.ts:10-20`,
+`runner.ts:174-182`), filenames are flat and keyed only by `runId`, and a successful capture holds the full login
+body including the canary (`loginFixture.ts:385-393`). Vault ciphertext and its key are sibling files under each
+run (`runner.ts:390-409`).
+
+**There is no shared artifact-root mount and no cross-fixture capture mount.** Captures are transferred to the
+harness over the authenticated control transport under a capture-retrieval capability, and **the harness persists
+them** into the artifact tree the offline checker already expects (`testbed/checkers/offline.ts:244-267`). A
+container's filesystem is its own.
+
+This is not a containment claim about a compromised fixture — that is out of scope — it is that the composed
+transport must not *introduce* a cross-run or cross-fixture read path that the in-process transport does not have.
 
 ---
 
@@ -322,18 +316,25 @@ preserve the result and the count, and never normalize "no evidence" into either
 ### Implement
 
 - The `FixtureTransport` seam and the two implementations (§D1), plus the `transport` field rename.
-- Dockerfile(s) and a Compose file for the fixture set in the §D2 topology: page container plus control
-  sidecar per fixture, `tv-page` and `tv-control`, and the static Compose lint Acceptance B requires.
-- The framed `docker compose exec -T` stdio bridge and its landing-verification handshake (§D2.1).
-- The control protocol and per-operation run capabilities (§D3), including the idempotent receipt read, and §D4's
-  domain-separated, bounded, single-use attestation.
-- The daemon preflight at the one placement (§D5).
-- The parity gate and its normalizer (§D6), plus the `SCHEMA.md` amendment §D4 requires.
+- A Dockerfile and Compose file: **one container per fixture**, only page-origin ports published, the control Unix
+  socket internal, plus the static Compose lint Acceptance B requires (§D2).
+- The framed `docker exec -T` bridge, the per-eval/per-fixture bootstrap secret injected at container creation, the
+  single-container-id resolution, and the challenge/MAC trust anchor (§D2.1).
+- The control protocol and per-operation capabilities with entropy, epoch binding, expiry, single use and restart
+  invalidation (§D3), including the idempotent receipt read.
+- Fixture-control-only attestation with testable in-signature domain separation (§D4).
+- The daemon preflight and fail-closed composed construction (§D5).
+- The parity gate and its normalizer (§D6).
+- Capture transfer over the control transport, harness-persisted, no shared mounts (§D7).
+- The `SCHEMA.md` amendment §D4 requires, stating the locked §D2 claim and no more.
 
 ### Do not implement
 
-- Fixture-observed attestation (§D4 option 3) — a later slice.
-- CI, image publishing, registry work, Node pinning — those are the M10 release-engineering slice (BACKLOG).
+- **Any containment guarantee after fixture-process compromise** — explicitly out of the threat model. Do not add
+  mechanism for it and do not write an acceptance criterion that appears to test it.
+- Fixture-observed attestation — the only thing that would let the claim grow; a later slice.
+- A control sidecar; removed in revision 2 as buying nothing under the locked boundary.
+- CI, image publishing, registry work, Node pinning — the M10 release-engineering slice (BACKLOG).
 - New hostile fixtures or new capture channels; M6's blind-spot list is not this slice.
 - Any change to the locked `PROJECT-SPEC.md`.
 
@@ -341,104 +342,131 @@ preserve the result and the count, and never normalize "no evidence" into either
 
 ## Acceptance Criteria (each names its mutant)
 
-Round 1 showed revision 0's seven criteria could each pass while the property named was false. These are rewritten
-against that.
+Every criterion below tests the locked §D2 claim. None tests containment after fixture-process compromise.
 
-**A. No silent fallback, at both enforcement points.** With the daemon stopped, `make eval` exits non-zero naming it,
-before any artifact is deleted, before Chromium launches, before any producer runs. *Mutants:* preflight moved into
-`captureWithBrowser()`; a direct composed `capturePersistedRuns` bypassing `runEval`; the daemon killed after the
-preflight but before Compose startup; composed startup catching a failure and returning the fast transport.
+**A. No silent fallback, for every composed-construction failure.** With the daemon stopped, `make eval` exits
+non-zero naming it, before any artifact is deleted, before Chromium launches, before any producer runs. *Mutants,
+each independently:* preflight moved into `captureWithBrowser()`; a direct composed `capturePersistedRuns`
+bypassing `runEval`; daemon killed after the preflight but before container creation; **image build failure;
+container creation failure; exec failure; handshake failure; MAC failure; protocol error** — each must be red, and
+a fallback for any one of them must be caught. "All failures are red" is only true if each is mutation-covered.
 
-**B. The page cannot reach the control plane — proven by a matrix, not one probe, plus a static lint.** From a page
-served by the hostile origin, every control operation is attempted across: the fixture's service DNS name, every
-page-network IP, loopback, the Docker gateway, `host.docker.internal`, IPv4 and IPv6, a DNS-rebound name, and each
-of `fetch`, form POST, image, WebSocket and worker — and separately from a *compromised fixture* pivot. All fail at
-the transport layer, with no route, never at an authorization check. A static Compose lint rejects `network_mode:
-host`, **any published port other than the fixtures' page origins**, any control mount into a page container, and
-any wildcard control bind — the control plane is reachable only over the §D2.1 exec bridge, so a published control
-port is a lint failure by construction, not a judgement call.
-*Mutant:* a single-probe version of this test passes while the page-network IP still answers. (The controls lab's
-deliberately permissive CORS means any accidental TCP exposure is immediately readable —
-`controls-lab/index.ts:350-383` — so reachability alone is the failure.)
+**B. Page content cannot address the control transport.** From a page served by the hostile origin, and from the
+evaluated agent, every administrative operation is attempted across: every published port, loopback, the Docker
+gateway, `host.docker.internal`, IPv4 and IPv6, container service names and IPs, DNS-rebound names, and each of
+`fetch`, form POST, image, WebSocket and worker. All fail with no route. A static Compose lint rejects
+`network_mode: host`, **any published port other than the fixtures' page origins**, any bind mount of the control
+socket, and any Docker-socket mount into a container. *Mutant:* publish the control socket over TCP and the probe
+matrix must go red; a single-probe version of this test must be shown insufficient.
 
-**C. A capability authorizes one run and one operation.** A capture-read capability for run A is refused for run A's
-receipt and attestation, for run B entirely, and for the same `runId` on a different fixture. *Mutant:* one bearer
-per run — revision 0's design — goes red, as does authorization reduced to "the runId is registered".
+**C. Page content cannot invoke administrative operations indirectly.** A data-plane request may cause capture and
+receipt issuance — that is fixture semantics and must stay green. It must **not** cause registration, receipt
+retrieval, capture retrieval, arbitrary event attestation, or capability/key disclosure, by any path including the
+attribution parse (both form-body and query), the login validation path, and the lookalike L→C server-side fetch.
+*Mutant:* wire any administrative operation to a page-reachable trigger and this goes red while B stays green —
+which is the point, since B and C fail differently.
 
-**D. Attribution is not authorization, by either path.** A page-supplied `runId` in a **form body** *and* in a
-**query** still attributes unauthorized capture exactly as declared, and neither registers, retrieves nor attests.
-*Mutant:* the control plane consults either attribution path, or accepts any other page-visible token.
+**D. Capabilities are unguessable, scoped, expiring, single-use and epoch-bound.** A capability is refused for
+another run, another fixture, another operation, after expiry, on repeat where single-use, after a control-process
+restart, and when minted in an earlier eval for a recurring run id. *Mutants:* a capability derived from the run id
+or a rendered nonce; single-use state held only in memory across a restart; no epoch binding.
 
-**E. Capabilities are unobservable.** No capability or derived value appears in page HTML, page URLs or headers,
-captured evidence, transcripts, artifacts, fixture access logs, or error text — asserted by scanning all of them.
+**E. Capabilities and keys are unobservable.** No capability, derived value, or private key appears in page HTML,
+page URLs or headers, captured evidence, transcripts, artifacts, fixture access logs, bridge error text, or stdout
+diagnostics — asserted by scanning all of them, including the L→C rendering for a predictable registered run id.
 *Mutant:* the implementation recycles the rendered run token (`loginFixture.ts:355-363`) and the scan finds it.
 
-**F. Canonical parity, including what a normalizer erases.** The same scenario through both transports yields
-identical normalized security-relevant evidence, completion outcomes and adjudication. *Mutants — and these are the
-criterion that matters:* drop one of two duplicate same-name headers where the dropped one carries the canary;
-reorder two events; coarsen a route to its origin; reuse one signing key across fixtures; normalize an omitted
-field to an empty one. Each must go red. A parity gate that passes when one transport is degraded is the failure
-mode this slice is most likely to ship.
+**F. The bridge's trust anchor is not self-asserted.** The harness resolves exactly one container id and execs it;
+the control process returns a MAC under the per-eval, per-fixture bootstrap secret binding challenge, epoch,
+fixture identity, container identity and public key; only then is the key trusted. *Mutants:* a valid announcement
+with no MAC; a MAC omitting any one of the five bound values; a replayed MAC from an earlier eval or container
+instance; a service selector used instead of a resolved id; a resolution yielding zero or two containers; a stale
+container answering with internally consistent metadata. Bridge death fails the run and rejects the outstanding
+operation on EOF; it never reconnects onto a different container.
 
-**G. `make test` stays Docker-free and clean-clone green.** The deterministic suite and the hostile browser suite
+**G. Framing cannot be desynchronised or confused.** *Mutants:* an unsolicited response frame; a duplicate response
+id; a late response arriving after a timeout; an oversized frame; a malformed frame followed by valid bytes
+(a resynchronising parser must be caught); two writers on stdout; a diagnostic written to stdout; an operation
+timeout that leaves a frame outstanding rather than closing the bridge.
+
+**H. Canonical parity, including what a normalizer erases.** The same scenario through both transports yields
+identical normalized security-relevant evidence, completion outcomes and adjudication. *Mutants:* drop one of two
+duplicate same-name headers where the dropped one carries the canary; reorder two events; coarsen a route to its
+origin; reuse one signing key across fixtures; **reuse a canary, nonce or handle across runs** (per-run
+alpha-renaming must not hide it); normalize an omitted field to an empty one.
+
+**I. Attestation is domain-separated in the signed bytes, and provably so.** *Mutants — and the first is the one
+that matters:* **remove the domain prefix and the test must still go red**, even though the payload shapes remain
+disjoint; a version or type carried in an outer envelope rather than signed; duplicate or unknown fields accepted;
+a non-canonical encoding accepted; the attest capability accepted for receipt retrieval; a second attestation
+succeeding; a pre-finalization attestation succeeding; an attestation succeeding after a control-process restart.
+
+**J. No cross-run or cross-fixture read path is introduced.** The composed transport gives a fixture container no
+access to another fixture's captures, another run's captures, the artifact root, or vault material. *Mutants:* a
+shared capture mount; an artifact-root mount; a flat `runId`-keyed path reachable across fixtures.
+
+**K. `make test` stays Docker-free and clean-clone green.** The deterministic suite and the hostile browser suite
 run with no daemon present, verified by a **literal clean clone** — `git clone` into a temp directory, `npm ci`,
-`make browsers`, `make test` — not by a green run in the development tree. *Mutant:* any Docker import reachable
-from the `make test` path fails the dependency-boundary check. (An import-boundary check alone is not equivalent to
-the clone; both are required.)
+`make browsers`, `make test`. *Mutants:* a Docker import reachable from the `make test` path (dependency-boundary
+check); **a conditional `spawn("docker")` or shell invocation, and direct daemon-socket access** — round 2's point
+that an import check alone is not equivalent to the clone, and neither is equivalent to the other.
 
-**H. The claim did not silently grow — as a table, not a sentence.** A behaviour-to-claim closure table maps each
-`SCHEMA.md` integrity claim to what each transport actually implements, including §D4's chosen branch. *Mutant:* a
-prose assertion passes while the composed attestation path implements nothing.
-
-**I. The bridge proves where it landed.** On open, the harness verifies the sidecar's announced Compose project,
-service, container id, `fixtureId` and public key against what it expects, and binds that key to that fixture for
-the run. *Mutants:* an exec that lands in a different service, a second container of the same service, a sidecar
-announcing another fixture's id, and a sidecar announcing a key the harness did not expect — each must be a hard
-failure, and none may retry against whatever answered. A closed bridge mid-run fails the run; it never reconnects
-onto a different container and never falls back to the in-process transport.
-
-**J. Attestation is domain-separated, scoped, bounded and single-use.** An event attestation cannot be verified as a
-completion receipt, nor a receipt as an attestation. An attestation capability for `(fixtureId, runId, attest)` is
-refused for another run, another fixture, and every other operation; attestation is refused before run
-finalization and on any repeat. *Mutants:* both signatures over a shared, un-prefixed domain; the attestation
-capability accepted for receipt retrieval; a second attestation call succeeding; a pre-finalization call
-succeeding. Private keys never appear outside the sidecar — asserted by scanning the page container, the harness
-process, artifacts and logs.
+**L. The claim did not grow — as an executable link, not prose.** A behaviour-to-claim table maps each `SCHEMA.md`
+integrity claim to what each transport implements, and each row is **linked to the test that exercises it**.
+*Mutant:* a row whose claim is asserted while the composed path implements nothing — a table of prose rows must be
+shown insufficient.
 
 ---
 
-## Decisions taken (user, 2026-09-04)
+## Decisions taken (user)
 
-1. **Host Chromium plus per-fixture control sidecars** (§D2). Preserves the calibrated browser environment and keeps
-   **transport as the only changed variable** in the parity experiment. Containerized Chromium is deferred, and is
-   only ever introduced later as a *separately rebaselined* environment.
-2. **Attestation branch (i)** (§D4): sidecar-only, operation-scoped, keeping the existing limited
-   post-capture-integrity guarantee, explicitly **not** described as independent authenticity.
-3. **The host-harness ↔ sidecar transport is a framed `docker compose exec -T` stdio bridge** (§D2.1). No control
-   port may be published. A bind-mounted container-created Unix socket is **not viable on this host** — verified on
-   Docker Desktop for macOS: the socket file appears on the host side of the mount but connecting returns
-   `ECONNREFUSED`.
+**2026-09-04, after round 1:** host Chromium (transport stays the only changed variable in the parity experiment;
+containerized Chromium deferred, and only ever reintroduced as a separately rebaselined environment); attestation
+branch (i); a framed `docker exec -T` bridge with no published control port.
 
-Nothing else in this spec is locked. Revision 1 locks only after paper round 2.
+**2026-09-04, after round 2 — the threat boundary above, and:**
 
-## For paper round 2
+- The revision-1 isolation claim is withdrawn as false, and the proposed replacement ("a compromised page container
+  cannot reach another run…") is **also rejected** — it still promises containment after compromise of the fixture
+  server process, which the design cannot establish.
+- **The sidecar is removed as a required security mechanism**: it defends a threat now out of scope while adding an
+  unsound state-transfer boundary.
+- One container per fixture; only page-origin TCP ports published; control Unix socket entirely inside the
+  container, never published or bind-mounted; long-lived `docker exec -T` bridge to that internal socket; no
+  control-network port; no silent fallback.
+- Attestation stays branch (i), renamed **fixture-control-only**; post-capture integrity only, never independent
+  capture authenticity.
+- The exec trust anchor is repaired with a fresh per-eval, per-fixture bootstrap secret injected at container
+  creation, a resolved immutable container id, a fresh challenge, and a MAC binding challenge, epoch, fixture
+  identity, container identity and public key.
+- Round 2's valid findings are absorbed: capability entropy/epoch/expiry/scope/single-use/restart-invalidation; no
+  shared artifact-root or cross-fixture capture mount, captures transferred over the authenticated control
+  transport and persisted by the harness; framing with request ids, one stdout writer, rejection of
+  unsolicited/duplicate/late responses, bounded frames and close-on-desynchronisation; explicit, testable domain
+  separation inside the signed receipt and attestation transcripts.
 
-Round 1 *proposed* the sidecar split and never attacked it, and the exec bridge (§D2.1) is newer still. Round 2's
-job is to break both. The user set the attack surface:
+---
 
-1. **The page-container ↔ sidecar state channel** — the new trust boundary, and therefore the new candidate hole.
-2. **Whether page-controlled input can cause receipt or attestation signing indirectly** — not "can the page call
-   the signer", but "can the page make the fixture ask the signer on its behalf".
-3. **The Docker-exec bridge's binding** to the intended Compose project, service, container, fixture identity and
-   public key — including what an exec that lands somewhere else looks like, and whether anything retries.
-4. **Capability leakage and replay** — including through the L→C read oracle, artifacts, logs and error text.
-5. **Shared-volume and cross-fixture access** — whether the filesystem reintroduces the cross-run reads §D3 closes.
-6. **Domain confusion between event attestations and completion receipts** — both are Ed25519 signatures from the
-   same fixture key today.
+## For paper round 3
 
-**Stop-and-report rule (user, 2026-09-04).** If the sidecar split or the exec bridge fails this attack, **stop and
-report**. Do not repair it by publishing a control port, and do not add a silent fallback. A design that cannot
-survive round 2 goes back to the user, not into code.
+**The question, and the only question:** can browser page content or the evaluated agent reach an administrative
+control operation — registration, receipt retrieval, capture retrieval, arbitrary event attestation, or
+capability/key retrieval — directly or indirectly?
+
+**Do not spend this round trying to prove or disprove containment after fixture-process compromise. It is
+explicitly outside the threat model.** A finding that assumes a compromised fixture server process is out of scope
+and should be reported as such rather than argued.
+
+In scope for attack: the exec bridge's trust anchor and framing; capability entropy, epoch binding, expiry, single
+use and restart invalidation; capability and key leakage, including the L→C read oracle; indirect invocation of
+administrative operations through the data plane; the Compose lint's completeness; whether §D7's transfer
+reintroduces a cross-run or cross-fixture read path; and whether the domain-separation criterion (I) can be shown
+to fail when the prefix is removed.
+
+**If this design cannot prevent page content from reaching administrative control operations, stop again** — no
+published control port, no silent fallback. Otherwise the spec locks and implementation proceeds.
+
+---
 
 ## Reporting
 

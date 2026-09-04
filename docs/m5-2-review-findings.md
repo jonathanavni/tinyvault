@@ -124,3 +124,58 @@ narrowing and its death-is-red rule are right.
 
 Round 2 of three. **The next action is the user's, not another round**: the blocking issue is a claim that is
 stronger than the fixture semantics support, and no amount of mechanism fixes that.
+
+---
+
+## C-R4 — threat boundary locked, sidecar removed (user, 2026-09-04) — spec revision 2
+
+The user accepted round 2's stop and its finding that revision 1's isolation claim was false. They also **rejected
+the integrator's proposed replacement sentence** ("a compromised page container cannot reach another run…") on the
+same grounds: it still promises containment after compromise of the fixture server process, which the design cannot
+establish. Spec revision 2 is written against a locked threat model instead of an implied one — revision 1 had
+none, which is how an unsupportable absolute got written and survived a round.
+
+**Locked threat model** (spec "Threat model"): the adversary is the evaluated model/agent and hostile page content
+in Chromium; the harness and fixture server/container are trusted infrastructure; **compromise of a fixture process
+invalidates the run and is out of scope**, and M5.2 must not claim containment after it; a declared data-plane
+request **may legitimately** cause capture and completion-receipt issuance, M5-C2 included; and page content **must
+not** be able to invoke registration, receipt retrieval, capture retrieval, arbitrary event attestation, or
+capability/key retrieval. That last line is the whole security question for the slice.
+
+**The sidecar is removed as a required security mechanism.** Round 2 proved no page↔sidecar state channel survives
+a compromised page process — but under the locked boundary that compromise is out of scope, so the sidecar was
+defending a threat this slice does not carry while introducing an unsound state-transfer boundary. Removing it also
+removes every C-R3 finding that existed only because of it (findings 1 and 2's channel enumeration).
+
+**Topology (decided):** one container per fixture; only page-origin TCP ports published; a control Unix socket
+**entirely inside** the container, never published or bind-mounted; a long-lived `docker exec -T` bridge connecting
+to it from inside; no control-network port; no silent fallback.
+
+**The exec trust anchor is repaired.** C-R3's finding stands and is answered: a self-announced key is not trust,
+because the bridge was that key's first trust path. Revision 2 requires a fresh **per-eval, per-fixture** bootstrap
+secret injected when Compose creates the container, resolution of **exactly one container id** and exec against
+that immutable id rather than a service selector, a fresh challenge, and a **MAC binding challenge, eval epoch,
+fixture identity, container identity and generated public key**.
+
+**Attestation** stays branch (i), renamed from "sidecar-only" to **fixture-control-only**, operation-scoped. It
+retains only post-capture integrity and does not establish independent capture authenticity.
+
+### C-R3 findings, disposition under the locked boundary
+
+| C-R3 finding | Disposition |
+|---|---|
+| 1 — no page↔sidecar state channel survives | **Moot**: the sidecar is removed and the compromise it addressed is out of scope. |
+| 2 — the page can cause receipt signing by design | **Accepted as correct, and now stated as intended behaviour**: the locked model says a declared data-plane request may cause capture and receipt issuance, M5-C2 included. The sub-finding stays live in a narrower form and is Acceptance C: a data-plane request must never cause an *administrative* operation. |
+| 3 — the exec landing proof is circular | **Accepted; repaired** in §D2.1 (bootstrap secret, resolved container id, challenge, five-value MAC). Acceptance F, with mutants for a missing MAC, any one omitted bound value, a replayed MAC, a service selector, a zero/two-container resolution, and a stale container. |
+| 4 — framing underspecified | **Accepted**; §D2.1 gains request ids, one stdout writer, rejection of unsolicited/duplicate/late responses, bounded frames, close-on-desynchronisation, and close-on-timeout. Acceptance G. |
+| 5 — capabilities lack freshness, secrecy, revocation | **Accepted**; §D3 gains cryptographic entropy, eval/instance epoch binding, expiry, per-operation scope, single use and restart invalidation. Acceptance D and E. |
+| 6 — the filesystem reopens cross-run/cross-fixture reads | **Accepted**; new §D7 — no shared artifact-root or cross-fixture capture mount; captures move over the authenticated control transport and the harness persists them. Acceptance J. Framed explicitly as "the composed transport must not *introduce* a read path the in-process transport lacks", not as a containment claim. |
+| 7 — Acceptance J could not prove domain separation | **Accepted**; the criterion (now I) leads with the mutant that matters: **remove the prefix and the test must still go red**, even though payload shapes remain disjoint. Requirements on the signed transcript are enumerated. |
+| 8 — all ten criteria could false-green | **Accepted**; twelve criteria (A–L), rewritten. A now mutation-covers every composed-construction failure separately; K adds conditional `spawn("docker")` and direct daemon-socket access alongside the import check and the clone; L requires each claim row linked to the test that exercises it. |
+
+### Round budget
+
+Round 3 of three, dispatched against revision 2, with one question: can page content or the evaluated agent reach
+an administrative control operation, directly or indirectly? Findings that assume a compromised fixture process are
+out of scope by instruction. If the design cannot prevent it, stop again — no published control port, no fallback;
+otherwise the spec locks and implementation proceeds.
