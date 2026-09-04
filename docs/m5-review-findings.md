@@ -3931,3 +3931,12 @@ Source: `docs/project-assessment-2026-09-03.md` (main at `e69259d`). Every findi
 | P1 release engineering absent (CI, engines, lint, entrypoint, license, security policy, changelog, tags) | Yes. | BACKLOG, an M10 pre-launch slice. |
 | Residuals (screenshot text, unload beacons, requestId uniqueness, decoder budgets, retention shapes, post-fill action rewrite, `finish()` not settling, writer durability) | Yes, all already declared. | Carried into the M6 spec as acceptance inputs (PLAN next-session); `finish()` and the writer added to BACKLOG explicitly. |
 | Assessment defects | — | Its milestone table mislabels M1–M3; the decoder budgets are work-based, not time-based (slice A round 3). Noted in the docs index. |
+
+### C-P addendum — fixture topology decided (2026-09-03)
+
+The user decided against amending the spec: Docker-composed fixtures are the M5 acceptance path, delivered as **M5.2**
+after M5.1, with one fixture implementation behind two transports (in-process stays the Docker-free fast harness), `make
+eval` Docker-backed with no silent fallback, canonical (not byte) parity between the transports, a control plane unreachable
+from the hostile page by network topology with authenticated run-scoped registration, and the deviation preserved in the
+Decisions Log as resolved by M5.2. The locked spec is unchanged. M5 stays shipped (`96e3ea3`); its acceptance on the
+Docker path is M5.2's exit criterion.

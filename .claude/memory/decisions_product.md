@@ -49,3 +49,9 @@ See `PROJECT-SPEC.md` §4 (the mechanism/invariants) and §11 (model/safeguards)
   `node_modules`* only, keyed on the entry root; production may not import `scripts/`, directly or
   transitively; protected classification is the union of link path and real path; the gate refuses to run
   without `--experimental-import-meta-resolve`.
+- **Docker-composed fixtures are the acceptance path; in-process servers are the fast harness; one implementation, two
+  transports.** The locked spec's Docker wording stands (governance: a locked spec is not amended to match what was easier
+  to ship) and encodes a real process boundary plus host-independent reproducibility. `make test` stays Docker-free;
+  `make eval` is Docker-backed with no silent fallback; parity between transports is canonical, not byte-for-byte; the
+  control plane is unreachable from the hostile page by network topology, with authenticated run-scoped registration.
+  (Decisions Log 2026-09-03; M5.2)

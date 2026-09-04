@@ -28,7 +28,7 @@ and the repository and CI must contain no real credentials.
 **Pre-release, under construction.** The contracts are frozen, the fill service and its integration gates are built
 (M4), and the measurement harness runs the first two hostile fixtures (M5). What does not exist yet: a real agent in front
 of those fixtures (M6), the MCP adapter (M8) and the 1Password backend (M9). A read-only project assessment
-(`docs/project-assessment-2026-09-03.md`) found two test-gate defects being repaired next (M5.1 in `PLAN.md`): the decoder
+(`docs/project-assessment-2026-09-03.md`) found two test-gate defects being repaired next (M5.1 in `PLAN.md`), followed by the Docker-composed fixture path the spec requires (M5.2): the decoder
 timing file runs at its own 60 s cap, and `make test` needs generated eval artifacts a clean clone does not have.
 
 | Milestone | State |

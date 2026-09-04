@@ -45,19 +45,30 @@ the decoder budgets time-based (they are work-based); do not copy it.
   bound (or a smaller corpus) — never a timeout bump. Mutant: the flat 2,048 budget restored → the model-context regression red.
 - Remove the hidden prerequisite: the corpus timing test builds its own corpus (or a checked-in minimal one); `make test` passes
   from `git clone` + `npm ci` + `make browsers`. Recorded as a rule in `CLAUDE.md`.
-- **Fixture topology — OPEN, needs the user** (Decisions Log, 2026-09-03): amend the spec to in-process fixtures (recommended) or
-  build the Docker topology and re-run Acceptance C. Until decided, the spec's wording stands and the phase plan carries an
-  adjudication note.
+- Fixture topology — **decided (Decisions Log 2026-09-03): Docker-composed fixtures are the M5 acceptance path, built as
+  M5.2 right after M5.1**; the spec is unchanged.
 - Docs already refreshed in this pass (README status, `ORIENT.md`, phase-plan build note, spec §5 as-built note); the leak-rate
   table stays empty and every `0/30` is labelled a deterministic-harness result until M6 produces real-agent rows.
 - Release engineering (CI with separate deterministic / browser / timing / eval jobs, `engines` + Node pinning, lint, license,
   security policy, changelog, tags) is a **pre-launch slice at M10**, not now — BACKLOG.
 
+**M5.2 — Docker-composed fixtures (the spec's M5 acceptance path; after M5.1, before M6; a full ladder slice):**
+- One fixture implementation, two transports: the existing in-process servers stay the fast harness (`make test`, the
+  coverage gate, the hostile browser suite); `make eval` runs the same fixtures Docker-composed and **fails loudly without a
+  daemon** — no silent fallback.
+- A control plane for what is in-process function calls today — run registration, receipt-signer key distribution,
+  fixture-side capture retrieval — on a network the hostile page's origin cannot reach (topology, not CORS), with
+  authenticated, run-scoped registration; the page-controlled attribution residual must not become a registration hole.
+- **Canonical parity gate:** the same scenario through both transports, transport nondeterminism normalized (ports,
+  timestamps, ids), then identical security-relevant evidence shapes, completion outcomes and adjudication — a mutant that
+  changes one transport's evidence shape must go red.
+- Acceptance C re-run on the Docker path; the register records the deviation as closed; M6 evidence comes from this path.
+
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
 **M4 ✅** (`b8a9396`, 2026-09-02) · **M5 ✅** (`96e3ea3`, 2026-09-03).
 
-**Next session:** `/start`; **M5.1 gate repair first** (the two P0s above, then the topology decision), then **M6** per
+**Next session:** `/start`; **M5.1 gate repair first** (the two P0s above), then **M5.2 Docker-composed fixtures** (spec first, through the ladder), then **M6** per
 `docs/phase-0-plan.md` §8 (reference agent + naive baseline; the baseline leaks on camera) through the same ladder — spec first
 (evals before specs: the naive baseline's expected leak cells and the `checkLiveFire` alarm are the eval), then Codex paper rounds,
 then slices. Carry into the M6 spec as acceptance inputs, not backlog notes: every declared observation blind spot (M5-C1
@@ -66,8 +77,8 @@ stage-specific closed-page suppression; the correlation identity test), the `fin
 form-selection obligation (the compliant dom-hidden script names its form), and the retention-rule-beyond-shapes item now
 unparked.
 
-**Blocked / needs attention:** the fixture-topology decision (above) needs the user; `make test` is red on a clean clone
-and marginal on this machine until M5.1 lands. Threads: deferred M2/M3 residuals unchanged (`docs/m3-review-findings.md`
+**Blocked / needs attention:** nothing needs the user; `make test` is red on a clean clone and marginal on this machine
+until M5.1 lands; M5.2 adds a Docker daemon requirement to `make eval` only. Threads: deferred M2/M3 residuals unchanged (`docs/m3-review-findings.md`
 §D); the 🔴 non-cloneable `dom-fill` destination slice (BACKLOG) is the strongest surviving lookalike path (a script at the
 authorized origin rewriting the form action after the fill — scored at layer 4, not refused at layer 2); shipped slice
 specs (m2–m5) stay at the docs root by precedent because the honest-claims sentences live there.
@@ -411,4 +422,5 @@ specs (m2–m5) stay at the docs root by precedent because the honest-claims sen
 - **2026-09-03** — **Post-implementation fix rounds stayed within the cap (slice A: 3; commit 2: 3 + integrator pass; commit 3: 2 + integrator pass),** and each last round's new blind spot was declared with a pinning test rather than opening a fourth round, per the M4 learnings; docs edits by Codex on a branch are parked and applied on main, where they are homed.
 - **2026-09-03** — **The checker's per-event candidate budget scales with the event (`max(2,048, one per input byte)`)** over a flat 2,048 (slice A) or a per-value cap, because the merged tree showed a flat budget exhausted by an ordinary 5 KB model-context event (the message history re-serialized each turn), which would make `scanTruncated` fire on every real-agent run in M6; work stays deterministic and bounded by the decoded-bytes budget, and the reaching input is declared (M5-M1, register C-M).
 - **2026-09-03** — **A read-only cross-model project assessment after each milestone close is worth its cost.** Codex's teardown of `main` at `e69259d` found two P0 gate defects the ladder's per-slice rounds could not see (a timing test that only passes by variance under its cap; a gitignored artifact prerequisite) and one contract drift (fixture topology vs the locked spec) — all verified. Kept as a `/review`-class step after every milestone; the doc lives in `docs/` and its verified findings in the register.
-- **2026-09-03** — **OPEN, needs the user: hostile-fixture topology — amend `PROJECT-SPEC.md` to in-process fixtures, or build the Docker Compose topology the spec requires.** Recommendation: amend. The fixtures are harness-owned, offline and deterministic as in-process Node servers (port-distinct loopback origins, per-fixture signers), the gate starts them in milliseconds at every eval, and containers add no security property for pages we author; Docker would buy only environment isolation the threat model does not need (the model, not the page host, is the adversary). Until decided the spec's wording stands and the slice spec's topology is recorded as a deviation, not an amendment.
+- **2026-09-03** — **OPEN, needs the user: hostile-fixture topology — amend `PROJECT-SPEC.md` to in-process fixtures, or build the Docker Compose topology the spec requires.** Recommendation: amend. The fixtures are harness-owned, offline and deterministic as in-process Node servers (port-distinct loopback origins, per-fixture signers), the gate starts them in milliseconds at every eval, and containers add no security property for pages we author; Docker would buy only environment isolation the threat model does not need (the model, not the page host, is the adversary). Until decided the spec's wording stands and the slice spec's topology is recorded as a deviation, not an amendment. **→ RESOLVED 2026-09-03 by the user: Docker-composed fixtures, as M5.2 (next entry). The recommendation to amend was declined on governance grounds — a locked spec is not amended to match what was easier to ship — and on the merits: the process boundary and host-independent reproducibility are what the spec's wording encodes. The deviation history stays here; M5.2 closes it.**
+- **2026-09-03** — **Hostile-fixture topology: Docker-composed fixtures are the M5 acceptance path (M5.2, after M5.1), one fixture implementation behind two transports, the spec unchanged.** Decided by the user. Constraints, which are M5.2's acceptance criteria: (1) one fixture codebase, two transports — in-process stays the fast unit/integration harness, `make test` and the coverage gate stay Docker-free; `make eval` is the Docker-backed acceptance path with **no silent fallback** to in-process (a missing daemon is a red, never a downgrade); (2) **canonical parity**, not byte equivalence — normalize transport-specific nondeterminism (ports, timestamps, ids), then require identical security-relevant evidence shapes, completion outcomes and adjudication for the same scenario through both transports; (3) the Docker control plane (run registration, receipt-signer key distribution, fixture-side capture retrieval) is **unreachable from the hostile page by network topology** — a separate network the page's origin is not on — not merely CORS, and registration is **authenticated and run-scoped**; (4) the deviation history is preserved in this log and marked resolved by M5.2 rather than deleted. Sequencing: M5.1 (the red gate) → M5.2 → M6, so M6's real-agent rows come from the acceptance topology.

@@ -113,9 +113,10 @@ Language: **TypeScript** (dsh, eve, and Playwright are all TS-native; the intend
 > **As built (M4/M5, recorded 2026-09-03, not an amendment):** the sketch's "Chrome-native autofill / verified keyboard
 > entry" became an **atomic in-realm inject primitive** (the locked Phase 0 design, `docs/phase-0-plan.md` §3–§4): the value
 > is assigned inside an isolated realm the page cannot observe, then the field is locked down; the origin check runs against
-> the live page's bare origin. The testbed's hostile fixtures shipped as **in-process Node servers** rather than the
-> Docker-composed fixtures §3 goal 3 and §6 require — that conflict is OPEN for adjudication (`PLAN.md` Decisions Log
-> 2026-09-03); this spec's wording stands until it is decided.
+> the live page's bare origin. The testbed's hostile fixtures shipped in M5 as **in-process Node servers**; the
+> Docker-composed fixtures §3 goal 3 and §6 require are delivered by **M5.2** as the acceptance path (`make eval`), the
+> in-process servers remaining the fast test harness behind the same fixture implementation (`PLAN.md` Decisions Log
+> 2026-09-03). This spec is unchanged.
 
 Key structural decisions to preserve (they make later integrations free):
 - **The fill service must be runnable as a standalone process** (the MCP/stdio adapter gives this), not only an importable library — so it can sit host-side while an untrusted caller sits in a container or another language (this is exactly what the future **KuchiClaw** integration needs).
