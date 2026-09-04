@@ -573,3 +573,58 @@ limitation as a residual rather than building a fifth matcher.**
 coordinated edits to both code and tests. The runtime-result gate proves the ten named tests ran and passed; it does
 not prove that every pinned assertion executed. This is accepted, not fixed — four rounds on one invariant is where
 the project's own convention says to stop adding matchers.
+
+### C-S2 addendum — final three-channel closure (2026-09-04), and the declared residuals
+
+Three channels reviewed `f7aef17`. **All three agree the runtime stop condition is NOT met**: model-controlled data
+cannot offer or dispatch outside the seven. Verdicts were MERGEABLE (security), MERGEABLE conditional on the pin
+(QA), and NOT MERGEABLE (Codex) — the split turned entirely on one P2 all three found.
+
+**Both restorations confirmed as restorations**, reproduced at both commits: an option under a name other than
+`tools`/`handlers` was undetected at `5868e60` (`tsc` 0, gate green) and is `TS2322` at `f7aef17`; `Object.freeze` →
+`Object.seal` was undetected at `5868e60` and is red at `f7aef17`. Attempts to defeat the restorations themselves
+failed: index signatures and symbol keys change `keyof` and are caught (an index signature is double-caught, since
+it also invalidates the `@ts-expect-error` fixtures); `AgentLoopOptions` is a `type` alias so declaration merging is
+unavailable; and a frozen outer array holding unfrozen definitions is still caught by the retained inner checks.
+Security ran a 22-case model-data probe — homoglyphs, padded and case-varied names, `__proto__`, `constructor`,
+`list_vault`, non-string names — all rejected before `executeTool`.
+
+**The P2, now fixed:** the `package.json` pin asserted presence and position but not that the gate's exit status
+still gates the build. `|| true`, a bare `;`, an `echo` sharing the string, a command substitution, and replacement
+by `node -e` each kept the pin green while the gate went inert — demonstrated empirically with the seal mutant
+applied, so the gate genuinely exited 1 and the build continued. Fixed by an adjacency assertion pinning the
+current fail-closed `&&` composition, in a separately named gate-wiring test rather than under the timing-only test
+name. All six named mutants plus outright removal are verified red.
+
+**Correction to `f7aef17`'s message:** it called the removed `typeof appendSerialized` branch "always-true". It was
+always true *in production* — only `TranscriptWriter` instances reach it — but false for the transcript double in
+`src/supervisor/host.test.ts`, which is why the same commit had to give that double an `appendSerialized`. No
+assertion was weakened by the change; the wording was imprecise and is corrected here rather than by another
+history rewrite.
+
+#### Declared residuals — accepted, not chased
+
+Each requires coordinated source changes passing code review; **none is reachable by the evaluated model in the
+current implementation.**
+
+1. **The package/build entry point is a reviewed root of trust.** The new assertion pins the *current* fail-closed
+   `&&` composition. It does not prove exit propagation under arbitrary future shell rewrites: a trailing
+   whole-command `|| true`, removal of the enclosing invocation, or coordinated edits to both the package script and
+   its test are outside what an in-band test can establish.
+2. **`Equal<keyof AgentLoopOptions, ExpectedOptionKeys>` constrains option KEYS, not every semantic widening of an
+   existing property's type.** Widening an existing key — e.g. `client: ModelClient & { extraTools?: … }` — leaves
+   `keyof` unchanged and passes everything, from a `loop.ts`-only edit. No TypeScript construct expresses "no member
+   of any option's type may carry a tool list", so this is structurally uncloseable by another check.
+3. **The `Equal` helper and `ExpectedOptionKeys` can be changed alongside production code**, in the same file the
+   source pin reads, without touching any test.
+4. **A future developer could split offering and dispatch into separate registries** — widening only the dispatch
+   check with a name outside the finite candidate list passes the acceptance tests. Production is mitigated by
+   `invokeHostTool`'s seven-case switch with a throwing default.
+5. **Source-text pins can be satisfied by comments**, and the runtime-result gate proves the ten named tests ran and
+   passed but not that every pinned assertion executed.
+
+**On the finite candidate list:** `CANDIDATE_TOOL_NAMES` checks *representative* forbidden names and proves nothing
+about the whole string namespace. The universal claim is carried by the literal exact-seven `offeredNames`
+assertion, which catches an eighth registry entry under any name. `list_vault` has been added to the representative
+set — it is a genuine host tool supplied through the bootstrap context and deliberately not one of the seven the
+loop offers, making it the forbidden name a real model is likeliest to try.

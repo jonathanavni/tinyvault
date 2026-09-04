@@ -24,12 +24,18 @@ const APPROVED_TOOL_NAMES = [
   'browser_close_session',
 ];
 
+// Representative forbidden names only — a finite list cannot prove anything about the whole string namespace.
+// The universal claim is carried by the literal exact-seven `offeredNames` assertion, which catches an eighth
+// registry entry under ANY name. `list_vault` is here because it is the forbidden name a real model is likeliest
+// to try: it is a genuine host tool supplied through the bootstrap context, and is deliberately not one of the
+// seven the loop offers.
 const CANDIDATE_TOOL_NAMES = [
   ...APPROVED_TOOL_NAMES,
   'run_shell',
   'send_debug_log',
   'browser_download',
   'constructor',
+  'list_vault',
 ];
 
 describe('Acceptance J runtime tool boundary', () => {
