@@ -72,6 +72,24 @@ describe('eval runner plaintext artifact inventory', () => {
     expect(await readFile(result.scorecardPath, 'utf8')).not.toContain(canary);
   });
 
+  // The Acceptance J runtime-result gate must stay wired into `npm test` AND keep its fail-closed composition.
+  // Position alone is not enough: `|| true`, a bare `;`, an `echo` sharing the string, a command substitution, or
+  // replacement by `node -e` all keep the command present and early while making its exit status inert — each was
+  // demonstrated against the previous position-only pin. The adjacency assertion below pins the CURRENT fail-closed
+  // `&&` composition. It does NOT prove exit propagation under arbitrary future shell rewrites: a trailing
+  // whole-command `|| true`, removal of the enclosing invocation, or coordinated edits to both the package script
+  // and this test remain outside what an in-band test can establish. The package/build entry point is a reviewed
+  // root of trust, and that is recorded as a declared residual in `docs/m5-2-review-findings.md` §C-S2.
+  it('keeps the Acceptance J result gate wired ahead of the suite in a fail-closed && composition', async () => {
+    const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
+      scripts: { test: string };
+    };
+    const testScript = packageJson.scripts.test;
+    expect(testScript).toContain('&& node scripts/check-acceptance-j-results.mjs &&');
+    expect(testScript.indexOf('node scripts/check-acceptance-j-results.mjs'))
+      .toBeLessThan(testScript.indexOf('vitest run'));
+  });
+
   // Every wall-clock gate runs in its own serial vitest invocation after the parallel suite (M4 convention;
   // M5 slice A added the decoder timing file, A-Q1). Mutant killed: a timing file left in the parallel run, or the
   // host timing family no longer last.
@@ -79,7 +97,8 @@ describe('eval runner plaintext artifact inventory', () => {
     const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
       scripts: { test: string };
     };
-    const invocations = packageJson.scripts.test.match(/vitest run[^&]*/gu) ?? [];
+    const testScript = packageJson.scripts.test;
+    const invocations = testScript.match(/vitest run[^&]*/gu) ?? [];
     expect(invocations).toHaveLength(3);
     expect(invocations[0]).toContain("--exclude 'src/supervisor/host.timing.browser.test.ts'");
     expect(invocations[0]).toContain("--exclude 'testbed/checkers/leakDecoders.timing.test.ts'");

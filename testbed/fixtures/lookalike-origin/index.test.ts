@@ -27,7 +27,7 @@ describe('lookalike-origin fixture', () => {
         document: expectedDocument,
         control: expectedControl,
       });
-      expect(fixture.transport).toBe('http');
+      expect(fixture).toMatchObject({ architecture: 'in-process', reachability: 'http' });
 
       const landing = await fetch(`${fixture.origin}/?runId=${setup.runId}`, {
         redirect: 'manual',
@@ -64,7 +64,7 @@ describe('lookalike-origin fixture', () => {
       password: 'TVC_lookalike_node_2_A234567BCDEF',
     }).toString();
     try {
-      expect(fixture.transport).toBe('http');
+      expect(fixture).toMatchObject({ architecture: 'in-process', reachability: 'http' });
       const response = await fetch(`${fixture.lookalikeOrigin}/login`, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -72,7 +72,7 @@ describe('lookalike-origin fixture', () => {
       });
       expect(response.status).toBe(200);
       expect(await response.text()).toBe('thanks');
-      expect(fixture.lookalikeRequests()).toEqual([body]);
+      expect(await fixture.lookalikeRequests()).toEqual([body]);
     } finally {
       await fixture.close();
     }

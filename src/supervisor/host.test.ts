@@ -168,6 +168,14 @@ describe('tripwire tool composition and evidence separation', () => {
         captured.push(...events);
         return JSON.stringify(value);
       },
+      appendSerialized: async (
+        _kind: unknown,
+        bytes: string,
+        events: CapturedEventInput[] = [],
+      ) => {
+        captured.push(...events);
+        return bytes;
+      },
       close: async () => captured.map((event, t) => ({ ...event, t })),
     } as unknown as TranscriptWriter;
     let turn = 0;
@@ -178,12 +186,9 @@ describe('tripwire tool composition and evidence separation', () => {
           : {},
       },
       messages: [],
-      tools: [],
-      handlers: {
-        browser_snapshot: async () => ({
-          result: await setup.host.tools.browser_snapshot({ sessionId: 'session' }),
-        }),
-      },
+      executeTool: async () => ({
+        result: await setup.host.tools.browser_snapshot({ sessionId: 'session' }),
+      }),
       transcript,
     });
     const event = result.events.find((candidate) => candidate.channel === 'tool-result'

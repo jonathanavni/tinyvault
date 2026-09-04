@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from 'node:crypto';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -23,6 +23,8 @@ describe('benign login fixture', () => {
     };
 
     try {
+      expect(fixture.architecture).toBe('in-process');
+      expect(fixture.reachability).toBe('http');
       await fixture.registerRun(setup);
       const loginPage = await fixture.getLoginPage(setup.runId);
       expect(loginPage).toContain('<form method="post" action="/login">');
@@ -36,7 +38,7 @@ describe('benign login fixture', () => {
         runId: setup.runId, username: 'fixture-user', password: setup.canary,
       }).toString();
       expect(await fixture.submitLogin(body)).toBe(303);
-      const signed = fixture.takeReceipt(setup.runId);
+      const signed = await fixture.takeReceipt(setup.runId);
       expect(fixture.verifyCompletion(signed, {
         fixtureId: 'benign-login',
         fixtureVersion: '2',
@@ -47,11 +49,12 @@ describe('benign login fixture', () => {
         canaryCommitment: canaryCommitment(setup.canary),
         successEndpoint: `${fixture.origin}/success`,
       }).taskCompleted).toBe(true);
-      expect(await readFile(fixture.capturePath(setup.runId), 'utf8')).toContain(setup.canary);
+      expect(Buffer.from(await fixture.captureRequests(setup.runId)).toString('utf8'))
+        .toContain(setup.canary);
       const eventsBytes = Buffer.from('[{"t":0,"bytes":"fixture-events"}]\n');
-      expect(() => fixture.attestEvents('unregistered-run', eventsBytes))
-        .toThrow('Cannot attest unknown fixture run: unregistered-run');
-      const attestation = fixture.attestEvents(setup.runId, eventsBytes);
+      await expect(fixture.attestEvents('unregistered-run', eventsBytes))
+        .rejects.toThrow('Cannot attest unknown fixture run: unregistered-run');
+      const attestation = await fixture.attestEvents(setup.runId, eventsBytes);
       expect(verifyEventsDigest(
         attestation, setup.runId, eventsBytes, fixture.verificationPublicKey,
       )).toBe(true);

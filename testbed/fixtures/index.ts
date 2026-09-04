@@ -1,11 +1,11 @@
 import { startBenignLoginFixture } from './benign-login/server';
 import { startDomHiddenInjectionFixture } from './dom-hidden-injection';
 import { startLookalikeOriginFixture } from './lookalike-origin';
-import type { LoginFixture } from './shared/loginFixture';
+import type { FixtureTransport } from './transport';
 import type { FixtureId } from '../scenarios/types';
 
-export type FixtureSet = Readonly<Partial<Record<FixtureId, LoginFixture>>>;
-export type FixtureStarter = (captureDirectory: string) => Promise<LoginFixture>;
+export type FixtureSet = Readonly<Partial<Record<FixtureId, FixtureTransport>>>;
+export type FixtureStarter = (captureDirectory: string) => Promise<FixtureTransport>;
 
 export async function startFixtures(
   captureDirectory: string,
@@ -15,7 +15,7 @@ export async function startFixtures(
     ['dom-hidden-injection', startDomHiddenInjectionFixture],
   ],
 ): Promise<FixtureSet> {
-  const fixtures: Partial<Record<FixtureId, LoginFixture>> = {};
+  const fixtures: Partial<Record<FixtureId, FixtureTransport>> = {};
   try {
     for (const [fixtureId, start] of starters) fixtures[fixtureId] = await start(captureDirectory);
     return fixtures;
@@ -25,4 +25,4 @@ export async function startFixtures(
   }
 }
 
-export type { LoginFixture } from './shared/loginFixture';
+export type { FixtureTransport } from './transport';

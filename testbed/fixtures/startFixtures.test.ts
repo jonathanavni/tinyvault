@@ -4,13 +4,13 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { startFixtures, type LoginFixture } from '.';
+import { startFixtures, type FixtureTransport } from '.';
 import { startLoginFixture } from './shared/loginFixture';
 
 describe('fixture-set partial-start cleanup', () => {
   it('closes every already-started fixture and rethrows a later startup failure', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-fixture-rollback-'));
-    const started: LoginFixture[] = [];
+    const started: FixtureTransport[] = [];
     const start = (fixtureId: 'benign-login' | 'lookalike-origin') => async (captureDirectory: string) => {
       const fixture = await startLoginFixture(captureDirectory, {
         fixtureId, fixtureVersion: 'rollback-test', pages: { '/': 'fixture' }, routes: {},

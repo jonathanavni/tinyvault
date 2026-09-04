@@ -7,8 +7,7 @@ import {
   scriptWasTruncated,
   type ModelMessage,
   type ToolCall,
-  type ToolDefinition,
-  type ToolHandler,
+  type ToolExecution,
 } from '../src/agents/loop';
 import { TranscriptWriter, type CapturedEventInput } from '../src/agents/transcript';
 import { createLocalFileBackend } from '../src/backends/localFile';
@@ -31,7 +30,7 @@ import {
 import { wrongOrigin } from './checkers/wrongOrigin';
 import { bodiesUnobserved } from './checkers/bodiesUnobserved';
 import { canaryCommitment, type CompletionBinding } from './completion';
-import { startFixtures, type FixtureSet, type LoginFixture } from './fixtures';
+import { startFixtures, type FixtureSet, type FixtureTransport } from './fixtures';
 import { startControlsLab } from './fixtures/controls-lab';
 import { runHarnessGate } from './harnessGate';
 import type { RunRecord, Scorecard } from './scorecard.schema';
@@ -65,7 +64,7 @@ const DEFAULT_SAMPLE_SIZE = 10;
 const CHECKER_VERSION = 'm4-v1';
 const STUB_SCRIPT_MAX_TURNS = 16;
 
-export const FIXTURE_TRANSPORT_MESSAGE = 'Fixture transport is not HTTP';
+export const FIXTURE_REACHABILITY_MESSAGE = 'Fixture is not reachable over HTTP';
 export const MISSING_END_MARKER_MESSAGE = 'Run ended without an end marker';
 
 export type EvalOptions = {
@@ -229,7 +228,7 @@ function assertScenarioFixturesPresent(
   }
 }
 
-function fixtureForScenario(fixtures: FixtureSet, scenario: Scenario): LoginFixture {
+function fixtureForScenario(fixtures: FixtureSet, scenario: Scenario): FixtureTransport {
   const fixture = fixtures[scenario.fixtureId];
   if (fixture === undefined) {
     throw new Error(`Missing fixture for scenario ${scenario.id}: ${scenario.fixtureId}`);
@@ -282,7 +281,7 @@ export async function finalizeEvaluation(
 type RunOnceInput = {
   runIndex: number;
   scenario: Scenario;
-  fixture: LoginFixture;
+  fixture: FixtureTransport;
   generator: CanaryGenerator;
   artifactDirectory: string;
   browser: Browser;
@@ -301,8 +300,8 @@ async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
   const prepared = await prepareRun(input);
   const auth = authForAgent(input.scenario.authForRun(prepared.runId, prepared.nonce), config);
   const loopResult = await executeStubRun(input, prepared, config);
-  const completionReceipt = input.fixture.takeReceipt(prepared.runId);
-  const eventsAttestation = input.fixture.attestEvents(
+  const completionReceipt = await input.fixture.takeReceipt(prepared.runId);
+  const eventsAttestation = await input.fixture.attestEvents(
     prepared.runId,
     await readFile(prepared.eventsPath),
   );
@@ -492,9 +491,8 @@ export async function runHostAdapter(input: Readonly<{
   return runAgentLoop({
     client: input.client,
     messages: input.messages,
-    ...(input.maxTurns === undefined ? {} : { maxTurns: input.maxTurns }),
-    tools: browserToolDefinitions(),
-    handlers: createHostHandlers(input.host),
+    maxTurns: input.maxTurns,
+    executeTool: (call) => executeHostTool(input.host, call),
     transcript: input.transcript,
     secretSources: input.secretSources,
     afterLoop: async () => {
@@ -568,12 +566,11 @@ export function initialMessages(runId: string, inventory: unknown): ModelMessage
   }];
 }
 
-export function createHostHandlers(host: SupervisedHost): Record<string, ToolHandler> {
-  const handler: ToolHandler = async (_input, call) => ({
+async function executeHostTool(host: SupervisedHost, call: ToolCall): Promise<ToolExecution> {
+  return {
     result: await invokeHostTool(host, call),
     events: correlateToolEvidence(host.drainEvidence(), call.id),
-  });
-  return Object.fromEntries(browserToolDefinitions().map(({ name }) => [name, handler]));
+  };
 }
 
 export function correlateToolEvidence<T extends Readonly<{ requestId?: string }>>(
@@ -585,11 +582,15 @@ export function correlateToolEvidence<T extends Readonly<{ requestId?: string }>
     : event);
 }
 
-export function assertHttpFixture(fixture: Pick<LoginFixture, 'transport'>): void {
-  if (fixture.transport !== 'http') throw new Error(FIXTURE_TRANSPORT_MESSAGE);
+export function assertHttpFixture(
+  fixture: Pick<FixtureTransport, 'reachability'>,
+): void {
+  if (fixture.reachability !== 'http') throw new Error(FIXTURE_REACHABILITY_MESSAGE);
 }
 
 function invokeHostTool(host: SupervisedHost, call: ToolCall): Promise<unknown> {
+  // Defence in depth behind the loop allowlist: retain this fixed seven-case switch and
+  // throwing default even though model output is only data in an uncompromised harness.
   switch (call.name) {
     case 'browser_open_session': return host.tools.browser_open_session();
     case 'browser_navigate': return host.tools.browser_navigate(call.input as never);
@@ -600,26 +601,6 @@ function invokeHostTool(host: SupervisedHost, call: ToolCall): Promise<unknown> 
     case 'browser_close_session': return host.tools.browser_close_session(call.input as never);
     default: throw new Error(`No supervised handler for tool: ${call.name}`);
   }
-}
-
-export function browserToolDefinitions(): ToolDefinition[] {
-  return [
-    toolDefinition('browser_open_session', []),
-    toolDefinition('browser_navigate', ['sessionId', 'url']),
-    toolDefinition('browser_type', ['sessionId', 'selector', 'text']),
-    toolDefinition('fill_from_vault', ['handle', 'sessionId', 'fields']),
-    toolDefinition('browser_click', ['sessionId', 'selector']),
-    toolDefinition('browser_snapshot', ['sessionId']),
-    toolDefinition('browser_close_session', ['sessionId']),
-  ];
-}
-
-function toolDefinition(name: string, required: string[]): ToolDefinition {
-  return {
-    name,
-    description: `TinyVault supervised ${name} operation.`,
-    inputSchema: { type: 'object', required },
-  };
 }
 
 export function assertHostFinished(

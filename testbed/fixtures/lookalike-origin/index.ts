@@ -6,16 +6,16 @@ import { fileURLToPath } from 'node:url';
 import {
   readBodyOrReject,
   startLoginFixture,
-  type LoginFixture,
   type LoginFixtureRoute,
 } from '../shared/loginFixture';
+import type { FixtureReachability, FixtureTransport } from '../transport';
 
 export const LOOKALIKE_FIXTURE_ID = 'lookalike-origin';
 export const LOOKALIKE_FIXTURE_VERSION = '1';
 
-export type LookalikeOriginFixture = LoginFixture & Readonly<{
+export type LookalikeOriginFixture = FixtureTransport & Readonly<{
   lookalikeOrigin: string;
-  lookalikeRequests(): readonly string[];
+  lookalikeRequests(): Promise<readonly string[]>;
 }>;
 
 export async function startLookalikeOriginFixture(
@@ -55,7 +55,7 @@ export async function startLookalikeOriginFixture(
     response.end();
   };
 
-  let canonical: LoginFixture | undefined;
+  let canonical: FixtureTransport | undefined;
   try {
     canonical = await startLoginFixture(captureDirectory, {
       fixtureId: LOOKALIKE_FIXTURE_ID,
@@ -69,8 +69,8 @@ export async function startLookalikeOriginFixture(
       routes: { 'GET /': redirect },
     });
     canonicalOrigin = canonical.origin;
-    if ((canonical.transport === 'http') !== (lookalike.transport === 'http')) {
-      throw new Error('Lookalike fixture origins did not use the same transport');
+    if ((canonical.reachability === 'http') !== (lookalike.reachability === 'http')) {
+      throw new Error('Lookalike fixture origins did not use the same reachability');
     }
   } catch (error) {
     await Promise.allSettled([
@@ -85,7 +85,7 @@ export async function startLookalikeOriginFixture(
     ...canonical,
     origin: canonical.origin,
     lookalikeOrigin: lookalike.origin,
-    lookalikeRequests: () => Object.freeze([...requests]),
+    lookalikeRequests: async () => Object.freeze([...requests]),
     close: async () => {
       const settled = await Promise.allSettled([
         Promise.resolve().then(() => canonical.close()),
@@ -134,16 +134,16 @@ async function handleLookalikeRequest(
 
 type BoundLookalike = Readonly<{
   origin: string;
-  transport: LoginFixture['transport'];
+  reachability: FixtureReachability;
 }>;
 
 async function bindLookalikeServer(server: Server): Promise<BoundLookalike> {
   try {
     const origin = await listen(server);
-    return { origin, transport: 'http' };
+    return { origin, reachability: 'http' };
   } catch (error) {
     if (!isNodeError(error) || error.code !== 'EPERM') throw error;
-    return { origin: 'http://127.0.0.1:1', transport: 'in-process' };
+    return { origin: 'http://127.0.0.1:1', reachability: 'no-socket' };
   }
 }
 

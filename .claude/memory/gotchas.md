@@ -187,3 +187,20 @@ Example:
   access by a member or a dual-homed member. Isolating a control plane from a hostile page needs **privilege
   separation** (a separate sidecar the page process cannot address), never network labelling. Found by Codex paper
   round 1 against a design that was about to be built (register C-R2). (2026-09-04)
+- **`coverage.browser.test.ts`'s `terminate-before-delivery` produced one unexplained full-suite timeout
+  (2026-09-04, M5.2 slice 1).** One red in a full `make test`; **not reproduced in three subsequent runs** — green
+  1/1 in isolation on the branch, 2/2 in isolation on `main`, and green in a later full unloaded run. **Cause
+  unknown.** An earlier version of this entry attributed it to concurrent load; the timestamps do not support that
+  (the Codex job's report was written before the red run began, and nothing else was running), so the attribution
+  was removed rather than softened.
+  The failure shape is a 10 s `expect.poll` timeout — "Matcher did not succeed in time", not a wrong value — waiting
+  for a `harness-marker` in a real-Chromium worker-terminate race. Note what that means: `SCHEMA.md:140-155`
+  declares the immediate-worker race nondeterministic between **body and marker**, but a timeout is *neither*
+  branch, so the declared race does not explain this red. What is unproven is a **liveness bound**, which SCHEMA
+  does not govern.
+  **Do not "fix" this by weakening the test.** A run producing neither the required body nor the marker is
+  **correctly red**; `bodiesUnobserved(events) === 1` is the meaningful assertion for the slow case, and asserting
+  "a body **or** a marker" — the shape of the sibling fast-case test — would drop it, because a harness-observed
+  body would make the count 0. The current evidence does not authorize changing that assertion. Treat a lone red
+  here the way the probe-P entry above requires: not as a code defect **without the other channel's numbers**, and
+  not as a load report either. (2026-09-04)

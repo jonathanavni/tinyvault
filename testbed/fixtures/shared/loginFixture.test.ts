@@ -21,7 +21,7 @@ describe('shared login fixture unauthorized request capture', () => {
       routes: { 'POST /support': respond, 'POST /verify': respond },
     });
     try {
-      expect(fixture.transport).toBe('http');
+      expect(fixture).toMatchObject({ architecture: 'in-process', reachability: 'http' });
       await fixture.registerRun({
         scenarioId: 'shared-fixture-test', runId: 'run-one', nonce: 'nonce-one',
         canaryId: 'canary-one', canary: 'TVC_shared_run-one_A234567BCDEF',
@@ -39,11 +39,11 @@ describe('shared login fixture unauthorized request capture', () => {
         `${fixture.origin}/verify?runId=run-one`, { method: 'POST', body: verifyBody },
       );
       expect([support.status, verify.status]).toEqual([204, 204]);
-      expect(fixture.unauthorizedRequests('run-one')).toEqual([
+      expect(await fixture.unauthorizedRequests('run-one')).toEqual([
         { route: '/support?runId=run-two', body: supportBody },
         { route: '/verify?runId=run-one', body: verifyBody },
       ]);
-      expect(fixture.unauthorizedRequests('run-two')).toEqual([]);
+      expect(await fixture.unauthorizedRequests('run-two')).toEqual([]);
     } finally {
       await fixture.close();
     }
@@ -70,14 +70,14 @@ describe('shared login fixture unauthorized request capture', () => {
       expect((await fetch(`${fixture.origin}/login`, { method: 'POST', body: unregistered })).status).toBe(400);
       expect((await fetch(`${fixture.origin}/login`, { method: 'POST', body: wrong })).status).toBe(401);
       expect((await fetch(`${fixture.origin}/login?sink=1`, { method: 'POST', body: queryLogin })).status).toBe(404);
-      expect(fixture.unauthorizedRequests('unregistered')).toEqual([
+      expect(await fixture.unauthorizedRequests('unregistered')).toEqual([
         { route: '/login', body: unregistered },
       ]);
-      expect(fixture.unauthorizedRequests('registered')).toEqual([
+      expect(await fixture.unauthorizedRequests('registered')).toEqual([
         { route: '/login', body: wrong },
         { route: '/login?sink=1', body: queryLogin },
       ]);
-      expect(await readFile(fixture.capturePath('registered'), 'utf8')).toBe('');
+      expect(Buffer.from(await fixture.captureRequests('registered')).toString('utf8')).toBe('');
       expect(await readFile(join(directory, 'unregistered.unauthorized.requests'), 'utf8'))
         .toContain(longId);
     } finally {
@@ -95,7 +95,21 @@ describe('shared login fixture unauthorized request capture', () => {
         method: 'POST', body: `runId=unregistered&payload=${'x'.repeat(1024 * 1024)}`,
       });
       expect(response.status).toBe(413);
-      expect(fixture.unauthorizedRequests('unregistered')).toEqual([]);
+      expect(await fixture.unauthorizedRequests('unregistered')).toEqual([]);
+    } finally {
+      await fixture.close();
+    }
+  });
+
+  it('rejects an unsafe capture run ID asynchronously with the exact message', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-shared-run-id-'));
+    const fixture = await startLoginFixture(directory, {
+      fixtureId: 'benign-login', fixtureVersion: 'test-1', pages: { '/': 'fixture' }, routes: {},
+    });
+    try {
+      const capture = fixture.captureRequests('../unsafe');
+      expect(capture).toBeInstanceOf(Promise);
+      await expect(capture).rejects.toHaveProperty('message', 'Unsafe fixture runId');
     } finally {
       await fixture.close();
     }

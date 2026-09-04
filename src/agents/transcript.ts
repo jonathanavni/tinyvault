@@ -47,10 +47,6 @@ export function serializeToolCallEnvelope(call: {
   return serializeExact({ id: call.id, name: call.name, input: call.input });
 }
 
-export function serializeModelResponseEnvelope(response: unknown): string {
-  return serializeExact(response);
-}
-
 /**
  * Append-only within a run. `create` owns fresh per-run paths; after creation no
  * transcript byte is rewritten. The future Anthropic client uses this same sink.
@@ -79,8 +75,15 @@ export class TranscriptWriter {
     value: unknown,
     captured: CapturedEventInput[] = [],
   ): Promise<string> {
+    return this.appendSerialized(kind, serializeExact(value), captured);
+  }
+
+  async appendSerialized(
+    kind: TranscriptKind,
+    bytes: string,
+    captured: CapturedEventInput[] = [],
+  ): Promise<string> {
     this.assertOpen();
-    const bytes = serializeExact(value);
     const record: TranscriptRecord = { sequence: this.sequence, kind, bytes };
     this.sequence += 1;
     await appendFile(this.transcriptPath, `${JSON.stringify(record)}\n`);

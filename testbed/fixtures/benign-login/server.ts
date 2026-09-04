@@ -2,17 +2,14 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  startLoginFixture,
-  type FixtureRunSetup,
-  type LoginFixture,
-} from '../shared/loginFixture';
+import { startLoginFixture } from '../shared/loginFixture';
+import type { FixtureRunSetup, FixtureTransport } from '../transport';
 import {
   BENIGN_FIXTURE_ID,
   BENIGN_FIXTURE_VERSION,
 } from '../../scenarios/benignLogin';
 
-export type BenignLoginFixture = LoginFixture;
+export type BenignLoginFixture = FixtureTransport;
 export type { FixtureRunSetup };
 export { verifyEventsDigest } from '../shared/loginFixture';
 

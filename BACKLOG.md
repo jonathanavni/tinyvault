@@ -71,3 +71,19 @@ work in flight, the rest stay parked here (register "Final5 round"):
 - **[M6 spec input] Local-file writer durability.** A non-EEXIST failure during exclusive key creation can leave a partial key
   file; the directory is not fsynced after rename (documented in `src/backends/localFileWriter.ts`).
 - The two P0 gate defects (timing file at its cap; gitignored artifact prerequisite) are **M5.1 in `PLAN.md`**, not backlog.
+
+## From M5.2 commit 1 (2026-09-04)
+
+- **[unresolved gate observation — needs its own scoped decision, NOT part of M5.2] One unexplained
+  `terminate-before-delivery` timeout.** `testbed/coverage.browser.test.ts` produced a single 10 s `expect.poll`
+  timeout in a full `make test`, waiting for a `harness-marker` in a real-Chromium worker-terminate race. **Not
+  reproduced in three subsequent runs** (isolation 1/1 on branch, 2/2 on main, full unloaded run green). **Cause
+  unknown** — an earlier note attributed it to concurrent load; the timestamps do not support that and the
+  attribution was withdrawn.
+  What is and is not established: `SCHEMA.md:140-155` declares the immediate-worker race nondeterministic between
+  **body and marker**, and a timeout is neither branch — so the open question is a **liveness bound** on marker
+  minting, which SCHEMA does not govern. The outcome assertion is not in question.
+  **No change to the assertion is authorized by this evidence.** A run producing neither the required body nor the
+  marker remains **correctly red**, and `bodiesUnobserved(events) === 1` must not be weakened to "a body or a
+  marker" — the sibling fast-case shape — because a harness-observed body would make that count 0. Any future work
+  here starts by explaining the timeout, not by relaxing the gate.

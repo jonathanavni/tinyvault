@@ -115,9 +115,9 @@ function createFixtureStarter(state: HarnessState): NonNullable<EvalOptions['sta
     state.fixture = started;
     const fixture: BenignLoginFixture = {
       ...started,
-      // The fixture API keeps its real transport in its method closures. Declaring HTTP here lets
+      // The fixture API keeps its real reachability in its method closures. Declaring HTTP here lets
       // these Node wiring tests run even where binding a local port is sandbox-denied.
-      transport: 'http',
+      reachability: 'http',
       registerRun: async (value: FixtureRunSetup) => {
         state.setup = value;
         await started.registerRun(value);

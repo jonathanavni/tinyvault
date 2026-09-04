@@ -36,7 +36,7 @@ beforeAll(async () => {
   const captureRoot = await temporaryRoot('tinyvault-m4-capture-');
   benign = await startBenignLoginFixture(captureRoot);
   lab = await startControlsLab();
-  expect(benign.transport).toBe('http');
+  expect(benign).toMatchObject({ architecture: 'in-process', reachability: 'http' });
 });
 
 afterEach(async () => {

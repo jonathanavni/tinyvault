@@ -411,3 +411,220 @@ non-exposure.
 **Revision 4 LOCKED.** Implementation proceeds through `docs/handoff-pattern.md` §4 with the security third channel
 (§7.1) — this is security-core surface. If implementation shows a locked decision needs a new mechanism, or a claim
 stronger than the deployment assumption supports, **stop and return to the user** rather than widening the claim.
+
+---
+
+## C-S1 — M5.2 slice 1: F-ALT failed three enforcement designs (2026-09-04)
+
+**STOP.** Per the user's standing rule, a third F-ALT failure ends the work: no fourth matcher iteration, no Slice 2.
+Slice 1 is unmerged on `codex/m5-2-slice-1` at `3c91a39`. **The enforcement primitive needs redesign, not another
+recognized syntax case.**
+
+### What Acceptance J requires
+
+The evaluated agent is a declared adversary in the locked threat model. §D8 freezes its tool surface to exactly
+seven supervised browser/vault tools, and Acceptance J asserts the **exact set**. The property is load-bearing for
+the locked §D2 claim.
+
+### Three designs, three failures
+
+| Round | Design | Defeated by |
+|---|---|---|
+| 1 | A test observing the array `runHostAdapter` passes to the client | An alternate production construction — the test wasn't at the production call site |
+| 2 | An AST matcher enumerating permitted call shapes | **Seven** bypasses: barrel re-export, local alias, `.call`, construction under `src/`, production code in a `*.test.ts`-named file, dynamic import, trailing spread in the options literal |
+| 3 | A positive occurrence inventory + suffix-blind reachability walk | **Eighth-class bypasses, found independently by two channels** (below) |
+
+Round 3 followed `.claude/memory/conventions.md:82` — "an AST allowlist rule must end with a positive pass over
+every occurrence, not an enumeration of forbidden shapes." The convention was applied correctly and still failed.
+
+### Why round 3 failed — the structural finding
+
+**A positive allowlist over "occurrences the type checker can resolve" is not a positive allowlist over
+"occurrences."** Two independent gaps, both verified by reading the gate and by end-to-end mutants:
+
+1. **Symbol-less references.** `nodeRefersToTarget` returns false when `checker.getSymbolAtLocation` yields
+   `undefined` (`runner.agent-tools.test.ts:337`), and `isStaticDynamicImport` requires a string-literal specifier
+   (`:377`). A dynamic `import()` with a **computed** specifier types the namespace `any`, so `mod.runAgentLoop`
+   carries no symbol: invisible to the inventory, unrecognised by the construction finder, and still executable.
+   Driven end-to-end inside `testbed/`: the gate reported green while the loop dispatched `run_shell` to the
+   evaluated agent. Control: replacing the computed import with a plain one turns the gate red, proving the file is
+   genuinely scanned and the green is a true evasion.
+2. **The `ROOTS` boundary and symlinked directories.** The walk only retains modules already in
+   `sourcePaths` (`ROOTS = ['src','testbed']`), skipping anything outside with no error, and `sourceFiles()` never
+   descends a symlinked directory because `entry.isDirectory()` is false for one. A second, wholly unvalidated
+   construction in `scripts/`, a new top-level directory, or behind a symlink is invisible to **both** checks.
+
+The set of symbol-resolvable, root-contained references is not closed under the language's import mechanisms. That
+is why an eighth or ninth recognised form would not end this.
+
+### The qualifier that belongs with the finding
+
+**`scripts/check-dependency-boundary.mjs` — pre-existing, already on the `make test` path — catches all four of the
+root-boundary mutants** (`production-to-tooling re-export`, `unresolved relative re-export`, `non-literal dynamic
+import()`). So `make test` still goes red on those exact routes today. **The F-ALT gate is defeated; the
+enforcement system is not, by an unrelated gate.** Both halves of that sentence are needed to judge the risk.
+
+### Two further defects in the round-3 gate
+
+- **It has no deletion-detection.** Nothing in the repo references `runner.agent-tools.test.ts`; deleting either
+  `it()` block, or the whole file, turns nothing red. The only signal is an unasserted total test count. A gate that
+  cannot detect its own removal is the silent-wrong shape.
+- **Its own text overclaims, and so does the integrator's commit message.** The gate says "This is the complete
+  positive inventory" and "exactly one reachable direct construction"; `d7418d5` repeats the reachability sentence
+  unqualified. Both are false outside `ROOTS` and for symbol-less occurrences inside them. The inventory paragraph
+  does state its `src/`+`testbed/` scope honestly; the reachability sentence does not.
+
+### Verified closed and expected to survive a redesign
+
+F-ASYNC (every `FixtureTransport` operation and `lookalikeRequests` awaited at all 46 call sites; `verifyCompletion`
+correctly sync; `readCaptureRequests` rejects rather than throwing, with its own absence-detection test); F-PROTO
+(own-property dispatch, equality-asserted unknown-tool message across `toString`/`constructor`/`__proto__`/
+`valueOf`/`hasOwnProperty`, with the safe handler asserted not called); F-FLAKE; F-MINOR including the corrected
+`child_process` count; and `architecture` honestly documented as reserved for commit 2 with no manufactured proof.
+
+### The direction the evidence points
+
+Not a syntactic patch. Move the property from **source shape** to **value identity or non-acceptance of input**:
+have `runAgentLoop` derive the tool surface from an internal registry rather than accept a `tools` parameter, or
+accept only a frozen module-level allowlist compared by identity. Such a property holds however the module is
+imported, because it never depends on recognising a reference. **This is a redesign decision and belongs to the
+user**, per the stop rule.
+
+---
+
+## C-S2 — M5.2 slice 1: the runtime redesign, its review, and two protections lost in repair (2026-09-04)
+
+Recording two rounds the register was missing (flagged by a closure reviewer: findings had to be reconstructed from
+commit messages, which is not the register's contract).
+
+### Round A — three-channel review of the runtime redesign (`ab8af72`)
+
+After C-S1 stopped the source-analysis approach, the user authorized a runtime redesign: `runAgentLoop` no longer
+accepts caller-supplied `tools` or `handlers`; a private deeply-frozen registry of the seven approved tools is both
+what is offered to the model and what dispatch validates against; the 449-line source-analysis gate was deleted with
+no replacement matcher. **All three channels agreed the primitive itself was not bypassable by any caller route**,
+and none proposed a fourth matcher. The findings were all in the PROOFS, not the mechanism:
+
+| # | Finding | Verified by |
+|---|---|---|
+| A1 | The snapshot probe could not fail — its accessor flipped on a flag set INSIDE the executor, but the snapshot is built BEFORE the executor runs, so it could not distinguish the implementations | QA + integrator |
+| A2 | The outer-array freeze was covered by nothing pinned; `isDeeplyFrozenDefinition` checked only the inner levels | QA + Codex |
+| A3 | The option-shape assertion was a runtime constant `true`; the type annotation carried all the force, so a two-line edit restored a caller-supplied option with everything green | all three |
+| A4 | Rejection coverage was name-specific: an eighth name **other than those tested** would have passed | Codex |
+| A5 | **`describe.skip` disarmed Acceptance J while the integrity gate stayed green at exit 0** — the pin checked assertion *text*, not execution. Deleting BOTH gate files was detected by nothing | security + Codex |
+| A6 | `turn.toolCalls`, `call.id` and `call.name` were each read several times; a response differing between reads could execute one operation while evidence named another, defeat the duplicate-id check, and — the consequence that matters — run an operation with a canary in its input while **no captured event contained the canary**, because the `tool-arg` channel the leak checker reads was absent. A leak-rate under-count | QA + security + Codex |
+
+The user then fixed the threat boundary: the evaluated model controls model-output **data** and does not execute
+JavaScript in the harness process, so prototype poisoning and a malicious in-process `ModelClient` are outside it;
+accessor tests are robustness probes, not containment evidence; production retains `invokeHostTool`'s seven-case
+switch as defence in depth.
+
+**Operational note.** The Codex channel was **safety-classifier-flagged mid-review** ("flagged for possible
+cybersecurity risk") and produced no findings; the packet was dense with attack vocabulary. Re-dispatched with
+accurate defensive framing — same substance, nothing obscured — it completed normally. Worth knowing, because
+Codex is this project's documented mitigation for classifier flags (`PROJECT-SPEC.md` §11) and can itself be the
+casualty when a review packet is written in attack framing.
+
+### Round B — closure review of the authorized repair (`5868e60`), and its finding
+
+The repair added a canonical model-turn snapshot (`serializeExact` → `JSON.parse` immediately after `nextTurn`,
+consumed by every downstream reader), repaired the proofs, and replaced the text pin with a runtime-result gate
+(`scripts/check-acceptance-j-results.mjs`) requiring the exact ten named tests to have executed and passed.
+
+**The two closure channels disagreed, and the disagreement is instructive: they tested different mutants, and
+neither set was a superset.** Security marked the option-shape and freeze findings CLOSED after reintroducing the
+two *named* options and after a push-throws test. QA used sharper mutants and found both were regressions:
+
+- **Restoring a caller option under a DIFFERENT name** (`unsafeExtraTools`), wired identity-preservingly, gave
+  `tsc` exit 0 and the full gate green with an unapproved tool executing. The counterfactual proves regression: the
+  same option at `ab8af72` produced `TS2322`. Cause: the repair **deleted**
+  `Equal<keyof AgentLoopOptions, ExpectedOptionKeys>` and replaced it with a fixture covering two named keys.
+- **`Object.freeze` → `Object.seal`** on the registry kept everything green, because `push` throws on a sealed
+  array too — while the array becomes index-assignable and the registry mutable. Cause: the repair **deleted**
+  `expect(Object.isFrozen(offeredTools)).toBe(true)`.
+
+Both protections were **stronger at `ab8af72`** and were lost during the authorized repair. The cause was an
+integrator specification error: the instruction said *replace* the vacuous assertion, but the vacuous half was the
+runtime `expect(...)`, not the type annotation that carried the force — and the same "replace" framing was applied
+to the freeze. The remedy is restoration, not new work.
+
+Security contributed two findings QA did not, both of the "what detects the detector's removal" family:
+
+- **The gate is removable from the test chain in 45 characters** — `package.json` is its only reference; deleting
+  the command turns nothing red, after which the suites can be skipped at exit 0.
+- **The source-text pin survives commenting out** — `// expect(...)` keeps `toContain` green while the assertion
+  stops executing; a J file of same-named empty tests plus a comment block holding the pinned strings passes both
+  the gate and the pin.
+
+Security also ran a **16-turn hostile model-DATA probe** (duplicate and colliding ids, missing fields, `__proto__`
+keys, origin/route spoofing, depth-5000 nesting, 8 MB inputs): in every case where a canary reached the executor,
+`leakScan` reported `secretLeaked: true` with correct channel attribution. That is direct evidence for the
+measurement property the snapshot repair exists to protect.
+
+### Disposition (user, 2026-09-04) — final additive repair authorized
+
+Restore both deleted protections; keep the named-option fixtures as complementary regressions; **do not narrow
+Acceptance J** — the locked requirement remains an exact seven-tool surface, and the candidate-dispatch test is
+renamed to say it checks *representative forbidden names* rather than pretending to cover the string namespace; pin
+the gate command and its position in `package.json` via the existing artifacts test; and **declare the source-text
+limitation as a residual rather than building a fifth matcher.**
+
+**Declared residual (this register is its home):** the source-text pin can be satisfied by comments or by
+coordinated edits to both code and tests. The runtime-result gate proves the ten named tests ran and passed; it does
+not prove that every pinned assertion executed. This is accepted, not fixed — four rounds on one invariant is where
+the project's own convention says to stop adding matchers.
+
+### C-S2 addendum — final three-channel closure (2026-09-04), and the declared residuals
+
+Three channels reviewed `f7aef17`. **All three agree the runtime stop condition is NOT met**: model-controlled data
+cannot offer or dispatch outside the seven. Verdicts were MERGEABLE (security), MERGEABLE conditional on the pin
+(QA), and NOT MERGEABLE (Codex) — the split turned entirely on one P2 all three found.
+
+**Both restorations confirmed as restorations**, reproduced at both commits: an option under a name other than
+`tools`/`handlers` was undetected at `5868e60` (`tsc` 0, gate green) and is `TS2322` at `f7aef17`; `Object.freeze` →
+`Object.seal` was undetected at `5868e60` and is red at `f7aef17`. Attempts to defeat the restorations themselves
+failed: index signatures and symbol keys change `keyof` and are caught (an index signature is double-caught, since
+it also invalidates the `@ts-expect-error` fixtures); `AgentLoopOptions` is a `type` alias so declaration merging is
+unavailable; and a frozen outer array holding unfrozen definitions is still caught by the retained inner checks.
+Security ran a 22-case model-data probe — homoglyphs, padded and case-varied names, `__proto__`, `constructor`,
+`list_vault`, non-string names — all rejected before `executeTool`.
+
+**The P2, now fixed:** the `package.json` pin asserted presence and position but not that the gate's exit status
+still gates the build. `|| true`, a bare `;`, an `echo` sharing the string, a command substitution, and replacement
+by `node -e` each kept the pin green while the gate went inert — demonstrated empirically with the seal mutant
+applied, so the gate genuinely exited 1 and the build continued. Fixed by an adjacency assertion pinning the
+current fail-closed `&&` composition, in a separately named gate-wiring test rather than under the timing-only test
+name. All six named mutants plus outright removal are verified red.
+
+**Correction to `f7aef17`'s message:** it called the removed `typeof appendSerialized` branch "always-true". It was
+always true *in production* — only `TranscriptWriter` instances reach it — but false for the transcript double in
+`src/supervisor/host.test.ts`, which is why the same commit had to give that double an `appendSerialized`. No
+assertion was weakened by the change; the wording was imprecise and is corrected here rather than by another
+history rewrite.
+
+#### Declared residuals — accepted, not chased
+
+Each requires coordinated source changes passing code review; **none is reachable by the evaluated model in the
+current implementation.**
+
+1. **The package/build entry point is a reviewed root of trust.** The new assertion pins the *current* fail-closed
+   `&&` composition. It does not prove exit propagation under arbitrary future shell rewrites: a trailing
+   whole-command `|| true`, removal of the enclosing invocation, or coordinated edits to both the package script and
+   its test are outside what an in-band test can establish.
+2. **`Equal<keyof AgentLoopOptions, ExpectedOptionKeys>` constrains option KEYS, not every semantic widening of an
+   existing property's type.** Widening an existing key — e.g. `client: ModelClient & { extraTools?: … }` — leaves
+   `keyof` unchanged and passes everything, from a `loop.ts`-only edit. No TypeScript construct expresses "no member
+   of any option's type may carry a tool list", so this is structurally uncloseable by another check.
+3. **The `Equal` helper and `ExpectedOptionKeys` can be changed alongside production code**, in the same file the
+   source pin reads, without touching any test.
+4. **A future developer could split offering and dispatch into separate registries** — widening only the dispatch
+   check with a name outside the finite candidate list passes the acceptance tests. Production is mitigated by
+   `invokeHostTool`'s seven-case switch with a throwing default.
+5. **Source-text pins can be satisfied by comments**, and the runtime-result gate proves the ten named tests ran and
+   passed but not that every pinned assertion executed.
+
+**On the finite candidate list:** `CANDIDATE_TOOL_NAMES` checks *representative* forbidden names and proves nothing
+about the whole string namespace. The universal claim is carried by the literal exact-seven `offeredNames`
+assertion, which catches an eighth registry entry under any name. `list_vault` has been added to the representative
+set — it is a genuine host tool supplied through the bootstrap context and deliberately not one of the seven the
+loop offers, making it the forbidden name a real model is likeliest to try.

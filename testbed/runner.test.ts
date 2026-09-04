@@ -39,7 +39,7 @@ import {
   assertHostFinished,
   assertHttpFixture,
   correlateToolEvidence,
-  FIXTURE_TRANSPORT_MESSAGE,
+  FIXTURE_REACHABILITY_MESSAGE,
   finalizeEvaluation,
   offlineArtifactPaths,
   printScorecard,
@@ -144,10 +144,10 @@ describe('eval runner guard helpers', () => {
     })).toThrow('Supervised run failed: {"transform":"hex","evidenceIndex":7}');
   });
 
-  it('kills non-HTTP fixture fallback before browser execution', () => {
-    expect(() => assertHttpFixture({ transport: 'in-process' }))
-      .toThrow(FIXTURE_TRANSPORT_MESSAGE);
-    expect(() => assertHttpFixture({ transport: 'http' })).not.toThrow();
+  it('kills non-HTTP reachability', () => {
+    const fixture = { architecture: 'in-process', reachability: 'no-socket' } as const; // Reserved for commit 2's no-fallback rule; deliberately not enforced here yet.
+    expect(() => assertHttpFixture(fixture)).toThrow(FIXTURE_REACHABILITY_MESSAGE);
+    expect(() => assertHttpFixture({ reachability: 'http' })).not.toThrow();
   });
 
   it('kills blanket request-id stamping while stamping evidence that lacks identity', () => {
@@ -678,14 +678,14 @@ async function createSignedRun(
   await fixture.registerRun({ scenarioId: scenario.id, runId, nonce, canaryId, canary });
   const body = new URLSearchParams({ runId, username: 'fixture-user', password: canary }).toString();
   if (completed) expect(await fixture.submitLogin(body)).toBe(303);
-  const completionReceipt = fixture.takeReceipt(runId);
+  const completionReceipt = await fixture.takeReceipt(runId);
   const events = signedRunEvents(scenario, runId, nonce, canary, body, includeLeak, completed);
   const runDirectory = join(directory, 'runs', runId);
   const eventsPath = join(runDirectory, 'events.json');
   await mkdir(runDirectory, { recursive: true });
   const eventsBytes = Buffer.from(`${JSON.stringify(events, null, 2)}\n`);
   await writeFile(eventsPath, eventsBytes);
-  const eventsAttestation = fixture.attestEvents(runId, eventsBytes);
+  const eventsAttestation = await fixture.attestEvents(runId, eventsBytes);
   return {
     record: signedRunRecord(
       scenario, runIndex, runDirectory, eventsPath, completionReceipt, includeLeak, completed,

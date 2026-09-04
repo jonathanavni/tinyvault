@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "tsc --noEmit && node --experimental-import-meta-resolve scripts/check-dependency-boundary.mjs && node --experimental-import-meta-resolve scripts/dependency-boundary.selftest.mjs && vitest run --exclude 'src/supervisor/host.timing.browser.test.ts' --exclude 'testbed/checkers/leakDecoders.timing.test.ts' && vitest run testbed/checkers/leakDecoders.timing.test.ts && vitest run src/supervisor/host.timing.browser.test.ts",
+    "test": "tsc --noEmit && node --experimental-import-meta-resolve scripts/check-dependency-boundary.mjs && node --experimental-import-meta-resolve scripts/dependency-boundary.selftest.mjs && node scripts/check-acceptance-j-results.mjs && vitest run --exclude 'src/supervisor/host.timing.browser.test.ts' --exclude 'testbed/checkers/leakDecoders.timing.test.ts' && vitest run testbed/checkers/leakDecoders.timing.test.ts && vitest run src/supervisor/host.timing.browser.test.ts",
     "browsers": "playwright install chromium",
     "eval": "TINYVAULT_EVAL=1 vitest run testbed/runner.eval.test.ts --reporter=verbose",
     "baseline": "node -e \"console.error('not implemented until M6'); process.exit(1)\"",

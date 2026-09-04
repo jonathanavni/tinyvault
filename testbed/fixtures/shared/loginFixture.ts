@@ -5,7 +5,7 @@ import {
   verify as cryptoVerify,
   type KeyObject,
 } from 'node:crypto';
-import { appendFile, mkdir, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { join } from 'node:path';
 
@@ -13,43 +13,19 @@ import {
   canaryCommitment,
   CompletionVerifier,
   signCompletionReceipt,
-  type CompletionBinding,
-  type CompletionVerification,
   type SignedCompletionReceipt,
 } from '../../completion';
 import type { CompletionReceipt } from '../../scorecard.schema';
 import { BENIGN_USERNAME, controlTokenFor } from '../../scenarios/benignLogin';
 import type { FixtureId } from '../../scenarios/types';
+import type {
+  FixtureReachability,
+  FixtureRunSetup,
+  FixtureTransport,
+  UnauthorizedRequest,
+} from '../transport';
 
-export type FixtureRunSetup = {
-  scenarioId: string;
-  runId: string;
-  nonce: string;
-  canaryId: string;
-  canary: string;
-};
-
-export type LoginFixture = {
-  origin: string;
-  transport: 'http' | 'in-process';
-  /** Trusted in-process verification anchor; the private signing key never leaves this fixture. */
-  verificationPublicKey: KeyObject;
-  registerRun(setup: FixtureRunSetup): Promise<void>;
-  getLoginPage(runId: string): Promise<string>;
-  submitLogin(body: string): Promise<number>;
-  takeReceipt(runId: string): string | undefined;
-  verifyCompletion(
-    receipt: string | undefined,
-    expected: CompletionBinding,
-    nowMs?: number,
-  ): CompletionVerification;
-  attestEvents(runId: string, eventsBytes: Uint8Array): string;
-  capturePath(runId: string): string;
-  unauthorizedRequests(runId: string): readonly UnauthorizedRequest[];
-  close(): Promise<void>;
-};
-
-export type UnauthorizedRequest = Readonly<{ route: string; body: string }>;
+export type { FixtureRunSetup, UnauthorizedRequest } from '../transport';
 
 export type LoginFixturePage = string | Readonly<{
   body: string;
@@ -77,7 +53,7 @@ export type LoginFixtureOptions = Readonly<{
 export async function startLoginFixture(
   captureDirectory: string,
   options: LoginFixtureOptions,
-): Promise<LoginFixture> {
+): Promise<FixtureTransport> {
   // The signer is deliberately generated inside each invocation: no fixture shares key material.
   const { privateKey, publicKey } = generateKeyPairSync('ed25519');
   const completionVerifier = new CompletionVerifier(publicKey);
@@ -96,30 +72,31 @@ export async function startLoginFixture(
     captureDirectory,
   };
   const server = createFixtureServer(state);
-  const transport = await bindFixtureServer(server, state);
-  return createFixtureApi(server, state, publicKey, completionVerifier, transport);
+  const reachability = await bindFixtureServer(server, state);
+  return createInProcessTransport(server, state, publicKey, completionVerifier, reachability);
 }
 
-function createFixtureApi(
+function createInProcessTransport(
   server: ReturnType<typeof createServer>,
   state: RequestState,
   publicKey: KeyObject,
   completionVerifier: CompletionVerifier,
-  transport: LoginFixture['transport'],
-): LoginFixture {
+  reachability: FixtureReachability,
+): FixtureTransport {
   return {
     origin: state.origin,
-    transport,
+    architecture: 'in-process',
+    reachability,
     verificationPublicKey: publicKey,
     registerRun: (setup) => registerFixtureRun(state, setup),
-    getLoginPage: (runId) => getFixtureLoginPage(state, transport, runId),
-    submitLogin: (body) => submitFixtureLogin(state, transport, body),
-    takeReceipt: (runId) => takeFixtureReceipt(state, runId),
+    getLoginPage: (runId) => getFixtureLoginPage(state, reachability, runId),
+    submitLogin: (body) => submitFixtureLogin(state, reachability, body),
+    takeReceipt: async (runId) => takeFixtureReceipt(state, runId),
     verifyCompletion: (receipt, expected, nowMs) =>
       completionVerifier.verify(receipt, expected, nowMs),
-    attestEvents: (runId, eventsBytes) => attestFixtureEvents(state, runId, eventsBytes),
-    capturePath: (runId) => checkedCapturePath(state.captureDirectory, runId),
-    unauthorizedRequests: (runId) => fixtureUnauthorizedRequests(state, runId),
+    attestEvents: async (runId, eventsBytes) => attestFixtureEvents(state, runId, eventsBytes),
+    captureRequests: (runId) => readCaptureRequests(state.captureDirectory, runId),
+    unauthorizedRequests: async (runId) => fixtureUnauthorizedRequests(state, runId),
     close: () => closeServer(server),
   };
 }
@@ -137,7 +114,7 @@ function createFixtureServer(state: RequestState): ReturnType<typeof createServe
 async function bindFixtureServer(
   server: ReturnType<typeof createServer>,
   state: RequestState,
-): Promise<LoginFixture['transport']> {
+): Promise<FixtureReachability> {
   try {
     await listen(server);
     const address = server.address();
@@ -147,7 +124,7 @@ async function bindFixtureServer(
   } catch (error) {
     if (!isListenPermissionError(error)) throw error;
     state.origin = 'http://127.0.0.1:0';
-    return 'in-process';
+    return 'no-socket';
   }
 }
 
@@ -164,10 +141,10 @@ async function registerFixtureRun(state: RequestState, setup: FixtureRunSetup): 
 
 function getFixtureLoginPage(
   state: RequestState,
-  transport: LoginFixture['transport'],
+  reachability: FixtureReachability,
   runId: string,
 ): Promise<string> {
-  if (transport === 'in-process') {
+  if (reachability === 'no-socket') {
     return Promise.resolve(renderPage(pageBody(state.pages['/']), state.runs.get(runId)));
   }
   return fetch(`${state.origin}/?runId=${encodeURIComponent(runId)}`)
@@ -176,10 +153,10 @@ function getFixtureLoginPage(
 
 async function submitFixtureLogin(
   state: RequestState,
-  transport: LoginFixture['transport'],
+  reachability: FixtureReachability,
   body: string,
 ): Promise<number> {
-  if (transport === 'in-process') return processLoginBody(body, state);
+  if (reachability === 'no-socket') return processLoginBody(body, state);
   const response = await fetch(`${state.origin}/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -206,9 +183,9 @@ function attestFixtureEvents(
   return signEventsDigest(runId, eventsBytes, state.signingKey);
 }
 
-function checkedCapturePath(directory: string, runId: string): string {
+async function readCaptureRequests(directory: string, runId: string): Promise<Uint8Array> {
   assertRunId(runId);
-  return capturePath(directory, runId);
+  return readFile(capturePath(directory, runId));
 }
 
 function fixtureUnauthorizedRequests(

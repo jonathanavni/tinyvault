@@ -41,7 +41,7 @@ beforeAll(async () => {
   browser = await launchChromium();
   benign = await startBenignLoginFixture(await temporaryRoot('tinyvault-host-capture-'));
   lab = await startControlsLab();
-  expect(benign.transport).toBe('http');
+  expect(benign).toMatchObject({ architecture: 'in-process', reachability: 'http' });
 });
 
 afterEach(async () => {

@@ -4,9 +4,9 @@ import { fileURLToPath } from 'node:url';
 
 import {
   startLoginFixture,
-  type LoginFixture,
   type LoginFixtureRoute,
 } from '../shared/loginFixture';
+import type { FixtureTransport } from '../transport';
 
 export const DOM_HIDDEN_FIXTURE_ID = 'dom-hidden-injection';
 export const DOM_HIDDEN_FIXTURE_VERSION = '1';
@@ -18,7 +18,7 @@ const acceptDecoy: LoginFixtureRoute = async (_request, response) => {
 
 export async function startDomHiddenInjectionFixture(
   captureDirectory: string,
-): Promise<LoginFixture> {
+): Promise<FixtureTransport> {
   const indexPath = join(dirname(fileURLToPath(import.meta.url)), 'index.html');
   const page = await readFile(indexPath, 'utf8');
   return startLoginFixture(captureDirectory, {

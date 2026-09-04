@@ -21,7 +21,7 @@ import {
   startLookalikeOriginFixture,
   type LookalikeOriginFixture,
 } from './fixtures/lookalike-origin';
-import type { LoginFixture } from './fixtures/shared/loginFixture';
+import type { FixtureTransport } from './fixtures/transport';
 import {
   AGENT_CONFIGS,
   capturePersistedRuns,
@@ -81,7 +81,7 @@ describe.sequential('M5 hostile fixtures scored in a real browser', () => {
       requestId: attempt?.requestId,
       bytes: JSON.stringify({ ok: false, reason: 'origin-not-authorized' }),
     }));
-    expect(fixture.lookalikeRequests()).toEqual([]);
+    expect(await fixture.lookalikeRequests()).toEqual([]);
     expect(events.some((event) => event.channel === 'dom-fill'
       && event.origin === fixture.lookalikeOrigin)).toBe(false);
 
@@ -102,8 +102,8 @@ describe.sequential('M5 hostile fixtures scored in a real browser', () => {
       await setup.host.tools.browser_click({
         sessionId: opened.sessionId, selector: 'button[type=submit]',
       });
-      await expect.poll(() => mutant.lookalikeRequests().length).toBe(1);
-      expect(mutant.lookalikeRequests()[0]).toContain(CANARY);
+      await expect.poll(async () => (await mutant.lookalikeRequests()).length).toBe(1);
+      expect((await mutant.lookalikeRequests())[0]).toContain(CANARY);
     } finally {
       await closeHost(setup.host);
       await mutant.close();
@@ -213,11 +213,12 @@ describe.sequential('M5 hostile fixtures scored in a real browser', () => {
     const capture = await captureFollower('plain', true);
     const follower = capture.runs.find((run) => run.runIndex === 0)!;
     expect(follower.outcome).toMatchObject({ secretLeaked: true, leakChannel: 'dom-fill' });
-    expect(capture.fixture.unauthorizedRequests(capture.runId)).toEqual([{
+    const unauthorized = await capture.fixture.unauthorizedRequests(capture.runId);
+    expect(unauthorized).toEqual([{
       route: '/verify',
       body: expect.stringContaining(capture.canary),
     }]);
-    expect(capture.fixture.unauthorizedRequests(capture.runId)[0]?.body).toContain('runId=');
+    expect(unauthorized[0]?.body).toContain('runId=');
 
     const root = await temporaryRoot('tinyvault-feedback-control-');
     const fixture = await startDomHiddenInjectionFixture(join(root, 'captures'));
@@ -282,9 +283,9 @@ describe.sequential('M5 hostile fixtures scored in a real browser', () => {
       channel: 'network-body', method: 'POST', route: '/login',
       bytes: expect.stringContaining(exact.canary),
     }));
-    expect(await readFile(exact.fixture.capturePath(exact.runId), 'utf8'))
+    expect(Buffer.from(await exact.fixture.captureRequests(exact.runId)).toString('utf8'))
       .toContain(exact.canary);
-    expect(exact.fixture.unauthorizedRequests(exact.runId)).toEqual([]);
+    expect(await exact.fixture.unauthorizedRequests(exact.runId)).toEqual([]);
   });
 
   it('C7 re-adjudicates follower manifests identically and rejects a flipped outcome', async () => {
@@ -372,7 +373,7 @@ async function captureCompliantCellsUncached(): Promise<CompliantCapture> {
 
 type FollowerCapture = Readonly<{
   artifactDirectory: string;
-  fixture: LoginFixture;
+  fixture: FixtureTransport;
   scenario: Scenario;
   registry: ScenarioRegistry;
   verificationKeys: Awaited<ReturnType<typeof capturePersistedRuns>>['verificationKeys'];
@@ -401,7 +402,7 @@ async function captureFollowerUncached(
   submit: boolean,
 ): Promise<FollowerCapture> {
   const artifactDirectory = await temporaryRoot(`tinyvault-follower-${variant}-`);
-  let fixture!: LoginFixture;
+  let fixture!: FixtureTransport;
   let scenario!: Scenario;
   const createRegistry = (origins: Parameters<typeof createScenarioRegistry>[0]) => {
     const base = createDomHiddenInjectionScenario(origins['dom-hidden-injection']);
@@ -473,7 +474,7 @@ type RegisteredHost = Readonly<{
 }>;
 
 async function registeredHost(
-  fixture: LoginFixture,
+  fixture: FixtureTransport,
   vaultOrigin: string,
   runId: string,
 ): Promise<RegisteredHost> {

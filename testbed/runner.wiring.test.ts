@@ -33,7 +33,7 @@ import {
 import {
   capturePersistedRuns,
   AGENT_CONFIGS,
-  FIXTURE_TRANSPORT_MESSAGE,
+  FIXTURE_REACHABILITY_MESSAGE,
   MISSING_END_MARKER_MESSAGE,
   offlineArtifactPaths,
   runEval,
@@ -198,7 +198,7 @@ describe('M5 harness gate ordering', () => {
     expect(harness.closeBrowser).toHaveBeenCalledOnce();
   });
 
-  it('uses createHostHandlers stamping and the afterLoop drain in the shared adapter', async () => {
+  it('uses host-executor stamping and the afterLoop drain in the shared adapter', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-gate-adapter-'));
     const transcript = await TranscriptWriter.create(
       join(directory, 'transcript.jsonl'), join(directory, 'events.json'),
@@ -330,11 +330,10 @@ describe('eval runner initiator wiring', () => {
     );
     const result = await runAgentLoop({
       client: new StubClient([{
-        toolCalls: [{ id: 'safe-1', name: 'safe_tool', input: { value: 'public' } }],
+        toolCalls: [{ id: 'safe-1', name: 'browser_snapshot', input: { value: 'public' } }],
       }]),
       messages: [],
-      tools: [{ name: 'safe_tool', description: 'test', inputSchema: {} }],
-      handlers: { safe_tool: () => ({ result: { ok: true } }) },
+      executeTool: () => ({ result: { ok: true } }),
       transcript,
       maxTurns: 1,
     });
@@ -342,8 +341,8 @@ describe('eval runner initiator wiring', () => {
     expect(result.events.filter((event) =>
       event.channel === 'tool-arg' || event.channel === 'tool-result'))
       .toEqual([
-        expect.objectContaining({ channel: 'tool-arg', initiator: 'tool:safe_tool' }),
-        expect.objectContaining({ channel: 'tool-result', initiator: 'tool:safe_tool' }),
+        expect.objectContaining({ channel: 'tool-arg', initiator: 'tool:browser_snapshot' }),
+        expect.objectContaining({ channel: 'tool-result', initiator: 'tool:browser_snapshot' }),
       ]);
   });
 });
@@ -364,16 +363,15 @@ describe('eval runner source and browser wiring', () => {
 
     await expect(runAgentLoop({
       client: new StubClient([{
-        toolCalls: [{ id: 'source-1', name: 'source_tool', input: {} }],
+        toolCalls: [{ id: 'source-1', name: 'browser_snapshot', input: {} }],
       }]),
       messages: [],
-      tools: [{ name: 'source_tool', description: 'test', inputSchema: {} }],
-      handlers: { source_tool: () => ({ result: { ok: true } }) },
+      executeTool: () => ({ result: { ok: true } }),
       transcript,
       secretSources: [{
         channel,
         direction,
-        initiator: 'tool:source_tool',
+        initiator: 'tool:browser_snapshot',
         requestId: 'source-1',
       }],
       maxTurns: 1,
@@ -420,17 +418,18 @@ describe('eval runner guard wiring', () => {
     expect(harness.finishHost).toHaveBeenCalledTimes(1);
   });
 
-  it('wires the HTTP transport guard through capturePersistedRuns', async () => {
+  it('wires the HTTP reachability guard through capturePersistedRuns', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-wired-http-'));
     const close = vi.fn(async () => undefined);
     const fixture = {
-      transport: 'in-process',
+      architecture: 'in-process',
+      reachability: 'no-socket',
       close,
     } as unknown as BenignLoginFixture;
 
     await expect(capturePersistedRuns(directory, 1, fakeBrowser(), {
       startFixtures: async () => ({ 'benign-login': fixture }),
-    })).rejects.toThrow(FIXTURE_TRANSPORT_MESSAGE);
+    })).rejects.toThrow(FIXTURE_REACHABILITY_MESSAGE);
     expect(close).toHaveBeenCalledTimes(1);
   });
 
