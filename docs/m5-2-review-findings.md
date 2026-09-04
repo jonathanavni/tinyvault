@@ -489,3 +489,87 @@ have `runAgentLoop` derive the tool surface from an internal registry rather tha
 accept only a frozen module-level allowlist compared by identity. Such a property holds however the module is
 imported, because it never depends on recognising a reference. **This is a redesign decision and belongs to the
 user**, per the stop rule.
+
+---
+
+## C-S2 — M5.2 slice 1: the runtime redesign, its review, and two protections lost in repair (2026-09-04)
+
+Recording two rounds the register was missing (flagged by a closure reviewer: findings had to be reconstructed from
+commit messages, which is not the register's contract).
+
+### Round A — three-channel review of the runtime redesign (`ab8af72`)
+
+After C-S1 stopped the source-analysis approach, the user authorized a runtime redesign: `runAgentLoop` no longer
+accepts caller-supplied `tools` or `handlers`; a private deeply-frozen registry of the seven approved tools is both
+what is offered to the model and what dispatch validates against; the 449-line source-analysis gate was deleted with
+no replacement matcher. **All three channels agreed the primitive itself was not bypassable by any caller route**,
+and none proposed a fourth matcher. The findings were all in the PROOFS, not the mechanism:
+
+| # | Finding | Verified by |
+|---|---|---|
+| A1 | The snapshot probe could not fail — its accessor flipped on a flag set INSIDE the executor, but the snapshot is built BEFORE the executor runs, so it could not distinguish the implementations | QA + integrator |
+| A2 | The outer-array freeze was covered by nothing pinned; `isDeeplyFrozenDefinition` checked only the inner levels | QA + Codex |
+| A3 | The option-shape assertion was a runtime constant `true`; the type annotation carried all the force, so a two-line edit restored a caller-supplied option with everything green | all three |
+| A4 | Rejection coverage was name-specific: an eighth name **other than those tested** would have passed | Codex |
+| A5 | **`describe.skip` disarmed Acceptance J while the integrity gate stayed green at exit 0** — the pin checked assertion *text*, not execution. Deleting BOTH gate files was detected by nothing | security + Codex |
+| A6 | `turn.toolCalls`, `call.id` and `call.name` were each read several times; a response differing between reads could execute one operation while evidence named another, defeat the duplicate-id check, and — the consequence that matters — run an operation with a canary in its input while **no captured event contained the canary**, because the `tool-arg` channel the leak checker reads was absent. A leak-rate under-count | QA + security + Codex |
+
+The user then fixed the threat boundary: the evaluated model controls model-output **data** and does not execute
+JavaScript in the harness process, so prototype poisoning and a malicious in-process `ModelClient` are outside it;
+accessor tests are robustness probes, not containment evidence; production retains `invokeHostTool`'s seven-case
+switch as defence in depth.
+
+**Operational note.** The Codex channel was **safety-classifier-flagged mid-review** ("flagged for possible
+cybersecurity risk") and produced no findings; the packet was dense with attack vocabulary. Re-dispatched with
+accurate defensive framing — same substance, nothing obscured — it completed normally. Worth knowing, because
+Codex is this project's documented mitigation for classifier flags (`PROJECT-SPEC.md` §11) and can itself be the
+casualty when a review packet is written in attack framing.
+
+### Round B — closure review of the authorized repair (`5868e60`), and its finding
+
+The repair added a canonical model-turn snapshot (`serializeExact` → `JSON.parse` immediately after `nextTurn`,
+consumed by every downstream reader), repaired the proofs, and replaced the text pin with a runtime-result gate
+(`scripts/check-acceptance-j-results.mjs`) requiring the exact ten named tests to have executed and passed.
+
+**The two closure channels disagreed, and the disagreement is instructive: they tested different mutants, and
+neither set was a superset.** Security marked the option-shape and freeze findings CLOSED after reintroducing the
+two *named* options and after a push-throws test. QA used sharper mutants and found both were regressions:
+
+- **Restoring a caller option under a DIFFERENT name** (`unsafeExtraTools`), wired identity-preservingly, gave
+  `tsc` exit 0 and the full gate green with an unapproved tool executing. The counterfactual proves regression: the
+  same option at `ab8af72` produced `TS2322`. Cause: the repair **deleted**
+  `Equal<keyof AgentLoopOptions, ExpectedOptionKeys>` and replaced it with a fixture covering two named keys.
+- **`Object.freeze` → `Object.seal`** on the registry kept everything green, because `push` throws on a sealed
+  array too — while the array becomes index-assignable and the registry mutable. Cause: the repair **deleted**
+  `expect(Object.isFrozen(offeredTools)).toBe(true)`.
+
+Both protections were **stronger at `ab8af72`** and were lost during the authorized repair. The cause was an
+integrator specification error: the instruction said *replace* the vacuous assertion, but the vacuous half was the
+runtime `expect(...)`, not the type annotation that carried the force — and the same "replace" framing was applied
+to the freeze. The remedy is restoration, not new work.
+
+Security contributed two findings QA did not, both of the "what detects the detector's removal" family:
+
+- **The gate is removable from the test chain in 45 characters** — `package.json` is its only reference; deleting
+  the command turns nothing red, after which the suites can be skipped at exit 0.
+- **The source-text pin survives commenting out** — `// expect(...)` keeps `toContain` green while the assertion
+  stops executing; a J file of same-named empty tests plus a comment block holding the pinned strings passes both
+  the gate and the pin.
+
+Security also ran a **16-turn hostile model-DATA probe** (duplicate and colliding ids, missing fields, `__proto__`
+keys, origin/route spoofing, depth-5000 nesting, 8 MB inputs): in every case where a canary reached the executor,
+`leakScan` reported `secretLeaked: true` with correct channel attribution. That is direct evidence for the
+measurement property the snapshot repair exists to protect.
+
+### Disposition (user, 2026-09-04) — final additive repair authorized
+
+Restore both deleted protections; keep the named-option fixtures as complementary regressions; **do not narrow
+Acceptance J** — the locked requirement remains an exact seven-tool surface, and the candidate-dispatch test is
+renamed to say it checks *representative forbidden names* rather than pretending to cover the string namespace; pin
+the gate command and its position in `package.json` via the existing artifacts test; and **declare the source-text
+limitation as a residual rather than building a fifth matcher.**
+
+**Declared residual (this register is its home):** the source-text pin can be satisfied by comments or by
+coordinated edits to both code and tests. The runtime-result gate proves the ten named tests ran and passed; it does
+not prove that every pinned assertion executed. This is accepted, not fixed — four rounds on one invariant is where
+the project's own convention says to stop adding matchers.
