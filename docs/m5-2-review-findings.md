@@ -179,3 +179,76 @@ Round 3 of three, dispatched against revision 2, with one question: can page con
 an administrative control operation, directly or indirectly? Findings that assume a compromised fixture process are
 out of scope by instruction. If the design cannot prevent it, stop again — no published control port, no fallback;
 otherwise the spec locks and implementation proceeds.
+
+---
+
+## C-R5 — Codex adversarial paper round 3 (read-only, 2026-09-04) — on spec revision 2
+
+**Verdict: YES — page content can still reach an administrative control operation, by one path. Revision 2 must not
+lock.** One P1, eight P2s, no P3s. The user's stop rule applies again. Round 3 of three; **the paper-round cap is
+spent**, so the next move is the user's.
+
+### The P1 — the Docker Engine endpoint is an unguarded alternate control transport
+
+Revision 2 isolates the fixture control socket correctly, and then leaves the daemon that fronts it unconstrained.
+The spec forbids **mounting** the Docker socket into a container (`m5-2-slice-spec.md:187-207`) but never forbids or
+preflights a **network-addressable Docker endpoint**, and Acceptance B inspects Compose publications rather than the
+daemon selected by the Docker context or `DOCKER_HOST` (`:354-360`).
+
+A conforming deployment could therefore point at a Docker TCP API that Chromium can address. Docker's own
+documentation is explicit that unsecured TCP access grants full Docker control; the Engine API exposes
+`Config.Env` through container inspection and supports `exec`. So hostile page content or the evaluated agent could
+read the bootstrap secret out of the container's environment and `exec` into the exact container to reach the Unix
+socket — **without any fixture compromise**, which is what makes it in scope. The attack begins with a
+trusted-but-reachable daemon.
+
+**Verified on this host: not currently exploitable.** `DOCKER_HOST` is unset and the active context
+(`desktop-linux`) resolves to `unix:///Users/jonathanavni/.docker/run/docker.sock`. The finding is a
+**spec-completeness hole** — nothing in the design, the preflight, or the acceptance suite prevents or even detects
+the insecure configuration — not a live hole on the development machine.
+
+**The repair is bounded and violates no constraint** (round 3 says so explicitly: "neither a published
+fixture-control port nor a fallback"): preflight must assert the daemon is reached only over a non-network channel
+inaccessible to Chromium and fail loudly otherwise, and Acceptance B must cover it. Two things belong with it:
+
+- **Stop injecting the bootstrap secret through Compose environment.** `Config.Env` is disclosed by container
+  inspection, so environment injection is the weakest available channel independent of the daemon question. Deliver
+  it over the exec bridge's stdin during the handshake, or through a file the harness writes in.
+- **Freeze the evaluated agent's tool boundary explicitly.** The agent today holds only supervised browser and
+  vault tools — no shell, filesystem, raw-socket or Docker tools (`testbed/runner.ts:592-614`) — and that is
+  load-bearing for this claim while being asserted nowhere.
+
+### Confirmed sound (no P1)
+
+- **Indirect invocation — the sharp question — survives.** Attribution-controlled `runId` selects only an
+  unauthorized-capture bucket and dispatches nothing (`loginFixture.ts:366-382`); `/login` requires a registered
+  run, the fixed username and the run canary, then performs only the expressly permitted capture and receipt
+  issuance (`:385-411`); the rendered document/control tokens are exposed, which is precisely why they may never be
+  capabilities (`:355-363`); and L→C is fixed to `GET /login` with only the query copied — a rendering oracle, not
+  destination-steerable SSRF (`lookalike-origin/index.ts:102-120`).
+- **The exec trust anchor works as designed** against stale projects, container replacement, cross-eval replay and
+  post-handshake replacement. It simply cannot defend against Docker-level access, which is the P1.
+- **Framing**: no page-input smuggling path survives length-prefixed bounded frames, one stdout writer, request
+  correlation, close-on-malformed and close-on-timeout.
+- **Capture transfer** (§D7) introduces no page-visible or cross-fixture mount path.
+- **Acceptance A, H and K** found no false-green path.
+
+### P2s — and two are criteria that test the wrong thing
+
+| # | Finding | Where |
+|---|---|---|
+| 1 | **Acceptance J asserts an impossible property.** One long-lived fixture container necessarily holds several registered runs and their captures in shared process state (`loginFixture.ts:85-97`, `:154-163`). J must test **caller-visible retrieval isolation** — run A's capability cannot fetch run B's or another fixture's — not that the trusted container has no internal access. A compromised fixture abusing that access is out of scope. | Acceptance J |
+| 2 | **Acceptance E's body contradicts its title.** It says "keys" but names only capabilities, derived values and private keys, omitting the **bootstrap MAC secret** and the **serialized public verification key**, both control-plane values covered by the locked question. Docker inspection and error output are missing from the scan set. | Acceptance E |
+| 3 | MAC encoding underspecified: "binding five values" does not require an **injective** transcript, so F can pass its omission mutants while delimiter-free or ambiguous encoding admits tuple confusion. Needs a fixed protocol prefix, byte-length framing, exact field order and encoding, the canonical **full** container id, and independent deletion mutants per field. | §D2.1 / F |
+| 4 | Acceptance D quantifies nothing: a short random token and an effectively run-long expiry pass the deterministic-token mutant. Require a CSPRNG, a minimum security strength, and an explicit latest expiry. | Acceptance D |
+| 5 | Acceptance G omits **request-id reuse** within a bridge lifetime and a **correctly correlated response carrying the wrong operation/type**; EOF with a partial frame should also close. | Acceptance G |
+| 6 | Acceptance I's single prefix mutant can false-green: it must remove the **receipt** prefix and the **attestation** prefix independently and assert the exact signed preimage in each case, or one transcript stays unprefixed while deleting the other still reddens the test. | Acceptance I |
+| 7 | Acceptance C's operation-wiring mutant is adequate **only if it observes actual control dispatch**, including fire-and-discard calls and idempotent reads — not merely returned page content. | Acceptance C |
+| 8 | Acceptance L can link the §D2 row to a false-green B while also carrying J's overstated claim. Require each linked test to **die under its row's claim-breaking mutant**. | Acceptance L |
+
+### Round budget
+
+**Rounds 1–3 spent; the paper cap is exhausted.** Extending it, accepting a revision 3 repair, or proceeding some
+other way is the user's decision. `CLAUDE.md`'s convention — when a channel beats the same invariant repeatedly,
+narrow the claim before adding code — has already been applied once here (C-R4); this P1 is a different shape, an
+unclosed transport rather than an overstated claim, and it has a bounded repair.

@@ -89,20 +89,31 @@ Codex recon (C-R1) + adversarial paper round 1 (C-R2) done; **round 1 of the thr
   sidecar split holds either way, so it is a cost question: host keeps the coverage gate's calibration valid,
   containerized removes the host from the topology but confounds the parity experiment and forces a rebaseline.
   Recommendation: **host Chromium plus control sidecars**. (2) which §D4 branch.
-- **Paper round 2 (C-R3) rejected BOTH the sidecar split and the exec bridge. M5.2 is BLOCKED on a user decision;
-  no code was written.** Rounds 1–2 of the cap are spent. The blocker is not a mechanism defect: §D2 promised that
-  compromising a page container could never reach the signing path, but **receipt signing is triggered by a page
-  request by design** (`loginFixture.ts:385-411`) and `SCHEMA.md:319-335` already declares that an exact-endpoint
-  follower can obtain a real receipt. The claim exceeded a declared residual — it was untrue in-process too. So
-  every page↔sidecar channel fails the same way (the page must be able to say "a login arrived with this body"; a
-  compromised page can forge exactly that), and the only escape puts page-input parsing back beside the signer.
-  Separately the exec bridge's landing handshake is circular — it cannot verify an "expected" public key, because
-  the bridge is that key's first trust path — and the shared capture directory (all fixtures share one today,
-  `fixtures/index.ts:10-20`) reopens the cross-fixture reads capabilities were meant to close.
-- **The decision the user owes:** how far to narrow §D2's isolation claim so it matches what the fixture semantics
-  actually support. Options are laid out in the session report; **narrowing the claim, not adding mechanism, is the
-  convention here** (`CLAUDE.md`). Docker-composed fixtures may still be buildable under a narrower claim; that is
-  what needs deciding before round 3 or any code.
+- **Rounds 1–3 spent; M5.2 still BLOCKED on a user decision; no code written.** Round 2 (C-R3) rejected revision 1
+  because its isolation claim promised containment after fixture-process compromise — untrue in-process too, since
+  `SCHEMA.md:319-335` already declares the exact-endpoint residual. The user then **locked the threat model** and
+  rejected the integrator's proposed replacement claim on the same grounds (C-R4): the adversary is the evaluated
+  agent and hostile page content in Chromium; harness and fixture container are trusted; fixture-process compromise
+  invalidates the run and is out of scope; declared data-plane requests may cause capture and receipt issuance;
+  page content must not invoke registration, receipt retrieval, capture retrieval, arbitrary attestation, or
+  capability/key retrieval. The sidecar was removed as buying nothing under that boundary, and revision 2 was
+  written against it — one container per fixture, control Unix socket internal, `docker exec -T` bridge, and a
+  repaired trust anchor (per-eval per-fixture bootstrap secret, resolved immutable container id, challenge, and a
+  MAC binding challenge/epoch/fixture/container/public key).
+- **Round 3 (C-R5) found one P1 and revision 2 did not lock.** The design isolates the control socket and leaves
+  the **daemon** unconstrained: it forbids mounting the Docker socket but never forbids or preflights a
+  network-addressable Docker endpoint, so a conforming deployment on a browser-addressable Docker TCP API would let
+  page content read the bootstrap secret from `Config.Env` and `exec` into the container — no fixture compromise
+  needed. **Verified not exploitable on this host** (`DOCKER_HOST` unset; active context is a Unix socket): a
+  spec-completeness hole, not a live one. Everything the round was commissioned to test survived — indirect
+  invocation, the trust anchor, framing, capture transfer — with eight P2s outstanding, two of which are acceptance
+  criteria that test the wrong property (J asserts something impossible; E's body omits the bootstrap secret and
+  public key).
+- **The decision the user owes:** whether to extend the paper cap for a revision 3 carrying the bounded repair
+  (preflight the daemon channel; inject the bootstrap secret over the exec handshake rather than Compose
+  environment, since `Config.Env` is disclosed by inspection; freeze the evaluated agent's tool boundary, true
+  today at `runner.ts:592-614` but asserted nowhere) plus the eight P2s — or to proceed another way. The repair
+  adds neither a control port nor a fallback.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·

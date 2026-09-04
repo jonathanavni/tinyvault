@@ -1,9 +1,24 @@
 # M5.2 slice spec — Docker-composed fixtures behind one implementation, two transports
 
-**Status: DRAFT (revision 2) — the threat boundary is LOCKED by the user; the design is rewritten against it.
-Round 3 gates the lock.** Revision 1 was rejected by paper round 2 (`docs/m5-2-review-findings.md`, C-R3) because
-its isolation claim was false: it promised containment after compromise of the fixture process, which the design
-cannot establish, and which the project had already contradicted in `SCHEMA.md:319-335`.
+**Status: BLOCKED — revision 2 did NOT lock. Paper round 3 found one P1** (`docs/m5-2-review-findings.md`, C-R5)
+**and the three-round paper cap is now spent.** The stop rule applies: no published control port, no silent
+fallback, no repair without the user.
+
+**The P1 in one paragraph.** Revision 2 isolates the fixture control socket and then leaves the daemon that fronts
+it unconstrained. It forbids *mounting* the Docker socket into a container but never forbids or preflights a
+**network-addressable Docker endpoint**, and Acceptance B inspects Compose publications rather than the daemon
+selected by the Docker context or `DOCKER_HOST`. A conforming deployment pointed at a browser-addressable Docker
+TCP API would let hostile page content read the bootstrap secret from `Config.Env` by container inspection and
+`exec` into the exact container to reach the internal socket — **with no fixture compromise**, so it is squarely
+inside the locked threat model. Verified not exploitable on the development host (`DOCKER_HOST` unset; the active
+context is a Unix socket): this is a spec-completeness hole, not a live one. The repair is bounded and adds neither
+a control port nor a fallback — preflight the daemon channel, stop injecting the bootstrap secret through Compose
+environment, and freeze the evaluated agent's tool boundary — but it is the user's call.
+
+**Read the sections below as the design plus the constraints that survived round 3.** The threat model is locked
+and unaffected; §D2's topology, §D2.1's trust anchor and framing, §D3, §D4 and §D7 all survived, and round 3
+recorded no P1 on indirect invocation — the question that motivated the round. Eight P2s, including two acceptance
+criteria that test the wrong property, are listed in C-R5 and are not yet applied.
 
 ## What changed from revision 1 (read first)
 
