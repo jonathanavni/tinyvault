@@ -223,3 +223,26 @@ Example:
   same substantive questions, nothing obscured — it completed normally. Write review packets in defensive framing
   from the start; per `PROJECT-SPEC.md` §11 the mitigation is accurate framing plus model choice, never
   obfuscation. (2026-09-04)
+
+## M5.2 slice-2 session (2026-09-04)
+
+- **The Codex plugin's `adversarial-review` / `review` modes are UNUSABLE on this machine, and they fail
+  silently.** Their default model is `gpt-6-astra`, which codex-cli 0.144.5 is too old to run: the API returns
+  `400 invalid_request_error — "The 'gpt-6-astra' model requires a newer version of Codex."` Neither mode accepts
+  a `--model` flag (only `task` does), so there is no in-mode workaround. **Workaround: run adversarial reviews
+  through `task --fresh --model gpt-5.6-sol --effort high` with an explicit "READ-ONLY, do not edit" preamble and
+  an explicit output format.** Real fix: upgrade codex-cli (user's call — it changes their toolchain). (2026-09-04)
+- **`status` reports dead Codex jobs as `running` indefinitely — trust log mtime, never the status list.** A job
+  whose pid was gone and whose log had been frozen for 33 minutes was still listed `running` with a live-looking
+  `elapsed: 36m 52s`, and `result <id>` answered "No job found" for that same id. Monitors must key on
+  `stat -f %m <jobdir>/<job-id>.log` with a stale timeout AND grep the log for `Turn failed|Codex error`; a poll
+  loop keyed on the running-set never terminates. Same silence-as-failure-mode class as the M3/M4 monitor bugs.
+  Job logs live at `~/.claude/plugins/data/codex-openai-codex/state/tinyvault-<hash>/jobs/<job-id>.log`.
+  (2026-09-04)
+- **Long, tool-heavy Codex turns die silently mid-work; short ones succeed.** Two full-scope review turns died
+  after ~4 min and ~2.5 min of real work (file reads, `docker context show` probing) with NO error line in the
+  log — a clean stop. A trivial same-model turn returned `DIAGNOSTIC_OK` immediately. **Split a large review into
+  two or three narrowly-scoped parallel `task` jobs** rather than one long one; read-only reviews may overlap
+  safely (only `--write` jobs must never share a worktree). (2026-09-04)
+- **macOS has no `timeout(1)`.** `timeout 180 node …` dies with `command not found`, and inside a backgrounded
+  compound command that failure is easy to miss. Use a bounded poll loop instead. (2026-09-04)
