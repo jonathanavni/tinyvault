@@ -64,17 +64,33 @@ the decoder budgets time-based (they are work-based); do not copy it.
 - Release engineering (CI with separate deterministic / browser / timing / eval jobs, `engines` + Node pinning, lint, license,
   security policy, changelog, tags) is a **pre-launch slice at M10**, not now — BACKLOG.
 
-**M5.2 — Docker-composed fixtures (the spec's M5 acceptance path; after M5.1, before M6; a full ladder slice):**
-- One fixture implementation, two transports: the existing in-process servers stay the fast harness (`make test`, the
-  coverage gate, the hostile browser suite); `make eval` runs the same fixtures Docker-composed and **fails loudly without a
-  daemon** — no silent fallback.
-- A control plane for what is in-process function calls today — run registration, receipt-signer key distribution,
-  fixture-side capture retrieval — on a network the hostile page's origin cannot reach (topology, not CORS), with
-  authenticated, run-scoped registration; the page-controlled attribution residual must not become a registration hole.
-- **Canonical parity gate:** the same scenario through both transports, transport nondeterminism normalized (ports,
-  timestamps, ids), then identical security-relevant evidence shapes, completion outcomes and adjudication — a mutant that
-  changes one transport's evidence shape must go red.
-- Acceptance C re-run on the Docker path; the register records the deviation as closed; M6 evidence comes from this path.
+**M5.2 — Docker-composed fixtures (the spec's M5 acceptance path; after M5.1, before M6; a full ladder slice).**
+Spec at `docs/m5-2-slice-spec.md` (**revision 1**, 2026-09-04); register `docs/m5-2-review-findings.md`.
+Codex recon (C-R1) + adversarial paper round 1 (C-R2) done; **round 1 of the three-round cap spent**. No code yet.
+
+- **Round 1 broke the topology in the M5.2 decision itself, and this is the headline.** "The fixture publishes its
+  page origins on the page network and its control port on the harness network" **is not a thing Docker does**: a
+  container has one network namespace, so a control listener on `0.0.0.0` is reachable through its `tv-page` IP too
+  — Docker networks scope routes, not listening ports. `internal: true` prevents external routing, not access by a
+  member or a dual-homed member; and any fixture compromised through page input becomes a pivot onto the control
+  network with its bootstrap secret. Revision 1's answer is **privilege separation, not network labelling**: a
+  control sidecar per fixture, page containers joining only `tv-page` and holding no secret, socket or listener.
+- Also corrected: **"keep attestation in-process and keep the claim" is not implementable** — offline adjudication
+  requires the fixture signature before parsing events, so §D4 is now an explicit fork (sidecar-only signing
+  endpoint keeping today's limited claim, or composed runs declared to carry no attestation). Capabilities are
+  **per-operation**, not one bearer per run, and gated as unobservable — the obvious implementation recycles the run
+  token the fixture *deliberately renders into the hostile page*. The parity gate gained the concrete false green a
+  normalizer produces: a dropped duplicate header carrying the canary collapsing into a last-value map. All seven
+  acceptance criteria were rewritten; round 1 showed each could pass while false.
+- Recon corrections carried, not buried: fixtures generate their **own** signing keys (nothing secret is
+  distributed), and the sharpest seam is `attestEvents` — a signing oracle over harness-supplied bytes the fixture
+  never observed.
+- **Two open decisions for the user** (spec "Open decisions"): (1) **host Chromium vs containerized Chromium** — the
+  sidecar split holds either way, so it is a cost question: host keeps the coverage gate's calibration valid,
+  containerized removes the host from the topology but confounds the parity experiment and forces a rebaseline.
+  Recommendation: **host Chromium plus control sidecars**. (2) which §D4 branch.
+- **Next: paper round 2**, whose primary job is to break the sidecar split — round 1 *proposed* it and never
+  attacked it, so the page-container↔sidecar channel is the new trust boundary and the new candidate hole.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
