@@ -71,3 +71,56 @@ Keeping the harness outside Compose is **not** a requirements weakening. The loc
 
 Round 1 of the three-round cap (`CLAUDE.md`). Round 2 reviews spec revision 1 — specifically whether the sidecar
 split survives the same attacks, since it is a design this round proposed rather than tested.
+
+---
+
+## C-R3 — Codex adversarial paper round 2 (read-only, 2026-09-04) — on spec revision 1
+
+**Verdict: the sidecar split does NOT survive. The exec bridge does NOT survive. Revision 1 must not lock.**
+The user's stop-and-report rule is triggered: no published control port, no silent fallback, no repair without the
+user. Round 2 of the three-round cap. **No code was written and none should be until this is resolved.**
+
+### The finding under the findings: §D2's isolation claim was never true, in either transport
+
+Round 2's first two attacks converge on one thing, and it is a premise problem rather than a mechanism problem.
+
+§D2 asserted that compromise of a page container "must cost the attacker only that fixture's page surface — never
+another run, never another fixture, **never the signing path**". But **receipt signing is triggered by a page
+request by design**: the page POSTs the login body, and a correct username plus the registered canary is what makes
+the fixture capture and sign (`loginFixture.ts:385-411`). `SCHEMA.md:319-335` already declares that an
+exact-endpoint follower can obtain a real receipt and satisfy completion. So D2's absolute claim **exceeds the
+residual the project has already declared** — it was not true in-process either, and the sidecar split did not
+introduce the gap, it inherited it while promising to close it.
+
+That is why no state channel survives. The page container must be able to tell the fixture "a login arrived with
+this body"; a compromised page container can therefore forge exactly that. Round 2 enumerated shared volume, shared
+namespace/socket, sidecar-initiated pull, message queue, and shared memory — each fails identically, because the
+question is not who opens the connection but **who authors the data**. The only semantic escape is for the sidecar
+to observe and adjudicate the browser request itself, which puts page-input parsing back beside the signing path
+and contradicts §D2's own argument (`m5-2-slice-spec.md:147-150`).
+
+**Disposition: not repairable inside the current claim. The claim has to narrow, and that is the user's call.**
+
+### Findings
+
+| # | Finding | P |
+|---|---|---|
+| 1 | **No page↔sidecar state channel survives the stated compromise model.** All five candidate channels let a compromised page process forge the state transition that causes receipt issuance. Directional directories still let it fabricate every record it is authorized to write; `network_mode: service:sidecar` exposes sidecar loopback; a sidecar-initiated pull changes the connection direction, not the data's author; queue ACLs bound fixture scope but cannot establish that an event corresponds to a real request. | P1 |
+| 2 | **The page can cause receipt signing by design** (above), and the split has no trustworthy way to distinguish that from a forged request. Also: attribution parsing does not sign today (`loginFixture.ts:366-382`), but **any sidecar that watches those page-writable files or statuses turns attribution into an indirect signing trigger** — the exact way this slice would convert a declared measurement limit into a hole. Attestation is harness-requested after receipt retrieval (`runner.ts:296-310`) and the signer checks only registration (`loginFixture.ts:198-207`), so a page-writable finalization bit, queue entry or request file would let the page reach it indirectly. | P1 |
+| 3 | **The exec bridge's landing proof is circular and unauthenticated.** The sidecar self-asserts project, service, container id, `fixtureId` and public key with no fresh harness challenge, MAC, or independent trust source. Critically, **"unexpected public key" cannot be checked at all — keys are generated at fixture startup and the bridge is the key's first trust path.** Cross-fixture inequality detects reuse, not authenticity or freshness. A collided or reused Compose project presents the expected static fields; a scaled service is not uniquely selected without replica cardinality and index checks; a stale sidecar announces internally consistent old metadata and its own key with nothing to detect it. | P1 |
+| 4 | Framing underspecified: no single-stdout-writer requirement, no request ids, no rejection of unsolicited or duplicate responses, no close-after-timeout — so a late frame can be consumed as the next response. `stderr` is safe only if the CLI's pipes stay separate; stdout diagnostics must corrupt-and-close, never be skipped. **Correct as specified:** the long-lived pipe does narrow later TOCTOU (replacement/restart kills the exec), and bridge death is red — it must also reject the outstanding operation on EOF. | P2 |
+| 5 | **Capability tuple binding is not freshness, secrecy, or revocation.** No entropy, eval/sidecar-instance epoch, expiry, or restart-safe consumed state is required. Run ids deterministically recur across evals (`runner.ts:380-388`), restart resets in-memory "used" state, and bridge death reddens the run without invalidating bearer material a restarted sidecar would accept. Leak paths beyond Acceptance E's artifact scan: shared state files, IPC buffers, page-container process state, bridge error echoing, stdout diagnostics, access logs, crash/core material. | P1 |
+| 6 | **The straightforward filesystem implementation reopens exactly what capabilities close.** All fixtures receive the **same** capture directory today (`fixtures/index.ts:10-20`, `runner.ts:174-182`); capture filenames are flat and keyed only by `runId`, and successful captures contain the full login body including the canary. Mounting the artifact root is worse — vault ciphertext and its key are sibling files per run (`runner.ts:390-409`). `readContainedBytes` prevents escape from the root, not cross-run or cross-fixture substitution inside it. The spec defines no filesystem ownership, per-fixture/per-run isolation, transfer timing, symlink handling, or teardown. | P1 |
+| 7 | **Domain confusion is not currently exploitable** — attestations sign canonical JSON of exactly `{runId, eventsSha256}` and receipts a fixed nine-field object, and both parsers reject other shapes (`loginFixture.ts:258-275`, `completion.ts:138-150`, `:188-210`), so the signed-byte languages are disjoint today. But **Acceptance J cannot prove the property it names**: removing a future prefix leaves the shapes disjoint, so the test stays green while explicit domain separation is false. The signed transcript must cover a distinct fixed prefix (protocol, artifact kind, version), length framing, fixed field ordering, one canonical encoding, schemas rejecting duplicate and unknown fields, and operation/`fixtureId`/`runId` scope **inside the signed bytes** — version and type signed, not carried in an outer envelope. | P2 |
+| 8 | **All ten acceptance criteria can still false-green**, including both criteria added in revision 1. A and B pass while the permitted state channel carries forged control-equivalent transitions; I passes on fake-announcement tests while a stale or collided sidecar self-reports consistent fields; J's single-use stays green in-process while a restart resets the ledger; F's per-run alpha-renaming can hide cross-run nonce/canary/handle reuse; G's import check misses a conditional `spawn("docker")` or direct daemon-socket access not exercised in the clone run; H remains prose in table rows without an executable link to the composed path. | P1/P2 |
+
+### Correct as specified
+
+Nothing requires mounting the Docker socket into a container — the host harness invokes the Docker CLI itself, and
+exposing the socket to the page container or sidecar would be a new violation. The long-lived bridge's TOCTOU
+narrowing and its death-is-red rule are right.
+
+### Round budget
+
+Round 2 of three. **The next action is the user's, not another round**: the blocking issue is a claim that is
+stronger than the fixture semantics support, and no amount of mechanism fixes that.

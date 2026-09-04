@@ -1,13 +1,24 @@
 # M5.2 slice spec — Docker-composed fixtures behind one implementation, two transports
 
-**Status: DRAFT (revision 1) — revised after paper round 1, with the user's decisions taken. Not locked; round 2
-gates the lock.** Round 1 broke both of revision 0's proposed topologies and every one of its acceptance criteria
-(`docs/m5-2-review-findings.md`, C-R2). Revision 1 answers them, and the three open questions are now decided —
-host Chromium plus per-fixture control sidecars, attestation branch (i), and a framed `docker compose exec -T`
-stdio bridge for the host-harness↔sidecar transport. It is not self-certifying: the sidecar split (§D2) is a design
-round 1 *proposed* rather than tested, and the exec bridge (§D2.1) is newer still, so round 2 attacks both before
-anything is built. If either fails, the rule is stop and report — never a published control port, never a
-fallback.
+**Status: BLOCKED — revision 1 did NOT lock. Paper round 2 rejected both the sidecar split and the exec bridge**
+(`docs/m5-2-review-findings.md`, C-R3). Round 2 of the three-round cap is spent. The stop-and-report rule applies:
+no published control port, no silent fallback, no repair without the user.
+
+**Why it is blocked, in one paragraph.** §D2 promised that compromising a page container could never reach the
+signing path. **Receipt signing is triggered by a page request by design** — the page POSTs the login body, and the
+right username plus the registered canary is what makes the fixture capture and sign
+(`testbed/fixtures/shared/loginFixture.ts:385-411`) — and `SCHEMA.md:319-335` already declares that an
+exact-endpoint follower can obtain a real receipt. So §D2's claim exceeded a residual the project had already
+declared; it was not true in-process either, and the sidecar inherited the gap while promising to close it. Every
+candidate page↔sidecar state channel therefore fails identically: the page container must be able to say "a login
+arrived with this body", so a compromised one can forge exactly that. The only semantic escape — the sidecar
+observing the browser request itself — puts page-input parsing back beside the signing path and contradicts §D2's
+own argument. **This is a claim problem, not a mechanism problem, and narrowing the claim is the user's decision.**
+Separately, the exec bridge's landing handshake is circular: it cannot verify an "expected" public key, because the
+bridge is that key's first trust path.
+
+**Read the sections below as the rejected design plus the constraints that survived**, not as a plan. Everything
+below §D1 is subject to whatever the user decides about the claim.
 
 ## What changed from revision 0 (read first)
 

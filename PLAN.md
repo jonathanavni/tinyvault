@@ -89,8 +89,20 @@ Codex recon (C-R1) + adversarial paper round 1 (C-R2) done; **round 1 of the thr
   sidecar split holds either way, so it is a cost question: host keeps the coverage gate's calibration valid,
   containerized removes the host from the topology but confounds the parity experiment and forces a rebaseline.
   Recommendation: **host Chromium plus control sidecars**. (2) which §D4 branch.
-- **Next: paper round 2**, whose primary job is to break the sidecar split — round 1 *proposed* it and never
-  attacked it, so the page-container↔sidecar channel is the new trust boundary and the new candidate hole.
+- **Paper round 2 (C-R3) rejected BOTH the sidecar split and the exec bridge. M5.2 is BLOCKED on a user decision;
+  no code was written.** Rounds 1–2 of the cap are spent. The blocker is not a mechanism defect: §D2 promised that
+  compromising a page container could never reach the signing path, but **receipt signing is triggered by a page
+  request by design** (`loginFixture.ts:385-411`) and `SCHEMA.md:319-335` already declares that an exact-endpoint
+  follower can obtain a real receipt. The claim exceeded a declared residual — it was untrue in-process too. So
+  every page↔sidecar channel fails the same way (the page must be able to say "a login arrived with this body"; a
+  compromised page can forge exactly that), and the only escape puts page-input parsing back beside the signer.
+  Separately the exec bridge's landing handshake is circular — it cannot verify an "expected" public key, because
+  the bridge is that key's first trust path — and the shared capture directory (all fixtures share one today,
+  `fixtures/index.ts:10-20`) reopens the cross-fixture reads capabilities were meant to close.
+- **The decision the user owes:** how far to narrow §D2's isolation claim so it matches what the fixture semantics
+  actually support. Options are laid out in the session report; **narrowing the claim, not adding mechanism, is the
+  convention here** (`CLAUDE.md`). Docker-composed fixtures may still be buildable under a narrower claim; that is
+  what needs deciding before round 3 or any code.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
