@@ -79,8 +79,15 @@ export class TranscriptWriter {
     value: unknown,
     captured: CapturedEventInput[] = [],
   ): Promise<string> {
+    return this.appendSerialized(kind, serializeExact(value), captured);
+  }
+
+  async appendSerialized(
+    kind: TranscriptKind,
+    bytes: string,
+    captured: CapturedEventInput[] = [],
+  ): Promise<string> {
     this.assertOpen();
-    const bytes = serializeExact(value);
     const record: TranscriptRecord = { sequence: this.sequence, kind, bytes };
     this.sequence += 1;
     await appendFile(this.transcriptPath, `${JSON.stringify(record)}\n`);

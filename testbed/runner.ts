@@ -589,6 +589,8 @@ export function assertHttpFixture(
 }
 
 function invokeHostTool(host: SupervisedHost, call: ToolCall): Promise<unknown> {
+  // Defence in depth behind the loop allowlist: retain this fixed seven-case switch and
+  // throwing default even though model output is only data in an uncompromised harness.
   switch (call.name) {
     case 'browser_open_session': return host.tools.browser_open_session();
     case 'browser_navigate': return host.tools.browser_navigate(call.input as never);

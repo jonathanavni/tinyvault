@@ -1,7 +1,6 @@
 import type { CapturedEvent } from '../../testbed/scorecard.schema';
 import {
   serializeExact,
-  serializeModelResponseEnvelope,
   serializeToolCallEnvelope,
   eventIdentityMatches,
   type CapturedEventInput,
@@ -117,10 +116,13 @@ async function executeLoop(options: AgentLoopOptions): Promise<LoopCompletion> {
       bytes: requestBytes,
     }]);
 
-    const turn = await options.client.nextTurn(messages, EVALUATED_AGENT_TOOLS);
-    const responseEvents = responseEventsFor(turn);
+    const rawTurn = await options.client.nextTurn(messages, EVALUATED_AGENT_TOOLS);
+    // The evaluated model controls data, not JavaScript in this process. Serializing immediately
+    // still removes accessors as a robustness measure and gives every later consumer one snapshot.
+    const { turn, bytes: responseBytes } = snapshotModelTurn(rawTurn);
+    const responseEvents = responseEventsFor(turn, responseBytes);
     rejectSelfDeclaredSecretSources(responseEvents, options.secretSources ?? []);
-    await captureResponse(options.transcript, turn, responseEvents);
+    await captureResponse(options.transcript, turn, responseBytes, responseEvents);
     messages.push({ role: 'assistant', content: turn });
 
     const calls = turn.toolCalls ?? [];
@@ -173,7 +175,12 @@ function rejectSelfDeclaredSecretSources(
   }
 }
 
-function responseEventsFor(turn: ModelTurn): CapturedEventInput[] {
+function snapshotModelTurn(rawTurn: ModelTurn): { turn: ModelTurn; bytes: string } {
+  const bytes = serializeExact(rawTurn);
+  return { turn: JSON.parse(bytes) as ModelTurn, bytes };
+}
+
+function responseEventsFor(turn: ModelTurn, responseBytes: string): CapturedEventInput[] {
   const events: CapturedEventInput[] = [];
   if (turn.text !== undefined) {
     events.push({
@@ -194,7 +201,7 @@ function responseEventsFor(turn: ModelTurn): CapturedEventInput[] {
     channel: 'model-text',
     direction: 'outbound',
     initiator: 'model-client-response',
-    bytes: serializeModelResponseEnvelope(turn),
+    bytes: responseBytes,
   });
   return events;
 }
@@ -202,8 +209,13 @@ function responseEventsFor(turn: ModelTurn): CapturedEventInput[] {
 async function captureResponse(
   transcript: TranscriptWriter,
   turn: ModelTurn,
+  responseBytes: string,
   events: CapturedEventInput[],
 ): Promise<void> {
+  if (typeof transcript.appendSerialized === 'function') {
+    await transcript.appendSerialized('response', responseBytes, events);
+    return;
+  }
   await transcript.append('response', turn, events);
 }
 
@@ -238,6 +250,9 @@ async function dispatchTool(
   call: ToolCall,
   executeTool: ToolExecutor,
 ): Promise<ToolExecution> {
+  // This allowlist assumes an uncompromised harness runtime. The model can supply only data;
+  // invokeHostTool retains its own seven-case switch as defence in depth.
+  // Read-once consistency comes from snapshotModelTurn, not from this dispatch helper alone.
   const name = call.name;
   if (!EVALUATED_AGENT_TOOLS.some((definition) => definition.name === name)) {
     throw new Error(`No handler registered for tool: ${name}`);
