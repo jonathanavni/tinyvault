@@ -293,3 +293,67 @@ stdin-only bootstrap handling; agent tool confinement; the eight P2 dispositions
 absorption sweep for stale revision-1/revision-2 language. If it finds these correctly specified and **no new P1**,
 revision 3 locks and implementation proceeds. If it finds a new P1, or closing one would need another architectural
 mechanism, **stop and return to the user — no automatic further extension.**
+
+---
+
+## C-R7 — focused closure review (Codex, read-only, 2026-09-04) — on spec revision 3
+
+**Verdict: STOP. A new P1. Revision 3 does not lock.** The user's outcome rule applies: a new P1 returns to the
+user, with no automatic further extension. Three of the five scoped items pass; two need work.
+
+### The new P1 — §D5.0 validates the client's connection, not the daemon's exposure
+
+The repair conflated two different things, and the spec states the stronger one. Requiring the **selected** endpoint
+to be a canonical local `unix://` socket proves only **how the harness connects**. Docker supports multiple `-H`
+listeners simultaneously, so the very same daemon may *also* be listening on TCP and remain browser-addressable;
+and a Unix socket may itself front a TCP proxy. §D5.0 nevertheless concludes that it "keeps the API itself off the
+network" (`m5-2-slice-spec.md:305-322`), which is false as written. Acceptance B's positive control would **falsely
+pass** a dual-listener or socket-proxy configuration, because it examines only the selected endpoint
+(`:435-441`).
+
+So C-R5's P1 is not closed. The disclosure half is closed (stdin delivery keeps the secret out of `Config.Env`),
+but the reachability half is not: a browser-addressable daemon still exposes `exec`.
+
+**Verified on this host, again not live:** no listener on 2375/2376, and `~/.docker/daemon.json` sets no `hosts`.
+As with C-R5 this is a spec-completeness hole rather than an exploitable one here.
+
+**Why this is not obviously repairable inside the current mechanism.** Closing it needs the preflight to verify the
+**daemon's own listener set**, not the client's chosen endpoint. That set is not reliably queryable: `/info` does
+not report listeners, and under Docker Desktop the daemon runs inside a VM whose `-H` flags are not exposed through
+the API and whose configuration Desktop manages. So the honest options are a different mechanism or a narrower
+claim — and by the user's rule, both are the user's call.
+
+### Items that pass
+
+- **Preflight ordering** is correct: after the synchronous checker meta-gate, before artifact deletion, Chromium,
+  controls-lab and any Docker API operation (`runner.ts:115-125`).
+- **CLI precedence** is stated adequately at policy level, and rejecting disagreement is **safely stricter** than
+  the CLI's own precedence. **Pinning** correctly targets validate-one/execute-another.
+- **§D8 agent tool confinement — correctly specified.** The assertion aims at the actual tool array, not handlers
+  or documentation; the production surface is exactly seven definitions and handlers are generated from that same
+  list (`runner.ts:492-499`, `:571-576`, `:592-614`). Exact-set assertion plus the extra-tool mutant closes silent
+  widening.
+- **Six of the eight P2 dispositions are correct and their mutants kill the reported defects:** G (injective MAC —
+  independent field deletion plus tuple confusion), H's entropy half, I (all three framing mutants), L (independent
+  prefix removal with exact preimages), D (fire-and-discard and idempotent-read dispatch observation), F (secret
+  scan set with the public key excluded, correct under the user's binding clarification), O (per-row claim-breaking
+  mutants).
+
+### Remaining P2s
+
+| # | Finding | Where |
+|---|---|---|
+| 1 | "Canonical local `unix://`" is not defined enough to implement: absolute-path syntax, `unix://` vs `unix:///`, `realpath`/symlink treatment, socket-type verification, and proxy rejection are all unstated. | §D5.0 |
+| 2 | **The stdin ordering question is answered, but the spec justifies it wrongly.** The secret *is* disclosed before protocol-level peer authentication, and the MAC proves possession only after the recipient already has it — so an accidentally selected **stale container** can MAC its own internally consistent identity, and Acceptance G's stale-container mutant **cannot be killed by the handshake alone**. Under the locked model this is not independently P1 once the daemon and the freshly created container identity are trusted (a malicious same-container recipient would need fixture compromise). But the spec must make the **pre-MAC provenance of the current-eval container identity** binding, rather than treating the MAC as that authentication. | §D2.1, Acceptance G |
+| 3 | "Harness and bridge memory" is underspecified: the value necessarily traverses Docker client, daemon and kernel buffers and reaches the control process. Core dumps, Docker CLI/debug logging, retention after handshake, and zeroization are ungated, and the generic file/log mutants do not name those surfaces. | §D2.1, Acceptance E |
+| 4 | **Capability expiry remains unclosed** — no maximum duration is specified, so "effectively run-long" has no executable threshold. The entropy half is correct. | §D3, Acceptance H |
+| 5 | **Acceptance M reintroduces the out-of-scope property it was written to remove.** Its capability-check mutant is right, but the shared-capture-mount and artifact-root-mount mutants do not necessarily change **what a caller can retrieve** — they test trusted-container internal access, exactly what M says it no longer tests. §D7's cross-run/cross-fixture language has the same flavour. | §D7, Acceptance M |
+| 6 | **Two stale revision-2 statements survive**, both saying the bootstrap secret is injected "at container creation", which revision 3 replaced with stdin delivery after the bridge opens. Verified present at `m5-2-slice-spec.md:41-44` and `:546-548`. | spec |
+
+`SCHEMA.md`'s single-process wording is stale for the eventual composed implementation, but the spec already
+requires amending it before completion — correctly flagged, not a defect.
+
+### Round budget
+
+The bounded cap extension is spent, and its closure review returned a new P1. **No automatic further extension**:
+this goes back to the user.

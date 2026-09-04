@@ -1,9 +1,25 @@
 # M5.2 slice spec — Docker-composed fixtures behind one implementation, two transports
 
-**Status: DRAFT (revision 3) — a single bounded cap extension, authorized by the user 2026-09-04. Scope is C-R5's
-P1, the eight recorded P2s, and consequent consistency edits. Nothing else.** The architecture is not reopened and
-implementation has not begun. Revision 3 locks only if the focused closure review (see the last section) finds
-these properties correctly specified and no new P1.
+**Status: BLOCKED — revision 3 did NOT lock. The focused closure review returned a new P1**
+(`docs/m5-2-review-findings.md`, C-R7). The user's outcome rule applies: a new P1 returns to the user, with no
+automatic further extension. **Do not implement.**
+
+**The P1 in one paragraph.** §D5.0 conflates two things and states the stronger one. Requiring the *selected*
+endpoint to be a canonical local `unix://` socket proves only **how the harness connects** — Docker supports
+multiple `-H` listeners at once, so the same daemon may also be listening on TCP and remain browser-addressable,
+and a Unix socket may itself front a TCP proxy. §D5.0's conclusion that this "keeps the API itself off the network"
+is false as written, and Acceptance B's positive control would falsely pass a dual-listener or proxy configuration
+because it inspects only the selected endpoint. C-R5's P1 is therefore **half closed**: stdin delivery (§D2.1)
+keeps the secret out of `Config.Env`, but a browser-addressable daemon still exposes `exec`. Verified not live on
+this host (no listener on 2375/2376; no `hosts` key in `~/.docker/daemon.json`). Closing it properly needs the
+daemon's **own listener set**, which is not reliably queryable — `/info` does not report listeners, and under
+Docker Desktop the daemon runs in a VM whose `-H` flags the API does not expose — so the options are a different
+mechanism or a narrower claim, and both are the user's call.
+
+**What passed:** preflight ordering, CLI-precedence policy and pinning (§D5.0); the frozen agent tool surface
+(§D8); and six of the eight P2 dispositions with their mutants. Six P2s remain open, including two that are this
+spec's own errors: Acceptance M reintroduces the out-of-scope internal-access property it was written to remove,
+and two revision-2 statements still say the bootstrap secret is injected "at container creation".
 
 ## What changed from revision 2
 

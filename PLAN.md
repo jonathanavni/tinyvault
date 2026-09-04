@@ -109,11 +109,24 @@ Codex recon (C-R1) + adversarial paper round 1 (C-R2) done; **round 1 of the thr
   invocation, the trust anchor, framing, capture transfer — with eight P2s outstanding, two of which are acceptance
   criteria that test the wrong property (J asserts something impossible; E's body omits the bootstrap secret and
   public key).
-- **The decision the user owes:** whether to extend the paper cap for a revision 3 carrying the bounded repair
-  (preflight the daemon channel; inject the bootstrap secret over the exec handshake rather than Compose
-  environment, since `Config.Env` is disclosed by inspection; freeze the evaluated agent's tool boundary, true
-  today at `runner.ts:592-614` but asserted nowhere) plus the eight P2s — or to proceed another way. The repair
-  adds neither a control port nor a fallback.
+- **Revision 3 (C-R6) spent the user's bounded cap extension on C-R5's P1 and the eight P2s; its focused closure
+  review (C-R7) returned a NEW P1, so revision 3 did not lock and M5.2 remains BLOCKED. No code written.**
+  The repair conflated two things: requiring the *selected* Docker endpoint to be a local `unix://` socket proves
+  only how the harness connects, while Docker supports multiple `-H` listeners at once — the same daemon may also
+  listen on TCP, and a Unix socket may front a TCP proxy. So C-R5's P1 is half closed (stdin delivery keeps the
+  secret out of `Config.Env`; a browser-addressable daemon still exposes `exec`). Verified not live on this host
+  (no 2375/2376 listener, no `hosts` key in `~/.docker/daemon.json`).
+- **Why it is not obviously repairable in place:** closing it needs the daemon's own listener set, which is not
+  reliably queryable — `/info` does not report listeners, and under Docker Desktop the daemon runs in a VM whose
+  `-H` flags the API does not expose. The honest options are a different mechanism or a narrower claim.
+- Passed in the closure review: preflight ordering, CLI-precedence policy and endpoint pinning; the frozen
+  evaluated-agent tool surface (§D8); and six of eight P2 dispositions with their mutants. Six P2s stay open,
+  two of them this spec's own errors — Acceptance M reintroduced the out-of-scope internal-access property it was
+  written to remove, and two revision-2 statements still say the bootstrap secret is injected "at container
+  creation" (`m5-2-slice-spec.md:41-44`, `:546-548`).
+- **The decision the user owes:** how to treat a daemon whose exposure the harness cannot verify — narrow the claim
+  to what is verifiable plus a stated deployment requirement, or adopt a different mechanism. There is no automatic
+  further extension; four review passes (C-R2, C-R3, C-R5, C-R7) have now run against this slice.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
