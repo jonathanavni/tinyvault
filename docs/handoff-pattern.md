@@ -1,6 +1,7 @@
 # Claude + Codex Handoff Pattern
 
-The canonical reference for how the orchestrator (Claude Code) hands work off to the adversary/implementer (Codex). Read it before any non-trivial Codex dispatch.
+The canonical reference for session ownership, implementation handoffs, and independent review.
+Read §0 to choose the session mode, then the relevant ladder and packet sections.
 
 > The pattern is model-agnostic. "Claude" and "Codex" are the two families this repo is wired for, but the roles matter more than the brands — you could run the orchestrator on one frontier model and the adversary on another (Gemini, GLM, etc.). What makes it work is that the model reviewing or attacking the code is a *different family* than the one that wrote it.
 
@@ -10,11 +11,186 @@ Companion essay: [Two Models Today, Meta-Harnesses Tomorrow](https://jonathanavn
 
 ## Purpose
 
-This repo runs a Claude Code-native operating model: `CLAUDE.md`, `.claude/commands/*`, `.claude/memory/*`, `PLAN.md`, and a review cadence. Codex *extends* that workflow, it does not replace it.
+This repo supports Claude-led and Codex-led sessions using the same `PLAN.md`, contracts, review
+registers, and `.claude/memory/*`. The agent where the user starts the session leads the agreed work;
+an explicit delegation or ownership handover takes precedence.
 
-Use Claude Code as the **continuity owner** and Codex as a **fresh-context, different-model-family agent** for bounded review or implementation.
+**Sections 1–13 retain the existing Claude-led flow.** For a direct Codex-led session, §0 supplies
+the ownership and dispatch mapping. Only those role assignments change: the contracts, review
+independence, round caps, evidence requirements, and reporting formats remain in force. In particular,
+§8's state-writing ban applies to a **delegated Codex worker**, not the Codex continuity owner.
 
-Codex runs from inside Claude Code through the [OpenAI Codex plugin](https://github.com/openai/codex-plugin-cc). Install and authenticate it per the plugin's README before using this pattern.
+Claude continues to dispatch Codex through the [OpenAI Codex plugin](https://github.com/openai/codex-plugin-cc).
+Direct Codex sessions use `AGENTS.md` and the project skills; they do not need Claude to dispatch them.
+
+---
+
+## 0. Session Entry and Ownership
+
+| Entry | Continuity owner | Other agents |
+|---|---|---|
+| User starts in Claude Code | Claude Code | Codex receives bounded packets via the existing ladder |
+| User starts directly in Codex with GPT-6 Astra selected | Codex GPT-6 Astra | Claude supplies independent review; Codex workers receive bounded packets as useful |
+| An orchestrator dispatches an implementation or review packet | The dispatching orchestrator | Recipient remains a worker, regardless of app or model |
+| Existing session resumes or compacts | Its existing owner | No implicit transfer |
+
+Explicit user scope and handoffs win. A quoted `/start` inside a packet is not a new session.
+Neither a second window nor a model switch grants concurrent ownership of project state.
+
+### One writer and handover
+
+`PLAN.md` remains the shared continuity record, including for Codex. The `.claude/memory/` name
+is historical; its project topics are shared. Do not create a second plan, decisions log, or Codex
+memory directory. Keep roadmap changes in `PROJECT-SPEC.md`, review-method policy here, and
+milestone-specific gates in `phase-0-plan.md`. Registers remain append-only.
+
+At kickoff, read Current State and inspect `git status`, HEAD, branch, and `git worktree list`.
+Identify the integration checkout that holds shared project state; a worker's branch copy of
+`PLAN.md` may be stale. Read that checkout's Current State before claiming or transferring ownership.
+An in-progress focus stamp predating this protocol is still evidence of work in flight, not a vacant slot.
+
+Once direction is agreed, extend the existing focus stamp with a compact owner checkpoint:
+
+```text
+`YYYY-MM-DD-<session>` — focus: <scope>; owner: codex|claude; state: active;
+state checkout: <absolute integration-checkout path>; worktree: <absolute task-worktree path>
+```
+
+Use the actual owner value and a stable session identifier. Add the current branch/HEAD and
+outstanding worker jobs to the surrounding state when they matter. This is a coordination convention,
+not an atomic lock: only one orchestrator writes shared state, and agents do not edit the same worktree
+concurrently. Workers return reports; the owner records dispositions.
+
+If another owner is active or its status is uncertain, orient read-only and surface the overlap before
+conflicting writes. Continue only independently authorized work that does not overlap it. Do not infer
+abandonment from elapsed time. A handover records completed work, dirty files, pinned refs, pending jobs,
+verification, next action, and the receiving owner; the old owner stops writing before the receiver starts.
+Obtain the user's direction when a live handover cannot be established. Do not adopt or cancel another
+session's jobs automatically. Re-check this checkpoint after compaction and before integration or wrapup.
+
+On wrapup, mark the session `closed` when relinquishing continuity; use `paused` if work is interrupted
+without a handover. Paused ownership also needs explicit resolution before another writer takes over.
+Record remaining work and running jobs either way. Do not mark another owner's session closed.
+
+### Codex kickoff
+
+Select GPT-6 Astra in the client, open the TinyVault checkout, and select **tinyvault-start** from the
+skill picker. In Codex CLI/IDE, use `$tinyvault-start` or `/skills`. Plain “start the TinyVault session”
+also routes through `AGENTS.md`. `/start` is supported as a message alias when the client sends it to
+the agent; this repo does not register a built-in Codex slash command.
+
+1. Establish owner versus worker from the request and checkpoint. Read `AGENTS.md`, `CLAUDE.md`,
+   `PLAN.md` Current State, the project-memory index, and the governing spec/plan for the current slice.
+   Load relevant topics and findings, not the full session history.
+2. Inspect working state and ownership as above. Report dirty files, blockers, and known active jobs;
+   do not silently switch branches, clean a worktree, or resume a job.
+3. Present roughly ten lines: owner/mode, milestone, shipped/in-progress work, blockers, and recommended
+   next steps. **Kickoff alone is read-only**; wait for direction. If the user already supplied a concrete
+   task, use that authorization without asking them to repeat it, subject to the ownership check.
+4. When work is agreed, record the owner checkpoint and drive it through the ladder below. A delegated
+   worker instead follows its packet and returns results to its orchestrator; it does not stamp `PLAN.md`.
+
+### Codex-led ladder
+
+This maps §§2, 4, 6, 8, and 11's continuity duties to Astra for a direct Codex session. Claude's native
+commands and plugin-dispatch instructions remain specific to Claude-led sessions.
+
+1. **Astra plans and synthesizes:** turn the agreed goal into bounded slices and acceptance evidence;
+   preserve the existing locked spec and completed reviews. Do not restart an in-flight ladder or reset
+   its round count on handover. Surface changes to locked contracts for explicit disposition.
+2. **Independent paper review before high-risk implementation:** send the plan and exact contract to
+   a fresh Claude reviewer. Keep additional paper channels required by the slice; for blind parallel
+   reviews, withhold the other reviewers' findings until synthesis. Astra records dispositions and the lock.
+3. **Astra implements:** use a bounded, fresh-context Codex implementation worker where available and
+   warranted; a small agreed slice may be implemented in the owner session. Give workers explicit file
+   ownership, base/head, no-touch boundaries, tests, and a return format. Do not have two writers implement
+   the same slice. A worker is not an independent reviewer of its own implementation.
+4. **Review the exact candidate:** retain fresh Claude QA, a separate security-specialized channel where
+   §7.1 requires it, and a fresh-context Codex adversarial pass. Relative to Astra-authored code, Claude is
+   cross-family; Astra/Sol review is same-family. The owner rereading its own code counts as neither a fresh
+   review nor a substitute for a required channel. Use the mandated round-2/round-3 fix review and caps (§5).
+5. **Astra integrates and preserves continuity:** adjudicate findings under §6, run the required candidate,
+   merged-tree and clean-clone checks at the stages the active contract requires, and record exact evidence.
+   Coordinate browser timing suites serially across the machine. Attempt checks allowed in the current
+   environment; old Codex sandbox failures do not establish present capability. Report blocked/unrun checks
+   separately. Commit, merge, push, or release only within the user's authorization; owner status grants no
+   additional permissions. Update shared state and append-only registers after the relevant evidence exists.
+
+Lower-risk work may use the existing reduced ladder. Owner-side model choice stays under the user's
+control; use the existing stakes-based routing for delegated jobs when the dispatcher supports it.
+
+**Dispatch to Claude:** use [tinyvault-claude-review](../.agents/skills/tinyvault-claude-review/SKILL.md),
+backed by [`scripts/claude-review.mjs`](../scripts/claude-review.mjs). The reviewer is explicitly pinned
+to **Opus 5 (`claude-opus-5`)**, high effort, in a fresh non-interactive CLI session with no model fallback.
+This uses the existing Claude Code login; no reverse-dispatch plugin is needed. Give it the
+[review packet](../templates/claude-review-packet.md), exact candidate, relevant contracts, threat model,
+accepted residuals, and verification artifacts. Keep raw reports outside every source worktree (§7.2).
+
+The helper exposes only Read/Glob/Grep and uses CLI safe mode to disable automatic instructions, commands,
+hooks, plugins, and MCP tools. It automatically supplies the reviewed checkout's complete root `CLAUDE.md`
+as required project context, saves `project-context.md`, and records its SHA-256 in `request.json`. Missing
+or empty `CLAUDE.md` fails before dispatch. Its product principles and review standards apply; its
+orchestrator/session/state-writing duties do not transfer to the reviewer. The packet supplies additional
+task-specific context. The reviewer cannot run tests or modify code. These
+are tool restrictions, not an OS sandbox. The before/after digest covers tracked and non-ignored untracked
+files, not `.git` internals or ignored artifacts; it detects candidate drift but is not an atomic lock.
+Hold the checkout stable. Each required channel gets its own fresh invocation. For `security`, the helper
+includes and hashes the versioned [security methodology](../templates/claude-security-review.md); this is
+a dedicated static security review, not a claim that `/security-review` or an external scanner ran.
+Explicitly mandated auditors and dynamic tests remain separate gates.
+
+Model identity is checked against CLI initialization and every assistant event. CLI auxiliary model usage
+may appear in usage metadata and is preserved; it is not relabeled as reviewer output. Missing or malformed
+results, denied permissions, wrong reviewer models/tools, timeouts, or candidate drift fail dispatch.
+Exit 0 is a completed PASS report; exit 2 is completed NEEDS-ATTENTION; other exits are execution failures.
+Read the full report before adjudication. Preserve candidate refs/digest, reviewer identity, channel,
+command, and evidence location. Do not resume the author's conversation as the independent reviewer.
+
+**Dispatch validation (2026-09-05):** Claude Code 2.1.258 completed an Opus 5 security smoke review of a
+synthetic origin-prefix bug. The report identified the bug, reproduced a randomly generated file-read
+marker, returned NEEDS-ATTENTION (exit 2), and left the candidate and startup-hook sentinel unchanged.
+Raw evidence: `/private/tmp/tinyvault-opus-live-vtzlsp54/security-report` (temporary local artifacts).
+`node --test scripts/claude-review.test.mjs` covers result/model/tool validation, process failures,
+timeouts, candidate drift, and output-location checks without making model calls. This validates the
+dispatch path, not TinyVault's security or the quality of every reviewer conclusion. The standard skill
+validator could not run because PyYAML is absent; the skill's YAML was parsed and checked with Ruby Psych.
+The exact model identifier follows [Claude's model configuration documentation](https://support.claude.com/en/articles/11940350-claude-code-model-configuration).
+
+```text
+Role: delegated reviewer; continuity owner: Codex <session>.
+READ-ONLY. Do not run /start or /wrapup, update shared state, or dispatch implementation.
+Checkout and candidate: <absolute path>, base <sha>, head <sha>.
+Scope and channel: <plan / QA / security; exact files and methodology>.
+Read: <governing contracts, source/tests, threat model, accepted residuals>.
+Evidence supplied: <diff and verification artifacts>; evidence to check: <requirements>.
+Return: §13 review format, severity and file:line, test gaps, residual risk, deviations.
+```
+
+If cross-family tooling or a required audit skill is unavailable, prepare that exact packet and request
+the missing review through the user. Continue independent preparation, but leave the review gate pending.
+A same-family substitute or an unexecuted packet is not completed cross-family review. This protocol
+does not install a reverse-dispatch plugin or change either application's saved credentials or permissions.
+
+### Codex wrapup
+
+Use **tinyvault-wrapup**, `$tinyvault-wrapup` in CLI/IDE, or “wrap up this TinyVault session.” `/wrapup`
+has the same message-alias limitation as `/start`.
+
+- Re-read the ownership checkpoint and current diff. A worker or former owner returns the §13 handoff
+  report and proposed state updates; it does not edit shared state or close the current owner's session.
+  After read-only orientation alone, summarize without manufacturing state changes.
+- The owner updates Current State with outcomes, exact verification and blockers, next action, pending
+  jobs, and the closed/paused checkpoint. Move no-longer-load-bearing narrative to `PLAN-archive.md`;
+  keep the cumulative Decisions Log in `PLAN.md` and open threads easy to find.
+- Record only useful durable project decisions/gotchas in the existing `.claude/memory/` topic files and
+  index, without duplicating Current State. This grants no authority to edit user-global Codex memory.
+- Follow the existing doc-hygiene rule: surface judgment-dependent staleness rather than silently rewriting
+  history. Preserve append-only registers. Leave changes uncommitted unless authorized, and summarize what
+  happened, what was verified, and the next step.
+
+Repository skills are thin entry points to this section. [OpenAI's skill documentation](https://learn.chatgpt.com/docs/build-skills)
+describes `.agents/skills` discovery and invocation. New sessions/worktrees must contain these files;
+existing conversations should reload `AGENTS.md` and this section before relying on the new mode.
 
 ---
 

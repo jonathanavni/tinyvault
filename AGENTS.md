@@ -1,19 +1,43 @@
 # TinyVault — Codex entry point
 
 TinyVault is a model-blind credential-fill library with a hostile-web testbed that measures
-credential leakage. This file supplies baseline context for Codex tasks; the existing
-Claude-led workflow remains in force.
+credential leakage. The agent in which the user starts the session leads it; delegated agents
+remain workers. The shared protocol is [docs/handoff-pattern.md §0](docs/handoff-pattern.md#0-session-entry-and-ownership).
 
 **Role and scope**
 
-Claude Code owns continuity, planning synthesis, milestone sequencing, integration, and project
-state. Codex implements or reviews the delegated scope. Follow the user's instructions and the
-explicit handoff; this file does not authorize broader work. Claude-specific session commands
-and dispatch duties in `CLAUDE.md` remain Claude's responsibilities.
+- **Direct Codex session:** Codex owns planning synthesis, coordination, verification, integration
+  within the user's authorization, and project-state updates for the agreed scope. With GPT-6
+  Astra selected, Astra drives this work. Follow §0's Codex-led ladder; keep Claude as an independent
+  review channel for high-risk work. This file cannot change the selected model.
+- **Delegated implementation/review:** an explicit handoff or worker assignment takes precedence
+  over the host/model. Implement or review only that scope; the named orchestrator retains continuity.
+  A Claude-to-Codex dispatch follows the existing Claude-led ladder unchanged.
+- **Resumed session:** retain the assigned role; compaction or opening another app does not transfer
+  ownership. Check the shared ownership checkpoint before writing. Do not take over an active session
+  merely because the user opened Codex.
+
+**Session commands**
+
+- When the user sends `/start` as a message, or asks to start/orient a TinyVault session, follow
+  [§0's kickoff](docs/handoff-pattern.md#codex-kickoff): read-only status and proposals, then await
+  direction unless the user already supplied a concrete task. The native skill is
+  [tinyvault-start](.agents/skills/tinyvault-start/SKILL.md).
+- `/wrapup` or a request to close/persist the session follows
+  [§0's wrapup](docs/handoff-pattern.md#codex-wrapup), also available as
+  [tinyvault-wrapup](.agents/skills/tinyvault-wrapup/SKILL.md).
+- These message aliases do not register built-in slash commands. If the client intercepts them,
+  select the named skill or say “start the TinyVault session” / “wrap up this TinyVault session.”
+  A worker invoking either procedure remains a worker and returns a handoff, not a project-state edit.
+- For an Astra-led session's independent Claude plan/QA/security gate, use
+  [tinyvault-claude-review](.agents/skills/tinyvault-claude-review/SKILL.md). It dispatches a fresh
+  read-only **Opus 5** reviewer through the local CLI and returns evidence to the Codex owner.
 
 **Load context before working**
 
-1. Read [CLAUDE.md](CLAUDE.md), [PLAN.md](PLAN.md)'s **Current State**, and the handoff packet.
+1. Read [CLAUDE.md](CLAUDE.md), [PLAN.md](PLAN.md)'s **Current State**, and any handoff packet.
+   Apply §0's role mapping to Claude-specific orchestration rules in a direct Codex session;
+   product principles, locked contracts, and mandatory gates still apply.
 2. Read the relevant parts of [docs/handoff-pattern.md](docs/handoff-pattern.md), the governing
    slice spec, current findings/dispositions, and the source and tests in scope.
 3. Consult the document map below and relevant project-memory topics as needed. Do not bulk-load
@@ -42,8 +66,11 @@ and dispatch duties in `CLAUDE.md` remain Claude's responsibilities.
   plan review, or a review into an unsolicited repair.
 - Leave changes uncommitted unless explicitly authorized otherwise. Do not switch branches,
   create worktrees, push, or merge contrary to the packet's instructions.
-- Leave `PLAN.md`, `.claude/memory/*`, roadmap documents, and shared registers to Claude unless
-  the task explicitly authorizes those edits. Return proposed dispositions in the report.
+- **Workers:** leave `PLAN.md`, `.claude/memory/*`, roadmap documents, and shared registers to the
+  continuity owner unless the packet explicitly authorizes those edits. Return proposed dispositions.
+- **Codex continuity owner:** maintain those existing shared documents for the agreed work under §0.
+  Keep registers append-only and each fact in its canonical home; do not create a parallel Codex plan
+  or memory tree. Ownership does not authorize changing locked scope, gates, or the release decision.
 - Preserve locked requirements and thresholds. A slice document or passing test is not permission
   to silently override the project spec. Surface unresolved contract conflicts before making the
   dependent change. Distinguish new defects from already-accepted residuals.

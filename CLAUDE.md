@@ -32,6 +32,9 @@ TinyVault is a **harness-agnostic, model-blind credential-fill library for brows
 
 ## Session Management
 
+- **Session ownership:** a session started here keeps Claude as continuity owner and follows the existing
+  ladder. Honor explicit worker packets and the shared [ownership/handover check](docs/handoff-pattern.md#one-writer-and-handover)
+  before writing project state; a Codex-led session is a separate mode, not a change to Claude's ladder.
 - `/clear` between unrelated tasks; `/compact` to keep focus while clearing noise.
 - **Two-correction rule**: if wrong twice on the same thing, `/clear` and write a sharper prompt.
 - Feed raw data (logs, errors, leak-checker output) instead of your interpretation of them.
