@@ -51,7 +51,6 @@ describe('probe classification', () => {
     expect(probes.filter(detectedRoute).map((p) => p.method)).toEqual(['form']);
     expect(coverageGaps(probes)).toEqual([]);
   });
-});
   it('a non-network (file:) target is excluded from network coverage but must still show no route', () => {
     const fileProbes = ['fetch', 'form', 'img', 'websocket', 'worker'].map((method) =>
       probe({ method, target: 'internal-socket-file-url', url: 'file:///tmp/tinyvault/control.sock' }));
