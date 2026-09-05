@@ -205,4 +205,13 @@ additive; `docker history` truncates by default; `vitest list --filesOnly --json
   same value and stays verified (`label-compose-project`). Integrator carve-out (four one-line removals in B1's
   verifier, its test table, the testkit and the code enum; `docs/handoff-pattern.md` §4 "mechanically absorbing
   review findings"), verified by tsc + the `testbed/docker` suite before commit. Plan §3 amended.
+- **2026-09-05 — Job B2 stopped twice more, both correctly, on contract facts revision 4 got wrong.** (1) A plain-Node
+  lint cannot import `compose.ts` (TypeScript parameter properties are not strippable; extensionless imports do not
+  resolve) — **resolved by `testbed/docker/topology.json`** as the single constants home read by both sides (plan §12
+  row added; B2 authorized to make the narrow `compose.ts` edit). (2) §9's "exactly one `scripts/` file may import
+  `child_process`" was false: the two dependency-boundary self-tests and the docker-invocation self-test already spawn
+  Node to prove reds — **resolved by pinning the measured set of four and every spawn site's `process.execPath`
+  first argument** (plan §9 amended). Lesson for the register: three of the four revision-4 sentences B2 tripped on
+  were written without measuring the tree; the paper rounds did not catch them because they were about the
+  *implementation's* environment, not the design. Carried to `.claude/memory/conventions.md` at wrapup.
 

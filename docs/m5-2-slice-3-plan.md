@@ -611,12 +611,15 @@ into a config nobody runs is red. **Declared limit:** the proof pins files, not 
 its ten); a test removed from a file that keeps other tests moves inventory and report together. `test:docker` gets
 the same proof with its own exact set (one file, zero skipped).
 
-**Plain-`node` steps run outside the interceptor — declared and pinned.** The five existing gate scripts and the
-three new ones run under bare `node`, where the Vitest setup file is not loaded. So: **exactly one** `scripts/` file
-may import `child_process` — `check-acceptance-j-results.mjs`, which re-runs Vitest — and the capability map pins
-that; its single spawn site is allowlisted to a first argument of the literal `process.execPath` (a positive
-allowlist over one reviewed call site, the M4 rule form); the three new gate scripts have **no** `child_process`,
-`net` or `http` entry, so the execution proof **reads** the reporter files rather than spawning Vitest. A
+**Plain-`node` steps run outside the interceptor — declared and pinned.** The existing gate scripts and the three
+new ones run under bare `node`, where the Vitest setup file is not loaded. So the capability map pins the **measured
+set** of `scripts/` files that import `child_process` — `check-acceptance-j-results.mjs` (re-runs Vitest),
+`dependency-boundary.selftest.mjs`, `dependency-boundary.selftest-fixtures.mjs` and `docker-invocation.selftest.mjs`
+(each proves its gate red through the real CLI) — and **every spawn site in those files is allowlisted to a first
+argument of the literal `process.execPath`** (a positive allowlist over reviewed call sites, the M4 rule form; a
+self-test mutant changes one to `'docker'` and must go red). *Revision 4 said "exactly one"; Job B2 measured four.
+Integrator amendment 2026-09-05.* The three new gate scripts have **no** `child_process`, `net` or `http` entry, so
+the execution proof **reads** the reporter files rather than spawning Vitest. A
 conditional `spawnSync('docker', …)` in any gate script is therefore caught by the map (no entry) or the call-site
 pin (wrong first argument); a mutation of that one argument is the reviewed-root-of-trust residual.
 
@@ -782,6 +785,7 @@ this rule applied to slice 2's own deferral).
 | `testbed/docker/composed.docker.test.ts` | the Docker-required suite (§11: E inspect scan, C probe matrix, bridge death, stale container, teardown) |
 | `vitest.config.ts`, `vitest.docker.config.ts` | §9 split |
 | `scripts/check-compose.mjs`, `scripts/compose-lint.mjs`, `scripts/compose-lint.selftest.mjs` | §8 closed-schema Compose **and Dockerfile** lint, values and interpolation pinned, table-driven self-test, no-`.env` check |
+| `testbed/docker/topology.json` | the single home of the §2 constants (services → container ports → host ports, image name, Compose file path, socket path, marker strings), read with `readFileSync` + `JSON.parse` and validated by **both** `compose.ts` and the plain-Node lint — a bare-`node` script cannot import TypeScript, and a constant that lives in two places is drift (integrator amendment 2026-09-05, after Job B2 stopped on the import) |
 | `scripts/check-test-entry.mjs` (+ selftest) | §9 entry-point **grammar** gate |
 | `scripts/check-test-execution.mjs` (+ selftest) | §9 execution proof over the three JSON reporter files (reads, never spawns) |
 | `testbed/rootOfTrust.test.ts` | §9 hash pins for `package.json` scripts, `Makefile`, both Vitest configs, every `scripts/check-*.mjs` |
