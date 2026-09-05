@@ -178,3 +178,24 @@ additive; `docker history` truncates by default; `vitest list --filesOnly --json
 - **Carried into the implementation review by name:** plan §14 items 1–16.
 - **Implementation proceeds** on `codex/m5-2-slice-3` (worktree `../tinyvault-slice3`), Jobs A → B1 → B2 → C,
   GPT-6 Astra, one worktree, sequential (the companion does not serialize writes). Integrator runs every gate.
+
+## Implementation log — integrator entries (append-only)
+
+- **2026-09-05 — Job A (protocol core) committed `1310a7f`** on `codex/m5-2-slice-3`. Astra stopped once on a genuine
+  §4/§5-vs-§11 wording conflict (adjudicated: the check order wins; `id: 2.0` → `frame-canonical`, missing `mac` →
+  `body-shape`) and completed on re-dispatch. Integrator-verified: tsc clean; `testbed/docker` 286 tests; invocation
+  gate PASS; **`make test` 1284 + 5 + 10, exit 0** in the worktree. Codex-reported 70/70 mutation reds (not
+  independently re-run; the post-impl QA channel re-mutates).
+- **2026-09-05 — Job B1 (executor, orchestration, composed transport, secretScan): plan amendment.** B1 stopped a
+  second time on a real gap I left: §11 E requires a `docker history --no-trunc` scan but §7's closed vocabulary had
+  no `history` variant, and the packet forbade widening the vocabulary unilaterally. **Continuity-owner amendment to
+  the locked revision 4:** `image-history` added to the §7 table (bounded, typed to the recorded image id). Recorded
+  here and in the plan row. The first B1 stop (creation-vs-unhealthy on a non-zero `compose up`) was adjudicated as a
+  post-hoc `compose-ps-all` query, both codes terminal reds. B1's other verification: tsc clean; 483 targeted tests
+  across 22 files; both gates PASS; Codex-reported 47 mutation reds including the **R2-4 production `--host`/`-H`
+  builder mutation rejected before the runner** (2 reds) — the disposition §7 promised.
+- **Process observation, recorded as a gotcha:** the first B1 job used subagents whose edits landed in the worktree
+  *after* its main thread reported completion; two later dispatches saw "another writer". No foreign process
+  existed. A quiescence check (no file newer than a marker for 60 s) now precedes every dispatch and every
+  integrator verification run.
+

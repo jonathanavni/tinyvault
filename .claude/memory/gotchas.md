@@ -265,4 +265,10 @@ Example:
   check and the `instanceof Error` vacuity; Claude verified process-env interpolation and the npm lifecycle-script
   hole on the host. Dispatch Sol (`task --fresh --model gpt-5.6-sol`) and a `Plan` subagent on the same packet, in
   parallel, and write the register only when both are in. (2026-09-05)
+- **A Codex job that used subagents can keep writing to the worktree after its status says `completed`.** The
+  first slice-3 B1 job's log ended with "subagent work drained", and two later dispatches in the same worktree each
+  stopped on "another writer is editing these files" — the subagents' edits landing late. No foreign process was
+  involved (`lsof -d cwd` showed only Codex's own `node_repl` helpers). Before dispatching the next `--write` job or
+  running an integrator `make test`, require **60 s of quiescence** (`touch marker; find … -newer marker` empty), and
+  tell the implementer "single writer: no subagent edits". (2026-09-05)
 

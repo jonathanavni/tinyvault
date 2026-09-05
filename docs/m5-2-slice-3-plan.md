@@ -461,6 +461,7 @@ never spawn.
 | `compose-down` | `compose --env-file /dev/null -f <file> -p <project> down --remove-orphans` | bounded run to completion |
 | `image-inspect` | `image inspect tinyvault-fixture:local` | stdout parsed as a one-element JSON array: `.Id` (`sha256:` + 64 hex), `.Config.Cmd`, `.Config.Entrypoint`, `.Config.Env`, `.Config.Labels` for the step-6 comparisons and the E scan |
 | `inspect` | `inspect --type container <64-hex id>` | stdout parsed as a one-element JSON array, strictly (§3 step 6) |
+| `image-history` | `history --no-trunc --format {{json .}} <sha256:64-hex image id>` | one JSON object per line; `CreatedBy` scanned for the E `history` surface, with the Dockerfile `LABEL` as its marker. *Added at implementation (integrator amendment, 2026-09-05): §11 E required this scan but the table omitted the variant; Job B1 correctly stopped rather than widen the closed vocabulary itself.* |
 | `logs` | `logs <64-hex id>` | stdout+stderr returned for the Acceptance E scan |
 | `export` | `export <64-hex id>` | **streamed** tar of the container filesystem, scanned on the host (E) |
 | `exec-bridge` | `exec -i <64-hex id> node /app/bridge.mjs` | **long-lived**: returns stdio streams |
