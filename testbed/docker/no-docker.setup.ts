@@ -1,8 +1,9 @@
 // Primary Docker-free test guard: inspect resolved runtime values, including computed imports.
 // This covers executed calls, not arbitrary shell programs or code in separate child processes.
+// Same-process worker_threads realms and direct process.binding('spawn_sync') or
+// process.binding('process_wrap') calls escape this hygiene guard, which is not containment.
 import childProcess from 'node:child_process';
 import net from 'node:net';
-import { syncBuiltinESMExports } from 'node:module';
 import { basename } from 'node:path';
 
 function reject(target: string): never {
@@ -25,8 +26,18 @@ function checkShellCommand(value: unknown): void {
 
 function checkProcessCall(args: readonly unknown[]): void {
   const options = (Array.isArray(args[1]) || args[1] == null ? args[2] : args[1]) as { shell?: unknown } | undefined;
-  if (options?.shell) checkShellCommand(args[0]);
-  else checkExecutable(args[0]);
+  if (options?.shell) {
+    checkExecutable(options.shell);
+    // Node joins file + argv before invoking the shell; sync APIs never reach checkSpawn.
+    const command = Array.isArray(args[1]) ? [args[0], ...args[1]].join(' ') : args[0];
+    checkShellCommand(command);
+  } else checkExecutable(args[0]);
+}
+
+function checkShellCall(args: readonly unknown[]): void {
+  const options = args[1] as { shell?: unknown } | undefined;
+  checkExecutable(options?.shell);
+  checkShellCommand(args[0]);
 }
 
 function checkSpawn(args: readonly unknown[]): void {
@@ -48,7 +59,7 @@ function checkConnection(args: readonly unknown[]): void {
   const path = options?.path ?? (typeof target === 'string' && !(Number(target) >= 0) ? target : undefined);
   const port = options?.port ?? target;
   // Preflight accepts any socket basename. No existing tests need Unix-socket exceptions.
-  if (typeof path === 'string') reject('Unix socket');
+  if (typeof path === 'string') throw new Error('Unix socket access forbidden during Docker-free tests.');
   if (typeof port === 'number' || typeof port === 'string') {
     if (Number(port) === 2375 || Number(port) === 2376) reject(`port ${port}`);
   }
@@ -77,10 +88,9 @@ for (const key of ['spawn', 'spawnSync', 'execFile', 'execFileSync'] as const) {
 const spawnPrototype = childProcess.ChildProcess.prototype as unknown as { spawn(options: unknown): unknown };
 wrap(spawnPrototype, 'spawn', checkSpawn);
 for (const key of ['exec', 'execSync'] as const) {
-  wrap(childProcess, key, (args) => checkShellCommand(args[0]));
+  wrap(childProcess, key, checkShellCall);
 }
 wrap(net, 'connect', checkConnection);
 wrap(net, 'createConnection', checkConnection);
 // http.request uses this path internally, bypassing the exported net.connect function.
 wrap(net.Socket.prototype, 'connect', checkConnection);
-syncBuiltinESMExports();

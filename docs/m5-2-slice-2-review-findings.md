@@ -123,14 +123,55 @@ resolution (`docs/handoff-pattern.md` §7.1).
 | **F5** | **Silent-green test.** Deleting **both** `net.connect`/`net.createConnection` wrappers leaves all 23 tests green, because `net.Socket.prototype.connect` is separately wrapped and masks them — while two test names read as coverage for them. | `/review` mutation **S9** green; contrast **S4** (prototype wrap) → 1 red. Protection is not weakened today; the *test* is the defect. |
 | **F6** | **B4's deferral lives only in a commit message.** Plan §5.2 still states the composed-EPERM test as required and §6 lists it under Acceptance A "Provable now"; the register's disposition still says ACCEPTED. | `grep -n "B4" docs/*.md` returns no deferral wording. Judgement was right; the record is wrong. Violates "each fact has ONE home". |
 
-### P3, accepted for this round
-- Unknown-architecture fail-closed throw (`runner.ts:282`) has **no test** — mutation R6 green.
-- `assertPinned` in `startComposedFixtures` (`runner.ts:307`) is **unobservable** — R7 green; meaningful only in slice 3.
-- **A2 and B5a are not declared in the shipped code**, unlike R2-4 which is labelled at `exec.ts:21-22`. Neither is
-  *claimed*, so this is auditability, not a false claim — but the security story here is "read the code".
-- `exec.ts` has no production importer; declared slice-3 scaffolding, to be named explicitly per `.claude/rules/core.md`.
-- The interceptor is registered for **every** Vitest run including `npm run eval`; slice 3's composed eval will need
-  an exclusion. Flagged now so it is not discovered later as a mystery failure.
+### P3 — raised in this round, dispositions after fix rounds 1-2
+| Item | Disposition |
+|---|---|
+| Unknown-architecture fail-closed throw (`runner.ts`) had **no test** (mutation R6 green) | **CLOSED** — test added; deleting the throw now turns 2 tests red |
+| `assertPinned` in `startComposedFixtures` is **unobservable** (R7 green) | **DECLARED, not closed** (intended) — commented as deliberately unobservable until slice 3 |
+| **A2 and B5a not declared in the shipped code** | **CLOSED** — `endpoint.ts` (A2, incl. the U+FEFF restriction) and `preflight.ts` (B5a) |
+| `exec.ts` has no production importer | **CLOSED** — labelled slice-3 scaffolding |
+| Interceptor registered for **every** Vitest run including `npm run eval` | **NOT CLOSED, carried to slice 3** — and the broad Unix-socket rejection makes the required exclusion *larger*, not smaller |
+
+### Round 2 (on `fb044d3..05f42c4`) — both channels, and fix round 2
+
+| Channel | Verdict |
+|---|---|
+| Codex adversarial | **NEEDS-ATTENTION** — 1 P1 + 2 residuals |
+| Fresh-context QA (**23 mutations**, tree verified clean) | **NEEDS-ATTENTION** — no P1, 3 P2, 5 P3 |
+
+- **P1 — synchronous shell normalization bypassed the guard.** With `shell:true` Node **joins the args array into
+  the command**, so inspecting `args[0]` saw a harmless `' '`; and **sync APIs never traverse
+  `ChildProcess.prototype.spawn`**, so fix round 1's shared-downstream hook did not cover them. Codex reached real
+  Docker output; the integrator reproduced both mechanisms in plain Node (Node's own DEP0190 warns on the shape).
+  **CLOSED** — the joined command is validated for sync APIs, plus custom `options.shell`. Reverting the join turns
+  two isolated tests red.
+- **P2-1 — fix round 1 INTRODUCED a silent-green.** `cp.exec` calls the exported `execFile` with `shell:true`, so
+  teaching that guard to route shell forms **masked** the `exec` wrapper: deleting `exec` went from red to green.
+  Found independently by both channels. **CLOSED** — deleting only that wrapper is red again.
+- **P2-2 — the gate exemption turned out to be unnecessary, so it was DELETED rather than narrowed.** Fix round 1's
+  prototype guard made `syncBuiltinESMExports` redundant, and that call was the *only* reason a hole was punched in
+  the repo-wide dependency gate. Codex took option (b): the call, its `node:module` import, and **every component of
+  the exemption** (`TEST_HARNESS_LOADER_EXEMPTIONS`, `isTestHarnessLoaderFile`, `GATE_ROOT`, the `isTestHarness`
+  term) are gone. The `node:module` prohibition applies to every file again with no carve-out. Verified by probe:
+  the R2-2 computed-import + base64 payload is **still blocked** without it, so this did not trade a gate hole for
+  a guard hole.
+- **P2-3 — two live escapes now declared.** Same-process `worker_threads` realms and
+  `process.binding('spawn_sync')`/`('process_wrap')` reach a daemon and were not covered by the header's declared
+  limits. The header now names both and states the guard **is hygiene, not containment**. Comment only — the honest
+  fix, not more code.
+- **P3s closed:** the reject message no longer mislabels a non-Docker socket; `preflight.ts` documents why the
+  resolved path is checked for edge whitespace only (realpath cannot emit dot segments, doubled or trailing
+  slashes; Go's `url.Parse` fails closed on control characters and a bare `%`); U+FEFF is **adjudicated as a kept
+  compatibility restriction** — JS `\s` includes it and Docker does not trim it, so the parser rejects a legal
+  filename, declared in the A2 comment on the A2 precedent (fail closed, loud, trivially remediable).
+
+### The broad Unix-socket rejection — adjudicated
+Both channels examined it. It is **consistent with the contract**: plan §7 already says no test may "dial a socket",
+and §4c's narrower Docker-specific wording is what F3 proved insufficient (the preflight accepts *any* socket path,
+so a daemon at `/tmp/engine.sock` was dialable). It breaks nothing today — no `net.connect`/`createConnection` use
+exists outside `testbed/docker/` — and **does not break slice 3**, whose control socket lives *inside* the container
+behind a `docker exec -T` bridge, with no host-side dial to block. It is recorded as an **additional compatibility
+restriction, not evidence of stronger Docker isolation**.
 
 ### Carried, not fixed
 - **The pin certifies provenance, not filesystem truth.** `dockerPreflight` takes injected `realpath`/`stat`, so any

@@ -58,6 +58,9 @@ async function canonicalPath(path: string, deps: PreflightDeps): Promise<string>
   let resolved: string;
   try { resolved = await deps.realpath(path); }
   catch { throw new DockerPreflightError('realpath-failed', 'Cannot resolve the socket path.'); }
+  // Unlike raw endpoint parsing, the resolved path is checked only for edge whitespace:
+  // realpath removes dot segments and doubled/trailing slashes (apart from root, rejected by stat).
+  // Go's url.Parse fails closed on control characters and bare %, rather than silently trimming them.
   if (hasEdgeWhitespace(resolved)) {
     throw new DockerPreflightError('endpoint-edge-whitespace', 'Resolved socket path has edge whitespace.');
   }

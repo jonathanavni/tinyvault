@@ -8,6 +8,7 @@ import { dockerPreflight, DockerPreflightError, type PinnedDockerEndpoint } from
 
 const noCommand = undefined as never;
 const forbidden = /Docker access forbidden during tests:/;
+const forbiddenConnection = /Unix socket access forbidden during Docker-free tests\./;
 
 function mintPin() {
   return dockerPreflight({
@@ -47,7 +48,9 @@ describe('slice 2 Docker choke point', () => {
     expect(() => buildDockerSpawn(forgery, noCommand)).toThrow(expect.objectContaining({ code: 'unpinned' }));
     expect(dockerHost).not.toHaveBeenCalled();
   });
+});
 
+describe('slice 2 Docker command construction', () => {
   it('pins the child environment and removes both ambient selectors without mutating the parent', async () => {
     vi.stubEnv('DOCKER_HOST', 'tcp://attacker:2375');
     vi.stubEnv('DOCKER_CONTEXT', 'attacker');
@@ -78,6 +81,7 @@ describe('slice 2 Docker choke point', () => {
 });
 
 describe('runtime Docker interceptor installed by Vitest setup', () => {
+  afterEach(() => vi.restoreAllMocks());
   it('rejects a literal named-export spawn before native execution', () => {
     expect(() => spawn('docker', ['-H', 'tcp://attacker:2375', 'info'])).toThrow(forbidden);
   });
@@ -90,20 +94,30 @@ describe('runtime Docker interceptor installed by Vitest setup', () => {
 
   it.each(['spawn', 'spawnSync', 'execFile', 'execFileSync'] as const)(
     'guards %s for absolute executable paths and compose', (method) => {
+      const downstream = vi.spyOn(spawnPrototype, 'spawn').mockImplementation(() => {
+        throw new Error('unguarded downstream spawn reached');
+      });
       expect(() => cp[method]('/injected/bin/docker', [])).toThrow(forbidden);
       expect(() => cp[method]('docker-compose', [])).toThrow(forbidden);
+      expect(downstream).not.toHaveBeenCalled();
     },
   );
 
   it.each(['exec', 'execSync'] as const)('guards shell API %s', (method) => {
+    const downstream = vi.spyOn(cp, 'execFile').mockImplementation(() => {
+      throw new Error('unguarded downstream execFile reached');
+    });
     for (const command of ['docker info', "'/injected/docker' info", '"/injected/docker-compose" version']) {
       expect(() => cp[method](command)).toThrow(forbidden);
     }
+    expect(downstream).not.toHaveBeenCalled();
   });
+});
 
+describe('runtime Docker interceptor connections and subprocess controls', () => {
   it.each(['connect', 'createConnection'] as const)('guards socket and port overloads of %s', (method) => {
-    expect(() => net[method]('/injected/docker.sock')).toThrow(forbidden);
-    expect(() => net[method]({ path: '/injected/docker.sock' })).toThrow(forbidden);
+    expect(() => net[method]('/injected/docker.sock')).toThrow(forbiddenConnection);
+    expect(() => net[method]({ path: '/injected/docker.sock' })).toThrow(forbiddenConnection);
     expect(() => net[method](2375, '127.0.0.1')).toThrow(forbidden);
     expect(() => net[method]({ port: 2376, host: '127.0.0.1' })).toThrow(forbidden);
     expect(() => Reflect.apply(net[method], net, ['2375', '127.0.0.1'])).toThrow(forbidden);
@@ -114,7 +128,7 @@ describe('runtime Docker interceptor installed by Vitest setup', () => {
     try { expect(() => socket.connect({ port: 2375 })).toThrow(forbidden); }
     finally { socket.destroy(); }
     expect(() => request({ port: 2375, path: '/v1.51/info' })).toThrow(forbidden);
-    expect(() => request({ socketPath: '/injected/docker.sock', path: '/info' })).toThrow(forbidden);
+    expect(() => request({ socketPath: '/injected/docker.sock', path: '/info' })).toThrow(forbiddenConnection);
   });
 
   it('allows an ordinary non-Docker subprocess with Docker-looking arguments', async () => {
@@ -133,6 +147,13 @@ describe('runtime Docker interceptor installed by Vitest setup', () => {
     expect(cp.spawnSync(process.execPath, ['-e', 'process.stdout.write("ok")'], { encoding: 'utf8' }))
       .toMatchObject({ status: 0, stdout: 'ok' });
     expect(cp.execSync('printf docker', { encoding: 'utf8' })).toBe('docker');
+  });
+
+  it.each(['spawnSync', 'execFileSync'] as const)('%s preserves benign joined shell arguments', (method) => {
+    const options = { shell: true, encoding: 'utf8' } as const;
+    const output = method === 'spawnSync'
+      ? cp.spawnSync('printf', ['docker'], options).stdout : cp.execFileSync('printf', ['docker'], options);
+    expect(output).toBe('docker');
   });
 });
 
@@ -207,12 +228,15 @@ describe('runtime guard deletion regressions', () => {
       expect(downstream).not.toHaveBeenCalled();
     },
   );
+});
 
+describe('runtime connection guard deletion regressions', () => {
+  afterEach(() => vi.restoreAllMocks());
   it.each(['connect', 'createConnection'] as const)(
     'exported net.%s rejects independently of Socket.connect (F5 option b)', (method) => {
       // Deleting either exported wrapper reaches this spy, which cannot dial anything.
       const downstream = vi.spyOn(net.Socket.prototype, 'connect').mockReturnThis();
-      expect(() => net[method]('/injected/docker.sock')).toThrow(forbidden);
+      expect(() => net[method]('/injected/docker.sock')).toThrow(forbiddenConnection);
       expect(downstream).not.toHaveBeenCalled();
     },
   );
@@ -223,9 +247,9 @@ describe('runtime guard deletion regressions', () => {
       guardProbe('net.Socket.prototype.connect = function () { return this; };', `
         const socket = new net.Socket();
         const path = ${JSON.stringify(path)};
-        throws(() => socket.connect(path), /Docker access forbidden during tests:/);
-        throws(() => socket.connect({ path }), /Docker access forbidden during tests:/);
-        throws(() => socket.connect([{ path }]), /Docker access forbidden during tests:/);
+        throws(() => socket.connect(path), /Unix socket access forbidden during Docker-free tests\./);
+        throws(() => socket.connect({ path }), /Unix socket access forbidden during Docker-free tests\./);
+        throws(() => socket.connect([{ path }]), /Unix socket access forbidden during Docker-free tests\./);
         socket.destroy();
       `);
     },
@@ -242,4 +266,32 @@ describe('runtime guard deletion regressions', () => {
       socket.destroy();
     `);
   });
+});
+
+describe('synchronous shell normalization deletion regressions (round 2 P1)', () => {
+  it.each(['spawnSync', 'execFileSync'] as const)(
+    '%s rejects Docker in joined shell argv independently of other guards', (method) => {
+      // Stub the original export before setup: deleting this wrapper or its join cannot run Docker.
+      guardProbe(`let calls = 0; cp.${method} = () => { calls++; };`, `
+        for (const shell of [true, '/bin/sh']) {
+          throws(() => cp.${method}(' ', ['docker', '--version'], { shell }),
+            /Docker access forbidden during tests:/);
+          throws(() => cp.${method}('', ['docker-compose', 'version'], { shell }),
+            /Docker access forbidden during tests:/);
+        }
+        equal(calls, 0);
+      `);
+    },
+  );
+
+  it.each(['spawnSync', 'execFileSync', 'execSync'] as const)(
+    '%s rejects a custom Docker shell independently of command inspection', (method) => {
+      guardProbe(`let calls = 0; cp.${method} = () => { calls++; };`, `
+        for (const shell of ['/injected/bin/docker', '/injected/bin/docker-compose']) {
+          throws(() => cp.${method}('printf ok', { shell }), /Docker access forbidden during tests:/);
+        }
+        equal(calls, 0);
+      `);
+    },
+  );
 });

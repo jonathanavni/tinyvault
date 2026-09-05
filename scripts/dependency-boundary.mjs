@@ -42,7 +42,6 @@ const SOURCE_DIRECTORIES = ['src', 'testbed', 'scripts'];
 const BUILTIN_MODULES = new Set(builtinModules.map((specifier) => specifier.replace(/^node:/u, '')));
 const MAX_EXTERNAL_MODULES = 10_000;
 const GATE_DIRECTORY = path.dirname(fs.realpathSync(fileURLToPath(import.meta.url)));
-const GATE_ROOT = path.dirname(GATE_DIRECTORY);
 
 export function checkDependencyBoundary(
   root,
@@ -438,11 +437,10 @@ function dependencies(file, source) {
   const edges = [];
   const unsupported = [];
   const isGateImplementation = isGateImplementationFile(file);
-  const isTestHarness = isTestHarnessLoaderFile(file, GATE_ROOT);
   const addLiteral = (node, syntax) => {
     if (node && ts.isStringLiteralLike(node)) {
       edges.push({ specifier: node.text, syntax });
-      if (['module', 'node:module'].includes(node.text) && !isGateImplementation && !isTestHarness) {
+      if (['module', 'node:module'].includes(node.text) && !isGateImplementation) {
         unsupported.push(`module loader ${syntax}`);
       }
     } else {
@@ -478,23 +476,6 @@ function dependencies(file, source) {
   visit(sourceFile);
   return { edges, unsupported };
 }
-// Test-harness files exempt from the module-loader prohibition, listed one by one rather than by
-// pattern so the exemption cannot silently widen. `no-docker.setup.ts` is a Vitest setup module, not a
-// production module: it must call syncBuiltinESMExports to patch the ESM *named* exports of
-// node:child_process, because those are snapshot bindings that a plain CJS mutation does not reach —
-// which is precisely the computed-import bypass the Docker-free guard exists to catch.
-const TEST_HARNESS_LOADER_EXEMPTIONS = ['testbed/docker/no-docker.setup.ts'];
-
-function isTestHarnessLoaderFile(file, root) {
-  const real = realFilePath(file);
-  if (real === undefined || root === undefined) return false;
-  // Exact repo-relative equality, never a suffix match: `realpathEndsWith` would also exempt
-  // `src/testbed/docker/no-docker.setup.ts`, silently lifting the module-loader prohibition off a
-  // production module. Verified: with a suffix match that file imported node:module and the gate passed.
-  const relative = path.relative(root, real).split(path.sep).join('/');
-  return TEST_HARNESS_LOADER_EXEMPTIONS.includes(relative);
-}
-
 function isGateImplementationFile(file) {
   const real = realFilePath(file);
   return real !== undefined

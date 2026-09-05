@@ -32,6 +32,8 @@ export function parseUnixEndpoint(raw: string): EndpointParse {
   }
   const socketPath = raw.slice('unix://'.length);
   // A2: rejecting unix:// deliberately false-rejects a spelling Docker accepts as its default.
+  // Edge U+FEFF rejection is another compatibility restriction: JS \s includes it, but Docker
+  // does not trim it. Keep this stricter, loud failure; removing the edge character remedies it.
   if (socketPath === '') return reject('empty-path', 'A socket path is required.');
   if (socketPath.includes('//')) return reject('redundant-slash', 'Repeated path slashes are forbidden.');
   if (socketPath.split('/').some((part) => part === '.' || part === '..')) {
