@@ -3,9 +3,9 @@
 // evidence-free error; hidden (CORS/ORB) answers are 'unobserved', and the coverage check fires when a target
 // has no observed verdict at all.
 import { describe, expect, it } from 'vitest';
-import { classifyProbe, coverageGaps, detectedRoute, reachedServer, type Probe } from './integrationProbes';
+import { classifyProbe, coverageGaps, detectedRoute, finishMatrix, PROBE_METHODS, reachedServer, type Probe, type Target } from './integrationProbes';
 
-const probe = (over: Partial<Probe>): Probe => ({ method: 'fetch', target: 't', url: 'http://127.0.0.1:1/control', statuses: [], outcome: 'error', ...over });
+const probe = (over: Partial<Probe>): Probe => ({ method: 'fetch', target: 't', url: 'http://127.0.0.1:1/control', routable: true, statuses: [], outcome: 'error', ...over });
 
 describe('probe classification', () => {
   it('observed statuses decide: 404 is no-route, anything else is a route', () => {
@@ -25,7 +25,9 @@ describe('probe classification', () => {
       expect(classifyProbe(probe({ failure: text }))).toBe('no-route');
       expect(reachedServer(probe({ failure: text }))).toBe(false);
     }
-    for (const text of ['net::ERR_FAILED', 'net::ERR_BLOCKED_BY_ORB', 'net::ERR_HTTP_RESPONSE_CODE_FAILURE']) {
+    // Cancellation and post-connect terminations are not verdicts either: the probes abort at their own deadline.
+    for (const text of ['net::ERR_FAILED', 'net::ERR_BLOCKED_BY_ORB', 'net::ERR_HTTP_RESPONSE_CODE_FAILURE',
+      'net::ERR_ABORTED', 'net::ERR_CONNECTION_RESET', 'net::ERR_CONNECTION_CLOSED']) {
       expect(classifyProbe(probe({ failure: text }))).toBe('unobserved');
       expect(reachedServer(probe({ failure: text }))).toBe(true);
       expect(detectedRoute(probe({ failure: text }))).toBe(false);
@@ -57,5 +59,23 @@ describe('probe classification', () => {
     expect(coverageGaps(fileProbes)).toEqual([]);
     expect(fileProbes.filter(detectedRoute)).toEqual([]);
     expect(coverageGaps([probe({ target: 'net', url: 'http://127.0.0.1:1/control' })])).toEqual(['net']);
+  });
+  it('a bridge-network (unroutable) target is excluded from coverage but must still show no route', () => {
+    const aborted = ['fetch', 'form', 'img', 'websocket', 'worker'].map((method) =>
+      probe({ method, target: '172.20.0.2:8080', url: 'http://172.20.0.2:8080/control', routable: false, failure: 'net::ERR_ABORTED' }));
+    expect(coverageGaps(aborted)).toEqual([]);
+    expect(aborted.filter(detectedRoute)).toEqual([]);
+    expect(aborted.map(classifyProbe).every((c) => c === 'unobserved')).toBe(true);
+  });
+  it('finishMatrix rejects a target whose methods are all hidden or aborted, and accepts the same with one observed verdict', () => {
+    const target: Target = { url: 'http://127.0.0.1:1/control', label: 'slow-control', routable: true };
+    const hidden = (method: string, failure: string) => probe({ method, target: target.label, url: target.url, routable: true, failure });
+    const blind = [hidden('fetch', 'net::ERR_FAILED'), hidden('img', 'net::ERR_BLOCKED_BY_ORB'), hidden('worker', 'net::ERR_FAILED'),
+      probe({ method: 'websocket', target: target.label, url: target.url }), hidden('form', 'net::ERR_ABORTED')];
+    expect(PROBE_METHODS).toHaveLength(blind.length);
+    expect(() => finishMatrix(blind, [target])).toThrow(/coverage gap/);
+    const observed = [...blind.slice(0, 4), probe({ method: 'form', target: target.label, url: target.url, statuses: [404] })];
+    expect(finishMatrix(observed, [target])).toBe(observed);
+    expect(() => finishMatrix(observed.slice(1), [target])).toThrow(/probe count/);
   });
 });

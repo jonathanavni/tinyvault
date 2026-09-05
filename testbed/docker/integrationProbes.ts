@@ -13,7 +13,7 @@ const topology = validateTopology(JSON.parse(readFileSync(new URL('./topology.js
 
 export const REBOUND_NAME = 'tinyvault-rebound.test';
 export type Target = { url: string; label: string; routable: boolean };
-export type Probe = { method: string; target: string; url: string; statuses: number[]; outcome: string; failure?: string };
+export type Probe = { method: string; target: string; url: string; routable: boolean; statuses: number[]; outcome: string; failure?: string };
 export function targets(documents: Record<string, any>[]): Target[] {
   // Host classes the harness machine can route to. Container-network addresses (gateway, container IPv4/IPv6)
   // are unroutable from a Docker Desktop host by construction: the page-content matrix still probes them, but the
@@ -123,12 +123,14 @@ async function attempt(page: Page, observed: Observed, target: Target, method: P
   const outcome = await page.evaluate(browserAttempt, { url: url.href, method, frame });
   // A response that arrives within the settle window counts; a target with no response at all stays 'no route'.
   await Promise.race([settled, new Promise<void>((r) => setTimeout(r, RESPONSE_SETTLE_MS).unref())]);
-  return { method, target: target.label, url: target.url, statuses: observed.statuses.get(url.href) ?? [], outcome,
-    failure: observed.failures.get(url.href) };
+  return { method, target: target.label, url: target.url, routable: target.routable,
+    statuses: observed.statuses.get(url.href) ?? [], outcome, failure: observed.failures.get(url.href) };
 }
-// Connection-level or scheme-level failures mean nothing was addressed; every other failure (ORB, CORS,
-// protocol) means a server answered but the page could not observe the response.
-const NO_ROUTE_FAILURE = /ERR_(?:CONNECTION_(?:REFUSED|RESET|TIMED_OUT|CLOSED)|TIMED_OUT|NAME_NOT_RESOLVED|ADDRESS_UNREACHABLE|INTERNET_DISCONNECTED|ABORTED|NETWORK_CHANGED|SOCKET_NOT_CONNECTED|ADDRESS_INVALID|ACCESS_DENIED|UNSAFE_PORT|UNKNOWN_URL_SCHEME|DISALLOWED_URL_SCHEME|BLOCKED_BY_CLIENT|FILE_NOT_FOUND|INVALID_URL)/;
+// Only failures that establish the request never reached a listener count as an observed 'no route': refused,
+// connect timeout, unresolvable, unreachable, disconnected, invalid or blocked-by-scheme. Cancellation
+// (ERR_ABORTED — including the probes' own deadlines), reset and closed connections happen AFTER a connection
+// existed, and CORS/ORB/protocol failures mean a server answered: all of those are 'unobserved', never a verdict.
+const NO_ROUTE_FAILURE = /ERR_(?:CONNECTION_(?:REFUSED|TIMED_OUT)|TIMED_OUT|NAME_NOT_RESOLVED|ADDRESS_UNREACHABLE|INTERNET_DISCONNECTED|SOCKET_NOT_CONNECTED|ADDRESS_INVALID|ACCESS_DENIED|UNSAFE_PORT|UNKNOWN_URL_SCHEME|DISALLOWED_URL_SCHEME|BLOCKED_BY_CLIENT|FILE_NOT_FOUND|INVALID_URL)/;
 export type ProbeClass = 'route' | 'no-route' | 'unobserved';
 export function classifyProbe(probe: Probe): ProbeClass {
   if (probe.statuses.some((s) => s !== 404) || probe.outcome === 'open'
@@ -144,20 +146,31 @@ export const detectedRoute = (probe: Probe): boolean => classifyProbe(probe) ===
 // Reachability (the override mutant's oracle): a route, an observed response of any status, or a server-side failure.
 export const reachedServer = (probe: Probe): boolean => classifyProbe(probe) === 'route' || probe.statuses.length > 0
   || (probe.failure !== undefined && !NO_ROUTE_FAILURE.test(probe.failure));
-// Per network target, at least one method must yield an observed verdict; otherwise the matrix was blind there.
-// Non-network targets (the control socket as a file: URL) are refused by the browser at the URL layer before any
-// request exists, so no network event can observe them; their check is the page-level refusal (no route, no
-// status, no open socket), which classifyProbe already enforces, and they are excluded from network coverage.
+// Per host-routable network target, at least one method must yield an observed verdict; otherwise the matrix was
+// blind there. Two declared exclusions from coverage (both still probed, and both must show no route):
+//  - non-network targets (the control socket as a file: URL) are refused by the browser at the URL layer before any
+//    request exists, so no network event can observe them; their check is the page-level refusal;
+//  - Docker bridge-network addresses (gateway, container IPv4/IPv6) are unroutable from a Docker Desktop host by
+//    construction, so a probe to them can only end in its own deadline abort, which is not a verdict either way —
+//    the same reason the supervised leg skips them (BACKLOG: browser_close_session stalls on a black-hole connect).
 export const isNetworkTarget = (url: string): boolean => /^https?:/.test(url);
 export function coverageGaps(probes: Probe[]): string[] {
   const byTarget = new Map<string, ProbeClass[]>();
   for (const probe of probes) {
-    if (!isNetworkTarget(probe.url)) continue;
+    if (!isNetworkTarget(probe.url) || !probe.routable) continue;
     byTarget.set(probe.target, [...(byTarget.get(probe.target) ?? []), classifyProbe(probe)]);
   }
   return [...byTarget].filter(([, classes]) => classes.every((c) => c === 'unobserved')).map(([target]) => target);
 }
 const TARGET_BATCH = 8;
+// The matrix's terminal assertions, separated so they are unit-testable: exact probe count, and no network target
+// left without an observed verdict. A matrix that returns without calling this has no coverage claim.
+export function finishMatrix(probes: Probe[], destinations: Target[]): Probe[] {
+  assert.equal(probes.length, destinations.length * METHODS.length, 'matrix probe count');
+  assert.deepEqual(coverageGaps(probes), [], 'matrix coverage gap: every method unobserved for these targets');
+  return probes;
+}
+export const PROBE_METHODS: readonly string[] = METHODS;
 export async function matrix(browser: Browser, hostile: string, destinations: Target[], invariant: () => void) {
   const page = await browser.newPage();
   const probes: Probe[] = [];
@@ -171,9 +184,7 @@ export async function matrix(browser: Browser, hostile: string, destinations: Ta
       probes.push(...await Promise.all(batch.flatMap((target) => METHODS.map((method) => attempt(page, observed, target, method)))));
       invariant();
     }
-    assert.equal(probes.length, destinations.length * METHODS.length);
-    assert.deepEqual(coverageGaps(probes), [], 'matrix coverage gap: every method unobserved for these targets');
-    return probes;
+    return finishMatrix(probes, destinations);
   } finally { await observed.detach(); await page.close(); }
 }
 const SUPERVISED_BOUND_MS = 20_000;
