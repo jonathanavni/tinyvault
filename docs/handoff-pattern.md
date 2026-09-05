@@ -30,6 +30,12 @@ node "<path-to>/codex-companion.mjs" <mode> "<prompt>"
 
 > The exact companion-script path and flag set are owned by the plugin and change across versions. Treat the plugin's own docs as the source of truth, and pin the working invocation for your machine in `.claude/memory/gotchas.md`.
 
+> **Route by stakes, then pin explicitly.** Reserve the expensive model for work where a wrong answer ships a false
+> claim — security-core implementation, adversarial review of code, rescue. Send docs, mechanical refactors,
+> test-only additions, fact-checks and environment probes to the cheaper one, and escalate only when it stops at a
+> boundary or returns a design question. Note that `adversarial-review` / `review` accept no `--model` flag, so
+> routing a review to the cheaper model means `task --model` with a review-shaped prompt.
+>
 > **Pin the model explicitly, not by mode default.** A mode's built-in default model changes when the plugin updates, and a default your CLI cannot run fails as an HTTP 400 at dispatch — silently, if you are not watching. Record the intended model and the minimum CLI version alongside the invocation, and keep `task --model <id>` documented as the escape hatch: it is the only mode that accepts a model flag, so it is what keeps the cross-model channel alive when a mode default breaks.
 
 Modes (current plugin):

@@ -4,7 +4,7 @@ Sharp edges and footguns discovered the hard way — environment quirks, library
 
 Pin the **working Codex dispatch invocation for this machine** here (companion-script path, flag set, model-availability notes), since that's owned by the plugin and drifts across versions — see `docs/handoff-pattern.md` §1.
 
-- **Codex dispatch invocation (this machine)** — companion script: `node /Users/jonathanavni/.claude/plugins/cache/openai-codex/codex/1.0.4/scripts/codex-companion.mjs <mode>`. Modes: `task [--background] [--write] [--model <m>] [--effort <e>] [prompt]`, `adversarial-review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [focus text]`, `review`, `status`, `result [job-id]`, `cancel`. **Model: `gpt-6-astra` for all modes; requires codex-cli >= 0.153.3.** Verified 2026-09-04: codex-cli 0.153.3, `adversarial-review` and `task --model gpt-6-astra` both green (`ASTRA_TASK_OK`). Path drifts on plugin update — re-`find ~/.claude/plugins/cache -name codex-companion.mjs` if it 404s. (2026-08-31)
+- **Codex dispatch invocation (this machine)** — companion script: `node /Users/jonathanavni/.claude/plugins/cache/openai-codex/codex/1.0.4/scripts/codex-companion.mjs <mode>`. Modes: `task [--background] [--write] [--model <m>] [--effort <e>] [prompt]`, `adversarial-review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [focus text]`, `review`, `status`, `result [job-id]`, `cancel`. **Models: route by stakes — `gpt-6-astra` for security-core code and adversarial review *of code*, `gpt-5.6-sol` for docs, mechanical refactors, fact-checks and probes (see CLAUDE.md). Astra requires codex-cli >= 0.153.3.** Note `adversarial-review`/`review` accept **no** `--model` flag and always run the built-in default, so routing a review to Sol means `task --fresh --model gpt-5.6-sol` with a READ-ONLY preamble and an explicit output format. Verified 2026-09-04: codex-cli 0.153.3, `adversarial-review` and `task --model gpt-6-astra` both green (`ASTRA_TASK_OK`); Sol carried both pre-impl plan-review rounds and found 7 P1s across them. Path drifts on plugin update — re-`find ~/.claude/plugins/cache -name codex-companion.mjs` if it 404s. (2026-08-31)
 
 <!-- One entry per gotcha. Format:
 - **<short title>** — <the trap>, <how to detect it>, <the fix>. (<date>)
@@ -84,7 +84,7 @@ Example:
   fallback and reported a job that had died at 53 s as still running for ten minutes. Parse `job.status`,
   treat anything not in the known-running set as terminal, and print the raw status on parse failure. Same
   class as the zsh word-splitting monitor bug from M3: a monitor whose failure mode is silence. (2026-09-01)
-- **(Fallback model only, since 2026-09-04 — the default is now `gpt-6-astra`.) `gpt-5.6-sol` returns "Selected model is at capacity" within a minute of dispatch, sometimes.** The job
+- **(Routine-tier model since 2026-09-04, not merely a fallback — see the routing rule in CLAUDE.md.) `gpt-5.6-sol` returns "Selected model is at capacity" within a minute of dispatch, sometimes.** The job
   shows `failed` with the review never started. Retry once with the same arguments before changing anything.
   (2026-09-01)
 - **The authoring hazard recurred: a NUL pad character written as a JS escape inside a spec code block landed as
