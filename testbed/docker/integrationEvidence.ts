@@ -19,6 +19,7 @@ export async function localPin() {
   } } });
 }
 export function commandKind(s: DockerSpawn): string {
+  if (s.args[0] === 'ps') return 'ps-project';
   if (s.args[0] !== 'compose') return s.args[0];
   const args = s.args.slice(s.args.indexOf('-p') + 2);
   return args[0] === 'ps' ? `ps-${args[1]}` : args[0];
@@ -95,7 +96,7 @@ export class IntegrationEvidence {
     const spawn = this.spawns.find((s) => s.args[0] === 'compose')!;
     return spawn.args[spawn.args.indexOf('-p') + 1];
   }
-  get epoch(): string { return this.spawns.find((s) => s.args[0] === 'compose')!.env.TV_EVAL_EPOCH; }
+  get epoch(): string { return this.spawns.find((s) => s.env.TV_EVAL_EPOCH !== undefined)!.env.TV_EVAL_EPOCH; }
   async finish(): Promise<void> {
     this.handles.forEach((h) => h.kill());
     await Promise.allSettled(this.handles.map((h) => h.exited));

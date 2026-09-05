@@ -37,10 +37,11 @@ export function validInspect(index: number, project: string, epoch: string) {
 }
 export function kindOf(spawn: DockerSpawn): string {
   const args = spawn.args;
+  if (args[0] === 'ps') return 'ps-project';
   if (args[0] === 'history') return 'image-history';
   if (args[0] !== 'compose') return args[0] === 'image' ? 'image-inspect' : args[0] === 'exec' ? 'exec-bridge' : args[0];
   const tail = args.slice(args.indexOf('-p') + 2);
-  return tail[0] === 'ps' ? (tail[1] === '-aq' ? 'compose-ps-all' : 'compose-ps') : `compose-${tail[0]}`;
+  return `compose-${tail[0]}`;
 }
 export async function mintPin() {
   return dockerPreflight({ env: {}, files: { readFile: async () => undefined },

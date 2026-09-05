@@ -1,9 +1,9 @@
 // Creation/inspect checks are code-enforced hygiene for a trusted boundary. The MAC binds possession
 // after provenance checks; fixture-process compromise invalidates the run. Docker liveness is not preflight proof.
-// Nonzero up is classified by a post-hoc ps query, never Compose text: empty means container-create,
+// Daemon-level ps-project checks pre-up absence and classifies nonzero up: empty means container-create,
 // existing containers mean container-unhealthy. Both are terminal Acceptance A reds; query failure is
-// container-create with the query's closed code in teardownCode.
-// E scans: spawn args/env, command output, history, logs, export, exec stderr, and artifacts.
+// container-create with the query's closed code in teardownCode. Malformed ids mean resolution-shape.
+// E scans: spawn args/env, command output (including ps-project), history, logs, export, exec stderr, and artifacts.
 import { createHash, randomBytes, type KeyObject } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
@@ -129,7 +129,7 @@ async function run(ctx: Context, command: DockerCommand, code: ConstructionCode)
     throw new ComposedConstructionError('daemon-unreachable');
   }
 }
-function composeCommand(ctx: Identity, kind: 'compose-ps-all' | 'compose-build' | 'compose-up' | 'compose-stop' | 'compose-down'): DockerCommand {
+function composeCommand(ctx: Identity, kind: 'ps-project' | 'compose-build' | 'compose-up' | 'compose-stop' | 'compose-down'): DockerCommand {
   return { kind, project: ctx.project, epoch: ctx.epoch };
 }
 export class ProjectCloser {
@@ -265,12 +265,18 @@ async function up(ctx: Context): Promise<void> {
   catch (error) {
     if (!(error instanceof ComposedConstructionError) || error.code !== 'container-create') throw error;
     let remaining: DockerResult;
-    try { remaining = await run(ctx, composeCommand(ctx, 'compose-ps-all'), 'daemon-unreachable'); }
+    try { remaining = await run(ctx, composeCommand(ctx, 'ps-project'), 'daemon-unreachable'); }
     catch (queryError) {
       error.teardownCode = queryError instanceof ComposedConstructionError ? queryError.code : 'daemon-unreachable';
       throw error;
     }
+    validateProjectIds(remaining.stdout);
     throw new ComposedConstructionError(remaining.stdout === '' ? 'container-create' : 'container-unhealthy');
+  }
+}
+function validateProjectIds(stdout: string): void {
+  if (stdout.split('\n').some((line) => line !== '' && /^(?:[0-9a-f]{12}|[0-9a-f]{64})$/.exec(line)?.[0] !== line)) {
+    throw new ComposedConstructionError('resolution-shape');
   }
 }
 async function resolveContainer(ctx: Context, service: FixtureId, image: Doc): Promise<ContainerId> {
@@ -325,7 +331,8 @@ export async function createComposedProject(options: ProjectOptions): Promise<Co
   assertPinned(options.pin);
   const ctx = context(options);
   // Failed absence checks must never stop/down a project that is not proven ours (including B5a).
-  const absent = await run(ctx, composeCommand(ctx, 'compose-ps-all'), 'daemon-unreachable');
+  const absent = await run(ctx, composeCommand(ctx, 'ps-project'), 'daemon-unreachable');
+  validateProjectIds(absent.stdout);
   if (absent.stdout !== '') throw new ComposedConstructionError('project-not-fresh', undefined, ctx.project);
   const closer = new ProjectCloser(ctx);
   try {

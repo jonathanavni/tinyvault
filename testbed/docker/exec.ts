@@ -50,7 +50,7 @@ export class ComposedConstructionError extends Error {
     this.surface = surface === 'history' ? surface : undefined;
   }
 }
-export const COMMAND_KINDS = ['compose-ps-all', 'compose-build', 'compose-up', 'compose-ps',
+export const COMMAND_KINDS = ['ps-project', 'compose-build', 'compose-up', 'compose-ps',
   'compose-stop', 'compose-down', 'image-inspect', 'image-history', 'inspect', 'logs', 'export', 'exec-bridge'] as const;
 declare const containerIdBrand: unique symbol;
 export type ContainerId = string & { readonly [containerIdBrand]: true };
@@ -60,7 +60,7 @@ export function containerId(value: string): ContainerId {
 }
 type ComposeContext = { project: string; epoch: string };
 export type DockerCommand =
-  | (ComposeContext & { kind: 'compose-ps-all' | 'compose-build' | 'compose-up' | 'compose-stop' | 'compose-down' })
+  | (ComposeContext & { kind: 'ps-project' | 'compose-build' | 'compose-up' | 'compose-stop' | 'compose-down' })
   | (ComposeContext & { kind: 'compose-ps'; service: string })
   | { kind: 'image-inspect' }
   | { kind: 'image-history'; id: string }
@@ -111,12 +111,13 @@ function commandArgs(command: DockerCommand): string[] {
   }
 }
 function composeArgs(command: DockerCommand & ComposeContext): string[] {
-  requirePattern(command.project, NAME_PATTERN);
+  const project = command.project;
+  requirePattern(project, NAME_PATTERN);
   requirePattern(command.epoch, /^(0|[1-9][0-9]*)-[0-9a-f]{32}$/);
+  if (command.kind === 'ps-project') return ['ps', '-aq', '--filter', `label=com.docker.compose.project=${project}`];
   const prefix = ['compose', '--env-file', '/dev/null', '--progress', 'quiet', '--ansi', 'never',
     '-f', COMPOSE_FILE, '-p', command.project];
   switch (command.kind) {
-    case 'compose-ps-all': return [...prefix, 'ps', '-aq'];
     case 'compose-build': return [...prefix, 'build'];
     case 'compose-up': return [...prefix, 'up', '-d', '--wait', '--wait-timeout', String(WAIT_TIMEOUT_SECONDS), '--no-build'];
     case 'compose-stop': return [...prefix, 'stop', '--timeout', String(STOP_TIMEOUT_SECONDS)];

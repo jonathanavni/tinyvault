@@ -10,7 +10,7 @@ const topology = validateTopology(JSON.parse(readFileSync(new URL('./topology.js
 
 export const REBOUND_NAME = 'tinyvault-rebound.test';
 export type Target = { url: string; label: string; routable: boolean };
-export type Probe = { method: string; target: string; statuses: number[]; outcome: string };
+export type Probe = { method: string; target: string; statuses: number[]; outcome: string; failure?: string };
 export function targets(documents: Record<string, any>[]): Target[] {
   // Host classes the harness machine can route to. Container-network addresses (gateway, container IPv4/IPv6)
   // are unroutable from a Docker Desktop host by construction: the page-content matrix still probes them, but the
@@ -76,7 +76,7 @@ function browserAttempt({ url, method, frame }: PageProbe): Promise<string> {
     } catch { finish('error'); }
   });
 }
-type Observed = { statuses: Map<string, number[]>; firstResponse(url: string): Promise<void>; detach(): Promise<void> };
+type Observed = { statuses: Map<string, number[]>; failures: Map<string, string>; firstResponse(url: string): Promise<void>; detach(): Promise<void> };
 const RESPONSE_SETTLE_MS = 300;
 // One CDP session per page; every probe URL carries a unique query so concurrent probes never share a key.
 async function observe(page: Page): Promise<Observed> {
@@ -93,6 +93,14 @@ async function observe(page: Page): Promise<Observed> {
   });
   const onResponse = (r: { url(): string; status(): number }) => record(r.url(), r.status());
   page.on('response', onResponse);
+  // Cross-origin loads of HTML fail in the page (ORB for <img>, CORS for fetch) with no `response` event even
+  // though the server answered; the failure text tells a reached server from a connection-level failure.
+  const failures = new Map<string, string>();
+  const onFailed = (r: { url(): string; failure(): { errorText: string } | null }) => {
+    failures.set(r.url(), r.failure()?.errorText ?? 'unknown');
+    waiters.get(r.url())?.(); waiters.delete(r.url());
+  };
+  page.on('requestfailed', onFailed);
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Network.enable');
   const sockets = new Map<string, string>();
@@ -100,7 +108,9 @@ async function observe(page: Page): Promise<Observed> {
   cdp.on('Network.webSocketHandshakeResponseReceived', (e) => {
     const url = sockets.get(e.requestId); if (url) record(url, e.response.status);
   });
-  return { statuses, firstResponse, detach: async () => { page.off('response', onResponse); await cdp.detach(); } };
+  return { statuses, failures, firstResponse, detach: async () => {
+    page.off('response', onResponse); page.off('requestfailed', onFailed); await cdp.detach();
+  } };
 }
 async function attempt(page: Page, observed: Observed, target: Target, method: PageProbe['method']): Promise<Probe> {
   const url = new URL(target.url); url.searchParams.set('tv-probe', randomUUID());
@@ -109,10 +119,15 @@ async function attempt(page: Page, observed: Observed, target: Target, method: P
   const outcome = await page.evaluate(browserAttempt, { url: url.href, method, frame });
   // A response that arrives within the settle window counts; a target with no response at all stays 'no route'.
   await Promise.race([settled, new Promise<void>((r) => setTimeout(r, RESPONSE_SETTLE_MS).unref())]);
-  return { method, target: target.label, statuses: observed.statuses.get(url.href) ?? [], outcome };
+  return { method, target: target.label, statuses: observed.statuses.get(url.href) ?? [], outcome,
+    failure: observed.failures.get(url.href) };
 }
 export const detectedRoute = (probe: Probe): boolean => probe.statuses.some((s) => s !== 404)
   || probe.outcome === 'open' || /^\d+$/.test(probe.outcome) && probe.outcome !== '404';
+// Connection-level failures mean nothing answered; every other failure (ORB, CORS, protocol) means a server did.
+const CONNECTION_FAILURE = /ERR_(?:CONNECTION_(?:REFUSED|RESET|TIMED_OUT|CLOSED)|TIMED_OUT|NAME_NOT_RESOLVED|ADDRESS_UNREACHABLE|INTERNET_DISCONNECTED|ABORTED|NETWORK_CHANGED|SOCKET_NOT_CONNECTED|ADDRESS_INVALID|ACCESS_DENIED|UNSAFE_PORT)/;
+export const reachedServer = (probe: Probe): boolean => probe.statuses.length > 0 || probe.outcome === 'open'
+  || /^\d+$/.test(probe.outcome) || (probe.failure !== undefined && !CONNECTION_FAILURE.test(probe.failure));
 const TARGET_BATCH = 8;
 export async function matrix(browser: Browser, hostile: string, destinations: Target[], invariant: () => void) {
   const page = await browser.newPage();

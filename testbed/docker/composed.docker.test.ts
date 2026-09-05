@@ -14,7 +14,7 @@ import { buildDockerSpawn, bounded, COMMAND_TIMEOUT_MS, ComposedConstructionErro
   type DockerSpawn, type DockerResult } from './exec';
 import { scanArtifactTree, SecretScanner } from './secretScan';
 import { IntegrationEvidence, localPin, commandKind, assertClean, assertMarker } from './integrationEvidence';
-import { matrix, targets, probeBrowser, detectedRoute, supervisedMatrix } from './integrationProbes';
+import { matrix, targets, probeBrowser, detectedRoute, reachedServer, supervisedMatrix } from './integrationProbes';
 import topology from './topology.json';
 
 vi.setConfig({ testTimeout: 1_800_000, hookTimeout: 180_000 });
@@ -176,8 +176,8 @@ describe.sequential('slice 3 real Docker construction and control-route probes',
     let staleId = '';
     const run = e.runner.run;
     e.runner.run = async (description) => {
-      if (commandKind(description) === 'ps--aq' && !staleId) {
-        const project = description.args[description.args.indexOf('-p') + 1];
+      if (commandKind(description) === 'ps-project' && !staleId) {
+        const project = description.args[description.args.indexOf('--filter') + 1].slice('label=com.docker.compose.project='.length);
         const labels = { 'com.docker.compose.project': project, 'com.docker.compose.service': 'benign-login',
           'com.tinyvault.fixture': 'benign-login', 'com.tinyvault.epoch': description.env.TV_EVAL_EPOCH,
           'com.docker.compose.oneoff': 'False' };
@@ -190,7 +190,7 @@ describe.sequential('slice 3 real Docker construction and control-route probes',
     try {
       await expect(startComposedFixtureSet({ pin, artifactRoot: root, runner: e.runner,
         probeOrigin: probeHttpOrigin })).rejects.toMatchObject({ code: 'project-not-fresh' });
-      expect(e.spawns.map(commandKind)).toEqual(['ps--aq']);
+      expect(e.spawns.map(commandKind)).toEqual(['ps-project']);
       const stillThere = await checked(e, testSpawn(pin, ['inspect', staleId]));
       const doc = JSON.parse(stillThere.stdout)[0];
       expect(doc.Config.Labels['com.tinyvault.epoch']).toBe(e.epoch);
@@ -242,11 +242,13 @@ describe.sequential('slice 3 real Docker construction and control-route probes',
       // The extra publication serves a page, not a /control endpoint. Probe its known page route as
       // the reachability control; /control remains 404 even in this mutant, so it cannot be its oracle.
       const mutant = await matrix(browser, hostile, [{ url: `http://127.0.0.1:${extraPort}/`, label: 'extra-publication' , routable: true}], () => {});
-      expect(mutant.some(detectedRoute)).toBe(true);
-      expect(() => expect(mutant.filter(detectedRoute)).toEqual([])).toThrow();
+      // Reachability, not a control route: the extra publication serves a page, and Chromium reports the
+      // cross-origin HTML as an ORB/CORS failure rather than a response — that failure is the proof a server answered.
+      expect(mutant.some(reachedServer)).toBe(true);
+      expect(() => expect(mutant.filter(reachedServer)).toEqual([])).toThrow();
       await directCompose(e, base); // Reconcile the same project against the canonical file, removing the extra port.
       const restored = await matrix(browser, hostile, [{ url: `http://127.0.0.1:${extraPort}/`, label: 'extra-publication' , routable: true}], () => {});
-      expect(restored.filter(detectedRoute)).toEqual([]);
+      expect(restored.filter(reachedServer)).toEqual([]);
     } finally {
       await browser?.close();
       try {

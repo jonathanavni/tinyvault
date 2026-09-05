@@ -8,7 +8,7 @@ const id = containerId('a'.repeat(64));
 const project = 'tinyvault-123'; const epoch = '1788600000000-' + 'b'.repeat(32);
 const prefix = ['compose', '--env-file', '/dev/null', '--progress', 'quiet', '--ansi', 'never', '-f', COMPOSE_FILE, '-p', project];
 const rows: [DockerCommand, string[]][] = [
-  [{ kind: 'compose-ps-all', project, epoch }, [...prefix, 'ps', '-aq']],
+  [{ kind: 'ps-project', project, epoch }, ['ps', '-aq', '--filter', `label=com.docker.compose.project=${project}`]],
   [{ kind: 'compose-build', project, epoch }, [...prefix, 'build']],
   [{ kind: 'compose-up', project, epoch }, [...prefix, 'up', '-d', '--wait', '--wait-timeout', '60', '--no-build']],
   [{ kind: 'compose-ps', project, epoch, service: 'benign-login' }, [...prefix, 'ps', '-q', 'benign-login']],
@@ -65,18 +65,20 @@ it.each(['-H', '--host', '--host=tcp://evil:2375', '-c', '--context=evil', 'tcp:
     expect(runner.run).not.toHaveBeenCalled(); expect(runner.spawnLongLived).not.toHaveBeenCalled();
   },
 );
-it('image-history run is bounded and reports its command on timeout', async () => {
-  const pin = await mintPin();
-  let timeout!: () => void;
-  const clock = { setTimeout: vi.fn((cb: () => void) => { timeout = cb; return cb; }), clearTimeout: vi.fn() };
-  const runner = { run: vi.fn(() => new Promise<never>(() => {})), spawnLongLived: vi.fn() };
-  const result = runDockerCommand(pin, { kind: 'image-history', id: imageId }, runner, clock);
-  const assertion = expect(result).rejects.toMatchObject({ code: 'command-timeout', command: 'image-history' });
-  await Promise.resolve(); timeout(); await assertion;
-  expect(clock.setTimeout).toHaveBeenCalledWith(expect.any(Function), COMMAND_TIMEOUT_MS);
-  expect(clock.clearTimeout).toHaveBeenCalledWith(timeout);
-  expect(runner.run).toHaveBeenCalledOnce(); expect(runner.spawnLongLived).not.toHaveBeenCalled();
-});
+it.each([rows[0][0], { kind: 'image-history', id: imageId }] as const)(
+  '%j run is bounded and reports its command on timeout', async (command) => {
+    const pin = await mintPin();
+    let timeout!: () => void;
+    const clock = { setTimeout: vi.fn((cb: () => void) => { timeout = cb; return cb; }), clearTimeout: vi.fn() };
+    const runner = { run: vi.fn(() => new Promise<never>(() => {})), spawnLongLived: vi.fn() };
+    const result = runDockerCommand(pin, command, runner, clock);
+    const assertion = expect(result).rejects.toMatchObject({ code: 'command-timeout', command: command.kind });
+    await Promise.resolve(); timeout(); await assertion;
+    expect(clock.setTimeout).toHaveBeenCalledWith(expect.any(Function), COMMAND_TIMEOUT_MS);
+    expect(clock.clearTimeout).toHaveBeenCalledWith(timeout);
+    expect(runner.run).toHaveBeenCalledOnce(); expect(runner.spawnLongLived).not.toHaveBeenCalled();
+  },
+);
 it('image-history emits the same immutable id value it validated', async () => {
   let reads = 0;
   const command: DockerCommand = { kind: 'image-history', get id() { return ++reads === 1 ? imageId : '--host'; } };
@@ -87,10 +89,11 @@ it('image-history emits the same immutable id value it validated', async () => {
     args: ['history', '--no-trunc', '--format', '{{json .}}', imageId],
   })]);
 });
-it.each(['-p', 'Upper', 'a'.repeat(64), 'with space', 'valid\n'])(
+it.each(['-H', '--host', '--host=tcp://evil:2375', '-c', '--context=evil', '-p', 'Upper', 'a'.repeat(64), 'with space', 'valid\n'])(
   'rejects malformed project or service %j before spawn', async (bad) => {
     const pin = await mintPin(); const runner = { run: vi.fn(), spawnLongLived: vi.fn() };
     for (const command of [
+      { kind: 'ps-project', project: bad, epoch },
       { kind: 'compose-build', project: bad, epoch },
       { kind: 'compose-ps', project, epoch, service: bad },
     ] as const) await expect(runDockerCommand(pin, command, runner)).rejects.toMatchObject({ code: 'command-invalid' });

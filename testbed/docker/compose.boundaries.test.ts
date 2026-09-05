@@ -2,8 +2,40 @@
 import { inspect } from 'node:util';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createComposedProject, HISTORY_MARKER } from './compose';
-import { fakeProject, imageDocument, imageId, kindOf } from './compose.testkit';
+import { fakeProject, ids, imageDocument, imageId, kindOf } from './compose.testkit';
 import { SECRET_FORMS } from './secretScan';
+it.each([ids[0], ids[0].slice(0, 12) + '\n', `${ids[0]}\n${ids[1].slice(0, 12)}\n`])(
+  'pre-up ps-project %j is project-not-fresh with zero closer runs', async (stdout) => {
+    const h = await fakeProject(vi.fn, { result: (kind) => kind === 'ps-project'
+      ? { stdout, stderr: '', exitCode: 0 } : undefined });
+    try {
+      await expect(createComposedProject(h.options)).rejects.toMatchObject({ code: 'project-not-fresh' });
+      expect(h.spawns.map(kindOf)).toEqual(['ps-project']);
+      expect(h.handles).toHaveLength(0);
+    } finally { await h.dispose(); }
+  },
+);
+const malformedProjectIds = ['benign-login', '-H', 'g'.repeat(12), 'A'.repeat(64),
+  ...[11, 13, 63, 65].map((length) => 'a'.repeat(length)), ' ' + ids[0], ids[0] + '\r',
+  `${ids[0]}\nnot-an-id\n`, `not-an-id\n${ids[0]}\n`];
+it.each(malformedProjectIds.flatMap((stdout) => [1, 2].map((query) => ({ stdout, query }))))(
+  'ps-project resolution-shape for $stdout at query $query', async ({ stdout, query }) => {
+    let queries = 0;
+    const h = await fakeProject(vi.fn, { result: (kind) => {
+      if (kind === 'compose-up') return { stdout: '', stderr: '', exitCode: 1 };
+      if (kind === 'ps-project' && ++queries === query) return { stdout, stderr: '', exitCode: 0 };
+      return undefined;
+    } });
+    try {
+      await expect(createComposedProject(h.options)).rejects.toMatchObject({ code: 'resolution-shape' });
+      expect(queries).toBe(query);
+      expect(h.spawns.map(kindOf)).toEqual(query === 1 ? ['ps-project'] : [
+        'ps-project', 'compose-build', 'image-inspect', 'compose-up', 'ps-project',
+        'compose-stop', 'image-history', 'compose-down',
+      ]);
+    } finally { await h.dispose(); }
+  },
+);
 it.each(['-H', 'sha256:' + 'F'.repeat(64), 'sha256:' + 'f'.repeat(64) + '\n'])(
   'rejects malformed image id %j with otherwise valid image fields', async (Id) => {
     const h = await fakeProject(vi.fn, { result: (kind) => kind === 'image-inspect'

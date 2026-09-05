@@ -21,8 +21,8 @@ async function capture(h: Awaited<ReturnType<typeof fakeProject>>) {
   } finally { expect(fallback).not.toHaveBeenCalled(); expect(injectedFallback).not.toHaveBeenCalled(); }
 }
 const failureRows = [
-  ['daemon-unreachable', 'compose-ps-all', 1, ''],
-  ['project-not-fresh', 'compose-ps-all', 0, ids[0]],
+  ['daemon-unreachable', 'ps-project', 1, ''],
+  ['project-not-fresh', 'ps-project', 0, ids[0]],
   ['image-build', 'compose-build', 1, ''],
   ['image-inspect', 'image-inspect', 0, '[{}]'],
   ['container-create', 'compose-up', 1, ''],
@@ -42,13 +42,13 @@ it.each(failureRows)('public capture: %s at %s returns no transport and never fa
   })).rejects.toMatchObject({ code });
   expect(fallback).not.toHaveBeenCalled(); expect(injectedFallback).not.toHaveBeenCalled();
   expect(close).toHaveBeenCalledOnce();
-  expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(kind === 'compose-ps-all' ? 0 : 1);
-  expect(h.spawns.filter((s) => kindOf(s) === 'compose-stop')).toHaveLength(kind === 'compose-ps-all' ? 0 : 1);
+  expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(kind === 'ps-project' ? 0 : 1);
+  expect(h.spawns.filter((s) => kindOf(s) === 'compose-stop')).toHaveLength(kind === 'ps-project' ? 0 : 1);
 });
 it.each(['ENOENT', 'ECONNREFUSED'])('B5a first-command exception %s is daemon-unreachable with zero teardown', async (code) => {
   const h = track(await fakeProject(vi.fn, { result: () => { throw Object.assign(new Error('untrusted'), { code }); } }));
   await expect(createComposedProject(h.options)).rejects.toMatchObject({ code: 'daemon-unreachable' });
-  expect(h.spawns.map(kindOf)).toEqual(['compose-ps-all']);
+  expect(h.spawns.map(kindOf)).toEqual(['ps-project']);
 });
 it('maps an up spawn rejection to daemon-unreachable', async () => {
   const h = track(await fakeProject(vi.fn, { result: (k) => { if (k === 'compose-up') throw new Error('untrusted'); return undefined; } }));
@@ -57,23 +57,25 @@ it('maps an up spawn rejection to daemon-unreachable', async () => {
 });
 it.each([
   ['', 'container-create'], [ids[0] + '\n', 'container-unhealthy'],
+  [ids[0].slice(0, 12) + '\n', 'container-unhealthy'],
+  [`${ids[0]}\n${ids[1].slice(0, 12)}\n`, 'container-unhealthy'],
 ] as const)('nonzero up queries project state once more (%j → %s)', async (stdout, code) => {
   let queries = 0;
   const h = track(await fakeProject(vi.fn, { result: (kind) => {
     if (kind === 'compose-up') return { exitCode: 17, stdout: 'untrusted', stderr: 'unhealthy text' };
-    if (kind === 'compose-ps-all' && ++queries === 2) return { exitCode: 0, stdout, stderr: '' };
+    if (kind === 'ps-project' && ++queries === 2) return { exitCode: 0, stdout, stderr: '' };
     return undefined;
   } }));
   await expect(capture(h)).rejects.toMatchObject({ code });
   expect(queries).toBe(2);
-  expect(h.spawns.map(kindOf)).toEqual(['compose-ps-all', 'compose-build', 'image-inspect',
-    'compose-up', 'compose-ps-all', 'compose-stop', 'image-history', 'compose-down']);
+  expect(h.spawns.map(kindOf)).toEqual(['ps-project', 'compose-build', 'image-inspect',
+    'compose-up', 'ps-project', 'compose-stop', 'image-history', 'compose-down']);
 });
 it.each(['exit', 'reject'] as const)('failed up follow-up query (%s) preserves container-create and query code', async (mode) => {
   let queries = 0;
   const h = track(await fakeProject(vi.fn, { result: (kind) => {
     if (kind === 'compose-up' || kind === 'compose-down') return { exitCode: 1, stdout: '', stderr: '' };
-    if (kind === 'compose-ps-all' && ++queries === 2) {
+    if (kind === 'ps-project' && ++queries === 2) {
       if (mode === 'reject') throw new Error('untrusted');
       return { exitCode: 1, stdout: '', stderr: '' };
     }
