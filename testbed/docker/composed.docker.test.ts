@@ -241,11 +241,11 @@ describe.sequential('slice 3 real Docker construction and control-route probes',
       const hostile = `http://127.0.0.1:${topology.services['dom-hidden-injection'][0].host}`;
       // The extra publication serves a page, not a /control endpoint. Probe its known page route as
       // the reachability control; /control remains 404 even in this mutant, so it cannot be its oracle.
-      const mutant = await matrix(browser, hostile, [{ url: `http://127.0.0.1:${extraPort}/`, label: 'extra-publication' }], () => {});
+      const mutant = await matrix(browser, hostile, [{ url: `http://127.0.0.1:${extraPort}/`, label: 'extra-publication' , routable: true}], () => {});
       expect(mutant.some(detectedRoute)).toBe(true);
       expect(() => expect(mutant.filter(detectedRoute)).toEqual([])).toThrow();
       await directCompose(e, base); // Reconcile the same project against the canonical file, removing the extra port.
-      const restored = await matrix(browser, hostile, [{ url: `http://127.0.0.1:${extraPort}/`, label: 'extra-publication' }], () => {});
+      const restored = await matrix(browser, hostile, [{ url: `http://127.0.0.1:${extraPort}/`, label: 'extra-publication' , routable: true}], () => {});
       expect(restored.filter(detectedRoute)).toEqual([]);
     } finally {
       await browser?.close();

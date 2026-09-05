@@ -62,7 +62,7 @@ const INSPECT_RULES: readonly [string, ConstructionCode, (d: Doc, e: Expected) =
   ['.Config.Hostname', 'hostname-mismatch', (d, e) => /^[0-9a-f]{12}$/.test(d.Config?.Hostname) && e.id.startsWith(d.Config.Hostname)],
   ['.Config.User', 'user-mismatch', (d) => d.Config?.User === 'node'],
   ['.Config.Env', 'env-unexpected', validEnv],
-  ['.Config.Cmd,.Config.Entrypoint', 'command-overridden', (d, e) => same(d.Config?.Cmd, e.image.Config.Cmd) && same(d.Config?.Entrypoint, e.image.Config.Entrypoint)],
+  ['.Config.Cmd,.Config.Entrypoint', 'command-overridden', (d, e) => same(d.Config?.Cmd ?? null, e.image.Config.Cmd ?? null) && same(d.Config?.Entrypoint ?? null, e.image.Config.Entrypoint ?? null)],
   ['.HostConfig.NetworkMode', 'network-mode', (d, e) => d.HostConfig?.NetworkMode === `${e.project}_default`],
   ['.HostConfig.Privileged', 'privileged', (d) => d.HostConfig?.Privileged === false],
   ['.HostConfig.PidMode,.HostConfig.IpcMode', 'namespace-shared', (d) => d.HostConfig?.PidMode === '' && ['', 'private'].includes(d.HostConfig?.IpcMode)],
@@ -253,7 +253,8 @@ async function build(ctx: Context): Promise<Doc> {
   const result = await run(ctx, { kind: 'image-inspect' }, 'image-inspect');
   const image = inspectDocument(result.stdout, 'image-inspect');
   if (typeof image.Id !== 'string' || IMAGE_ID_PATTERN.exec(image.Id)?.[0] !== image.Id || !image.Config
-    || !Object.hasOwn(image.Config, 'Cmd') || !Object.hasOwn(image.Config, 'Entrypoint')
+    // Docker omits Config.Cmd (or Entrypoint) entirely when the image does not set it; absent means null.
+    || !(Object.hasOwn(image.Config, 'Cmd') || Object.hasOwn(image.Config, 'Entrypoint'))
     || !envKeys(image.Config.Env) || !Object.hasOwn(image.Config, 'Labels')) throw new ComposedConstructionError('image-inspect');
   ctx.imageId = image.Id;
   await up(ctx);

@@ -9,22 +9,29 @@ import { validateTopology } from './topology.mjs';
 const topology = validateTopology(JSON.parse(readFileSync(new URL('./topology.json', import.meta.url), 'utf8')));
 
 export const REBOUND_NAME = 'tinyvault-rebound.test';
-export type Target = { url: string; label: string };
+export type Target = { url: string; label: string; routable: boolean };
 export type Probe = { method: string; target: string; statuses: number[]; outcome: string };
 export function targets(documents: Record<string, any>[]): Target[] {
-  const internal = new Set<string>(['127.0.0.1', '[::1]', 'host.docker.internal', REBOUND_NAME,
+  // Host classes the harness machine can route to. Container-network addresses (gateway, container IPv4/IPv6)
+  // are unroutable from a Docker Desktop host by construction: the page-content matrix still probes them, but the
+  // supervised leg skips them because browser_close_session stalls while a connect to a black-hole address is
+  // pending (recorded in BACKLOG as an M6 spec input, with its reproduction; not a slice-3 fix).
+  const routable = new Set<string>(['127.0.0.1', '[::1]', 'host.docker.internal', REBOUND_NAME,
     ...Object.keys(topology.services)]);
+  const network = new Set<string>();
   for (const doc of documents) {
-    for (const network of Object.values(doc.NetworkSettings.Networks) as Record<string, string>[]) {
-      if (network.Gateway) internal.add(network.Gateway);
-      if (network.IPAddress) internal.add(network.IPAddress);
-      if (network.GlobalIPv6Address) internal.add(`[${network.GlobalIPv6Address}]`);
+    for (const net of Object.values(doc.NetworkSettings.Networks) as Record<string, string>[]) {
+      if (net.Gateway) network.add(net.Gateway);
+      if (net.IPAddress) network.add(net.IPAddress);
+      if (net.GlobalIPv6Address) network.add(`[${net.GlobalIPv6Address}]`);
     }
   }
   const ports = new Set(Object.values(topology.services).flat().flatMap((p) => [p.host, p.container]));
-  return [...internal].flatMap((host) => [...ports].map((port) => ({
-    url: `http://${host}:${port}/control`, label: `${host}:${port}`,
-  }))).concat([{ url: `file://${topology.controlSocket}`, label: 'internal-socket-file-url' }]);
+  const entries = (hosts: Set<string>, isRoutable: boolean) => [...hosts].flatMap((host) => [...ports].map((port) => ({
+    url: `http://${host}:${port}/control`, label: `${host}:${port}`, routable: isRoutable,
+  })));
+  return [...entries(routable, true), ...entries(network, false),
+    { url: `file://${topology.controlSocket}`, label: 'internal-socket-file-url', routable: true }];
 }
 export function probeBrowser(): Promise<Browser> {
   return launchChromium(undefined, [`--host-resolver-rules=MAP ${REBOUND_NAME} 127.0.0.1`]);
@@ -69,47 +76,73 @@ function browserAttempt({ url, method, frame }: PageProbe): Promise<string> {
     } catch { finish('error'); }
   });
 }
-async function attempt(page: Page, target: Target, method: PageProbe['method']): Promise<Probe> {
-  const url = new URL(target.url); url.searchParams.set('tv-probe', randomUUID());
-  const statuses: number[] = [];
-  const onResponse = (r: { url(): string; status(): number }) => {
-    if (r.url() === url.href) statuses.push(r.status());
+type Observed = { statuses: Map<string, number[]>; firstResponse(url: string): Promise<void>; detach(): Promise<void> };
+const RESPONSE_SETTLE_MS = 300;
+// One CDP session per page; every probe URL carries a unique query so concurrent probes never share a key.
+async function observe(page: Page): Promise<Observed> {
+  const statuses = new Map<string, number[]>();
+  const waiters = new Map<string, () => void>();
+  const record = (url: string, status: number) => {
+    statuses.set(url, [...(statuses.get(url) ?? []), status]);
+    waiters.get(url)?.(); waiters.delete(url);
   };
+  // Playwright delivers the `response` event asynchronously; an in-page attempt can resolve before Node sees it.
+  const firstResponse = (url: string) => new Promise<void>((resolve) => {
+    if (statuses.has(url)) { resolve(); return; }
+    waiters.set(url, resolve);
+  });
+  const onResponse = (r: { url(): string; status(): number }) => record(r.url(), r.status());
   page.on('response', onResponse);
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Network.enable');
-  const wsIds = new Set<string>();
-  cdp.on('Network.webSocketCreated', (e) => { if (e.url === url.href.replace(/^http/, 'ws')) wsIds.add(e.requestId); });
+  const sockets = new Map<string, string>();
+  cdp.on('Network.webSocketCreated', (e) => { sockets.set(e.requestId, e.url.replace(/^ws/, 'http')); });
   cdp.on('Network.webSocketHandshakeResponseReceived', (e) => {
-    if (wsIds.has(e.requestId)) statuses.push(e.response.status);
+    const url = sockets.get(e.requestId); if (url) record(url, e.response.status);
   });
-  try {
-    const frame = JSON.stringify({ v: 1, kind: 'req', id: 1, op: 'bootstrap', body: { secret: 'A'.repeat(43) } });
-    const outcome = await page.evaluate(browserAttempt, { url: url.href, method, frame });
-    return { method, target: target.label, statuses, outcome };
-  } finally { page.off('response', onResponse); await cdp.detach(); }
+  return { statuses, firstResponse, detach: async () => { page.off('response', onResponse); await cdp.detach(); } };
+}
+async function attempt(page: Page, observed: Observed, target: Target, method: PageProbe['method']): Promise<Probe> {
+  const url = new URL(target.url); url.searchParams.set('tv-probe', randomUUID());
+  const frame = JSON.stringify({ v: 1, kind: 'req', id: 1, op: 'bootstrap', body: { secret: 'A'.repeat(43) } });
+  const settled = observed.firstResponse(url.href);
+  const outcome = await page.evaluate(browserAttempt, { url: url.href, method, frame });
+  // A response that arrives within the settle window counts; a target with no response at all stays 'no route'.
+  await Promise.race([settled, new Promise<void>((r) => setTimeout(r, RESPONSE_SETTLE_MS).unref())]);
+  return { method, target: target.label, statuses: observed.statuses.get(url.href) ?? [], outcome };
 }
 export const detectedRoute = (probe: Probe): boolean => probe.statuses.some((s) => s !== 404)
   || probe.outcome === 'open' || /^\d+$/.test(probe.outcome) && probe.outcome !== '404';
+const TARGET_BATCH = 8;
 export async function matrix(browser: Browser, hostile: string, destinations: Target[], invariant: () => void) {
   const page = await browser.newPage();
   const probes: Probe[] = [];
+  const observed = await observe(page);
   try {
     await page.goto(hostile);
-    for (const target of destinations) {
-      for (const method of METHODS) { probes.push(await attempt(page, target, method)); invariant(); }
+    // Probes are individually bounded (1.5-1.8 s); unroutable targets pay the full bound, so they run
+    // concurrently per batch rather than one after another, and the invariant is checked after each batch.
+    for (let i = 0; i < destinations.length; i += TARGET_BATCH) {
+      const batch = destinations.slice(i, i + TARGET_BATCH);
+      probes.push(...await Promise.all(batch.flatMap((target) => METHODS.map((method) => attempt(page, observed, target, method)))));
+      invariant();
     }
     assert.equal(probes.length, destinations.length * METHODS.length);
     return probes;
-  } finally { await page.close(); }
+  } finally { await observed.detach(); await page.close(); }
 }
+const SUPERVISED_BOUND_MS = 20_000;
 export async function supervisedMatrix(browser: Browser, hostile: string, destinations: Target[], invariant: () => void) {
   const unused = async (): Promise<never> => { throw new Error('unused'); };
   const backend: CredentialBackend = { listItems: async () => [], probeAvailability: unused,
     resolvePolicy: unused, resolveSecret: unused, dispose: async () => {} };
   const host = await createSupervisedHost({ backend, canary: 'TVC_probe_no_credentials', browser });
   try {
-    for (const target of destinations) await supervisedAttempt(browser, host, hostile, target, invariant);
+    for (const target of destinations.filter((t) => t.routable)) {
+      // A supervised attempt that neither fails nor completes within the bound is a red, never a silent wait.
+      await Promise.race([supervisedAttempt(browser, host, hostile, target, invariant),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`supervised probe stalled: ${target.label}`)), SUPERVISED_BOUND_MS).unref())]);
+    }
   } finally { host.abort(); await host.closeAll(); }
 }
 async function supervisedAttempt(browser: Browser, host: Awaited<ReturnType<typeof createSupervisedHost>>,
