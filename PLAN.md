@@ -11,6 +11,8 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
+`2026-09-04-m5.2-slice3` — focus: assessment fold-in check + commit `AGENTS.md`, then **M5.2 slice 3** (container, Compose, framed `docker exec -T` bridge) through the full security-core ladder via Astra; prune `codex/m5-2-slice-2` at close.
+
 `2026-09-04-m5.2-slice2` — focus: M5.2 slice 2 (daemon-channel preflight) through the full security-core ladder —
 **outcome: MERGED (`8133495`). Reviewed and clean-clone-tested at `41aa5f5`: 1182 + 5 + 10, exit 0. Also shipped:
 the Codex ladder moved to GPT-6 Astra with stakes-based model routing.** `main` pushed to the private origin
