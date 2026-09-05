@@ -1,7 +1,13 @@
-// Primary Docker-free test guard: inspect resolved runtime values, including computed imports.
-// This covers executed calls, not arbitrary shell programs or code in separate child processes.
-// Same-process worker_threads realms and direct process.binding('spawn_sync') or
-// process.binding('process_wrap') calls escape this hygiene guard, which is not containment.
+// The runtime interceptor, the capability map and the execution proof catch Docker reach from code
+// modules reachable from make test — source and test files, spawn sites, plain-node gate scripts.
+// Entry-point files are the reviewed root of trust: package.json (scripts block), Makefile, both
+// Vitest configs and every scripts/check-*.mjs. Their exact content is hash-pinned in-suite.
+// Hostile root-of-trust edits are outside the locked threat model: page content and the evaluated
+// model do not edit the repository. Makefile parse-time execution precedes the in-recipe gates.
+// No static gate is complete. This runtime guard covers default-config Vitest, including in-process
+// eval; the Docker config is the deliberate exception and is never on make test's path. Bare-node
+// steps and separate children run outside it. Wrapper launchers (xargs, nohup, script, PATH shims),
+// worker_threads realms and process.binding escape this hygiene guard; it is not containment.
 import childProcess from 'node:child_process';
 import net from 'node:net';
 import { basename } from 'node:path';
@@ -10,10 +16,15 @@ function reject(target: string): never {
   throw new Error(`Docker access forbidden during tests: ${target}`);
 }
 
-function checkExecutable(value: unknown): void {
+function checkExecutable(value: unknown, argv: readonly unknown[] = []): void {
   if (typeof value !== 'string') return;
   const name = basename(value);
   if (name === 'docker' || name === 'docker-compose') reject(name);
+  if (name === 'env') {
+    const first = argv.find((arg) => typeof arg === 'string' && !arg.startsWith('-'));
+    // The cheap first-non-option case only; this is not an env/shell interpreter.
+    if (typeof first === 'string' && ['docker', 'docker-compose'].includes(basename(first))) reject(basename(first));
+  }
 }
 
 function checkShellCommand(value: unknown): void {
@@ -21,7 +32,8 @@ function checkShellCommand(value: unknown): void {
   // exec/execSync receive a shell command, not an executable path. Recognize its
   // initial quoted/unquoted executable; this is deliberately not a shell interpreter.
   const first = value.trimStart().match(/^(?:"([^"]*)"|'([^']*)'|([^\s;|&]+))/);
-  checkExecutable(first?.[1] ?? first?.[2] ?? first?.[3]);
+  const tail = first ? value.trimStart().slice(first[0].length).trim().split(/\s+/) : [];
+  checkExecutable(first?.[1] ?? first?.[2] ?? first?.[3], tail.map((s) => s.replace(/^['"]|['"]$/g, '')));
 }
 
 function checkProcessCall(args: readonly unknown[]): void {
@@ -31,7 +43,7 @@ function checkProcessCall(args: readonly unknown[]): void {
     // Node joins file + argv before invoking the shell; sync APIs never reach checkSpawn.
     const command = Array.isArray(args[1]) ? [args[0], ...args[1]].join(' ') : args[0];
     checkShellCommand(command);
-  } else checkExecutable(args[0]);
+  } else checkExecutable(args[0], Array.isArray(args[1]) ? args[1] : []);
 }
 
 function checkShellCall(args: readonly unknown[]): void {
@@ -42,7 +54,7 @@ function checkShellCall(args: readonly unknown[]): void {
 
 function checkSpawn(args: readonly unknown[]): void {
   const options = args[0] as { file?: unknown; args?: unknown[]; shell?: unknown } | undefined;
-  checkExecutable(options?.file);
+  checkExecutable(options?.file, options?.args?.slice(1));
   // Node normalizes shell:true/custom-shell calls to [argv0, '-c', command]
   // (or [argv0, '/d', '/s', '/c', command] for cmd.exe) before this boundary.
   if (options?.shell && Array.isArray(options.args)) {

@@ -1,76 +1,113 @@
-// Standalone defence in depth; no module graph and no dependency-boundary imports.
-// CANNOT follow computed specifiers such as import('node:' + 'child_process').
-// The runtime interceptor is the PRIMARY guard. Neither half is complete alone.
+// Standalone defence in depth. The runtime interceptor, capability map and execution proof catch
+// Docker reach from code modules reachable from make test (source/tests, spawn sites, plain-node gates).
+// Entry-point files are the reviewed root of trust, hash-pinned in-suite. Hostile root edits are
+// outside the locked threat model (page content and the evaluated model do not edit the repository).
+// No static gate is complete: this does not follow runtime specifiers outside scanned directories,
+// see process.getBuiltinModule, or provide containment. The runtime interceptor is the primary guard.
 import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 
-// Exact repo-relative module paths, never directory-wide exemptions.
-export const DOCKER_CAPABILITY_ALLOWLIST = Object.freeze([
-  'testbed/docker/exec.ts',
-  'testbed/docker/no-docker.setup.ts',
-  'testbed/docker/exec.test.ts',
-  'scripts/check-acceptance-j-results.mjs',
-  'scripts/dependency-boundary.selftest-fixtures.mjs',
-  'scripts/dependency-boundary.selftest.mjs',
-  'scripts/docker-invocation.selftest.mjs',
-  'src/browser/playwright.test.ts',
-  'src/browser/controls.browser.test.ts',
-  'testbed/fixtures/controls-lab/index.test.ts',
-  'testbed/fixtures/controls-lab/index.ts',
-  'testbed/fixtures/shared/loginFixture.ts',
-  'testbed/fixtures/lookalike-origin/index.ts',
-]);
-
-const capabilities = new Set(['child_process', 'net', 'http', 'https']);
+// Exact repo-relative path -> exact capability specifiers, never a directory exemption.
+export const DOCKER_CAPABILITY_ALLOWLIST = Object.freeze({
+  'testbed/docker/exec.ts': ['node:child_process'],
+  'testbed/docker/no-docker.setup.ts': ['node:child_process', 'node:net'],
+  'testbed/docker/exec.test.ts': ['node:child_process', 'node:http', 'node:net'],
+  'testbed/docker/container/main.ts': ['node:net', 'node:http'],
+  'testbed/docker/container/control.ts': ['node:net', 'node:http'],
+  'testbed/docker/container/bridge.ts': ['node:net', 'node:process'],
+  'testbed/docker/container/stdoutTripwire.test.ts': ['node:process'],
+  'testbed/docker/composed.docker.test.ts': ['node:child_process'],
+  'scripts/check-acceptance-j-results.mjs': ['node:child_process'],
+  'scripts/dependency-boundary.selftest-fixtures.mjs': ['node:child_process'],
+  'scripts/dependency-boundary.selftest.mjs': ['node:child_process'],
+  'scripts/docker-invocation.selftest.mjs': ['node:child_process'],
+  'scripts/check-docker-invocation.mjs': ['node:process'],
+  'scripts/check-dependency-boundary.mjs': ['node:process'],
+  'src/browser/playwright.test.ts': ['node:child_process'],
+  'src/browser/controls.browser.test.ts': ['node:http'],
+  'testbed/fixtures/controls-lab/index.test.ts': ['node:http'],
+  'testbed/fixtures/controls-lab/index.ts': ['node:http'],
+  'testbed/fixtures/shared/loginFixture.ts': ['node:http'],
+  'testbed/fixtures/lookalike-origin/index.ts': ['node:http'],
+});
+for (const list of Object.values(DOCKER_CAPABILITY_ALLOWLIST)) Object.freeze(list);
+export const CAPABILITY_RULES = Object.freeze(['capability-import', 'computed-import', 'spawn-import-shape',
+  'spawn-reference', 'spawn-executable', 'source-syntax', 'source-symlink', 'source-empty']);
+const capabilities = new Set(['child_process', 'net', 'http', 'https', 'tls', 'http2', 'process']);
 const skipped = new Set(['node_modules', 'dist', 'artifacts', '.git']);
-
 function walk(directory) {
   const files = [];
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     if (skipped.has(entry.name)) continue;
     const target = path.join(directory, entry.name);
-    // Fail closed on symlinks instead of silently skipping source or following cycles.
-    if (entry.isSymbolicLink()) throw new Error(`Source scan cannot follow symlink: ${target}`);
+    if (entry.isSymbolicLink()) throw new Error('source-symlink');
     if (entry.isDirectory()) files.push(...walk(target));
-    else if (/\.(?:ts|mts|js|mjs)$/.test(entry.name)) files.push(target);
+    else if (/\.(?:ts|mts|cts|js|mjs|cjs)$/.test(entry.name)) files.push(target);
   }
   return files.sort();
 }
-
-function literalSpecifier(node) {
-  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return node.moduleSpecifier;
+function specifier(node) {
+  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return { value: node.moduleSpecifier };
   if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
-    return node.moduleReference.expression;
+    return { value: node.moduleReference.expression, computed: true };
   }
   if (!ts.isCallExpression(node)) return undefined;
   const callee = node.expression;
-  if (callee.kind === ts.SyntaxKind.ImportKeyword
-    || (ts.isIdentifier(callee) && callee.text === 'require')) return node.arguments[0];
+  if (callee.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(callee) && callee.text === 'require')
+    || (ts.isPropertyAccessExpression(callee) && callee.name.text === 'require')) {
+    return { value: node.arguments[0], computed: true };
+  }
   return undefined;
 }
-
-function inspect(file, relative) {
-  const source = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
-  const violations = [];
+function scriptBinding(node, bindings, add) {
+  // The measured scripts all use named spawnSync. Every reference must be a direct call.
+  const clause = ts.isImportDeclaration(node) && node.importClause;
+  const named = clause?.namedBindings;
+  if (!clause || clause.name || clause.isTypeOnly || !named || !ts.isNamedImports(named)
+    || named.elements.length !== 1 || (named.elements[0].propertyName ?? named.elements[0].name).text !== 'spawnSync') {
+    add(node, 'spawn-import-shape'); return;
+  }
+  bindings.set(named.elements[0].name.text, named.elements[0].name);
+}
+function pinReferences(source, bindings, add) {
   function visit(node) {
-    const literal = literalSpecifier(node);
-    if (literal && ts.isStringLiteral(literal) && capabilities.has(literal.text.replace(/^node:/, ''))) {
-      const { line } = source.getLineAndCharacterOfPosition(literal.getStart(source));
-      violations.push({ file: relative, line: line + 1, specifier: literal.text });
+    if (ts.isIdentifier(node) && bindings.has(node.text) && bindings.get(node.text) !== node) {
+      const call = node.parent;
+      if (!ts.isCallExpression(call) || call.expression !== node) add(node, 'spawn-reference');
+      else {
+        const first = call.arguments[0];
+        const allowed = first && ts.isPropertyAccessExpression(first) && ts.isIdentifier(first.expression)
+          && first.expression.text === 'process' && first.name.text === 'execPath' && !first.questionDotToken;
+        if (!allowed) add(node, 'spawn-executable');
+      }
     }
     ts.forEachChild(node, visit);
   }
   visit(source);
+}
+export function inspectSource(text, relative) {
+  const source = ts.createSourceFile(relative, text, ts.ScriptTarget.Latest, true);
+  const violations = []; const bindings = new Map();
+  const add = (node, code, spec = code) => violations.push({ file: relative,
+    line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1, specifier: spec, code });
+  if (source.parseDiagnostics.length) add(source, 'source-syntax');
+  function visit(node) {
+    const load = specifier(node);
+    if (load?.computed && (!load.value || !ts.isStringLiteral(load.value))) add(node, 'computed-import');
+    if (load?.value && ts.isStringLiteral(load.value) && capabilities.has(load.value.text.replace(/^node:/, ''))) {
+      const spec = load.value.text;
+      if (!(DOCKER_CAPABILITY_ALLOWLIST[relative] ?? []).includes(spec)) add(node, 'capability-import', spec);
+      else if (relative.startsWith('scripts/') && spec === 'node:child_process') scriptBinding(node, bindings, add);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  pinReferences(source, bindings, add);
   return violations;
 }
-
 export function checkDockerInvocation(root) {
-  const absoluteRoot = path.resolve(root);
-  const files = walk(absoluteRoot);
-  if (files.length === 0) throw new Error('Docker invocation scan found no source files.');
-  return files.flatMap((file) => {
-    const relative = path.relative(absoluteRoot, file).split(path.sep).join('/');
-    return DOCKER_CAPABILITY_ALLOWLIST.includes(relative) ? [] : inspect(file, relative);
-  });
+  const absoluteRoot = path.resolve(root); const files = walk(absoluteRoot);
+  if (files.length === 0) throw new Error('source-empty');
+  return files.flatMap((file) => inspectSource(fs.readFileSync(file, 'utf8'), path.relative(absoluteRoot, file).split(path.sep).join('/')));
 }

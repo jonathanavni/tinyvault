@@ -3,11 +3,14 @@
 import { spawn } from 'node:child_process';
 import type { Readable, Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { validateTopology } from './topology.mjs';
 import { assertPinned, DockerPreflightError, type PinnedDockerEndpoint } from './preflight';
 import type { BridgeClock } from './bridge';
 
-export const COMPOSE_FILE = fileURLToPath(new URL('./compose.json', import.meta.url));
-export const IMAGE_NAME = 'tinyvault-fixture:local';
+const topology = validateTopology(JSON.parse(readFileSync(new URL('./topology.json', import.meta.url), 'utf8')));
+export const COMPOSE_FILE = fileURLToPath(new URL(`../../${topology.composePath}`, import.meta.url));
+export const IMAGE_NAME = topology.imageName;
 export const COMMAND_TIMEOUT_MS = 120_000;
 export const WAIT_TIMEOUT_SECONDS = 60;
 export const STOP_TIMEOUT_SECONDS = 10;

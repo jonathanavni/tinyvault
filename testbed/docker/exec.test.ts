@@ -89,9 +89,11 @@ describe('runtime Docker interceptor installed by Vitest setup', () => {
   });
 
   it('rejects the computed-import and base64-executable bypass (R2-2)', async () => {
-    const computed = await import('node:' + 'child_process');
-    const exe = Buffer.from('ZG9ja2Vy', 'base64').toString();
-    expect(() => computed.spawn(exe, ['-H', 'tcp://attacker:2375', 'info'])).toThrow(forbidden);
+    guardProbe('', `
+      const computed = await import('node:' + 'child_process');
+      const exe = Buffer.from('ZG9ja2Vy', 'base64').toString();
+      throws(() => computed.spawn(exe, ['-H', 'tcp://attacker:2375', 'info']), /Docker access forbidden during tests:/);
+    `);
   });
 
   it.each(['spawn', 'spawnSync', 'execFile', 'execFileSync'] as const)(
@@ -195,6 +197,25 @@ function promisifiedProbe(method: 'exec' | 'execFile', shell: boolean): void {
     await rejects(async () => invoke(command, { shell: ${shell} }), /Docker access forbidden during tests:/);
   `);
 }
+
+describe('env launcher guard deletion regressions', () => {
+  it.each(['spawn', 'spawnSync', 'execFile', 'execFileSync'] as const)('%s checks the first non-option env argument', (method) => {
+    guardProbe(`let calls = 0; cp.${method} = () => { calls++; };`, `
+      for (const argv of [['docker', 'info'], ['--', '/nonexistent/docker-compose', 'version']]) {
+        throws(() => cp.${method}('/usr/bin/env', argv), /Docker access forbidden during tests:/);
+      }
+      equal(calls, 0);
+      cp.${method}('/usr/bin/env', ['node', 'docker']); equal(calls, 1);
+    `);
+  });
+  it('checks normalized named-export spawn and env shell commands', () => {
+    guardProbe('import { spawn as namedSpawn } from "node:child_process"; let calls = 0; cp.ChildProcess.prototype.spawn = () => { calls++; }; cp.execSync = () => { calls++; };', `
+      throws(() => namedSpawn('/usr/bin/env', ['docker', 'info']), /Docker access forbidden during tests:/);
+      throws(() => cp.execSync('/usr/bin/env -- docker info'), /Docker access forbidden during tests:/);
+      equal(calls, 0);
+    `);
+  });
+});
 
 describe('runtime guard deletion regressions', () => {
   afterEach(() => vi.restoreAllMocks());

@@ -6,6 +6,7 @@
 // E scans: spawn args/env, command output, history, logs, export, exec stderr, and artifacts.
 import { createHash, randomBytes, type KeyObject } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BridgeSession, type BridgeClock } from './bridge';
 import { BridgeError, FIXTURE_IDS, type FixtureId } from './protocol';
@@ -15,11 +16,16 @@ import { bounded, buildDockerSpawn, containerId, ComposedConstructionError, crea
   type ContainerId, type ConstructionCode, type DockerCommand, type DockerHandle, type DockerProcessRunner,
   type DockerResult, type DockerSpawn, type ProcessHandle } from './exec';
 import { observeStderr, scanArtifactTree, scanSpawns, scanStream, SecretScanner } from './secretScan';
-export { ComposedConstructionError, COMPOSE_FILE, WAIT_TIMEOUT_SECONDS, STOP_TIMEOUT_SECONDS } from './exec';
-export const PORTS = { 'benign-login': [47110], 'lookalike-origin': [47120, 47121], 'dom-hidden-injection': [47130] } as const;
+import { validateTopology } from './topology.mjs';
+const topology = validateTopology(JSON.parse(readFileSync(new URL('./topology.json', import.meta.url), 'utf8')));
+export { ComposedConstructionError, COMPOSE_FILE, IMAGE_NAME, WAIT_TIMEOUT_SECONDS, STOP_TIMEOUT_SECONDS } from './exec';
+export const PORTS = {
+  'benign-login': topology.services['benign-login'].map((p) => p.host),
+  'lookalike-origin': topology.services['lookalike-origin'].map((p) => p.host),
+  'dom-hidden-injection': topology.services['dom-hidden-injection'].map((p) => p.host),
+} as const;
 export const CREATED_TOLERANCE_MS = 60_000;
-export const ARTIFACT_MARKER = 'tinyvault-artifact-scan-close-v1';
-export const HISTORY_MARKER = 'com.tinyvault.marker=history-surface';
+export const { ARTIFACT_MARKER, HISTORY_MARKER } = topology.markers;
 export type ProbeOrigin = (origin: string) => Promise<boolean>;
 export type ComposeClock = BridgeClock & { now(): number };
 type Doc = Record<string, any>;
@@ -37,12 +43,12 @@ function validEnv(doc: Doc, expected: Expected): boolean {
 }
 function validPorts(doc: Doc, expected: Expected): boolean {
   const ports = doc.NetworkSettings?.Ports;
-  const values = PORTS[expected.service];
-  return !!ports && Object.keys(ports).length === values.length && values.every((port, index) =>
-    Array.isArray(ports[`${8080 + index}/tcp`]) && ports[`${8080 + index}/tcp`].length === 1
-    && ports[`${8080 + index}/tcp`][0]?.HostIp === '127.0.0.1'
-    && ports[`${8080 + index}/tcp`][0]?.HostPort === String(port)
-    && Object.keys(ports[`${8080 + index}/tcp`][0]).length === 2);
+  const values = topology.services[expected.service];
+  return !!ports && Object.keys(ports).length === values.length && values.every((port) =>
+    Array.isArray(ports[`${port.container}/tcp`]) && ports[`${port.container}/tcp`].length === 1
+    && ports[`${port.container}/tcp`][0]?.HostIp === port.address
+    && ports[`${port.container}/tcp`][0]?.HostPort === String(port.host)
+    && Object.keys(ports[`${port.container}/tcp`][0]).length === 2);
 }
 const INSPECT_RULES: readonly [string, ConstructionCode, (d: Doc, e: Expected) => boolean][] = [
   ['.State.Running', 'not-running', (d) => d.State?.Running === true],

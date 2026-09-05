@@ -1,16 +1,19 @@
 // Deterministic daemon descriptions and real protocol peers over memory streams; no spawn or socket.
 import { generateKeyPairSync } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { ControlSession } from './container/control';
 import { dockerPreflight } from './preflight';
 import { FIXTURE_IDS } from './protocol';
-import { HISTORY_MARKER, PORTS, type ProjectOptions } from './compose';
+import { HISTORY_MARKER, type ProjectOptions } from './compose';
+import { validateTopology } from './topology.mjs';
 import { containerId, type DockerSpawn, type DockerResult, type DockerHandle } from './exec';
 
 export const epochMs = 1788600000000;
+const topology = validateTopology(JSON.parse(readFileSync(new URL('./topology.json', import.meta.url), 'utf8')));
 export const imageId = 'sha256:' + 'f'.repeat(64);
 export const ids = ['a', 'b', 'c'].map((c) => containerId(c.repeat(64)));
 export const pair = generateKeyPairSync('ed25519');
@@ -28,7 +31,8 @@ export function validInspect(index: number, project: string, epoch: string) {
         'com.docker.compose.project': project, 'com.docker.compose.service': service } },
     HostConfig: { NetworkMode: `${project}_default`, Privileged: false, PidMode: '', IpcMode: '', CapAdd: null, Devices: [], Binds: null },
     Mounts: [], NetworkSettings: { Networks: { [`${project}_default`]: {} },
-      Ports: Object.fromEntries(PORTS[service].map((port, i) => [`${8080 + i}/tcp`, [{ HostIp: '127.0.0.1', HostPort: String(port) }]])) },
+      Ports: Object.fromEntries(topology.services[service].map((port) => [`${port.container}/tcp`,
+        [{ HostIp: port.address, HostPort: String(port.host) }]])) },
   };
 }
 export function kindOf(spawn: DockerSpawn): string {
