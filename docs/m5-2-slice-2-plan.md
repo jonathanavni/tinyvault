@@ -283,10 +283,13 @@ So:
   failure is a red, with **no selective fallback for any of them.**
 - The EPERM `no-socket` substitution (`testbed/fixtures/shared/loginFixture.ts:114-128`, helper at `:487-489`)
   must be **unreachable** from the composed path.
-- **B4 — the EPERM proof must be deletion-isolated.** An unconditional slice-2 "composed is unavailable" throw
-  would make a composed-EPERM test pass for the wrong reason. The required test drives the **production path**
-  with composed mode and `listen()` rejecting `{code:'EPERM'}`, and asserts no transport and no in-process
-  fallback is returned; **deleting the composed-mode EPERM guard must turn it red.**
+- **B4 — DEFERRED TO SLICE 3 (post-implementation).** The intent was a production-path test driving composed mode
+  with `listen()` rejecting `{code:'EPERM'}`, red on deletion of the composed-mode EPERM guard. **No legitimate
+  slice-2 composed path reaches `listen()`** — composed construction throws earlier and unconditionally — so such a
+  test would pass because composed failed *sooner*, not because the guard worked: exactly the vacuous coverage B4
+  was raised to prevent. B4's **structural** half is proven now (composed falling back to the in-process starter
+  turns three tests red; deleting the supplied-browser rejection reddens a test asserting `dockerPreflight` was
+  never called). The deletion-isolated EPERM test lands in slice 3 with the first real composed path.
 - The in-process path is behaviour-unchanged; slice 2 must not alter any existing green.
 
 *Noted from B4 and accepted as scope-bounded:* `FixtureStarter` can return any self-labelled transport, and
@@ -336,13 +339,14 @@ only that rule.
 ### Acceptance A — the slice-2 subset
 
 **Provable now:** preflight ordering on the direct composed capture entry (B3); a direct composed
-`capturePersistedRuns` bypassing `runEval`; daemon absent (socket missing); the composed-EPERM guard (B4); and the
-**no-fallback rule** for every composed-construction failure this slice can raise.
+`capturePersistedRuns` bypassing `runEval`; daemon absent (socket missing); B4's **structural** half (no fallback,
+and the in-process EPERM substitution unreachable from composed); and the **no-fallback rule** for every
+composed-construction failure this slice can raise.
 
 **Deferred to slices 3–5, declared:** image build failure, container creation failure, exec failure, handshake
 failure, MAC failure, protocol error, "daemon killed after preflight but before container creation", and
-**B5a's dead-listener socket** (§2.2), and **R2-4's endpoint-selecting-argv mutant** (no executable variant
-exists until slice 3).
+**B5a's dead-listener socket** (§2.2), **R2-4's endpoint-selecting-argv mutant** (no executable variant exists
+until slice 3), and **B4's deletion-isolated composed-EPERM test** (no slice-2 composed path reaches `listen()`).
 
 ### Absence-detection
 
