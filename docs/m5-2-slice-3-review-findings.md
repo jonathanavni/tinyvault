@@ -389,4 +389,17 @@ in the main report). The exact-file mechanism is what closes U1-16.
   tests; invocation gate PASS; **`make test` 1566 + 5 + 10, execution proof PASS**; **`make test-docker` 4/4 in 78 s**,
   no containers or networks left. Remaining gates before merge: the round 3 QA channel on `5385a4b..2838931` and the
   literal clean clone at `2838931`.
+- **Round 3, QA channel (own detached worktree at `2838931`): PASS.** 45 mutants, 38 red; survivors: two declared
+  Docker-suite-only checks (the form probe's Chromium submission; `matrix()` calling `finishMatrix` — the Docker suite
+  asserts `coverageGaps` itself), one equivalent (zeroing a public marker), and four pin gaps on behaviour proven correct
+  at head by throwaway tests. It also ran `make test` in its clean worktree: **1566 + 5 + 10, execution proof PASS, 4 min
+  15 s.** Absorption check: every round-1/2/3 disposition ABSORBED (Docker-only proofs declared). Findings: **[P2]** the
+  `logs` **stdout** secret scan had no absence-detection test (behaviour correct; a refactor could drop it silently) —
+  **absorbed** as a test-only pin; **[P3]** the rank order between `secret-exposed` and `scan-control-missing` was
+  unpinned — **absorbed** as a unit test of `preferConstructionCode`; **[P3, CARRY]** `checkScan`'s control-count guard
+  (defends only the injected-scanner seam), exec-stderr's `failed()` path (pre-existing), and a test asserting the
+  `.dockerignore` entries. Per the cap these two absorptions are test-only additions introducing no new mutant
+  (`docs/handoff-pattern.md` §4 carve-out); no production code changed after `2838931`.
+- **Merge gate:** literal clean clone of the branch (`git clone` → `npm ci` → `make browsers` → `make test`) at the final
+  head, then merge, then `make test-docker` on the merged tree. Results below.
 
