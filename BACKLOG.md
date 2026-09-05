@@ -15,7 +15,7 @@ Post-launch adapters & extensions (from `PROJECT-SPEC.md` §7 — parked here un
 - **Second safe public target / masked-input & JS-framework fill edge cases** — timeboxed, only if the demo needs it.
 - ~~**Policy dry-run / replay mode**~~ — **graduated 2026-09-01** to `PROJECT-SPEC.md` §7 step 6 (post-v0.1 fast-follow; eval-side `make policy-diff` tool reusing the offline adjudicator).
 
-**🔴 slice (full ladder, `src/core` contract change) — non-cloneable `dom-fill` identity (M5-C2, spec r2 P1-3):** carry
+**🔴 slice (full ladder, `src/core` contract change) — non-cloneable `dom-fill` identity (M5-C2, spec r2 P1-3):** **Owes an explicit launch disposition before M10 (assessment 2026-09-04 A3).** carry
 the pinned destination's resolved form `action` (method + route + origin) on `FillObservation.assigned` so
 `classify` can require the filled control's form to target the scenario's login endpoint — a property a page
 cannot clone without turning the decoy into a real login form. Until then the `dom-fill` sink is identified by a
@@ -91,5 +91,13 @@ work in flight, the rest stay parked here (register "Final5 round"):
 **From the 2026-09-04 assessment (dispositioned in `PLAN.md`'s Decisions Log):**
 
 - **A5 — scorecard provenance (scheduled, pre-M6).** Record the actual source revision and relevant configuration in the scorecard instead of a hard-coded `tinyvaultVersion: '0.0.0-m1'` and a stale `CHECKER_VERSION = 'm4-v1'` (`testbed/scorecardAggregate.ts`, `testbed/runnerExecution.ts`, `testbed/scorecard.schema.ts`). Today two different implementations can emit artifacts with indistinguishable version labels, which undermines exactly the comparison M6 exists to publish. Small, self-contained; must land before any published result.
+- **[M6 spec input] A1 — agent interface and recovery flow.** The frozen seven-tool registry (D8 allowlist) excludes
+  `list_vault` and `request_vault_setup`, and the stub receives fixture URLs/selectors through trusted setup. M6 must decide
+  the real agent's interface and recovery flow explicitly: widening the tool surface is a threat-model decision, not an
+  implementation detail. Dispositioned in `PLAN.md`'s Decisions Log (2026-09-04).
+- **[M6 spec input] A2 — explicit coverage requirements per M6 scenario.** Zero missing-body markers ≠ complete observation
+  (unload beacons, screenshot text, worker/popup limits, finite decoder inventory — see the M6 capture items above and
+  `SCHEMA.md`). Each M6 scenario states which channels it requires observed, and the limitations stay printed beside any
+  published result.
 - **A4 — `finish()` should settle evidence itself or refuse pending work** (`src/supervisor/host.ts`). It can currently return a verdict and drop state without settling pending captures; the runner happens to supply the settle/drain sequence, so the verified path passes and another caller can silently omit it. Scope before external consumers (the MCP adapter), not inside M5.2.
 - **A7 — local-vault durability.** Exclusive key creation can leave a partial file after failure, and vault replacement lacks a directory `fsync` (`src/backends/localFileWriter.ts`). Bounded follow-up.
