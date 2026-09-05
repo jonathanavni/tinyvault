@@ -252,3 +252,17 @@ Example:
   safely (only `--write` jobs must never share a worktree). (2026-09-04)
 - **macOS has no `timeout(1)`.** `timeout 180 node …` dies with `command not found`, and inside a backgrounded
   compound command that failure is easy to miss. Use a bounded poll loop instead. (2026-09-04)
+
+## M5.2 slice-3 session (2026-09-05)
+
+- **`codex-companion.mjs status <job-id> --json` does not resolve a job id — it returns the workspace summary with
+  no `.job`, and `result <id>` says "No job found" while the job is still running.** A monitor keyed on the
+  single-job form breaks immediately (status reads empty → "not running"). Poll `status --all --json` and filter the
+  `running` list by `id`; the log mtime rule from 2026-09-04 still applies. (2026-09-05)
+- **Two blind channels per paper round pays for itself on this project.** Round 1: Codex found the gating gaps
+  (E surfaces, correlation branches), Claude found the two facts that would have burned the integrator's Docker fix
+  cycle (`docker exec` has no `-T`; `"type": "module"` is present). Round 2: Codex found the reorder-blind canonical
+  check and the `instanceof Error` vacuity; Claude verified process-env interpolation and the npm lifecycle-script
+  hole on the host. Dispatch Sol (`task --fresh --model gpt-5.6-sol`) and a `Plan` subagent on the same packet, in
+  parallel, and write the register only when both are in. (2026-09-05)
+

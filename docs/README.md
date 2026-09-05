@@ -59,7 +59,7 @@ Active planning docs:
   gate; capture transfer without shared mounts; the frozen agent tool surface) and Acceptance A–P.
 - `m5-2-implementation-plan.md` — how the locked M5.2 contract is sequenced: six independently-green commits, the
   Codex/integrator ownership split, and which Acceptance criteria each commit gates. Docker enters at commit 3 and
-  never on the `make test` path. **Slice 1 merged (`ab52f8e`); slice 2 next.**
+  never on the `make test` path. **Slices 1–2 merged (`ab52f8e`, `8133495`); slice 3 in flight.**
 - `m5-2-review-findings.md` — the M5.2 register: C-R1 (seam recon), C-R2/C-R3/C-R5 (three adversarial paper rounds,
   which killed the original network shape, then the sidecar split and exec bridge, then found the Docker daemon was
   an unguarded alternate control transport), C-R4 and C-R6 (the user's threat-model lock and bounded cap
@@ -74,6 +74,15 @@ Active planning docs:
   C-T3a/C-T3b; the three-channel post-implementation review (Codex, fresh-context QA, security-review) with F1–F6
   and the P3 dispositions; round 2 on the absorbed-fix diff; and the adjudications, including why the broad
   Unix-socket rejection is a recorded compatibility restriction rather than an isolation claim.
+- `m5-2-slice-3-plan.md` — the slice-3 implementation contract (**revision 3**, three pre-implementation rounds):
+  one image / three services on fixed loopback ports, harness-controlled creation with a pre-up absence check and a
+  full inspect table, the framed `docker exec -i` bridge (canonical frames, ordered high-water-mark correlation,
+  close-never-resync, a runtime stdout tripwire), bootstrap-over-stdin and the injective challenge/MAC, the
+  closed-schema Compose + Dockerfile lint, the entry-point grammar gate and execution proof that pin `make test`,
+  and the narrowed claim for static scans. Resolves slice 2's B4, R2-4 and eval-time-interceptor residuals.
+- `m5-2-slice-3-review-findings.md` — the slice-3 register, **append-only**: C-U1/C-U1b (round 1: Codex Sol STOP
+  10×P1, Claude 7×P2), C-U2/C-U2b (round 2: Codex STOP 8×P1, Claude 1×P1 — the round that beat every static scan
+  and forced the claim narrowing), round 3 and the implementation-review rounds as they land.
 - `project-assessment-2026-09-03.md` — Codex's read-only project teardown at `e69259d` (post-M5): two P0 gate defects, the
   fixture-topology conflict, stale docs, missing release engineering. Verified by Claude the same day; dispositions in
   `m5-review-findings.md` §C-P and the M5.1 slice in `PLAN.md`. Its milestone table is inaccurate for M1–M3 — read `PLAN.md` for those.
