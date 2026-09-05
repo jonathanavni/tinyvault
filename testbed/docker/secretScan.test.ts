@@ -5,7 +5,7 @@ import { PassThrough, Readable } from 'node:stream';
 import { inspect } from 'node:util';
 import { afterEach, expect, it, vi } from 'vitest';
 import { capturePersistedRuns } from '../runner';
-import { ARTIFACT_MARKER, createComposedProject } from './compose';
+import { ARTIFACT_MARKER, createComposedProject, preferConstructionCode } from './compose';
 import { ComposedConstructionError } from './exec';
 import { startComposedFixtureSet } from './composedFixtures';
 import topology from './topology.json';
@@ -201,13 +201,20 @@ it('closer invokes the injected spawn scanner on its complete construction and t
   expect(scanned.at(-1)).toEqual(h.spawns.map(kindOf));
 });
 
-it.each(['logs', 'export', 'exec-stderr'] as const)('closer scans real secret bytes from %s', async (surface) => {
+it.each(['logs', 'logs-stdout', 'export', 'exec-stderr'] as const)('closer scans real secret bytes from %s', async (surface) => {
   const h = await fakeProject(vi.fn); disposals.push(h.dispose);
   const p = await createComposedProject(h.options);
   if (surface === 'logs') {
     const run = h.runner.run.getMockImplementation()!;
     h.runner.run.mockImplementation(async (spawn) => kindOf(spawn) === 'logs'
       ? { stdout: '', stderr: h.secrets[0].toString('hex'), exitCode: 0 } : run(spawn));
+  } else if (surface === 'logs-stdout') {
+    // The fixture's stdout also reaches `docker logs`; markers stay intact on stderr so only the stdout scan can catch it.
+    const run = h.runner.run.getMockImplementation()!;
+    h.runner.run.mockImplementation(async (spawn) => {
+      const result = await run(spawn);
+      return kindOf(spawn) === 'logs' ? { ...result, stdout: `${result.stdout}${h.secrets[0].toString('hex')}` } : result;
+    });
   } else if (surface === 'export') {
     const spawn = h.runner.spawnLongLived.getMockImplementation()!;
     h.runner.spawnLongLived.mockImplementation((description) => kindOf(description) === 'export' ? {
@@ -315,4 +322,12 @@ it.each(['project', 'fixture-set'] as const)('%s preserves dominant teardown cod
     expect(cause.teardownCode).toBe(expected);
     expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
   }
+});
+
+// The two security codes are ranked against each other, not only against operational codes: a missing control on one
+// surface must never relabel a real exposure found on a later one.
+it('secret-exposed outranks scan-control-missing in both orders', () => {
+  expect(preferConstructionCode('scan-control-missing', 'secret-exposed')).toBe('secret-exposed');
+  expect(preferConstructionCode('secret-exposed', 'scan-control-missing')).toBe('secret-exposed');
+  expect(preferConstructionCode('compose-stop', 'scan-control-missing')).toBe('scan-control-missing');
 });
