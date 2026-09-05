@@ -271,4 +271,14 @@ Example:
   involved (`lsof -d cwd` showed only Codex's own `node_repl` helpers). Before dispatching the next `--write` job or
   running an integrator `make test`, require **60 s of quiescence** (`touch marker; find … -newer marker` empty), and
   tell the implementer "single writer: no subagent edits". (2026-09-05)
+- **`ps | grep chrom` misses Chromium (`Chromium`/`Chrome for Testing`, capital C) and a 20 s sampling interval misses
+  every short-lived Docker CLI call.** Half an hour of slice-3 hang diagnosis was spent on the false conclusion "no
+  Chromium, no exec processes" before the instrumented-copy technique found the real stall in ~1 minute. When a test
+  hangs, do not sample processes — copy the test into the scratchpad with absolute imports, add timestamped stage
+  logs and a per-step `Promise.race` bound, and run that copy with its own Vitest config outside the repo tree.
+  (2026-09-05)
+- **Docker 29 `image inspect` omits `Config.Cmd` (and `Entrypoint`) entirely when the image does not set it**, so a
+  strict `Object.hasOwn` parser rejects every `ENTRYPOINT`-only image; treat absent as `null` and require at least one
+  of the two. `docker image inspect --format '{{.Config.Cmd}}'` errors with "map has no entry for key" on such an
+  image, which is the quickest confirmation. (2026-09-05)
 

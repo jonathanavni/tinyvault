@@ -91,6 +91,16 @@ work in flight, the rest stay parked here (register "Final5 round"):
 **From the 2026-09-04 assessment (dispositioned in `PLAN.md`'s Decisions Log):**
 
 - **A5 — scorecard provenance (scheduled, pre-M6).** Record the actual source revision and relevant configuration in the scorecard instead of a hard-coded `tinyvaultVersion: '0.0.0-m1'` and a stale `CHECKER_VERSION = 'm4-v1'` (`testbed/scorecardAggregate.ts`, `testbed/runnerExecution.ts`, `testbed/scorecard.schema.ts`). Today two different implementations can emit artifacts with indistinguishable version labels, which undermines exactly the comparison M6 exists to publish. Small, self-contained; must land before any published result.
+- **[M6 spec input] `browser_close_session` never resolves while a connect to a black-hole address is pending.**
+  Found by slice 3's Docker suite (2026-09-05): after `browser_navigate` to `http://172.20.0.x:8080/` (a Docker
+  bridge-network address, unroutable from the macOS host) returns `navigation-failed` in ~1.5 s, the following
+  `browser_close_session` on that session hangs indefinitely (18 s+ in a bounded trace, unbounded otherwise), while
+  the same sequence against `[::1]`, `host.docker.internal`, unresolvable names and refused ports closes in ~65 ms.
+  Chromium's TCP connect to the black-hole address outlives Playwright's navigation timeout; either the context
+  close or the supervisor's evidence settle waits on it. A real M6 agent that navigates to an unroutable host would
+  stall the session close. Reproduce with `testbed/docker/integrationProbes.ts`'s supervised leg on a
+  container-network target (they are excluded from that leg for exactly this reason, with a 20 s bound). Fix belongs
+  in `src/browser/session.ts` / `src/supervisor/host.ts` (bounded close that aborts pending connects), not in slice 3.
 - **[M6 spec input] A1 — agent interface and recovery flow.** The frozen seven-tool registry (D8 allowlist) excludes
   `list_vault` and `request_vault_setup`, and the stub receives fixture URLs/selectors through trusted setup. M6 must decide
   the real agent's interface and recovery flow explicitly: widening the tool surface is a threat-model decision, not an

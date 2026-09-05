@@ -252,4 +252,17 @@ additive; `docker history` truncates by default; `vitest list --filesOnly --json
   `.dockerignore`, esbuild pinned `0.28.2`, `bindServer` seam with the single EPERM branch, constants lift, the Docker
   suite. Noted for the review: an additive optional `additionalArgs` parameter on `src/browser/playwright.ts`'s
   launcher (defaults unchanged) so the DNS-rebound probe can pass `--host-resolver-rules` through the vetted importer.
+- **2026-09-05 — Job C committed `71bf7b2`; first real Docker runs (integrator) found three things, two in the slice
+  and one outside it.** (1) Docker 29's `image inspect` omits `Config.Cmd` entirely for an `ENTRYPOINT`-only image,
+  so the strict parser's `hasOwn('Cmd')` rejected every real image — fixed as "absent equals null" on both sides of
+  the command comparison (integrator carve-out, two lines, `compose.ts`). (2) The page-content probe matrix ran 67
+  targets × 5 methods × 2 origins strictly sequentially with a fresh CDP session per probe; unroutable targets pay the
+  full 1.5–1.8 s bound each, so the test exceeded its 30-minute budget — restructured to one CDP session per page and
+  concurrent probes per batch of eight targets (16 s per origin), semantics unchanged (test-evidence code,
+  `integrationProbes.ts`). (3) **A product defect outside the slice:** `browser_close_session` never resolves after a
+  `browser_navigate` to a black-hole address (Docker bridge-network IPs, unroutable from the host) — recorded in
+  `BACKLOG.md` as an M6 spec input with its reproduction; the supervised leg now covers every routable host class and
+  is bounded at 20 s per attempt so a stall is a red, and its exclusion of container-network hosts is stated in code.
+  The raw composed path — build, three authenticated bridges, stop → history/logs/export scans → down — completes in
+  13 s in an instrumented run, unchanged by any of this.
 
