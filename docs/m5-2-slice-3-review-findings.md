@@ -350,3 +350,31 @@ in the main report). The exact-file mechanism is what closes U1-16.
 - **Round 3 (the last under the cap)** will review the whole fix range `5385a4b..HEAD` with both channels under the
   stated P1 criteria, after the integrator re-runs `make test` and `make test-docker` at the candidate head.
 
+### Fix round 2 verified; round 3 (the last under the cap)
+
+- **Fix round 2 committed:** Codex core `1507ef7` (every in-closer control observed in the same scanning pass as the
+  secrets; the separate-observation mutant red on all five surfaces) plus the integrator's `file:` target handling —
+  and, recorded against the integrator: that commit carried a **syntax error** in `integrationProbes.classify.test.ts`
+  left by an integrator edit; the chain's typecheck failure did not abort the commit (a `;` where `&&` was needed) and
+  `make test-docker` ran green regardless because that file is on the `make test` path, not the Docker suite's. Caught
+  by tsc and by the round 3 Codex review on that head. Repaired at `190d3c3`; **`make test` 1564 + 5 + 10 green** there.
+  Lesson recorded in `.claude/memory/gotchas.md` at wrapup: never commit on a chain whose typecheck can be skipped.
+- **The coverage check's first real catch:** at `1507ef7` the Docker suite failed on `internal-socket-file-url` — a
+  `file:` URL is refused by Chromium at the URL layer before any request exists, so no network method can observe it.
+  Handled honestly: the target stays in the matrix with its page-level refusal check (no route, no status, no open
+  socket) and is excluded from *network* coverage, stated in code.
+- **Round 3 Codex adversarial review (`--base 5385a4b`, on `190d3c3`): NEEDS-ATTENTION, one P1** — `ERR_ABORTED`,
+  `CONNECTION_RESET` and `CONNECTION_CLOSED` were classified `no-route`, but they are cancellation or post-connect
+  terminations (the probes' own 1.5 s deadlines produce `ERR_ABORTED`), so a slow-answering control endpoint would read
+  as unreachable; and `matrix()`'s own coverage assertion had no test (deleting the caller left the classification
+  suite green). Absorption check otherwise: 6 ABSORBED, the rest PARTIAL only because Vitest and Chromium cannot run in
+  its sandbox. Claim boundary clean except the now-corrected "failures mean nothing was addressed" comment.
+- **Fix round 3 (integrator, evidence code):** those three failure texts are `unobserved`; the matrix's terminal
+  assertions moved into an exported, unit-tested `finishMatrix` with a hidden-plus-aborted regression (five methods:
+  three CORS/ORB-hidden, an evidence-free WebSocket, an aborted form → rejects; one observed 404 → accepts; a short
+  list → the count assertion); the Docker suite asserts `coverageGaps(probes)` itself as well. Verified at the
+  candidate head before commit: tsc, the Docker-free suite, gates, `make test`, `make test-docker`.
+- **Cap status:** three post-implementation review rounds and three fix rounds are spent. The QA channel runs once more
+  on the final range as round 3's second channel; per the conventions, any further finding is a recorded residual (or
+  a return to the user if it is a leak or an undeclared gate blind spot), not a fourth fix round.
+
