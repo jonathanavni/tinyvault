@@ -12,11 +12,21 @@ describe('parseUnixEndpoint', () => {
     ['trailing-slash', 'unix:///var/run/docker.sock/'],
     ['empty-path', 'unix://'],
     ['control-character', 'unix:///var/run/docker\u0000.sock'],
+    ['edge-whitespace', 'unix:///tmp/review.sock '],
+    ['edge-whitespace', 'unix:///tmp/review.sock\u00a0'],
   ];
 
   it.each(isolated)('rejects the isolated %s mutant', (reason, raw) => {
     expect(parseUnixEndpoint(raw)).toEqual({ ok: false, reason, detail: expect.any(String) });
   });
+
+  it.each([' ', '\t', '\n', '\u0085', '\u00a0', '\u2003', '\u202f', '\u3000', '\ufeff'])(
+    'rejects leading and trailing whitespace %j with its own reason', (space) => {
+      for (const raw of [`${space}unix:///tmp/review.sock`, `unix:///tmp/review.sock${space}`]) {
+        expect(parseUnixEndpoint(raw)).toMatchObject({ ok: false, reason: 'edge-whitespace' });
+      }
+    },
+  );
 
   it.each([
     ['unix:///var/run/docker.sock', '/var/run/docker.sock'],

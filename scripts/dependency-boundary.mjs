@@ -42,6 +42,7 @@ const SOURCE_DIRECTORIES = ['src', 'testbed', 'scripts'];
 const BUILTIN_MODULES = new Set(builtinModules.map((specifier) => specifier.replace(/^node:/u, '')));
 const MAX_EXTERNAL_MODULES = 10_000;
 const GATE_DIRECTORY = path.dirname(fs.realpathSync(fileURLToPath(import.meta.url)));
+const GATE_ROOT = path.dirname(GATE_DIRECTORY);
 
 export function checkDependencyBoundary(
   root,
@@ -437,7 +438,7 @@ function dependencies(file, source) {
   const edges = [];
   const unsupported = [];
   const isGateImplementation = isGateImplementationFile(file);
-  const isTestHarness = isTestHarnessLoaderFile(file);
+  const isTestHarness = isTestHarnessLoaderFile(file, GATE_ROOT);
   const addLiteral = (node, syntax) => {
     if (node && ts.isStringLiteralLike(node)) {
       edges.push({ specifier: node.text, syntax });
@@ -484,10 +485,14 @@ function dependencies(file, source) {
 // which is precisely the computed-import bypass the Docker-free guard exists to catch.
 const TEST_HARNESS_LOADER_EXEMPTIONS = ['testbed/docker/no-docker.setup.ts'];
 
-function isTestHarnessLoaderFile(file) {
+function isTestHarnessLoaderFile(file, root) {
   const real = realFilePath(file);
-  if (real === undefined) return false;
-  return TEST_HARNESS_LOADER_EXEMPTIONS.some((relative) => realpathEndsWith(real, relative));
+  if (real === undefined || root === undefined) return false;
+  // Exact repo-relative equality, never a suffix match: `realpathEndsWith` would also exempt
+  // `src/testbed/docker/no-docker.setup.ts`, silently lifting the module-loader prohibition off a
+  // production module. Verified: with a suffix match that file imported node:module and the gate passed.
+  const relative = path.relative(root, real).split(path.sep).join('/');
+  return TEST_HARNESS_LOADER_EXEMPTIONS.includes(relative);
 }
 
 function isGateImplementationFile(file) {

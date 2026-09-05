@@ -1,5 +1,7 @@
 import { assertPinned, DockerPreflightError, type PinnedDockerEndpoint } from './preflight';
 
+// Slice-3 scaffolding: this module has no production importer yet.
+
 export type DockerCommand = never;
 export type DockerSpawn = Readonly<{
   file: string; args: readonly string[]; env: Readonly<Record<string, string>>;

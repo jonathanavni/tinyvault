@@ -23,14 +23,32 @@ function checkShellCommand(value: unknown): void {
   checkExecutable(first?.[1] ?? first?.[2] ?? first?.[3]);
 }
 
+function checkProcessCall(args: readonly unknown[]): void {
+  const options = (Array.isArray(args[1]) || args[1] == null ? args[2] : args[1]) as { shell?: unknown } | undefined;
+  if (options?.shell) checkShellCommand(args[0]);
+  else checkExecutable(args[0]);
+}
+
+function checkSpawn(args: readonly unknown[]): void {
+  const options = args[0] as { file?: unknown; args?: unknown[]; shell?: unknown } | undefined;
+  checkExecutable(options?.file);
+  // Node normalizes shell:true/custom-shell calls to [argv0, '-c', command]
+  // (or [argv0, '/d', '/s', '/c', command] for cmd.exe) before this boundary.
+  if (options?.shell && Array.isArray(options.args)) {
+    checkShellCommand(options.args[options.args.length - 1]);
+  }
+}
+
 function checkConnection(args: readonly unknown[]): void {
   // Node's HTTP client also calls Socket.connect with a normalized argument array.
   const target = Array.isArray(args[0]) ? args[0][0] : args[0];
   const options = typeof target === 'object' && target !== null
     ? target as { path?: unknown; port?: unknown } : undefined;
-  const path = options?.path ?? (typeof target === 'string' ? target : undefined);
+  // Numeric strings use Node's TCP port overload; other strings select Unix sockets.
+  const path = options?.path ?? (typeof target === 'string' && !(Number(target) >= 0) ? target : undefined);
   const port = options?.port ?? target;
-  if (typeof path === 'string' && basename(path) === 'docker.sock') reject('docker.sock');
+  // Preflight accepts any socket basename. No existing tests need Unix-socket exceptions.
+  if (typeof path === 'string') reject('Unix socket');
   if (typeof port === 'number' || typeof port === 'string') {
     if (Number(port) === 2375 || Number(port) === 2376) reject(`port ${port}`);
   }
@@ -42,7 +60,8 @@ function wrap<T extends object, K extends keyof T>(
   const original = owner[key];
   if (typeof original !== 'function') throw new Error(`Cannot guard ${String(key)}`);
   // A Proxy preserves function properties (including Node's promisify hooks), receiver,
-  // overload behaviour and return values. Every call is checked before the native API.
+  // overload behaviour and return values. Its apply trap checks direct calls; preserved
+  // promisify hooks can bypass it, so async calls are also checked at the shared spawn boundary.
   owner[key] = new Proxy(original, {
     apply(target, receiver, args) {
       check(args);
@@ -52,8 +71,11 @@ function wrap<T extends object, K extends keyof T>(
 }
 
 for (const key of ['spawn', 'spawnSync', 'execFile', 'execFileSync'] as const) {
-  wrap(childProcess, key, (args) => checkExecutable(args[0]));
+  wrap(childProcess, key, checkProcessCall);
 }
+// Node exposes this downstream method at runtime but omits it from its public types.
+const spawnPrototype = childProcess.ChildProcess.prototype as unknown as { spawn(options: unknown): unknown };
+wrap(spawnPrototype, 'spawn', checkSpawn);
 for (const key of ['exec', 'execSync'] as const) {
   wrap(childProcess, key, (args) => checkShellCommand(args[0]));
 }

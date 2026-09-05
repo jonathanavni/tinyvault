@@ -38,7 +38,7 @@ confirmation of the C-R8-aligned decision.
 | B1 | **P1** | **Docker arguments override the pin.** `createDockerCommand(pin, argv)` takes arbitrary global argv, and `-H/--host` / `-c/--context` beat `DOCKER_HOST`. Bypass: `argv = ['--host','tcp://attacker:2375','compose','up']`. Deleting env vars is insufficient. | **ACCEPTED** — closed typed command vocabulary; no free-form global argv. |
 | B2 | **P1** | **The branded type does not enforce "preflight only."** TS brands are erased: `'unix:///tmp/evil.sock' as unknown as PinnedDockerEndpoint` forges a pin, JS callers pass a raw string, and nothing stops `spawn('docker', ['-H', 'tcp://…'])` elsewhere. Acceptance B's builder-only test stays **green** under the raw-spawn mutant. | **ACCEPTED** — runtime-checked provenance + single choke-point executor + repo-wide scan with a proven red. This is C-S1 (slice 1) restated. |
 | B3 | **P1** | **Direct composed capture has no valid preflight/pin flow.** `capturePersistedRuns(dir, 1, undefined, {startFixtures: composedStarter})` launches Chromium at `runner.ts:165` *before* `captureWithBrowser`; supplying a browser bypasses `runEval` and preflight entirely. Moving preflight into `captureWithBrowser` is **still too late**. | **ACCEPTED** — explicit architecture mode on the public capture entry, preflight before browser launch, downward-only pin propagation. |
-| B4 | P2 | **Composed identity and the EPERM boundary lack a deletion-isolated proof.** `FixtureStarter` may return any self-labelled transport; capture checks only HTTP reachability. §6 names no mutant that deletes the composed-mode EPERM guard, so an unconditional slice-2 `ComposedTransportUnavailableError` test could stay **green**. | **ACCEPTED** — production-path EPERM test whose guard-deletion mutant must kill it. |
+| B4 | P2 | **Composed identity and the EPERM boundary lack a deletion-isolated proof.** `FixtureStarter` may return any self-labelled transport; capture checks only HTTP reachability. §6 names no mutant that deletes the composed-mode EPERM guard, so an unconditional slice-2 `ComposedTransportUnavailableError` test could stay **green**. | **ACCEPTED, then DEFERRED to slice 3 at implementation** — the structural half (no fallback; in-process EPERM substitution unreachable from composed) is proven now; the deletion-isolated EPERM test itself cannot exist in slice 2 because no composed path reaches `listen()`. See the three-channel section below. |
 | B5a | P2 | **"Daemon absent" is narrowed to a missing socket**, but `unix:///tmp/stale.sock` can be an existing `S_ISSOCK` with a dead listener; `realpath`/`stat` both pass. Neither proved nor deferred. | **ACCEPTED as an explicit deferral** — see §Adjudications. |
 | B5b | P2 | **The Docker-free checker and its self-test are not wired into `make test`** (`package.json:8` unchanged), so a conditional `spawn('docker')` mutant is silent-green. The gate **belongs in slice 2** because Docker-facing modules become reachable now. `runEval` also needs an **injected preflight seam** so existing unit tests never read real Docker configuration. | **ACCEPTED** in full. |
 
@@ -91,3 +91,59 @@ closed. No wording implies daemon non-exposure.
 claim rather than add code** — which is what R2-4's disposition does. Revision 3 absorbs all four P1s and
 **implementation proceeds**; the executable guarantees are validated in the implementation-review ladder, as the
 locked spec itself directs, not in a third paper round.
+
+---
+
+## Three-channel post-implementation review (2026-09-04) — on `783d0df..fb044d3`
+
+Because **Codex wrote this code**, the two Claude channels are the different-family look and the Codex pass is
+fresh-context but same-family (`.claude/memory/conventions.md`).
+
+| Channel | Verdict |
+|---|---|
+| Codex adversarial post-impl (gpt-6-astra, base+head pinned) | **NEEDS-ATTENTION** — 4 × P2 |
+| Fresh-context QA `/review` (rejection-default, **43 mutations, 40 red**) | **NEEDS-ATTENTION** — 2 × P2 new, 1 × P2 docs, 5 × P3 |
+| `/security-review` (third channel) | **No findings ≥ 7 confidence**; 4 sub-threshold observations |
+
+**Where the channels disagreed, and how it was adjudicated.** The security channel rated the exemption-suffix and
+socket-basename issues ~4 (needs a deliberate repo change; operator config is trusted) while Codex rated both P2.
+Adjudicated in favour of fixing: PI-4 **weakens a boundary that existed before this change**, and a regression in an
+existing gate is not excused by the threat model; PI-2 degrades the **Docker-free guarantee**, which is a
+correctness invariant of the suite and not only a security property. "One channel said it was fine" is not a
+resolution (`docs/handoff-pattern.md` §7.1).
+
+### Confirmed by the integrator, not taken on report
+
+| # | Finding | Verification |
+|---|---|---|
+| **F1** | **Loader exemption matches by SUFFIX** (`realpathEndsWith`), so **any** path ending `testbed/docker/no-docker.setup.ts` is exempt — including a production `src/testbed/docker/no-docker.setup.ts`. | **Reproduced:** that file importing `node:module` → gate **PASS**, 83 modules, 0 violations. **Integrator's own defect**; the earlier narrowness check varied the *filename* but never the *path*. |
+| **F2** | **Interceptor escapes.** `util.promisify(cp.execFile)` uses the `promisify.custom` hook captured from the original and never enters the Proxy trap; `ChildProcess.prototype.spawn` is unwrapped; and `spawn`/`spawnSync`/`execFile` with `{shell:true}` take a command line that `basename()` never matches. | **Reproduced:** `direct execFile: blocked` / `promisified execFile: NOT BLOCKED` / `ChildProcess.spawn: NOT BLOCKED`. `/review` measured the shell form separately. The comment *"Every call is checked before the native API"* is false. |
+| **F3** | **Socket matching is basename-exact** (`docker.sock`), but the preflight accepts **any** socket path, so a daemon at `/tmp/engine.sock` is dialable from a test. | Codex probe reached an intercepted boundary without rejection. |
+| **F4** | **Trailing whitespace breaks the pin invariant.** `unix:///tmp/review.sock ` is accepted and pinned **with** the space; Docker 29.6.2 **trims** and dials a different path — validate-one/execute-another, the exact class the pin exists to prevent. | Codex verified against the real CLI via both `--host` and `DOCKER_HOST`. |
+| **F5** | **Silent-green test.** Deleting **both** `net.connect`/`net.createConnection` wrappers leaves all 23 tests green, because `net.Socket.prototype.connect` is separately wrapped and masks them — while two test names read as coverage for them. | `/review` mutation **S9** green; contrast **S4** (prototype wrap) → 1 red. Protection is not weakened today; the *test* is the defect. |
+| **F6** | **B4's deferral lives only in a commit message.** Plan §5.2 still states the composed-EPERM test as required and §6 lists it under Acceptance A "Provable now"; the register's disposition still says ACCEPTED. | `grep -n "B4" docs/*.md` returns no deferral wording. Judgement was right; the record is wrong. Violates "each fact has ONE home". |
+
+### P3, accepted for this round
+- Unknown-architecture fail-closed throw (`runner.ts:282`) has **no test** — mutation R6 green.
+- `assertPinned` in `startComposedFixtures` (`runner.ts:307`) is **unobservable** — R7 green; meaningful only in slice 3.
+- **A2 and B5a are not declared in the shipped code**, unlike R2-4 which is labelled at `exec.ts:21-22`. Neither is
+  *claimed*, so this is auditability, not a false claim — but the security story here is "read the code".
+- `exec.ts` has no production importer; declared slice-3 scaffolding, to be named explicitly per `.claude/rules/core.md`.
+- The interceptor is registered for **every** Vitest run including `npm run eval`; slice 3's composed eval will need
+  an exclusion. Flagged now so it is not discovered later as a mystery failure.
+
+### Carried, not fixed
+- **The pin certifies provenance, not filesystem truth.** `dockerPreflight` takes injected `realpath`/`stat`, so any
+  harness module can mint a *genuine* pin for an arbitrary path. Inherent to the injected-seam design a Docker-free
+  `make test` requires, and inside the locked threat model (harness trusted) — but it deserves one sentence of
+  comment so a future reader does not over-read the pin.
+- A4 (single explicit source trusted) and B5a stand as previously declared.
+
+### Independently confirmed clean
+Claim boundary: `git diff 783d0df..fb044d3 | grep -Ei '^\+.*(daemon|proxy|expos|other listen|forward)'` returns
+**zero** added lines — nothing states or implies daemon non-exposure. Pin forgery: no route found by either channel
+across Proxy, subclass + `super`, reflection clone, `setPrototypeOf`, `structuredClone`, direct constructor, or
+module-namespace reflection. Context names become `sha256(name)`, so path traversal is impossible by construction;
+`%` is rejected before slicing so `%2e%2e` never decodes; `{"__proto__":{...}}` fails closed under `Object.hasOwn`.
+The `runner.ts` → `runnerExecution.ts` split is a verbatim move, and `vitest.config.ts` lost no test discovery
+(66 test files at base → 72 at head).

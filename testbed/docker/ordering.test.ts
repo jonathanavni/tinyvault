@@ -71,6 +71,17 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 describe('public composed capture ordering', () => {
   for (const entry of ['capture', 'eval'] as const) {
+    it(`${entry}: rejects an unknown runtime architecture before preflight or effects (R6)`, async () => {
+      const h = lifecycle();
+      h.options.architecture = 'unknown' as EvalOptions['architecture'];
+      const result = entry === 'capture'
+        ? capturePersistedRuns('/injected/artifacts', 1, undefined, h.options)
+        : runEval(h.options);
+      await expect(result).rejects.toThrow('Unknown fixture architecture: unknown');
+      expect(h.options.dockerPreflight).not.toHaveBeenCalled();
+      expectNoEffects(h);
+    });
+
     it(`${entry}: preflight rejection precedes all observed side effects`, async () => {
       const h = lifecycle();
       const error = new DockerPreflightError('realpath-failed');

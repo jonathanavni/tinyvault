@@ -1,7 +1,7 @@
 import {
   BUILT_IN_DEFAULT_ENDPOINT, resolveSources, type DockerEnvironment, type FileReader,
 } from './context';
-import { parseUnixEndpoint } from './endpoint';
+import { hasEdgeWhitespace, parseUnixEndpoint } from './endpoint';
 
 export class DockerPreflightError extends Error {
   constructor(readonly code: string, message: string = code) {
@@ -55,8 +55,13 @@ function socketPath(raw: string): string {
 }
 
 async function canonicalPath(path: string, deps: PreflightDeps): Promise<string> {
-  try { return await deps.realpath(path); }
+  let resolved: string;
+  try { resolved = await deps.realpath(path); }
   catch { throw new DockerPreflightError('realpath-failed', 'Cannot resolve the socket path.'); }
+  if (hasEdgeWhitespace(resolved)) {
+    throw new DockerPreflightError('endpoint-edge-whitespace', 'Resolved socket path has edge whitespace.');
+  }
+  return resolved;
 }
 
 async function requireSocket(path: string, deps: PreflightDeps): Promise<void> {
@@ -64,8 +69,11 @@ async function requireSocket(path: string, deps: PreflightDeps): Promise<void> {
   try { isSocket = (await deps.stat(path)).isSocket(); }
   catch { throw new DockerPreflightError('stat-failed', 'Cannot stat the resolved socket path.'); }
   if (!isSocket) throw new DockerPreflightError('not-socket', 'The resolved path must be a Unix socket.');
+  // B5a: S_ISSOCK does not establish a live listener; liveness failure is deferred to slice 3.
 }
 
+// The pin certifies preflight provenance, not filesystem truth: trusted harness modules can
+// inject realpath/stat to mint a genuine pin for an arbitrary path.
 export async function dockerPreflight(deps: PreflightDeps): Promise<PinnedDockerEndpoint> {
   const sources = await resolveSources(deps.env, deps.files);
   if (!sources.ok) throw new DockerPreflightError(`source-${sources.reason}`);

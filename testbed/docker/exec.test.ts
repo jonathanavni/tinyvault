@@ -1,6 +1,7 @@
 import cp, { spawn } from 'node:child_process';
 import { request } from 'node:http';
 import net from 'node:net';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildDockerSpawn, runDockerCommand, type DockerCommand } from './exec';
 import { dockerPreflight, DockerPreflightError, type PinnedDockerEndpoint } from './preflight';
@@ -132,5 +133,113 @@ describe('runtime Docker interceptor installed by Vitest setup', () => {
     expect(cp.spawnSync(process.execPath, ['-e', 'process.stdout.write("ok")'], { encoding: 'utf8' }))
       .toMatchObject({ status: 0, stdout: 'ok' });
     expect(cp.execSync('printf docker', { encoding: 'utf8' })).toBe('docker');
+  });
+});
+
+const setupPath = fileURLToPath(new URL('./no-docker.setup.ts', import.meta.url));
+const spawnPrototype = cp.ChildProcess.prototype as unknown as { spawn(options: unknown): unknown };
+
+function guardProbe(beforeSetup: string, assertion: string): void {
+  // Install the real setup in a fresh process, with optional native-boundary test doubles.
+  const script = `
+    import cp from 'node:child_process';
+    import net from 'node:net';
+    import { promisify } from 'node:util';
+    import { readFileSync } from 'node:fs';
+    import { rejects, throws, equal } from 'node:assert/strict';
+    import ts from 'typescript';
+    ${beforeSetup}
+    const source = readFileSync(process.argv[1], 'utf8');
+    const { outputText } = ts.transpileModule(source, {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
+    });
+    await import('data:text/javascript;base64,' + Buffer.from(outputText).toString('base64'));
+    ${assertion}
+  `;
+  const result = cp.spawnSync(process.execPath, ['--input-type=module', '-e', script, setupPath], {
+    encoding: 'utf8', timeout: 10_000,
+  });
+  expect({ status: result.status, error: result.error, stderr: result.stderr })
+    .toEqual({ status: 0, error: undefined, stderr: '' });
+}
+
+function promisifiedProbe(method: 'exec' | 'execFile', shell: boolean): void {
+  // Remove only the exported execFile wrapper to isolate the shared spawn guard for exec.
+  guardProbe('const originalExecFile = cp.execFile;', `
+    const invoke = promisify(cp.${method});
+    if ('${method}' === 'exec') cp.execFile = originalExecFile;
+    const command = ${shell} ? "'/nonexistent/docker' --version" : '/nonexistent/docker';
+    await rejects(async () => invoke(command, { shell: ${shell} }), /Docker access forbidden during tests:/);
+  `);
+}
+
+describe('runtime guard deletion regressions', () => {
+  afterEach(() => vi.restoreAllMocks());
+  it('shared spawn guard rejects promisified execFile (F2)', () => promisifiedProbe('execFile', false));
+  it('shared spawn guard rejects promisified exec with exported execFile guard removed (F2)', () => {
+    promisifiedProbe('exec', true);
+  });
+  it('shared spawn guard rejects promisified execFile with shell:true (F2)', () => {
+    promisifiedProbe('execFile', true);
+  });
+
+  it('rejects direct ChildProcess.prototype.spawn before native execution (F2)', () => {
+    const child = new cp.ChildProcess();
+    // The missing executable and error handler keep a deleted-guard mutant Docker-free.
+    child.on('error', () => {});
+    expect(() => Reflect.apply(spawnPrototype.spawn, child, [{
+      file: '/nonexistent/docker', args: ['/nonexistent/docker', '--version'],
+    }])).toThrow(forbidden);
+  });
+
+  it.each(['spawn', 'spawnSync', 'execFile', 'execFileSync'] as const)(
+    'exported %s guard rejects shell:true without downstream masking (F2)', (method) => {
+      // Async methods must reject above the prototype; sync methods never use it.
+      const downstream = vi.spyOn(spawnPrototype, 'spawn').mockImplementation(() => {
+        throw new Error('unguarded downstream spawn reached');
+      });
+      for (const options of [{ shell: true }, { shell: '/bin/sh' }]) {
+        expect(() => Reflect.apply(cp[method], cp, ["'/nonexistent/docker' --version", options])).toThrow(forbidden);
+        expect(() => Reflect.apply(cp[method], cp, ["'/nonexistent/docker' --version", [], options])).toThrow(forbidden);
+        expect(() => Reflect.apply(cp[method], cp, ["'/nonexistent/docker' --version", undefined, options])).toThrow(forbidden);
+        expect(() => Reflect.apply(cp[method], cp, ["'/nonexistent/docker' --version", null, options])).toThrow(forbidden);
+      }
+      expect(downstream).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['connect', 'createConnection'] as const)(
+    'exported net.%s rejects independently of Socket.connect (F5 option b)', (method) => {
+      // Deleting either exported wrapper reaches this spy, which cannot dial anything.
+      const downstream = vi.spyOn(net.Socket.prototype, 'connect').mockReturnThis();
+      expect(() => net[method]('/injected/docker.sock')).toThrow(forbidden);
+      expect(downstream).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['/tmp/engine.sock', '/tmp/engine', '\u0000engine'])(
+    'rejects Unix sockets regardless of basename at Socket.connect (F3): %j', (path) => {
+      // The native boundary is inert even with the Unix-socket rejection deleted.
+      guardProbe('net.Socket.prototype.connect = function () { return this; };', `
+        const socket = new net.Socket();
+        const path = ${JSON.stringify(path)};
+        throws(() => socket.connect(path), /Docker access forbidden during tests:/);
+        throws(() => socket.connect({ path }), /Docker access forbidden during tests:/);
+        throws(() => socket.connect([{ path }]), /Docker access forbidden during tests:/);
+        socket.destroy();
+      `);
+    },
+  );
+
+  it('preserves non-Docker TCP overloads without dialing', () => {
+    guardProbe('let calls = 0; net.Socket.prototype.connect = function () { calls++; return this; };', `
+      const socket = new net.Socket();
+      socket.connect(8080, '127.0.0.1');
+      socket.connect('8080', '127.0.0.1');
+      socket.connect({ port: 8080 });
+      socket.connect([{ port: 8080 }]);
+      equal(calls, 4);
+      socket.destroy();
+    `);
   });
 });

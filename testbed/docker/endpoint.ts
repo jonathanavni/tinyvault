@@ -1,6 +1,7 @@
 export type EndpointRejectionReason =
   | 'scheme' | 'authority' | 'query-or-fragment' | 'percent-escape'
-  | 'redundant-slash' | 'dot-segment' | 'trailing-slash' | 'empty-path' | 'control-character';
+  | 'redundant-slash' | 'dot-segment' | 'trailing-slash' | 'empty-path' | 'control-character'
+  | 'edge-whitespace';
 export type EndpointParse =
   | { readonly ok: true; readonly socketPath: string }
   | { readonly ok: false; readonly reason: EndpointRejectionReason; readonly detail: string };
@@ -9,7 +10,14 @@ function reject(reason: EndpointRejectionReason, detail: string): EndpointParse 
   return { ok: false, reason, detail };
 }
 
+export function hasEdgeWhitespace(value: string): boolean {
+  return /^[\s\p{White_Space}]|[\s\p{White_Space}]$/u.test(value);
+}
+
 export function parseUnixEndpoint(raw: string): EndpointParse {
+  if (hasEdgeWhitespace(raw)) {
+    return reject('edge-whitespace', 'Leading and trailing whitespace are forbidden.');
+  }
   if (!raw.startsWith('unix://')) {
     return reject('scheme', 'Expected the unix:// scheme, including both slashes.');
   }
@@ -23,6 +31,7 @@ export function parseUnixEndpoint(raw: string): EndpointParse {
     return reject('control-character', 'Control characters are forbidden.');
   }
   const socketPath = raw.slice('unix://'.length);
+  // A2: rejecting unix:// deliberately false-rejects a spelling Docker accepts as its default.
   if (socketPath === '') return reject('empty-path', 'A socket path is required.');
   if (socketPath.includes('//')) return reject('redundant-slash', 'Repeated path slashes are forbidden.');
   if (socketPath.split('/').some((part) => part === '.' || part === '..')) {

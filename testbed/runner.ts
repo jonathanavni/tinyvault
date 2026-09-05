@@ -304,6 +304,8 @@ async function startComposedFixtures(
   _captureDirectory: string,
   pin: PinnedDockerEndpoint,
 ): Promise<FixtureSet> {
+  // Defence in depth, deliberately unobservable until slice 3: prepareArchitecture already
+  // asserts this pin and construction below always throws, so deletion is not tested here.
   assertPinned(pin);
   // Slice 3 supplies the pinned container construction. This path never calls an in-process starter.
   throw new Error('Composed fixture construction is unavailable until slice 3.');

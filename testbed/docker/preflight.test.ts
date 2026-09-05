@@ -111,6 +111,25 @@ describe('dockerPreflight', () => {
     expect(deps.stat).not.toHaveBeenCalled();
   });
 
+  it.each([' unix:///tmp/review.sock', 'unix:///tmp/review.sock ', 'unix:///tmp/review.sock\u00a0'])(
+    'rejects raw edge whitespace before filesystem checks: %j', async (raw) => {
+      const deps = dependencies({ DOCKER_HOST: raw });
+      await expectFailure(deps, 'endpoint-edge-whitespace');
+      expect(deps.realpath).not.toHaveBeenCalled();
+      expect(deps.stat).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['/tmp/review.sock ', '/tmp/review.sock\u00a0', ' /tmp/review.sock', '\u00a0/tmp/review.sock'])(
+    'rejects edge whitespace in a resolved target before stat or pinning: %j', async (resolved) => {
+      const deps = dependencies({ DOCKER_HOST: 'unix:///tmp/link.sock' });
+      deps.realpath.mockResolvedValue(resolved);
+      await expectFailure(deps, 'endpoint-edge-whitespace');
+      expect(deps.realpath).toHaveBeenCalledExactlyOnceWith('/tmp/link.sock');
+      expect(deps.stat).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([[undefined, 'context-missing'], ['{', 'context-json'], ['{}', 'context-host']] as const)(
     'rejects context failure %s despite a usable host', async (meta, reason) => {
       const deps = dependencies({ DOCKER_CONFIG: root, DOCKER_HOST: BUILT_IN_DEFAULT_ENDPOINT, DOCKER_CONTEXT: 'work' },
