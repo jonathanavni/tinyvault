@@ -206,3 +206,26 @@ it('host rejects repeated bootstrap and hello before bootstrap with protocol-ord
   await boot(q);
   await expect(q.bridge.sendBootstrap(Buffer.alloc(32))).rejects.toMatchObject({ code: 'protocol-order' });
 });
+
+it('direct bootstrap request closes protocol-order without writing a frame', async () => {
+  const p = setup();
+  const pending = p.bridge.request('bootstrap', { secret: Buffer.alloc(32, 1).toString('base64url') });
+  const check = expect(pending).rejects.toMatchObject({ code: 'protocol-order' });
+  // A response makes the pre-fix alternate install path resolve, rather than timing out.
+  p.stdout.write(success());
+  await check;
+  expectClosed(p, 'protocol-order');
+  expect(p.sent).toEqual([]);
+});
+it('malformed hello is rejected on the host before any frame is written', async () => {
+  const p = setup();
+  await boot(p);
+  const write = vi.spyOn(p.stdin, 'write');
+  const pending = p.bridge.request('hello', { ...hello, challenge: 'AA' });
+  const check = expect(pending).rejects.toMatchObject({ code: 'challenge-shape' });
+  p.tick();
+  await check;
+  expect(write).not.toHaveBeenCalled();
+  expect(p.sent.map((frame) => frame.op)).toEqual(['bootstrap']);
+  expectClosed(p, 'challenge-shape');
+});

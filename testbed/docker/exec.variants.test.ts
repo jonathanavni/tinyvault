@@ -100,3 +100,10 @@ it.each(['-H', '--host', '--host=tcp://evil:2375', '-c', '--context=evil', '-p',
     expect(runner.run).not.toHaveBeenCalled();
   },
 );
+
+it.each([{ entry: '/tmp/x.mjs' }, { service: 'lookalike-origin' }])(
+  'caller fields %j cannot alter exec-bridge argv', async (extra) => {
+    const spawn = buildDockerSpawn(await mintPin(), { kind: 'exec-bridge', id, ...extra } as never);
+    expect(spawn.args).toEqual(['exec', '-i', id, 'node', '/app/bridge.mjs']);
+  },
+);

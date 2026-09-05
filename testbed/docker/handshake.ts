@@ -1,5 +1,6 @@
 // The MAC proves possession of the delivered secret and binds session and key to the already-resolved
 // container. It does not establish provenance. Buffer zeroing cannot erase GC-managed JSON copies.
+// timingSafeEqual is a reviewed invariant, not unit-observable: a Buffer.equals mutant survives.
 import { createHmac, createPublicKey, timingSafeEqual, type KeyObject } from 'node:crypto';
 import {
   BODY_SCHEMAS, BridgeError, CONTAINER_ID_PATTERN, EPOCH_PATTERN, FIXTURE_IDS, HELLO_PREFIX, OPS,

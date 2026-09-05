@@ -6,6 +6,9 @@ import { inspect } from 'node:util';
 import { afterEach, expect, it, vi } from 'vitest';
 import { capturePersistedRuns } from '../runner';
 import { ARTIFACT_MARKER, createComposedProject } from './compose';
+import { ComposedConstructionError } from './exec';
+import { startComposedFixtureSet } from './composedFixtures';
+import topology from './topology.json';
 import { fakeProject, kindOf } from './compose.testkit';
 import { scanArtifactTree, scanSpawns, scanStream, SECRET_FORMS, SecretScanner, secretScan, observeStderr } from './secretScan';
 
@@ -72,7 +75,7 @@ it('artifact traversal omission fails the closer marker positive control', async
   const h = await fakeProject(vi.fn); disposals.push(h.dispose);
   h.options.scanners = { artifacts: async () => false };
   const p = await createComposedProject(h.options);
-  await expect(p.closer.close()).rejects.toMatchObject({ code: 'scan-failed' });
+  await expect(p.closer.close()).rejects.toMatchObject({ code: 'scan-control-missing', surface: 'artifacts' });
 });
 it('scans shutdown-only artifact leakage after stop', async () => {
   const h = await fakeProject(vi.fn); disposals.push(h.dispose);
@@ -149,4 +152,102 @@ it.each(['logs', 'export', 'exec-stderr'] as const)('closer scans real secret by
   } else (h.handles[0].stderr as PassThrough).write(inspect(h.secrets[0]));
   await expect(p.closer.close()).rejects.toMatchObject({ code: 'secret-exposed' });
   expect(h.spawns.some((spawn) => spawn.args.includes('down'))).toBe(true);
+});
+
+// Each missing marker must fail at its own closer surface, independently of the secret scan.
+it.each([
+  ['BOOT_MARKER', 'logs'], ['SHUTDOWN_MARKER', 'logs'],
+  ['EXPORT_MARKER', 'export'], ['BRIDGE_MARKER', 'exec-stderr'],
+] as const)('missing %s rejects close on %s', async (omitMarker, surface) => {
+  const h = await fakeProject(vi.fn, { omitMarker }); disposals.push(h.dispose);
+  const p = await createComposedProject(h.options);
+  await expect(p.closer.close()).rejects.toMatchObject({ code: 'scan-control-missing', surface });
+  expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
+});
+it('all closer controls present with no secret are clean, including exec marker before ring eviction', async () => {
+  const h = await fakeProject(vi.fn); disposals.push(h.dispose);
+  const p = await createComposedProject(h.options);
+  (h.handles[0].stderr as PassThrough).write(Buffer.alloc(100000, 1));
+  await expect(p.closer.close()).resolves.toBeUndefined();
+});
+it.each(['before-down', 'after-down'] as const)('secret-exposed dominates compose-stop on artifacts %s', async (when) => {
+  const h = await fakeProject(vi.fn, { result: (kind) => kind === 'compose-stop'
+    ? { exitCode: 1, stdout: '', stderr: '' } : undefined }); disposals.push(h.dispose);
+  const p = await createComposedProject(h.options);
+  const run = h.runner.run.getMockImplementation()!;
+  h.runner.run.mockImplementation(async (spawn) => {
+    if (kindOf(spawn) === (when === 'before-down' ? 'compose-stop' : 'compose-down')) {
+      await writeFile(join(h.root, 'planted'), h.secrets[0]);
+    }
+    return run(spawn);
+  });
+  await expect(p.closer.close()).rejects.toMatchObject({ code: 'secret-exposed' });
+  expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
+});
+it.each(['BRIDGE_MARKER', undefined] as const)('exec-stderr secret dominates early history-parse (omitted %s)', async (omitMarker) => {
+  const h = await fakeProject(vi.fn, { omitMarker, result: (kind) => kind === 'image-history'
+    ? { exitCode: 0, stdout: 'not-json', stderr: '' } : undefined }); disposals.push(h.dispose);
+  const p = await createComposedProject(h.options);
+  (h.handles[0].stderr as PassThrough).write(h.secrets[0]);
+  await expect(p.closer.close()).rejects.toMatchObject({ code: 'secret-exposed' });
+});
+it('scan-control-missing dominates both compose-stop and history-parse', async () => {
+  const h = await fakeProject(vi.fn, { omitMarker: 'EXPORT_MARKER', result: (kind) =>
+    kind === 'compose-stop' ? { exitCode: 1, stdout: '', stderr: '' } : kind === 'image-history'
+      ? { exitCode: 0, stdout: 'not-json', stderr: '' } : undefined }); disposals.push(h.dispose);
+  const p = await createComposedProject(h.options);
+  await expect(p.closer.close()).rejects.toMatchObject({ code: 'scan-control-missing', surface: 'export' });
+});
+
+it.each(['BOOT_MARKER', 'SHUTDOWN_MARKER'] as const)('logs control %s on stdout only is missing', async (marker) => {
+  const h = await fakeProject(vi.fn, { result: (kind) => kind === 'logs' ? {
+    stdout: topology.markers[marker], stderr: topology.markers[marker === 'BOOT_MARKER' ? 'SHUTDOWN_MARKER' : 'BOOT_MARKER'], exitCode: 0,
+  } : undefined }); disposals.push(h.dispose);
+  const p = await createComposedProject(h.options);
+  await expect(p.closer.close()).rejects.toMatchObject({ code: 'scan-control-missing', surface: 'logs' });
+});
+it('export control is observed across chunks on stdout, never on stderr alone', async () => {
+  for (const onStdout of [true, false]) {
+    const h = await fakeProject(vi.fn); disposals.push(h.dispose);
+    const p = await createComposedProject(h.options);
+    const spawn = h.runner.spawnLongLived.getMockImplementation()!;
+    const marker = Buffer.from(topology.markers.EXPORT_MARKER);
+    h.runner.spawnLongLived.mockImplementation((description) => kindOf(description) === 'export' ? {
+      stdin: new PassThrough(), stdout: Readable.from(onStdout ? [marker.subarray(0, 7), marker.subarray(7)] : ['safe tar']),
+      stderr: Readable.from(onStdout ? [] : [marker]), kill: vi.fn(), exited: Promise.resolve(0),
+    } : spawn(description));
+    if (onStdout) await expect(p.closer.close()).resolves.toBeUndefined();
+    else await expect(p.closer.close()).rejects.toMatchObject({ code: 'scan-control-missing', surface: 'export' });
+  }
+});
+it.each(['project', 'fixture-set'] as const)('%s preserves dominant teardown codes and first operational failure', async (entry) => {
+  for (const [prior, next, expected] of [
+    ['compose-down', 'secret-exposed', 'secret-exposed'],
+    ['compose-down', 'scan-control-missing', 'scan-control-missing'],
+    ['secret-exposed', 'scan-control-missing', 'secret-exposed'],
+    ['compose-stop', 'compose-down', 'compose-stop'],
+  ] as const) {
+    const h = await fakeProject(vi.fn, { omitMarker: next === 'scan-control-missing' ? 'EXPORT_MARKER' : undefined,
+      result: (kind) => kind === 'compose-down' && next === 'compose-down' ? { exitCode: 1, stdout: '', stderr: '' } : undefined });
+    disposals.push(h.dispose);
+    const cause = new ComposedConstructionError('inspect-shape'); cause.teardownCode = prior;
+    const plant = async () => { if (next === 'secret-exposed') await writeFile(join(h.root, 'planted'), h.secrets[0]); };
+    if (entry === 'project') {
+      const run = h.runner.run.getMockImplementation()!;
+      h.runner.run.mockImplementation(async (spawn) => {
+        if (kindOf(spawn) === 'inspect' && h.secrets.length === 1) { await plant(); throw cause; }
+        return run(spawn);
+      });
+      await expect(createComposedProject(h.options)).rejects.toBe(cause);
+    } else {
+      h.options.probeOrigin = async () => { await plant(); return true; };
+      let reads = 0;
+      await expect(startComposedFixtureSet({ ...h.options, get fetch(): typeof fetch | undefined {
+        if (++reads === 1) return undefined; // Context copies options before constructing transports.
+        throw cause;
+      } })).rejects.toBe(cause);
+    }
+    expect(cause.teardownCode).toBe(expected);
+    expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
+  }
 });

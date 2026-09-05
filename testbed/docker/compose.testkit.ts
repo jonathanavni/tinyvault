@@ -54,6 +54,7 @@ type Spy<T extends Procedure> = ((...args: Parameters<T>) => ReturnType<T>) & {
 };
 type SpyFactory = (implementation: Procedure) => unknown;
 type FakeOptions = {
+  omitMarker?: keyof typeof topology.markers;
   result?: (kind: string, spawn: DockerSpawn) => DockerResult | undefined;
   inspect?: (doc: ReturnType<typeof validInspect>, index: number) => void;
   peer?: (handle: DockerHandle & { stdout: PassThrough }, index: number) => void;
@@ -79,7 +80,9 @@ export async function fakeProject(spyFactory: SpyFactory, fake: FakeOptions = {}
         const i = ids.indexOf(spawn.args.at(-1) as typeof ids[number]);
         const doc = validInspect(i, project, epoch); fake.inspect?.(doc, i); stdout = JSON.stringify([doc]);
       }
-      return { stdout, stderr: '', exitCode: 0 };
+      const stderr = kind === 'logs' ? (['BOOT_MARKER', 'SHUTDOWN_MARKER'] as const)
+        .filter((key) => key !== fake.omitMarker).map((key) => topology.markers[key]).join('\n') : '';
+      return { stdout, stderr, exitCode: 0 };
     }),
     spawnLongLived: spy((spawn: DockerSpawn): DockerHandle => {
       spawns.push(spawn);
@@ -89,9 +92,10 @@ export async function fakeProject(spyFactory: SpyFactory, fake: FakeOptions = {}
       const handle = { stdin, stdout, stderr, exited, kill: spy(() => {
         stdin.destroy(); stdout.end(); stderr.end(); exit(0);
       }) };
-      if (kindOf(spawn) === 'export') { queueMicrotask(() => { stdout.end('tar-marker'); stderr.end(); exit(0); }); return handle; }
+      if (kindOf(spawn) === 'export') { queueMicrotask(() => { stdout.end(fake.omitMarker === 'EXPORT_MARKER' ? 'safe tar' : topology.markers.EXPORT_MARKER); stderr.end(); exit(0); }); return handle; }
       const i = ids.indexOf(spawn.args[2] as typeof ids[number]);
       handles.push(handle);
+      queueMicrotask(() => { if (fake.omitMarker !== 'BRIDGE_MARKER') stderr.write(topology.markers.BRIDGE_MARKER); });
       // Capture the actual bootstrap bytes for the E spawn scan, not a marker masquerading as a secret.
       stdin.once('data', (frame: Buffer) => { secrets.push(Buffer.from(JSON.parse(frame.subarray(4).toString()).body.secret, 'base64url')); });
       fake.peer?.(handle, i);

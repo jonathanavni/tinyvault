@@ -231,3 +231,12 @@ it('closed-code error constructors cannot interpolate injected secret text', () 
   }
   expect(String(new BridgeError(secret.toString('hex') as never))).toBe('BridgeError: bridge-closed');
 });
+
+it('final peer-set check rejects an earlier bridge dying during the third peer handshake', async () => {
+  const h = track(await fakeProject(vi.fn, { peer(_handle, index) {
+    if (index === 2) h.handles[0].kill();
+  } }));
+  await expect(createComposedProject(h.options)).rejects.toMatchObject({ code: 'bridge-closed' });
+  expect(h.handles).toHaveLength(3);
+  expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
+});

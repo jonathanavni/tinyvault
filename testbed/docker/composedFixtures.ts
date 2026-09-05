@@ -3,7 +3,7 @@
 import { CompletionVerifier } from '../completion';
 import type { FixtureSet } from '../fixtures';
 import type { FixtureTransport } from '../fixtures/transport';
-import { ComposedConstructionError, createComposedProject, type ComposedPeer, type ProjectOptions } from './compose';
+import { ComposedConstructionError, createComposedProject, preferConstructionCode, type ComposedPeer, type ProjectOptions } from './compose';
 
 export class ComposedNotImplementedError extends Error {
   readonly code = 'slice-4';
@@ -47,7 +47,8 @@ export async function startComposedFixtureSet(options: ProjectOptions & { fetch?
   } catch (error) {
     const cause = error instanceof ComposedConstructionError ? error : new ComposedConstructionError('handshake-rejected');
     try { await project.closer.close(); }
-    catch (teardown) { cause.teardownCode = teardown instanceof ComposedConstructionError ? teardown.code : 'compose-down'; }
+    catch (teardown) { cause.teardownCode = preferConstructionCode(cause.teardownCode,
+      teardown instanceof ComposedConstructionError ? teardown.code : 'compose-down'); }
     throw cause;
   }
 }

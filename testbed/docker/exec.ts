@@ -33,6 +33,7 @@ export const CONSTRUCTION_CODES = [
 export type ConstructionCode = typeof CONSTRUCTION_CODES[number];
 const safeCode = (code: ConstructionCode): ConstructionCode =>
   CONSTRUCTION_CODES.includes(code) ? code : 'command-invalid';
+type ScanSurface = 'history' | 'logs' | 'export' | 'exec-stderr' | 'artifacts';
 export class ComposedConstructionError extends Error {
   readonly code: ConstructionCode;
   #teardownCode?: ConstructionCode;
@@ -40,14 +41,14 @@ export class ComposedConstructionError extends Error {
   set teardownCode(code: ConstructionCode | undefined) { this.#teardownCode = code === undefined ? undefined : safeCode(code); }
   readonly command?: DockerCommand['kind'];
   readonly project?: string;
-  readonly surface?: 'history';
-  constructor(code: ConstructionCode, command?: DockerCommand['kind'], project?: string, surface?: 'history') {
+  readonly surface?: ScanSurface;
+  constructor(code: ConstructionCode, command?: DockerCommand['kind'], project?: string, surface?: ScanSurface) {
     super(safeCode(code));
     this.name = 'ComposedConstructionError';
     this.code = safeCode(code);
     this.project = typeof project === 'string' && NAME_PATTERN.exec(project)?.[0] === project ? project : undefined;
     this.command = COMMAND_KINDS.includes(command as DockerCommand['kind']) ? command : undefined;
-    this.surface = surface === 'history' ? surface : undefined;
+    this.surface = ['history', 'logs', 'export', 'exec-stderr', 'artifacts'].includes(surface as string) ? surface : undefined;
   }
 }
 export const COMMAND_KINDS = ['ps-project', 'compose-build', 'compose-up', 'compose-ps',

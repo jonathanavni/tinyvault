@@ -89,7 +89,7 @@ export class BridgeSession {
         throw new BridgeError('protocol-order');
       }
       if (pending.op === 'bootstrap' && !this.#secret) {
-        this.#secret = decodeBase64url(pending.body.secret as string, 32, 'secret-shape');
+        throw new BridgeError('protocol-order');
       }
       pending.timer = this.#clock.setTimeout(() => this.close('bridge-timeout'), this.#timeoutMs);
       this.#write(encodeFrame({ v: 1, kind: 'req', id: pending.id, op: pending.op, body: pending.body }),

@@ -1,3 +1,5 @@
+// Start-failure process.exitCode = 1 is covered by the Docker suite and --wait-timeout
+// (container-unhealthy), not by a Docker-free test (QA I2).
 import { mkdir } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { dirname } from 'node:path';
@@ -31,6 +33,8 @@ async function shutdown(failed = false): Promise<void> {
 }
 async function start(): Promise<void> {
   const config = containerConfig(process.env);
+  // Create the private socket parent before the captures directory can create it with default mode.
+  await mkdir(dirname(topology.controlSocket), { recursive: true, mode: 0o700 });
   fixture = await startContainerFixture(config, '/tmp/tinyvault/captures');
   if (closing) { await fixture.close(); return; }
   const accept = createControlServer(controlConfigForFixture(config, fixture, hostname(),
@@ -40,7 +44,6 @@ async function start(): Promise<void> {
     const accepted = accept({ input: socket, output: socket });
     if (accepted) session = accepted;
   });
-  await mkdir(dirname(topology.controlSocket), { recursive: true, mode: 0o700 });
   if (closing) return;
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);

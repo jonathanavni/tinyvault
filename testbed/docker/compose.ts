@@ -3,6 +3,7 @@
 // Daemon-level ps-project checks pre-up absence and classifies nonzero up: empty means container-create,
 // existing containers mean container-unhealthy. Both are terminal Acceptance A reds; query failure is
 // container-create with the query's closed code in teardownCode. Malformed ids mean resolution-shape.
+// Positive controls: history, logs (boot + shutdown on stderr), export, exec stderr, and artifacts.
 // E scans: spawn args/env, command output (including ps-project), history, logs, export, exec stderr, and artifacts.
 import { createHash, randomBytes, type KeyObject } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -15,7 +16,7 @@ import { bounded, buildDockerSpawn, containerId, ComposedConstructionError, crea
   COMMAND_TIMEOUT_MS, KILL_TIMEOUT_MS, ID_PATTERN, IMAGE_ID_PATTERN, runDockerCommand, systemClock,
   type ContainerId, type ConstructionCode, type DockerCommand, type DockerHandle, type DockerProcessRunner,
   type DockerResult, type DockerSpawn, type ProcessHandle } from './exec';
-import { observeStderr, scanArtifactTree, scanSpawns, scanStream, SecretScanner } from './secretScan';
+import { observeStderr, scanArtifactTree, scanSpawns, scanStream, SecretScanner, StreamSecretScanner } from './secretScan';
 import { validateTopology } from './topology.mjs';
 const topology = validateTopology(JSON.parse(readFileSync(new URL('./topology.json', import.meta.url), 'utf8')));
 export { ComposedConstructionError, COMPOSE_FILE, IMAGE_NAME, WAIT_TIMEOUT_SECONDS, STOP_TIMEOUT_SECONDS } from './exec';
@@ -114,7 +115,8 @@ export type ProjectOptions = {
 type Context = Identity & {
   pin: PinnedDockerEndpoint; runner: DockerProcessRunner; clock: ComposeClock; registry: HandleRegistry;
   spawns: DockerSpawn[]; surfaces: string[]; secrets: SecretScanner[]; ids: ContainerId[];
-  stderr: ReturnType<typeof observeStderr>[]; options: ProjectOptions;
+  stderr: { secrets: ReturnType<typeof observeStderr>; control: ReturnType<typeof observeStderr>; marker: SecretScanner }[];
+  options: ProjectOptions;
   imageId?: string;
 };
 async function run(ctx: Context, command: DockerCommand, code: ConstructionCode): Promise<DockerResult> {
@@ -132,6 +134,15 @@ async function run(ctx: Context, command: DockerCommand, code: ConstructionCode)
 function composeCommand(ctx: Identity, kind: 'ps-project' | 'compose-build' | 'compose-up' | 'compose-stop' | 'compose-down'): DockerCommand {
   return { kind, project: ctx.project, epoch: ctx.epoch };
 }
+// Security findings outrank operational failures; preserve the first within each rank.
+export function preferConstructionCode(first: ConstructionCode | undefined, next: ConstructionCode): ConstructionCode {
+  const rank = (code: ConstructionCode) => code === 'secret-exposed' ? 2 : code === 'scan-control-missing' ? 1 : 0;
+  return first === undefined || rank(next) > rank(first) ? next : first;
+}
+function scanFailure(first: ComposedConstructionError | undefined, error: unknown, code: ConstructionCode): ComposedConstructionError {
+  const next = error instanceof ComposedConstructionError ? error : new ComposedConstructionError(code);
+  return first && preferConstructionCode(first.code, next.code) === first.code ? first : next;
+}
 export class ProjectCloser {
   #closing?: Promise<void>;
   constructor(readonly ctx: Context) {}
@@ -142,7 +153,7 @@ export class ProjectCloser {
     const attempt = async (work: () => Promise<unknown>, code: ConstructionCode) => {
       // Each operation owns its bound. Racing this whole sequence could let scans spawn after down.
       try { await work(); }
-      catch (error) { failure ??= error instanceof ComposedConstructionError ? error : new ComposedConstructionError(code); }
+      catch (error) { failure = scanFailure(failure, error, code); }
     };
     await attempt(() => ctx.registry.close(ctx.clock), 'handle-timeout');
     await attempt(() => run(ctx, composeCommand(ctx, 'compose-stop'), 'compose-stop'), 'compose-stop');
@@ -150,7 +161,7 @@ export class ProjectCloser {
     await attempt(() => run(ctx, composeCommand(ctx, 'compose-down'), 'compose-down'), 'compose-down');
     await attempt(() => this.#artifacts(true), 'scan-failed');
     await attempt(async () => this.#scanDescriptions(), 'scan-failed');
-    for (const h of ctx.stderr) h.destroy();
+    for (const h of ctx.stderr) { h.secrets.destroy(); h.control.destroy(); h.marker.destroy(); }
     for (const secret of ctx.secrets) secret.destroy();
     if (failure) throw failure;
   }
@@ -165,26 +176,41 @@ export class ProjectCloser {
     if (await check(ctx.secrets)) throw new ComposedConstructionError('secret-exposed');
     if (marker) {
       const control = new SecretScanner(Buffer.from(ARTIFACT_MARKER));
-      try { if (!await check([control])) throw new ComposedConstructionError('scan-failed'); }
+      try { if (!await check([control])) throw new ComposedConstructionError('scan-control-missing', undefined, undefined, 'artifacts'); }
       finally { control.destroy(); }
     }
   }
   async #scan(): Promise<void> {
     const ctx = this.ctx;
-    let failure: unknown;
+    let failure: ComposedConstructionError | undefined;
     const attempt = async (work: () => unknown) => {
-      try { await work(); } catch (error) { failure ??= error; }
+      try { await work(); } catch (error) { failure = scanFailure(failure, error, 'scan-failed'); }
     };
     if (ctx.imageId) await attempt(() => this.#history(ctx.imageId!));
     for (const id of ctx.ids) {
-      await attempt(() => run(ctx, { kind: 'logs', id }, 'scan-failed'));
+      await attempt(() => this.#logs(id));
       await attempt(() => this.#export(id));
     }
     await attempt(() => this.#scanDescriptions());
-    if (ctx.stderr.some((s) => s.failed())) failure ??= new ComposedConstructionError('scan-failed');
-    if (ctx.stderr.some((s) => s.exposed())) failure ??= new ComposedConstructionError('secret-exposed');
+    for (const stderr of ctx.stderr) await attempt(() => {
+      if (stderr.secrets.exposed()) throw new ComposedConstructionError('secret-exposed', 'exec-bridge', undefined, 'exec-stderr');
+      if (!stderr.control.exposed()) throw new ComposedConstructionError('scan-control-missing', 'exec-bridge', undefined, 'exec-stderr');
+      if (stderr.secrets.failed() || stderr.control.failed()) throw new ComposedConstructionError('scan-failed');
+    });
     await attempt(() => this.#artifacts());
     if (failure) throw failure;
+  }
+  async #logs(id: ContainerId): Promise<void> {
+    const { stdout, stderr } = await run(this.ctx, { kind: 'logs', id }, 'scan-failed');
+    if (this.ctx.secrets.some((secret) => secret.scan(stdout) || secret.scan(stderr))) {
+      throw new ComposedConstructionError('secret-exposed', 'logs', undefined, 'logs');
+    }
+    for (const marker of [topology.markers.BOOT_MARKER, topology.markers.SHUTDOWN_MARKER]) {
+      const control = new SecretScanner(Buffer.from(marker));
+      try {
+        if (!control.scan(stderr)) throw new ComposedConstructionError('scan-control-missing', 'logs', undefined, 'logs');
+      } finally { control.destroy(); }
+    }
   }
   async #history(id: string): Promise<void> {
     const { stdout, stderr } = await run(this.ctx, { kind: 'image-history', id }, 'scan-failed');
@@ -219,6 +245,10 @@ export class ProjectCloser {
     const handle = ctx.runner.spawnLongLived(description);
     ctx.registry.register(handle);
     const stderr = observeStderr(handle.stderr, ctx.secrets);
+    const marker = new SecretScanner(Buffer.from(topology.markers.EXPORT_MARKER));
+    const control = new StreamSecretScanner([marker]);
+    const feedControl = (chunk: Buffer | string) => control.feed(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    handle.stdout.on('data', feedControl);
     try {
       handle.stdin.end();
       const [exposed, exit] = await bounded(Promise.all([
@@ -226,8 +256,10 @@ export class ProjectCloser {
       ]), COMMAND_TIMEOUT_MS, ctx.clock, new ComposedConstructionError('command-timeout', 'export'));
       if (exposed || stderr.exposed()) throw new ComposedConstructionError('secret-exposed');
       if (exit !== 0 || stderr.failed()) throw new ComposedConstructionError('scan-failed');
+      if (!control.found) throw new ComposedConstructionError('scan-control-missing', 'export', undefined, 'export');
     } finally {
       ctx.registry.kill(handle); handle.stdout.destroy(); handle.stderr.destroy(); stderr.destroy();
+      handle.stdout.off('data', feedControl); control.destroy(); marker.destroy();
     }
   }
   #scanDescriptions(): void {
@@ -306,7 +338,9 @@ async function openPeer(ctx: Context, fixtureId: FixtureId, id: ContainerId): Pr
   } catch { throw new ComposedConstructionError('exec-spawn'); }
   const secret = randomBytes(32);
   ctx.secrets.push(new SecretScanner(secret));
-  ctx.stderr.push(observeStderr(handle.stderr, ctx.secrets));
+  const marker = new SecretScanner(Buffer.from(topology.markers.BRIDGE_MARKER));
+  ctx.stderr.push({ secrets: observeStderr(handle.stderr, ctx.secrets),
+    control: observeStderr(handle.stderr, [marker]), marker });
   const bridge = new BridgeSession(handle, { kill: () => ctx.registry.kill(handle), clock: ctx.clock });
   ctx.registry.sessions.push(bridge);
   let exited = false;
@@ -344,7 +378,8 @@ export async function createComposedProject(options: ProjectOptions): Promise<Co
   } catch (error) {
     const cause = error instanceof ComposedConstructionError ? error : new ComposedConstructionError('container-create');
     try { await closer.close(); }
-    catch (teardown) { cause.teardownCode ??= teardown instanceof ComposedConstructionError ? teardown.code : 'compose-down'; }
+    catch (teardown) { cause.teardownCode = preferConstructionCode(cause.teardownCode,
+      teardown instanceof ComposedConstructionError ? teardown.code : 'compose-down'); }
     try { options.diagnostics?.(cause.code); } catch { /* Preserve original cause. */ }
     throw cause;
   }
