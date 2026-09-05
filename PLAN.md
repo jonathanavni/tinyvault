@@ -54,43 +54,12 @@ address (BACKLOG, with reproduction).
 
 *Slice 2's detail is below; slice 1 and earlier in `PLAN-archive.md`.*
 
-**M5.2 slice 2 ✅ MERGED** — the harness now resolves, validates and **pins** its Docker endpoint, invokes Docker
-through one choke point, and fails closed on composed construction. Session tests 995 → 1182.
+**M5.2 slice 2 ✅ MERGED (`8133495`)** — daemon-channel preflight, canonical `unix:///` policy, runtime-unforgeable pin,
+single Docker choke point, fail-closed composed construction; 2 pre-impl rounds → 3 impl jobs → 3-channel review →
+2 fix rounds → clean clone. Its four carried lessons and six declared residuals were all resolved or re-declared by
+slice 3 (above); full detail in `PLAN-archive.md`.
 
-Ladder actually run: **2 pre-impl plan rounds** (C-T1 NEEDS-ATTENTION, C-T2 STOP 3×P1; C-T3a absorption PASS,
-C-T3b STOP 4×P1) → 3 implementation jobs → **3-channel post-impl review** (Codex 4×P2, QA 43 mutations/40 red,
-security-review no findings ≥7) → **fix round 1** → **round 2 on the absorbed-fix diff** (Codex 1×P1, QA 23
-mutations) → **fix round 2** → clean clone → merge. Register: `docs/m5-2-slice-2-review-findings.md`.
-
-**The four findings worth carrying into slice 3:**
-- **A type-level pin pins nothing.** A TS brand erases at runtime and free-form argv let `-H/--host` override
-  `DOCKER_HOST`. Provenance is now a module-private `WeakSet` + `#private` frozen storage; commands are a closed
-  vocabulary whose argv is built internally. Same shape as slice 1's C-S1 lesson, re-learned on a new surface.
-- **Ordering must be proven on the *public* entry.** `capturePersistedRuns` launches Chromium itself and the
-  hostile suite calls it *with* a browser, so no placement of the preflight could order that call — a supplied
-  browser is now runtime-illegal in composed mode.
-- **A guard that only reads source loses to `import('node:'+'child_process')`.** The primary guard is runtime,
-  where the value has resolved; the static scan is defence in depth and says so. But patching CJS exports does not
-  reach ESM *named* exports, and **synchronous APIs never traverse `ChildProcess.prototype.spawn`** — fix round 1
-  closed the async half and left the sync half open until round 2.
-- **A fix can introduce a silent-green.** Teaching the `execFile` guard to route shell forms *masked* the `exec`
-  wrapper's own test (red → green). Found independently by both round-2 channels. This is the argument for a
-  round 2 on the absorbed-fix diff, not merging after round 1.
-
-**Best outcome of round 2:** the dependency-gate exemption was **deleted, not narrowed**. Fix round 1's prototype
-guard made `syncBuiltinESMExports` redundant, and that call was the only reason a hole existed in a repo-wide gate.
-The `node:module` prohibition applies to every file again with no carve-out — undoing the integrator's own earlier
-change rather than defending it.
-
-**Declared residuals carried to slice 3**, each declared in code not implied: **A2** (`unix://` and `U+FEFF`
-rejected though Docker accepts them — conveniences declined, not protections); **B5a** (dead-listener sockets need
-a dial the spec forbids pre-contact); **R2-4** (no executable command variant exists to make the argv mutant fail);
-**B4** (no slice-2 composed path reaches `listen()`, so the test would pass for the wrong reason — its structural
-half *is* proven); **eval-time interceptor exclusion** (`vitest.config.ts` loads the guard for every Vitest run
-including `npm run eval`, and the broad Unix-socket rejection makes that exclusion larger); and the guard is
-**hygiene, not containment** — `worker_threads` realms and `process.binding` escape it, and the header says so.
-
-*Slice 1's C-S1/C-S2 lessons and the M5.1 / spec-lock detail are in `PLAN-archive.md`.*
+*Slice 1's C-S1/C-S2 lessons and the M5.1 / spec-lock detail are also in `PLAN-archive.md`.*
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·

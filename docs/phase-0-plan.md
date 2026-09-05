@@ -418,8 +418,8 @@ tinyvault/
 
 > **Build status (updated 2026-09-04):** **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅**
 > (`07996a2`, closing the Opus 5 audit) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) · **M4 ✅** (`b8a9396`) · **M5 ✅**
-> (`96e3ea3`) · **M5.1 ✅** · **M5.2 in flight** — spec LOCKED at revision 4 (`60520d9`), slices 1–2 of 6 merged
-> (`ab52f8e`, `8133495`); **slice 3 next**, then M6 (`PLAN.md`). M4 and M5 carry deferred audit items — see their
+> (`96e3ea3`) · **M5.1 ✅** · **M5.2 in flight** — spec LOCKED at revision 4 (`60520d9`), slices 1–3 of 6 merged
+> (`ab52f8e`, `8133495`, `8afce07`); **slice 4 next**, then M6 (`PLAN.md`). M4 and M5 carry deferred audit items — see their
 > Verify columns. Post-lock contract amendments (`'benign'` AttackClass, `canaryCommitment`, per-scenario
 > `leakRateCI95`) are recorded in the `PLAN.md` Decisions Log.
 

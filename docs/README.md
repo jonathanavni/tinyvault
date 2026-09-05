@@ -59,7 +59,7 @@ Active planning docs:
   gate; capture transfer without shared mounts; the frozen agent tool surface) and Acceptance A–P.
 - `m5-2-implementation-plan.md` — how the locked M5.2 contract is sequenced: six independently-green commits, the
   Codex/integrator ownership split, and which Acceptance criteria each commit gates. Docker enters at commit 3 and
-  never on the `make test` path. **Slices 1–3 merged (`ab52f8e`, `8133495`, slice 3 — see `PLAN.md`); slice 4 next.**
+  never on the `make test` path. **Slices 1–3 merged (`ab52f8e`, `8133495`, `8afce07`); slice 4 next.**
 - `m5-2-review-findings.md` — the M5.2 register: C-R1 (seam recon), C-R2/C-R3/C-R5 (three adversarial paper rounds,
   which killed the original network shape, then the sidecar split and exec bridge, then found the Docker daemon was
   an unguarded alternate control transport), C-R4 and C-R6 (the user's threat-model lock and bounded cap
@@ -85,7 +85,7 @@ Active planning docs:
   and forced the claim narrowing), C-U3/C-U3b (round 3, the lock: the entry-point files become a hash-pinned root
   of trust), the implementation log (every adjudicated Codex stop and integrator amendment, the first real Docker
   runs, the `browser_close_session` finding), and the three-channel post-implementation review with three fix
-  rounds under the cap. **Shipped** — see `PLAN.md` for the merge commit.
+  rounds under the cap. **Shipped** (`8afce07`).
 - `project-assessment-2026-09-03.md` — Codex's read-only project teardown at `e69259d` (post-M5): two P0 gate defects, the
   fixture-topology conflict, stale docs, missing release engineering. Verified by Claude the same day; dispositions in
   `m5-review-findings.md` §C-P and the M5.1 slice in `PLAN.md`. Its milestone table is inaccurate for M1–M3 — read `PLAN.md` for those.
