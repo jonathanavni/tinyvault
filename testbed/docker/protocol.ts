@@ -1,4 +1,4 @@
-// Closed wire vocabulary for trusted evaluation peers; this proves no process identity or isolation.
+// Closed wire vocabulary for trusted evaluation peers; this does not prove process identity or isolation.
 export const BRIDGE_CODES = [
   'unsolicited', 'duplicate-id', 'id-mismatch', 'op-mismatch', 'bridge-timeout',
   'bridge-closed', 'protocol-order', 'unknown-op', 'pipelined', 'body-shape',

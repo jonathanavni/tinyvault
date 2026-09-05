@@ -14,7 +14,7 @@ import { buildDockerSpawn, bounded, COMMAND_TIMEOUT_MS, ComposedConstructionErro
   type DockerSpawn, type DockerResult } from './exec';
 import { scanArtifactTree, SecretScanner } from './secretScan';
 import { IntegrationEvidence, localPin, commandKind, assertClean, assertMarker } from './integrationEvidence';
-import { matrix, targets, probeBrowser, detectedRoute, reachedServer, supervisedMatrix } from './integrationProbes';
+import { matrix, targets, probeBrowser, detectedRoute, classifyProbe, reachedServer, supervisedMatrix } from './integrationProbes';
 import topology from './topology.json';
 
 vi.setConfig({ testTimeout: 1_800_000, hookTimeout: 180_000 });
@@ -153,6 +153,12 @@ describe.sequential('slice 3 real Docker construction and control-route probes',
         fixtures['dom-hidden-injection']!.origin]) {
         const probes = await matrix(browser, hostile, destinations, invariant);
         expect(probes.filter(detectedRoute)).toEqual([]);
+        // Oracle positive control: the lookalike origin answers 200 to any POST /login, and a form navigation
+        // response is observable without CORS — so the route oracle must fire here, or it is blind.
+        const positive = await matrix(browser, hostile,
+          [{ url: `http://127.0.0.1:${topology.services['lookalike-origin'][1].host}/login`, label: 'positive-control-login', routable: true }], invariant);
+        expect(positive.filter((p) => p.method === 'form').map(classifyProbe)).toEqual(['route']);
+        expect(positive.some(detectedRoute)).toBe(true);
         await supervisedMatrix(browser, hostile, destinations, invariant);
       }
       await browser.close(); browser = undefined;

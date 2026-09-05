@@ -4,3 +4,8 @@ artifacts
 .claude
 docs
 .vitest
+.env
+.env.*
+*.pem
+*.key
+secrets/

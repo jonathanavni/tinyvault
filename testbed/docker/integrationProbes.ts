@@ -1,4 +1,7 @@
-// Browser probes prove no route from page content to control transport under the deployment requirement.
+// Browser probes observe no route from page content to the control transport across the enumerated
+// target x method matrix, under the deployment requirement; the override mutant proves the matrix can see one.
+// Every probe is classified 'route' | 'no-route' | 'unobserved', and a target whose every method is
+// 'unobserved' is a coverage gap (red), never a silent pass.
 import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -70,8 +73,9 @@ function browserAttempt({ url, method, frame }: PageProbe): Promise<string> {
         const form = document.createElement('form'); form.target = target.name; form.method = 'POST'; form.action = url;
         const field = document.createElement('input'); field.name = 'frame'; field.value = frame; form.append(field);
         cleanup = () => { target.remove(); form.remove(); };
-        document.body.append(target, form);
+        // The blank iframe's load event fires synchronously on insertion; install the handler first.
         target.onload = () => { target.onload = () => finish('loaded'); form.submit(); };
+        document.body.append(target, form);
       }
     } catch { finish('error'); }
   });
@@ -122,12 +126,29 @@ async function attempt(page: Page, observed: Observed, target: Target, method: P
   return { method, target: target.label, statuses: observed.statuses.get(url.href) ?? [], outcome,
     failure: observed.failures.get(url.href) };
 }
-export const detectedRoute = (probe: Probe): boolean => probe.statuses.some((s) => s !== 404)
-  || probe.outcome === 'open' || /^\d+$/.test(probe.outcome) && probe.outcome !== '404';
-// Connection-level failures mean nothing answered; every other failure (ORB, CORS, protocol) means a server did.
-const CONNECTION_FAILURE = /ERR_(?:CONNECTION_(?:REFUSED|RESET|TIMED_OUT|CLOSED)|TIMED_OUT|NAME_NOT_RESOLVED|ADDRESS_UNREACHABLE|INTERNET_DISCONNECTED|ABORTED|NETWORK_CHANGED|SOCKET_NOT_CONNECTED|ADDRESS_INVALID|ACCESS_DENIED|UNSAFE_PORT)/;
-export const reachedServer = (probe: Probe): boolean => probe.statuses.length > 0 || probe.outcome === 'open'
-  || /^\d+$/.test(probe.outcome) || (probe.failure !== undefined && !CONNECTION_FAILURE.test(probe.failure));
+// Connection-level or scheme-level failures mean nothing was addressed; every other failure (ORB, CORS,
+// protocol) means a server answered but the page could not observe the response.
+const NO_ROUTE_FAILURE = /ERR_(?:CONNECTION_(?:REFUSED|RESET|TIMED_OUT|CLOSED)|TIMED_OUT|NAME_NOT_RESOLVED|ADDRESS_UNREACHABLE|INTERNET_DISCONNECTED|ABORTED|NETWORK_CHANGED|SOCKET_NOT_CONNECTED|ADDRESS_INVALID|ACCESS_DENIED|UNSAFE_PORT|UNKNOWN_URL_SCHEME|DISALLOWED_URL_SCHEME|BLOCKED_BY_CLIENT|FILE_NOT_FOUND|INVALID_URL)/;
+export type ProbeClass = 'route' | 'no-route' | 'unobserved';
+export function classifyProbe(probe: Probe): ProbeClass {
+  if (probe.statuses.some((s) => s !== 404) || probe.outcome === 'open'
+    || (/^\d+$/.test(probe.outcome) && probe.outcome !== '404')) return 'route';
+  if (probe.statuses.length > 0 || probe.outcome === '404') return 'no-route';
+  if (probe.failure !== undefined) return NO_ROUTE_FAILURE.test(probe.failure) ? 'no-route' : 'unobserved';
+  // A WebSocket that neither opened nor produced network evidence is not a WebSocket control route.
+  if (probe.method === 'websocket') return 'no-route';
+  return 'unobserved';
+}
+export const detectedRoute = (probe: Probe): boolean => classifyProbe(probe) === 'route';
+// Reachability (the override mutant's oracle): a route, an observed response of any status, or a server-side failure.
+export const reachedServer = (probe: Probe): boolean => classifyProbe(probe) === 'route' || probe.statuses.length > 0
+  || (probe.failure !== undefined && !NO_ROUTE_FAILURE.test(probe.failure));
+// Per target, at least one method must yield an observed verdict; otherwise the matrix was blind there.
+export function coverageGaps(probes: Probe[]): string[] {
+  const byTarget = new Map<string, ProbeClass[]>();
+  for (const probe of probes) byTarget.set(probe.target, [...(byTarget.get(probe.target) ?? []), classifyProbe(probe)]);
+  return [...byTarget].filter(([, classes]) => classes.every((c) => c === 'unobserved')).map(([target]) => target);
+}
 const TARGET_BATCH = 8;
 export async function matrix(browser: Browser, hostile: string, destinations: Target[], invariant: () => void) {
   const page = await browser.newPage();
@@ -143,6 +164,7 @@ export async function matrix(browser: Browser, hostile: string, destinations: Ta
       invariant();
     }
     assert.equal(probes.length, destinations.length * METHODS.length);
+    assert.deepEqual(coverageGaps(probes), [], 'matrix coverage gap: every method unobserved for these targets');
     return probes;
   } finally { await observed.detach(); await page.close(); }
 }
