@@ -65,7 +65,7 @@ const INSPECT_RULES: readonly [string, ConstructionCode, (d: Doc, e: Expected) =
   ['.Config.Cmd,.Config.Entrypoint', 'command-overridden', (d, e) => same(d.Config?.Cmd, e.image.Config.Cmd) && same(d.Config?.Entrypoint, e.image.Config.Entrypoint)],
   ['.HostConfig.NetworkMode', 'network-mode', (d, e) => d.HostConfig?.NetworkMode === `${e.project}_default`],
   ['.HostConfig.Privileged', 'privileged', (d) => d.HostConfig?.Privileged === false],
-  ['.HostConfig.PidMode,.HostConfig.IpcMode', 'namespace-shared', (d) => d.HostConfig?.PidMode === '' && d.HostConfig?.IpcMode === ''],
+  ['.HostConfig.PidMode,.HostConfig.IpcMode', 'namespace-shared', (d) => d.HostConfig?.PidMode === '' && ['', 'private'].includes(d.HostConfig?.IpcMode)],
   ['.HostConfig.CapAdd', 'capability-added', (d) => empty(d.HostConfig?.CapAdd)],
   ['.HostConfig.Devices', 'device-added', (d) => empty(d.HostConfig?.Devices)],
   ['.HostConfig.Binds', 'bind-present', (d) => empty(d.HostConfig?.Binds)],

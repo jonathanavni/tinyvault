@@ -13,7 +13,8 @@ export const DOCKER_CAPABILITY_ALLOWLIST = Object.freeze({
   'testbed/docker/exec.ts': ['node:child_process'],
   'testbed/docker/no-docker.setup.ts': ['node:child_process', 'node:net'],
   'testbed/docker/exec.test.ts': ['node:child_process', 'node:http', 'node:net'],
-  'testbed/docker/container/main.ts': ['node:net', 'node:http'],
+  'testbed/docker/container/fixture.test.ts': ['node:net'],
+  'testbed/docker/container/main.ts': ['node:net'],
   'testbed/docker/container/control.ts': ['node:net', 'node:http'],
   'testbed/docker/container/bridge.ts': ['node:net', 'node:process'],
   'testbed/docker/container/stdoutTripwire.test.ts': ['node:process'],
@@ -28,6 +29,8 @@ export const DOCKER_CAPABILITY_ALLOWLIST = Object.freeze({
   'src/browser/controls.browser.test.ts': ['node:http'],
   'testbed/fixtures/controls-lab/index.test.ts': ['node:http'],
   'testbed/fixtures/controls-lab/index.ts': ['node:http'],
+  'testbed/fixtures/shared/bindServer.test.ts': ['node:net'],
+  'testbed/fixtures/shared/bindServer.ts': ['node:net'],
   'testbed/fixtures/shared/loginFixture.ts': ['node:http'],
   'testbed/fixtures/lookalike-origin/index.ts': ['node:http'],
 });

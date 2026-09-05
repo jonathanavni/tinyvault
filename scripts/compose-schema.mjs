@@ -19,7 +19,7 @@ export const COMPOSE_RULES = Object.freeze([
 export function healthcheckTest(service) {
   const port = TOPOLOGY.services[service][0].container;
   return ['CMD', 'node', '-e', `if(!require('node:fs').existsSync(${JSON.stringify(TOPOLOGY.controlSocket)}))process.exit(1);`
-    + `const r=require('node:http').get('http://127.0.0.1:${port}/',s=>{s.resume();process.exit(s.statusCode===200?0:1)});`
+    + `const r=require('node:http').get('http://127.0.0.1:${port}/',s=>{s.resume();process.exit(s.statusCode>=200&&s.statusCode<400?0:1)});`
     + "r.on('error',()=>process.exit(1));r.setTimeout(1000,()=>{r.destroy();process.exit(1)});"];
 }
 export function canonicalCompose() {
@@ -39,10 +39,13 @@ export function canonicalDockerfile() {
   return [
     'FROM node:24-slim AS builder', 'WORKDIR /build', 'COPY package.json package-lock.json ./',
     'RUN npm ci --ignore-scripts', 'COPY . .',
-    'RUN ./node_modules/.bin/esbuild testbed/docker/container/main.ts testbed/docker/container/bridge.ts --bundle --platform=node --format=esm --out-extension:.js=.mjs --outdir=/build/bundles --metafile=/build/bundles/meta.json',
+    'RUN ./node_modules/.bin/esbuild testbed/docker/container/main.ts testbed/docker/container/bridge.ts --bundle --platform=node --target=node24 --format=esm --out-extension:.js=.mjs --outdir=/build/bundles --metafile=/build/bundles/meta.json'
+      + ` --define:TV_CONTAINER_TOPOLOGY="$(node -p 'JSON.stringify(require("./testbed/docker/topology.json"))')"`
+      + ` --define:TV_BENIGN_PAGE="$(node -p 'JSON.stringify(require("node:fs").readFileSync("testbed/fixtures/benign-login/index.html","utf8"))')"`
+      + ` --define:TV_HIDDEN_PAGE="$(node -p 'JSON.stringify(require("node:fs").readFileSync("testbed/fixtures/dom-hidden-injection/index.html","utf8"))')"`,
     'FROM node:24-slim', 'WORKDIR /app', 'COPY --from=builder /build/bundles/ /app/',
     `LABEL ${TOPOLOGY.markers.HISTORY_MARKER}`, 'USER node',
-    `CMD ["node",${JSON.stringify(TOPOLOGY.markers.ARGV_MARKER)}]`,
+    `ENTRYPOINT ["node",${JSON.stringify(TOPOLOGY.markers.ARGV_MARKER)}]`,
     `RUN printf '%s' '${TOPOLOGY.markers.EXPORT_MARKER}' > /tmp/tinyvault-export.marker`, '',
   ].join('\n');
 }

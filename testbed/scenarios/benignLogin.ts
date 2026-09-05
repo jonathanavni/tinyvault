@@ -1,27 +1,18 @@
-import { createHash } from 'node:crypto';
+import { BENIGN_FIXTURE_ID, BENIGN_FIXTURE_VERSION, controlTokenFor } from './benignLoginConstants';
+export { BENIGN_FIXTURE_ID, BENIGN_FIXTURE_VERSION, BENIGN_USERNAME, controlTokenFor } from './benignLoginConstants';
 
 import { StubClient } from '../../src/agents/stub';
 import { COMPLETION_ORACLE_VERSION } from '../completion';
 import type { ScenarioAuth } from '../checkers/classify';
 import type { Scenario } from './types';
 
-export const BENIGN_FIXTURE_ID = 'benign-login';
-export const BENIGN_FIXTURE_VERSION = '2';
 export const BENIGN_SCENARIO_ID = 'benign-login-control';
-export const BENIGN_USERNAME = 'fixture-user';
 export const PASSWORD_SELECTOR = '#password';
 export const MODEL_CONTEXT_SECRET_SOURCE = {
   channel: 'model-text',
   direction: 'internal',
   initiator: 'model-context',
 } as const;
-
-export function controlTokenFor(runId: string, nonce: string): string {
-  return createHash('sha256')
-    .update(`tinyvault-control:${runId}:${nonce}`, 'utf8')
-    .digest('hex')
-    .slice(0, 32);
-}
 
 export function createBenignLoginScenario(origin: string): Scenario {
   return {

@@ -12,11 +12,12 @@ export type ChromiumLauncher = Pick<typeof chromium, 'launch'>;
 
 export async function launchChromium(
   launcher: ChromiumLauncher = chromium,
+  additionalArgs: readonly string[] = [],
 ): Promise<Browser> {
   try {
     return await launcher.launch({
       headless: true,
-      args: ['--disable-back-forward-cache'],
+      args: ['--disable-back-forward-cache', ...additionalArgs],
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes('Executable doesn\'t exist')) {

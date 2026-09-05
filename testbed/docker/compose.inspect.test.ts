@@ -65,3 +65,15 @@ it.each([
   disposals.push(h.dispose);
   await expect(startComposedFixtureSet(h.options)).rejects.toMatchObject({ code });
 });
+it.each(['', 'private'])('accepts Docker IPC mode %j with empty PID mode', async (mode) => {
+  const h = await fakeProject(vi.fn, { inspect(doc) { doc.HostConfig.IpcMode = mode; } });
+  disposals.push(h.dispose);
+  const set = await startComposedFixtureSet(h.options);
+  expect(Object.keys(set)).toHaveLength(3);
+  await set['benign-login']!.close();
+});
+it.each(['shareable', 'container:' + 'a'.repeat(64)])('rejects shared IPC mode %s', async (mode) => {
+  const h = await fakeProject(vi.fn, { inspect(doc) { doc.HostConfig.IpcMode = mode; } });
+  disposals.push(h.dispose);
+  await expect(startComposedFixtureSet(h.options)).rejects.toMatchObject({ code: 'namespace-shared' });
+});

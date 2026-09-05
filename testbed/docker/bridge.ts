@@ -49,6 +49,7 @@ export class BridgeSession {
     streams.stdin.on('error', () => this.close());
     streams.stdin.on('close', () => this.close());
   }
+  get completedRequests(): number { return this.#completedHighWater; }
   get closed(): boolean { return this.#closed; }
   get closingCode(): BridgeCode | undefined { return this.#closingCode; }
   request(op: BridgeOp, body: Body): Promise<Body> {

@@ -29,7 +29,7 @@ export function validInspect(index: number, project: string, epoch: string) {
       Env: [...imageDocument.Config.Env, `TV_FIXTURE_ID=${service}`, `TV_EVAL_EPOCH=${epoch}`],
       Labels: { 'com.tinyvault.fixture': service, 'com.tinyvault.epoch': epoch,
         'com.docker.compose.project': project, 'com.docker.compose.service': service } },
-    HostConfig: { NetworkMode: `${project}_default`, Privileged: false, PidMode: '', IpcMode: '', CapAdd: null, Devices: [], Binds: null },
+    HostConfig: { NetworkMode: `${project}_default`, Privileged: false, PidMode: '', IpcMode: 'private', CapAdd: null, Devices: [], Binds: null },
     Mounts: [], NetworkSettings: { Networks: { [`${project}_default`]: {} },
       Ports: Object.fromEntries(topology.services[service].map((port) => [`${port.container}/tcp`,
         [{ HostIp: port.address, HostPort: String(port.host) }]])) },

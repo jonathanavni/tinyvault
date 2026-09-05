@@ -1,8 +1,8 @@
+import { bindServer, type FixtureListenOptions } from './bindServer';
+import { signEventsDigest } from './eventsDigest';
+export { verifyEventsDigest } from './eventsDigest';
 import {
-  createHash,
   generateKeyPairSync,
-  sign as cryptoSign,
-  verify as cryptoVerify,
   type KeyObject,
 } from 'node:crypto';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -16,7 +16,7 @@ import {
   type SignedCompletionReceipt,
 } from '../../completion';
 import type { CompletionReceipt } from '../../scorecard.schema';
-import { BENIGN_USERNAME, controlTokenFor } from '../../scenarios/benignLogin';
+import { BENIGN_USERNAME, controlTokenFor } from '../../scenarios/benignLoginConstants';
 import type { FixtureId } from '../../scenarios/types';
 import type {
   FixtureReachability,
@@ -53,6 +53,7 @@ export type LoginFixtureOptions = Readonly<{
 export async function startLoginFixture(
   captureDirectory: string,
   options: LoginFixtureOptions,
+  listenOptions: FixtureListenOptions = {},
 ): Promise<FixtureTransport> {
   // The signer is deliberately generated inside each invocation: no fixture shares key material.
   const { privateKey, publicKey } = generateKeyPairSync('ed25519');
@@ -71,8 +72,8 @@ export async function startLoginFixture(
     unauthorizedRequests: new Map(),
     captureDirectory,
   };
-  const server = createFixtureServer(state);
-  const reachability = await bindFixtureServer(server, state);
+  const server = createFixtureServer(state, listenOptions);
+  const reachability = await bindFixtureServer(server, state, listenOptions);
   return createInProcessTransport(server, state, publicKey, completionVerifier, reachability);
 }
 
@@ -101,31 +102,28 @@ function createInProcessTransport(
   };
 }
 
-function createFixtureServer(state: RequestState): ReturnType<typeof createServer> {
+function createFixtureServer(state: RequestState, options: FixtureListenOptions): ReturnType<typeof createServer> {
   return createServer((request, response) => {
     void handleRequest(request, response, state).catch((error: unknown) => {
       response.statusCode = 500;
       response.end('fixture error');
-      console.error(error);
+      if (options.onListenPermissionError === 'fail') process.stderr.write('fixture-error\n');
+      else console.error(error);
     });
   });
 }
 
 async function bindFixtureServer(
-  server: ReturnType<typeof createServer>,
-  state: RequestState,
+  server: ReturnType<typeof createServer>, state: RequestState, options: FixtureListenOptions,
 ): Promise<FixtureReachability> {
-  try {
-    await listen(server);
-    const address = server.address();
-    if (!address || typeof address === 'string') throw new Error('Fixture did not bind a TCP port');
-    state.origin = `http://127.0.0.1:${address.port}`;
-    return 'http';
-  } catch (error) {
-    if (!isListenPermissionError(error)) throw error;
-    state.origin = 'http://127.0.0.1:0';
-    return 'no-socket';
+  const reachability = await bindServer(server, options);
+  const address = reachability === 'http' ? server.address() : null;
+  if (reachability === 'http' && (!address || typeof address === 'string')) {
+    throw new Error('Fixture did not bind a TCP port');
   }
+  state.origin = options.publicOrigin ?? (reachability === 'no-socket'
+    ? 'http://127.0.0.1:0' : `http://127.0.0.1:${(address as { port: number }).port}`);
+  return reachability;
 }
 
 async function registerFixtureRun(state: RequestState, setup: FixtureRunSetup): Promise<void> {
@@ -194,83 +192,6 @@ function fixtureUnauthorizedRequests(
 ): readonly UnauthorizedRequest[] {
   assertRunId(runId);
   return [...(state.unauthorizedRequests.get(runId) ?? [])];
-}
-
-type EventsDigestPayload = { runId: string; eventsSha256: string };
-
-type SignedEventsDigest = {
-  version: '1';
-  payload: EventsDigestPayload;
-  signature: string;
-};
-
-export function verifyEventsDigest(
-  serialized: string,
-  expectedRunId: string,
-  eventsBytes: Uint8Array,
-  verificationKey: KeyObject,
-): boolean {
-  const envelope = parseEventsDigest(serialized);
-  if (!envelope || envelope.payload.runId !== expectedRunId
-    || envelope.payload.eventsSha256 !== sha256(eventsBytes)) return false;
-  return cryptoVerify(
-    null,
-    Buffer.from(canonicalEventsDigest(envelope.payload), 'utf8'),
-    verificationKey,
-    Buffer.from(envelope.signature, 'base64url'),
-  );
-}
-
-function signEventsDigest(runId: string, eventsBytes: Uint8Array, signingKey: KeyObject): string {
-  const payload: EventsDigestPayload = { runId, eventsSha256: sha256(eventsBytes) };
-  const signature = cryptoSign(
-    null,
-    Buffer.from(canonicalEventsDigest(payload), 'utf8'),
-    signingKey,
-  ).toString('base64url');
-  const envelope: SignedEventsDigest = { version: '1', payload, signature };
-  return JSON.stringify(envelope);
-}
-
-function parseEventsDigest(serialized: string): SignedEventsDigest | undefined {
-  try {
-    const value = JSON.parse(serialized) as unknown;
-    if (!isRecord(value) || !hasExactKeys(value, ['version', 'payload', 'signature'])
-      || value.version !== '1' || typeof value.signature !== 'string'
-      || !isCanonicalSignature(value.signature) || !isRecord(value.payload)
-      || !hasExactKeys(value.payload, ['runId', 'eventsSha256'])
-      || typeof value.payload.runId !== 'string'
-      || typeof value.payload.eventsSha256 !== 'string'
-      || !/^[0-9a-f]{64}$/.test(value.payload.eventsSha256)) return undefined;
-    return value as SignedEventsDigest;
-  } catch {
-    return undefined;
-  }
-}
-
-function canonicalEventsDigest(payload: EventsDigestPayload): string {
-  return JSON.stringify({ runId: payload.runId, eventsSha256: payload.eventsSha256 });
-}
-
-function sha256(bytes: Uint8Array): string {
-  return createHash('sha256').update(bytes).digest('hex');
-}
-
-function isCanonicalSignature(signature: string): boolean {
-  if (!/^[A-Za-z0-9_-]+$/.test(signature)) return false;
-  const decoded = Buffer.from(signature, 'base64url');
-  return decoded.length === 64 && decoded.toString('base64url') === signature;
-}
-
-function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
-  const actual = Object.keys(value).sort();
-  const sortedExpected = [...expected].sort();
-  return actual.length === sortedExpected.length
-    && actual.every((field, index) => field === sortedExpected[index]);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 type RequestState = {
@@ -388,23 +309,14 @@ async function processLoginBody(body: string, state: RequestState): Promise<numb
   return 303;
 }
 
-export async function readBodyOrReject(
-  request: IncomingMessage,
-  response: ServerResponse,
-  timeoutMs = 2_000,
-): Promise<string | undefined> {
+export async function readBodyOrReject(request: IncomingMessage, response: ServerResponse, timeoutMs = 2_000): Promise<string | undefined> {
   return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let length = 0;
-    let settled = false;
+    const chunks: Buffer[] = []; let length = 0; let settled = false;
     const timer = setTimeout(() => rejectRequest(408, 'request body timeout'), timeoutMs);
-
     const cleanup = () => {
       clearTimeout(timer);
-      request.off('data', onData);
-      request.off('end', onEnd);
-      request.off('error', onError);
-      request.off('aborted', onAborted);
+      request.off('data', onData); request.off('end', onEnd);
+      request.off('error', onError); request.off('aborted', onAborted);
     };
     const destroyAfterResponse = () => {
       request.once('error', () => undefined);
@@ -442,10 +354,8 @@ export async function readBodyOrReject(
       reject(error);
     };
     const onAborted = () => onError(new Error('Request body aborted'));
-
     request.on('data', onData);
-    request.once('end', onEnd);
-    request.once('error', onError);
+    request.once('end', onEnd); request.once('error', onError);
     request.once('aborted', onAborted);
   });
 }
@@ -467,27 +377,9 @@ function assertRunId(runId: string): void {
   if (!/^[A-Za-z0-9-]+$/.test(runId)) throw new Error('Unsafe fixture runId');
 }
 
-function listen(server: ReturnType<typeof createServer>): Promise<void> {
-  return new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      server.removeListener('error', reject);
-      resolve();
-    });
-  });
-}
-
 function closeServer(server: ReturnType<typeof createServer>): Promise<void> {
   if (!server.listening) return Promise.resolve();
   return new Promise((resolve, reject) => {
     server.close((error) => error ? reject(error) : resolve());
   });
-}
-
-function isListenPermissionError(error: unknown): boolean {
-  return isNodeError(error) && error.code === 'EPERM';
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error;
 }

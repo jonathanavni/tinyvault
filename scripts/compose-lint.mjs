@@ -60,7 +60,7 @@ export function lintDockerfile(source) {
   requireRule(equal(by('FROM'), ['FROM node:24-slim AS builder', 'FROM node:24-slim']), 'docker-from');
   requireRule(equal(by('USER'), ['USER node']), 'docker-user');
   requireRule(equal(by('LABEL'), [`LABEL ${TOPOLOGY.markers.HISTORY_MARKER}`]), 'docker-label');
-  requireRule(commands.every(([op]) => ['FROM', 'WORKDIR', 'COPY', 'RUN', 'LABEL', 'USER', 'CMD'].includes(op)), 'docker-instruction');
+  requireRule(commands.every(([op]) => ['FROM', 'WORKDIR', 'COPY', 'RUN', 'LABEL', 'USER', 'ENTRYPOINT'].includes(op)), 'docker-instruction');
   requireRule(equal(lines, canonicalDockerfile().trim().split('\n')), 'docker-content');
 }
 export function checkCompose(root) {
