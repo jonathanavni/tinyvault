@@ -222,4 +222,12 @@ additive; `docker history` truncates by default; `vitest list --filesOnly --json
   narrow edit. **Dispatch rule widened:** an ownership-only conflict that a §8/§9 rule forces is handled by the
   minimal edit preserving the file's assertions and reported as a deviation; STOP is reserved for contracts that
   cannot be met.
+- **2026-09-05 — Job B2 committed `965c568`** after five dispatches (four correct stops, all adjudicated above).
+  Integrator-verified: the **new `make test` chain green end to end** — entry gate → tsc → boundary gate + selftest →
+  invocation gate + selftest (8 rules) → compose lint + selftest (58 rules) → acceptance-J → three Vitest
+  invocations with JSON reports (1477 + 5 + 10 passed, 1 pinned skip) → **execution proof PASS**. B2's deviations were
+  all authorized ones; two worth carrying: `tsc --noEmit` stays second in the chain (existing negative compile
+  assertions depend on it), and the new gate CLIs accept `--root` for their real-CLI self-tests while the pinned
+  grammar forbids `--root` in the actual `test` command. Job C dispatched with B2's Compose file, Dockerfile and
+  topology as inherited inputs.
 
