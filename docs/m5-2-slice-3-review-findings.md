@@ -289,3 +289,12 @@ additive; `docker history` truncates by default; `vitest list --filesOnly --json
   unreachable), while the main matrix keeps the stricter control-route oracle (`detectedRoute`). Verified by a
   diagnostic that observed `ERR_BLOCKED_BY_ORB` and `ERR_FAILED` for the published extra port and `200` for the page.
 
+## Three-channel post-implementation review (2026-09-05) — on `5e0f121..5385a4b` (`codex/m5-2-slice-3`)
+
+Integrator status at head: `make test` 1525 + 5 + 10 with the execution proof PASS; `make test-docker` 4/4 (84 s) on
+this host. Channels dispatched in parallel, blind to each other, with base and head pinned and commits held:
+**Codex GPT-6 Astra `adversarial-review --base 5e0f121 --scope branch`** (different-family code review; packet
+`slice3-postimpl-codex-review.md`); **fresh-context Claude QA with mutations A–K** in its own worktree (packet
+`slice3-postimpl-qa-packet.md`); **`/security-review`** as the security-specialized third channel in its own checkout,
+given the locked threat model and the §9/§10 declared limits. Findings and dispositions follow when all three are in.
+
