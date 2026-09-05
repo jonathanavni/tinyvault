@@ -275,4 +275,17 @@ additive; `docker history` truncates by default; `vitest list --filesOnly --json
   override-port oracle in the Docker suite raced Playwright's `response` event against the in-page attempt's
   resolution (a 200 recorded a few ms late read as "not detected"); fixed test-side with a per-URL settle
   (integrator, evidence code).
+- **2026-09-05 — Job B1-c (daemon-level absence check) verified:** tsc clean; `testbed/docker` 504 tests; invocation gate
+  PASS; `make test` **1525 + 5 + 10, execution proof PASS**; Docker suite: the same-image same-label stale-container
+  test now yields `project-not-fresh` with zero teardown (the G mutant is caught for real). Codex-reported reds: the
+  whole absence check deleted → 3 red; hex validation deleted → 24 red. One integrator line: the evidence wrapper's
+  epoch getter no longer assumes a Compose spawn.
+- **2026-09-05 — Override-oracle root cause (test evidence, not the core):** Chromium reports a page's cross-origin
+  `<img>` load of an HTML document as `net::ERR_BLOCKED_BY_ORB` and a cross-origin `fetch` as a CORS failure, so
+  Playwright emits `requestfailed` with **no `response` event** even though the server answered — a status-keyed
+  oracle is blind to exactly the reachable-extra-port case it was meant to detect. `integrationProbes.ts` now records
+  `requestfailed` texts per probe URL, and the mutant uses a **reachability** oracle (`reachedServer`: any response, an
+  open WebSocket, a numeric outcome, or any failure that is not connection-level — refused/reset/timed out/unresolved/
+  unreachable), while the main matrix keeps the stricter control-route oracle (`detectedRoute`). Verified by a
+  diagnostic that observed `ERR_BLOCKED_BY_ORB` and `ERR_FAILED` for the published extra port and `200` for the page.
 
