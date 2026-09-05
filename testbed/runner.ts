@@ -9,6 +9,9 @@ import { runMetaGate } from './checkers/metaGate';
 import { adjudicatePersistedRuns, type OfflineEvidenceManifest,
   type OfflineRunEvidence } from './checkers/offline';
 import { assertPinned, dockerPreflight, type PinnedDockerEndpoint } from './docker/preflight';
+import type { DockerProcessRunner } from './docker/exec';
+import type { ProbeOrigin } from './docker/compose';
+import { probeHttpOrigin, startComposedFixtureSet } from './docker/composedFixtures';
 import { startFixtures, type FixtureSet, type FixtureTransport } from './fixtures';
 import type { FixtureArchitecture } from './fixtures/transport';
 import { startControlsLab } from './fixtures/controls-lab';
@@ -37,6 +40,8 @@ export const FIXTURE_REACHABILITY_MESSAGE = 'Fixture is not reachable over HTTP'
 export type EvalOptions = {
   architecture?: FixtureArchitecture;
   dockerPreflight?: () => Promise<PinnedDockerEndpoint>;
+  dockerRunner?: DockerProcessRunner;
+  probeOrigin?: ProbeOrigin;
   /** Artifact lifecycle seams for observing preflight ordering without filesystem effects. */
   removeArtifactDirectory?: typeof rm;
   createArtifactDirectory?: typeof mkdir;
@@ -66,7 +71,7 @@ export type EvalOptions = {
 export type CaptureOptions = Pick<
   EvalOptions,
   | 'launchChromium' | 'startFixtures' | 'createScenarioRegistry' | 'createHost' | 'createBackend'
-  | 'maxTurns' | 'architecture' | 'dockerPreflight'
+  | 'maxTurns' | 'architecture' | 'dockerPreflight' | 'dockerRunner' | 'probeOrigin'
 >;
 
 export type EvalResult = { scorecard: Scorecard; runs: RunRecord[]; scorecardPath: string };
@@ -156,7 +161,7 @@ async function captureWithBrowser(
 ): Promise<EvalTrust> {
   const captureDirectory = resolve(artifactDirectory, 'fixture-captures');
   const fixtures = options.architecture === 'composed'
-    ? await startComposedFixtures(captureDirectory, pin!)
+    ? await startComposedFixtures(artifactDirectory, pin!, options)
     : await (options.startFixtures ?? startFixtures)(captureDirectory);
   const capturedRuns: RunRecord[] = [];
   const evidenceRuns: OfflineRunEvidence[] = [];
@@ -301,12 +306,10 @@ function preflightLocalDocker(): Promise<PinnedDockerEndpoint> {
 }
 
 async function startComposedFixtures(
-  _captureDirectory: string,
+  artifactDirectory: string,
   pin: PinnedDockerEndpoint,
+  options: CaptureOptions,
 ): Promise<FixtureSet> {
-  // Defence in depth, deliberately unobservable until slice 3: prepareArchitecture already
-  // asserts this pin and construction below always throws, so deletion is not tested here.
-  assertPinned(pin);
-  // Slice 3 supplies the pinned container construction. This path never calls an in-process starter.
-  throw new Error('Composed fixture construction is unavailable until slice 3.');
+  return startComposedFixtureSet({ pin, artifactRoot: artifactDirectory,
+    runner: options.dockerRunner, probeOrigin: options.probeOrigin ?? probeHttpOrigin });
 }

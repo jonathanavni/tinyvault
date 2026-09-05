@@ -32,6 +32,8 @@ function lifecycle() {
   const options: EvalOptions = {
     artifactDirectory: '/injected/artifacts',
     architecture: 'composed',
+    dockerRunner: { run: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 1 })), spawnLongLived: vi.fn() },
+    probeOrigin: vi.fn(async () => true),
     dockerPreflight: vi.fn(async () => { events.push('preflight'); return mintPin(); }),
     runMetaGate: vi.fn(() => { events.push('meta'); return { passed: true, failures: [], plantedCases: 0, negativeControls: 0 }; }),
     removeArtifactDirectory: vi.fn(async () => { events.push('rm'); }),
@@ -148,12 +150,12 @@ describe('public composed capture ordering', () => {
     expect(fs.rm).not.toHaveBeenCalled();
     expect(fs.mkdir).not.toHaveBeenCalled();
     expect(fs.writeFile).not.toHaveBeenCalled();
-    expect(failure).toMatchObject({ message: expect.stringContaining('Composed fixture construction is unavailable') });
+    expect(failure).toMatchObject({ code: 'daemon-unreachable' });
   });
 
   it('eval preflights once before replacement and owns its internal browser through failure', async () => {
     const h = lifecycle();
-    await expect(runEval(h.options)).rejects.toThrow('Composed fixture construction is unavailable');
+    await expect(runEval(h.options)).rejects.toMatchObject({ code: 'daemon-unreachable' });
     expect(h.events).toEqual([
       'meta', 'preflight', 'rm', 'mkdir', 'launch', 'controls', 'harness', 'close-lab', 'close-browser',
     ]);
@@ -173,7 +175,7 @@ describe('public composed capture ordering', () => {
     vi.mocked(fs.realpath).mockResolvedValue('/injected/docker.sock');
     vi.mocked(fs.stat).mockResolvedValue({ isSocket: () => true } as Awaited<ReturnType<typeof fs.stat>>);
     await expect(capturePersistedRuns('/injected/artifacts', 1, undefined, h.options))
-      .rejects.toThrow('Composed fixture construction is unavailable');
+      .rejects.toMatchObject({ code: 'daemon-unreachable' });
     expect(fs.readFile).toHaveBeenCalledExactlyOnceWith('/injected/docker-config/config.json', 'utf8');
     expect(fs.realpath).toHaveBeenCalledExactlyOnceWith('/injected/docker.sock');
     expect(fs.stat).toHaveBeenCalledExactlyOnceWith('/injected/docker.sock');
