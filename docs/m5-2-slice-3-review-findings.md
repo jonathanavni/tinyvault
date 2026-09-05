@@ -243,4 +243,13 @@ additive; `docker history` truncates by default; `vitest list --filesOnly --json
   modes still rejected under `namespace-shared`; B1's predicate at `compose.ts:68` follows (Job C authorized). (2) The
   pinned healthcheck required HTTP 200 on `/`, but the lookalike canonical origin answers 302 — **amended** to accept
   2xx/3xx. Both are facts about the implementation's environment that no paper round could see; recorded as such.
+- **2026-09-05 — Job C stop #3 (packet over-ask, adjudicated):** the Job C packet asked the Docker suite to assert that
+  the receipts' public key equals the handshake key, but receipt retrieval is a slice-4 control operation that slice 3
+  must reject with `slice-4`. **Dropped as a live assertion**; the Docker-free proof (the control server and the
+  fixture signer hold the same key object; a substituted key turns the test red) plus the authenticated-handshake key
+  check stand in, and the live comparison lands with slice 4's receipt read. Job C otherwise complete (31 files):
+  Dockerfile with `ENTRYPOINT`, `--target=node24`, embedded topology/pages via esbuild defines, repo-root
+  `.dockerignore`, esbuild pinned `0.28.2`, `bindServer` seam with the single EPERM branch, constants lift, the Docker
+  suite. Noted for the review: an additive optional `additionalArgs` parameter on `src/browser/playwright.ts`'s
+  launcher (defaults unchanged) so the DNS-rebound probe can pass `--host-resolver-rules` through the vetted importer.
 
