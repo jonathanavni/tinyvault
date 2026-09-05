@@ -13,6 +13,18 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 `2026-09-04-m5.2-slice3` — focus: assessment fold-in check + commit `AGENTS.md`, then **M5.2 slice 3** (container, Compose, framed `docker exec -T` bridge) through the full security-core ladder via Astra; prune `codex/m5-2-slice-2` at close.
 
+> **Interim breadcrumb (2026-09-05, session in progress; `/wrapup` replaces this).** Assessment fold-in verified and
+> completed (A1/A2 BACKLOG rows); `AGENTS.md` committed. Slice 3: plan **locked at revision 4** (`5e0f121`, three paper
+> rounds × two blind channels, register `docs/m5-2-slice-3-review-findings.md`); implementation on `codex/m5-2-slice-3`
+> (worktree `../tinyvault-slice3`): Jobs A (`1310a7f`), B1 (`eb16ab8`), B1-b (`d3cd3a0`), B2 (`965c568`), C (`71bf7b2`),
+> integrator Docker-run fixes (`c4ce2c0`) all committed; `make test` green on the branch (1490 + 5 + 10, execution proof
+> PASS). Docker suite: main test and bridge-death pass; the stale-container test exposed that `compose ps` hides
+> non-Compose containers → absence check moved to a daemon-level label query (plan amended; Codex B1-c in flight); the
+> override-oracle race fixed test-side. **Next:** B1-c lands → `make test` + `make test-docker` green → three-channel
+> post-impl review (packets drafted in the scratchpad) → fix rounds (cap 3) → clean clone → merge → prune
+> `codex/m5-2-slice-2`. Found along the way, outside the slice: `browser_close_session` stalls on a black-hole connect
+> (BACKLOG, M6 spec input).
+
 `2026-09-04-m5.2-slice2` — focus: M5.2 slice 2 (daemon-channel preflight) through the full security-core ladder —
 **outcome: MERGED (`8133495`). Reviewed and clean-clone-tested at `41aa5f5`: 1182 + 5 + 10, exit 0. Also shipped:
 the Codex ladder moved to GPT-6 Astra with stakes-based model routing.** `main` pushed to the private origin
