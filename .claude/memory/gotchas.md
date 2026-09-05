@@ -305,4 +305,8 @@ Example:
   From the harness this means (a) `browser_close_session` hangs after a navigation to such an address (BACKLOG, M6
   spec input) and (b) no page-level probe can produce a verdict there within its deadline — measure coverage over
   host-routable targets and declare the exclusion. (2026-09-05)
+- **Do not commit on `main` while a background chain is merging or testing on `main`.** The memory/docs-index commit
+  landed while the slice-3 merge chain was running in the same checkout; the merge is atomic and tests do not read
+  docs, so nothing broke, but a code edit at that moment would have tested a tree that was not the one committed.
+  One writer per checkout applies to the integrator too. (2026-09-05)
 

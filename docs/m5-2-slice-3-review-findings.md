@@ -403,3 +403,10 @@ in the main report). The exact-file mechanism is what closes U1-16.
 - **Merge gate:** literal clean clone of the branch (`git clone` → `npm ci` → `make browsers` → `make test`) at the final
   head, then merge, then `make test-docker` on the merged tree. Results below.
 
+### Merge (2026-09-05)
+
+**Merged into `main` as `8afce07`** (no fast-forward; branch tip `638bc15`, 83 files, +6017/−392). Gates: literal clean
+clone at `638bc15` → `npm ci` → `make browsers` → `make test`: **every gate PASS, 1568 + 5 + 10, execution proof
+PASS**; on the merged tree: `make test` 1568 + 5 + 10 and `make test-docker` 4/4 in 78 s, no containers or networks
+left. `codex/m5-2-slice-3` and its worktree removed after the merge. Slice 4 next.
+

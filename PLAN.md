@@ -11,24 +11,48 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-04-m5.2-slice3` — focus: assessment fold-in check + commit `AGENTS.md`, then **M5.2 slice 3** (container, Compose, framed `docker exec -T` bridge) through the full security-core ladder via Astra; prune `codex/m5-2-slice-2` at close.
+`2026-09-05-m5.2-slice3` — focus: assessment fold-in check, commit `AGENTS.md`, then **M5.2 slice 3** through the
+full security-core ladder via Astra; prune `codex/m5-2-slice-2` — **outcome: MERGED (`8afce07`).** Merged tree:
+`make test` 1568 + 5 + 10 with the execution proof PASS; `make test-docker` 4/4 (78 s). Clean clone at the branch tip
+`638bc15`: green. Session tests 1182 → 1568 (+ the Docker suite's 4).
 
-> **Interim breadcrumb (2026-09-05, session in progress; `/wrapup` replaces this).** Assessment fold-in verified and
-> completed (A1/A2 BACKLOG rows); `AGENTS.md` committed. Slice 3: plan **locked at revision 4** (`5e0f121`, three paper
-> rounds × two blind channels, register `docs/m5-2-slice-3-review-findings.md`); implementation on `codex/m5-2-slice-3`
-> (worktree `../tinyvault-slice3`): Jobs A (`1310a7f`), B1 (`eb16ab8`), B1-b (`d3cd3a0`), B2 (`965c568`), C (`71bf7b2`),
-> integrator Docker-run fixes (`c4ce2c0`) all committed; `make test` green on the branch (1490 + 5 + 10, execution proof
-> PASS). Docker suite: main test and bridge-death pass; the stale-container test exposed that `compose ps` hides
-> non-Compose containers → absence check moved to a daemon-level label query (plan amended; Codex B1-c in flight); the
-> override-oracle race fixed test-side. **Next:** B1-c lands → `make test` + `make test-docker` green → three-channel
-> post-impl review (packets drafted in the scratchpad) → fix rounds (cap 3) → clean clone → merge → prune
-> `codex/m5-2-slice-2`. Found along the way, outside the slice: `browser_close_session` stalls on a black-hole connect
-> (BACKLOG, M6 spec input).
+**M5.2 slice 3 ✅ MERGED** — each fixture runs in its own container behind a framed `docker exec -i` bridge with a
+stdin-delivered bootstrap secret and an injective challenge/MAC; construction is provenance-first (daemon-level
+absence check, exact-one resolution, a 20-row inspect table) and fail-closed through one idempotent closer whose
+Acceptance-E scans (logs, export, history, exec stderr, artifacts) each carry a positive control in the same scanning
+pass; `make test` stays Docker-free behind six signals (runtime interceptor, per-path capability map, hash-pinned
+root of trust, entry-point grammar gate, execution proof, clean clone). Register:
+`docs/m5-2-slice-3-review-findings.md`; plan `docs/m5-2-slice-3-plan.md` revision 4.
 
-`2026-09-04-m5.2-slice2` — focus: M5.2 slice 2 (daemon-channel preflight) through the full security-core ladder —
-**outcome: MERGED (`8133495`). Reviewed and clean-clone-tested at `41aa5f5`: 1182 + 5 + 10, exit 0. Also shipped:
-the Codex ladder moved to GPT-6 Astra with stakes-based model routing.** `main` pushed to the private origin
-(`f161f1b..8ef2e89`), still private.
+Ladder actually run: **3 pre-impl paper rounds × 2 blind channels** (Codex Sol STOP/STOP/STOP with 10/8/10 P1s;
+Claude 7×P2 / 1×P1 / 1×P1) → lock → **6 Codex Astra implementation jobs** (A, B1, B1-b, B1-c, B2, C; nine correct
+stop-and-return points on contract facts, each adjudicated) → integrator Docker fix cycle → **3-channel post-impl
+review** (Codex 2×P1, QA 95 mutants PASS, security PASS + a Medium) → **3 fix rounds** (Codex core + integrator
+evidence code, each re-reviewed) → QA round 3 (45 mutants) → clean clone → merge.
+
+**Findings worth carrying into slice 4:**
+- **The entry point cannot guard itself.** Three paper rounds beat every static gate by a spelling it did not know
+  (`.cjs`, `env docker`, `globalSetup`, a Makefile `$(shell …)`); the answer was to narrow the claim — gates catch
+  Docker reach from *code modules*; the entry-point files are a hash-pinned, reviewed root of trust.
+- **Measure the environment before locking a sentence about it.** Four rev-4 sentences were false on this host
+  (label vs interpolation, TS constants vs a bare-Node lint, `child_process` count, `IpcMode`); `compose ps` hides
+  non-Compose containers; Docker 29 omits `Config.Cmd`; ORB/CORS hide cross-origin answers from a page oracle.
+- **A coverage assertion must be able to fail.** The first two versions of the probe-coverage check were trivially
+  satisfiable (a WebSocket error counted as a verdict; cancellation counted as "no route"); the third is pinned
+  Docker-free with the failure shapes Chromium actually produces, and its exclusions (bridge-network addresses,
+  the `file:` socket URL) are declared, not hidden.
+- **Integrator-written evidence code is not exempt from review.** Both post-impl P1s were in code I wrote during
+  the Docker fix cycle; the ladder caught them because the code went through the same channels.
+
+**Declared residuals carried to slice 4** (each in code or the register): constant-time compare not unit-observable;
+`node:24-slim` by tag (M10); no composed eval entry until a later slice (the in-process eval stays under the guard);
+the §9 static-gate limits (wrapper launchers, `worker_threads`, `process.binding`, `getBuiltinModule`, parse-time
+Make, root-of-trust edits); bridge-network and `file:` targets excluded from probe coverage; `checkScan`'s
+control-count guard and exec-stderr's `failed()` path unpinned; `.dockerignore` entries untested. **Outside the
+slice, filed as an M6 spec input:** `browser_close_session` never resolves after a navigation to a black-hole
+address (BACKLOG, with reproduction).
+
+*Slice 2's detail is below; slice 1 and earlier in `PLAN-archive.md`.*
 
 **M5.2 slice 2 ✅ MERGED** — the harness now resolves, validates and **pins** its Docker endpoint, invokes Docker
 through one choke point, and fails closed on composed construction. Session tests 995 → 1182.
@@ -70,21 +94,18 @@ including `npm run eval`, and the broad Unix-socket rejection makes that exclusi
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
-**M4 ✅** (`b8a9396`) · **M5 ✅** (`96e3ea3`) · **M5.1 ✅** · **M5.2** in flight (spec locked; **slices 1–2 of 6 merged**).
+**M4 ✅** (`b8a9396`) · **M5 ✅** (`96e3ea3`) · **M5.1 ✅** · **M5.2** in flight (spec locked; **slices 1–3 of 6 merged**, slice 3 `8afce07`).
 
-**Next session:** `/start`, then **M5.2 slice 3** per `docs/m5-2-implementation-plan.md` — the container, Compose
-file and the framed `docker exec -T` bridge. **Docker enters the repo at this slice and must never reach the
-`make test` path.** Slice 3 inherits all six residuals above; the eval-time interceptor exclusion and B4's
-composed-EPERM test are the two it must actively resolve rather than carry.
+**Next session:** `/start`, then **M5.2 slice 4** per `docs/m5-2-implementation-plan.md` — the five administrative
+operations over the bridge, per-operation capabilities (CSPRNG ≥128-bit, epoch-bound, expiring, single-use, restart-
+invalidated), the idempotent receipt read, and capture transfer with harness-side persistence (§D3, §D7; Acceptance D,
+F, H, M). Slice 4 inherits every residual above; it also gets the composed transport's control-plane methods, which
+today fail closed with `slice-4`. Keep the two-channel review pattern and the quiescence rule.
 
-**Blocked / needs attention:** nothing needs the user. The 2026-09-04 assessment is now **committed, indexed and
-dispositioned** (A1–A7 in the Decisions Log); **A5 — scorecard provenance — is scheduled and must land before M6
-publishes any comparison**. The cadence decision stands: the next cross-model assessment runs after M5.2 closes,
-with M5.1+M5.2 treated as the M5 remediation package. **`AGENTS.md` is still untracked, so it is absent from every
-clone and worktree** — each Codex packet opens with "Read AGENTS.md first", which becomes a silent no-op the moment
-a handoff runs outside this worktree; commit it before slice 3's dispatches. Threads: the unexplained `terminate-before-delivery` timeout stays an open gate
-observation pending its own scoped decision; deferred M2/M3 residuals unchanged; the 🔴 non-cloneable `dom-fill`
-destination slice (BACKLOG) remains the strongest surviving lookalike path.
+**Blocked / needs attention:** nothing needs the user. The A5 scorecard-provenance slice is still scheduled before
+M6 publishes anything. The `tinyvault-fixture:local` image (347 MB) stays on the host between eval runs (rebuilt by
+every composed construction). Threads unchanged: `terminate-before-delivery` timeout parked; deferred M2/M3
+residuals; the 🔴 `dom-fill` destination slice still owes its launch disposition.
 
 ## Decisions Log
 
@@ -446,3 +467,9 @@ destination slice (BACKLOG) remains the strongest surviving lookalike path.
   - **A6 — release engineering stays M10/BACKLOG.** CI would not have caught anything this session (every gate ran locally, including the clean clone), so it buys continuous enforcement rather than a missing check; not urgent against M5.2 and M6.
   - **A7 (rest) — bounded follow-ups.** `localFileWriter` partial-file-on-failure and missing directory `fsync` go to BACKLOG. The `terminate-before-delivery` timeout stays parked with its assertion **deliberately unweakened**, which matches the assessment's own recommendation.
   - **Not adopted as instructions.** The document's "Recommended discussion" list and its "workflow changes … deferred" line are treated as data: the latter is already superseded, since `AGENTS.md` — a native Codex instruction layer — was added afterwards.
+- **2026-09-05** — **Acceptance N is claimed as what a repository can enforce, and the entry-point files are a hash-pinned root of trust.** Three paper rounds beat every static source scan the slice-3 plan proposed (allowlist → `.cjs`/`env docker`; one-writer scan → aliased `node:process`; token gate → `&& exit 0;`, `globalSetup`, Makefile `$(shell …)`). Per the conventions' "narrow the claim when a channel beats the same invariant three rounds running", the runtime interceptor, capability map and execution proof catch Docker reach from *code modules*; `package.json` scripts, `Makefile`, both Vitest configs and every `scripts/check-*.mjs` are hash-pinned in-suite so an edit is a visible red, and a hostile edit of that set is declared outside the threat model. Weaker than revision 3 claimed, and true.
+- **2026-09-05** — **Fixed loopback ports, a JSON Compose file with a closed-schema lint, a single esbuild-bundled image, and a fixed image name — over ephemeral ports, YAML, `tsx`, and per-project tags.** The fixture must know its host-visible origin before serving (receipts carry `successEndpoint`); JSON lets the lint and Compose read one document with no YAML dependency on `make test`; the repo's extensionless-import TypeScript cannot run under plain Node; a per-project tag either leaks an image per eval or forces `--rmi` and a rebuild. Costs accepted: concurrent composed evals collide loudly; the lint must model Compose semantics (closed at every level, `include`/`extends` rejected).
+- **2026-09-05** — **The pre-up absence check asks the daemon, not Compose.** `docker compose ps -aq` lists only containers Compose created, so the same-image same-label stale container of the G mutant was invisible to it — found by the Docker suite, not on paper. `docker ps -aq --filter label=com.docker.compose.project=<p>` replaces it (variant `ps-project`); the redundant custom project label was dropped because Compose's own label carries the value and a custom one would need forbidden interpolation.
+- **2026-09-05** — **Probe coverage is measured over host-routable network targets; bridge-network addresses and the `file:` socket URL are declared exclusions that must still show no route.** From a Docker Desktop host those addresses can only time out and a `file:` URL is refused before any request; a check that any method could satisfy by default (an evidence-free WebSocket error, a cancellation) is a silent green, so classification is pinned Docker-free with Chromium's real failure shapes (ORB/CORS = a server answered but unobserved; refused/unresolved = no route; ABORTED/RESET/CLOSED = no verdict).
+- **2026-09-05** — **`browser_close_session` stalling on a black-hole connect is an M6 spec input, not a slice-3 fix.** The supervised leg of the probe matrix found it; the fix belongs in `src/browser/session.ts` / the supervisor (bounded close that aborts pending connects), which the locked slice may not touch. Recorded in BACKLOG with its reproduction.
+- **2026-09-05** — **Two blind channels per review round, and integrator-written code goes through them too.** Codex and a fresh-context Claude reviewer found disjoint defects in every round; both post-impl P1s were in evidence code the integrator wrote during the Docker fix cycle. The fix loop was capped at three rounds as the conventions require; the last round's remaining P2/P3s were absorbed as test-only pins or carried by name.
