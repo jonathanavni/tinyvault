@@ -67,7 +67,7 @@ it.each([
   await expect(capture(h)).rejects.toMatchObject({ code });
   expect(queries).toBe(2);
   expect(h.spawns.map(kindOf)).toEqual(['compose-ps-all', 'compose-build', 'image-inspect',
-    'compose-up', 'compose-ps-all', 'compose-stop', 'compose-down']);
+    'compose-up', 'compose-ps-all', 'compose-stop', 'image-history', 'compose-down']);
 });
 it.each(['exit', 'reject'] as const)('failed up follow-up query (%s) preserves container-create and query code', async (mode) => {
   let queries = 0;
@@ -121,7 +121,7 @@ it('bounds each teardown command without letting an aggregate timeout race scans
   const close = p.closer.close();
   const assertion = expect(close).resolves.toBeUndefined();
   await vi.advanceTimersByTimeAsync(180000); await assertion;
-  expect(h.spawns.map(kindOf).slice(-8)).toEqual(['compose-stop', 'logs', 'export', 'logs', 'export',
+  expect(h.spawns.map(kindOf).slice(-9)).toEqual(['compose-stop', 'image-history', 'logs', 'export', 'logs', 'export',
     'logs', 'export', 'compose-down']);
 });
 it('a hanging export is killed on its own bound and remaining scans precede down', async () => {
@@ -222,7 +222,8 @@ it.each(['exec-spawn', 'handshake-rejected', 'mac-invalid', 'bridge-protocol'] a
 it('closed-code error constructors cannot interpolate injected secret text', () => {
   const secret = Buffer.from(Array.from({ length: 32 }, (_, i) => 0x80 + i));
   for (const code of [...CONSTRUCTION_CODES, secret.toString('base64url')]) {
-    const error = new ComposedConstructionError(code as never, secret.toString('hex') as never);
+    const error = new ComposedConstructionError(code as never, secret.toString('hex') as never,
+      undefined, secret.toString('hex') as never);
     expect(String(error)).not.toContain(secret.toString('base64url'));
     expect(JSON.stringify(error)).not.toContain(secret.toString('hex'));
   }

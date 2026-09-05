@@ -24,6 +24,7 @@ export const CONSTRUCTION_CODES = [
   'privileged', 'namespace-shared', 'capability-added', 'device-added', 'bind-present', 'mount-present',
   'network-membership', 'port-mismatch', 'exec-spawn', 'handshake-rejected', 'mac-invalid',
   'bridge-protocol', 'bridge-closed', 'origin-unreachable', 'secret-exposed', 'scan-failed',
+  'history-parse', 'scan-control-missing',
   'compose-stop', 'compose-down', 'handle-timeout',
 ] as const;
 export type ConstructionCode = typeof CONSTRUCTION_CODES[number];
@@ -36,16 +37,18 @@ export class ComposedConstructionError extends Error {
   set teardownCode(code: ConstructionCode | undefined) { this.#teardownCode = code === undefined ? undefined : safeCode(code); }
   readonly command?: DockerCommand['kind'];
   readonly project?: string;
-  constructor(code: ConstructionCode, command?: DockerCommand['kind'], project?: string) {
+  readonly surface?: 'history';
+  constructor(code: ConstructionCode, command?: DockerCommand['kind'], project?: string, surface?: 'history') {
     super(safeCode(code));
     this.name = 'ComposedConstructionError';
     this.code = safeCode(code);
     this.project = typeof project === 'string' && NAME_PATTERN.exec(project)?.[0] === project ? project : undefined;
     this.command = COMMAND_KINDS.includes(command as DockerCommand['kind']) ? command : undefined;
+    this.surface = surface === 'history' ? surface : undefined;
   }
 }
 export const COMMAND_KINDS = ['compose-ps-all', 'compose-build', 'compose-up', 'compose-ps',
-  'compose-stop', 'compose-down', 'image-inspect', 'inspect', 'logs', 'export', 'exec-bridge'] as const;
+  'compose-stop', 'compose-down', 'image-inspect', 'image-history', 'inspect', 'logs', 'export', 'exec-bridge'] as const;
 declare const containerIdBrand: unique symbol;
 export type ContainerId = string & { readonly [containerIdBrand]: true };
 export function containerId(value: string): ContainerId {
@@ -57,6 +60,7 @@ export type DockerCommand =
   | (ComposeContext & { kind: 'compose-ps-all' | 'compose-build' | 'compose-up' | 'compose-stop' | 'compose-down' })
   | (ComposeContext & { kind: 'compose-ps'; service: string })
   | { kind: 'image-inspect' }
+  | { kind: 'image-history'; id: string }
   | { kind: 'inspect' | 'logs' | 'export' | 'exec-bridge'; id: ContainerId };
 export type DockerSpawn = Readonly<{
   file: string; args: readonly string[]; env: Readonly<Record<string, string>>;
@@ -89,6 +93,11 @@ function commandArgs(command: DockerCommand): string[] {
   if (!command || !COMMAND_KINDS.includes(command.kind)) throw new ComposedConstructionError('command-invalid');
   if ('project' in command) return composeArgs(command);
   if (command.kind === 'image-inspect') return ['image', 'inspect', IMAGE_NAME];
+  if (command.kind === 'image-history') {
+    const id = command.id;
+    requirePattern(id, IMAGE_ID_PATTERN);
+    return ['history', '--no-trunc', '--format', '{{json .}}', id];
+  }
   if (!('id' in command)) throw new ComposedConstructionError('command-invalid');
   requirePattern(command.id, ID_PATTERN);
   switch (command.kind) {

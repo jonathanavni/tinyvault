@@ -3,6 +3,7 @@
 // Nonzero up is classified by a post-hoc ps query, never Compose text: empty means container-create,
 // existing containers mean container-unhealthy. Both are terminal Acceptance A reds; query failure is
 // container-create with the query's closed code in teardownCode.
+// E scans: spawn args/env, command output, history, logs, export, exec stderr, and artifacts.
 import { createHash, randomBytes, type KeyObject } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -18,6 +19,7 @@ export { ComposedConstructionError, COMPOSE_FILE, WAIT_TIMEOUT_SECONDS, STOP_TIM
 export const PORTS = { 'benign-login': [47110], 'lookalike-origin': [47120, 47121], 'dom-hidden-injection': [47130] } as const;
 export const CREATED_TOLERANCE_MS = 60_000;
 export const ARTIFACT_MARKER = 'tinyvault-artifact-scan-close-v1';
+export const HISTORY_MARKER = 'com.tinyvault.marker=history-surface';
 export type ProbeOrigin = (origin: string) => Promise<boolean>;
 export type ComposeClock = BridgeClock & { now(): number };
 type Doc = Record<string, any>;
@@ -108,6 +110,7 @@ type Context = Identity & {
   pin: PinnedDockerEndpoint; runner: DockerProcessRunner; clock: ComposeClock; registry: HandleRegistry;
   spawns: DockerSpawn[]; surfaces: string[]; secrets: SecretScanner[]; ids: ContainerId[];
   stderr: ReturnType<typeof observeStderr>[]; options: ProjectOptions;
+  imageId?: string;
 };
 async function run(ctx: Context, command: DockerCommand, code: ConstructionCode): Promise<DockerResult> {
   ctx.spawns.push(buildDockerSpawn(ctx.pin, command));
@@ -167,7 +170,7 @@ export class ProjectCloser {
     const attempt = async (work: () => unknown) => {
       try { await work(); } catch (error) { failure ??= error; }
     };
-    // The locked §7 vocabulary omits history; its §11 E scan needs continuity-owner adjudication.
+    if (ctx.imageId) await attempt(() => this.#history(ctx.imageId!));
     for (const id of ctx.ids) {
       await attempt(() => run(ctx, { kind: 'logs', id }, 'scan-failed'));
       await attempt(() => this.#export(id));
@@ -177,6 +180,32 @@ export class ProjectCloser {
     if (ctx.stderr.some((s) => s.exposed())) failure ??= new ComposedConstructionError('secret-exposed');
     await attempt(() => this.#artifacts());
     if (failure) throw failure;
+  }
+  async #history(id: string): Promise<void> {
+    const { stdout, stderr } = await run(this.ctx, { kind: 'image-history', id }, 'scan-failed');
+    const control = new SecretScanner(Buffer.from(HISTORY_MARKER));
+    let observed = false;
+    let exposed = this.ctx.secrets.some((secret) => secret.scan(stderr));
+    try {
+      // Runner output is byte-preserving latin1; JSON text itself is strict UTF-8.
+      const text = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.from(stdout, 'latin1'));
+      const lines = text === '' ? [] : text.replace(/\n$/, '').split('\n');
+      for (const line of lines) {
+        const doc: unknown = JSON.parse(line);
+        if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new Error('history-parse');
+        const pending: unknown[] = Object.values(doc);
+        while (pending.length) {
+          const value = pending.pop();
+          if (typeof value === 'string') {
+            observed = control.scan(value) || observed;
+            exposed = this.ctx.secrets.some((secret) => secret.scan(value)) || exposed;
+          } else if (value && typeof value === 'object') pending.push(...Object.values(value));
+        }
+      }
+    } catch { throw new ComposedConstructionError('history-parse', 'image-history', undefined, 'history'); }
+    finally { control.destroy(); }
+    if (exposed) throw new ComposedConstructionError('secret-exposed', 'image-history', undefined, 'history');
+    if (!observed) throw new ComposedConstructionError('scan-control-missing', 'image-history', undefined, 'history');
   }
   async #export(id: ContainerId): Promise<void> {
     const ctx = this.ctx;
@@ -221,6 +250,7 @@ async function build(ctx: Context): Promise<Doc> {
   if (typeof image.Id !== 'string' || IMAGE_ID_PATTERN.exec(image.Id)?.[0] !== image.Id || !image.Config
     || !Object.hasOwn(image.Config, 'Cmd') || !Object.hasOwn(image.Config, 'Entrypoint')
     || !envKeys(image.Config.Env) || !Object.hasOwn(image.Config, 'Labels')) throw new ComposedConstructionError('image-inspect');
+  ctx.imageId = image.Id;
   await up(ctx);
   return image;
 }

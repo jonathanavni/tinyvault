@@ -7,7 +7,7 @@ import { PassThrough } from 'node:stream';
 import { ControlSession } from './container/control';
 import { dockerPreflight } from './preflight';
 import { FIXTURE_IDS } from './protocol';
-import { PORTS, type ProjectOptions } from './compose';
+import { HISTORY_MARKER, PORTS, type ProjectOptions } from './compose';
 import { containerId, type DockerSpawn, type DockerResult, type DockerHandle } from './exec';
 
 export const epochMs = 1788600000000;
@@ -33,6 +33,7 @@ export function validInspect(index: number, project: string, epoch: string) {
 }
 export function kindOf(spawn: DockerSpawn): string {
   const args = spawn.args;
+  if (args[0] === 'history') return 'image-history';
   if (args[0] !== 'compose') return args[0] === 'image' ? 'image-inspect' : args[0] === 'exec' ? 'exec-bridge' : args[0];
   const tail = args.slice(args.indexOf('-p') + 2);
   return tail[0] === 'ps' ? (tail[1] === '-aq' ? 'compose-ps-all' : 'compose-ps') : `compose-${tail[0]}`;
@@ -67,6 +68,7 @@ export async function fakeProject(spyFactory: SpyFactory, fake: FakeOptions = {}
       if (override) return override;
       let stdout = '';
       if (kind === 'image-inspect') stdout = JSON.stringify([imageDocument]);
+      if (kind === 'image-history') stdout = JSON.stringify({ CreatedBy: `LABEL ${HISTORY_MARKER}` }) + '\n';
       if (kind === 'compose-ps') stdout = ids[FIXTURE_IDS.indexOf(spawn.args.at(-1) as typeof FIXTURE_IDS[number])] + '\n';
       if (kind === 'inspect') {
         const i = ids.indexOf(spawn.args.at(-1) as typeof ids[number]);
