@@ -214,4 +214,12 @@ additive; `docker history` truncates by default; `vitest list --filesOnly --json
   first argument** (plan §9 amended). Lesson for the register: three of the four revision-4 sentences B2 tripped on
   were written without measuring the tree; the paper rounds did not catch them because they were about the
   *implementation's* environment, not the design. Carried to `.claude/memory/conventions.md` at wrapup.
+- **2026-09-05 — B2 stop #4 (ownership, not contract):** slice 2's R2-2 regression (`exec.test.ts:92`) deliberately
+  contains `import('node:' + 'child_process')` to prove the runtime interceptor catches an obfuscated spawn; the new
+  capability gate must reject computed imports in gated directories. **Resolved:** the probe moves into the file's
+  existing `guardProbe` subprocess fixture as generated source, so the computed import is still *executed* under the
+  interceptor and still asserted rejected, while no checked-in file carries the literal. B2 authorized to make that
+  narrow edit. **Dispatch rule widened:** an ownership-only conflict that a §8/§9 rule forces is handled by the
+  minimal edit preserving the file's assertions and reported as a deviation; STOP is reserved for contracts that
+  cannot be met.
 
