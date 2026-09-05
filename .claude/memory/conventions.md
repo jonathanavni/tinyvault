@@ -180,3 +180,25 @@ Example:
   subagent ran.
 - **A monitor that prints nothing is not a pass.** A grep-in-a-shell-function harness swallowed vitest output and
   looked like "no failures"; re-run plainly, the mutants were real. Same class as the status-vs-log-mtime trap.
+
+## Slice-3 session conventions (2026-09-05)
+
+- **Two blind channels per review round, every round.** Codex (Sol for paper, Astra for code) plus a fresh-context
+  Claude reviewer on the same packet; write the register only when both are in. Their catches were disjoint in all
+  three paper rounds and in the post-impl round; neither alone would have shipped the slice.
+- **Every integrator-authored line goes through the same cross-model review as Codex's.** The evidence code the
+  integrator wrote during the Docker fix cycle (probe matrix, oracle, coverage) drew two P1s from Codex in the
+  post-impl rounds — the carve-out for "evidence code" does not exempt it from review, and the register records who
+  wrote what.
+- **Environment facts are measured before they are written into a locked plan.** Four revision-4 sentences (a label
+  needing forbidden interpolation, TypeScript constants a bare-Node lint cannot import, an undercounted
+  `child_process` set, an `IpcMode` Docker never leaves empty) each cost a Codex stop. Probe the host first; three
+  paper rounds cannot see the implementation's environment.
+- **Quiescence before every dispatch and every integrator run**: no file newer than a marker for 60 s. Codex jobs
+  with subagents keep writing after "completed"; tell implementers "single writer, no subagent edits".
+- **Post-impl fix rounds route by ownership, sequentially in one worktree**: integrator edits first (evidence code,
+  hygiene, wording), commit, then the Codex core job — never two writers.
+- **The coverage check must be able to fail.** A per-target coverage assertion that any method could satisfy by
+  default (an evidence-free WebSocket error counted as a verdict) is a silent-green; classification must be pinned
+  Docker-free with the exact failure shapes the environment produces.
+

@@ -281,4 +281,28 @@ Example:
   strict `Object.hasOwn` parser rejects every `ENTRYPOINT`-only image; treat absent as `null` and require at least one
   of the two. `docker image inspect --format '{{.Config.Cmd}}'` errors with "map has no entry for key" on such an
   image, which is the quickest confirmation. (2026-09-05)
+- **A verification chain that commits must fail closed at every step — `cmd; next` after a failing `tsc` still
+  commits.** The slice-3 fix-round-2 chain used `;` between typecheck and the rest, so a test file with a syntax error
+  was committed (`1507ef7`) and even got a green `make test-docker` (that file is on the `make test` path, not the
+  Docker suite's). Caught by tsc and by the next review round. Use `|| exit 1` after every gate in a chain, and never
+  put a commit after a step whose failure the chain can skip. Related: a `while … [ x ] && { …; }` loop's exit status
+  is the last test's — with `&&` after it, the quiet path silently skips the rest; use `if`. (2026-09-05)
+- **Reading a stale `.vitest/*.json` report as a result.** After a chain aborted before Vitest ran, the report files from
+  the previous run were still there and read as "green". The execution proof deletes them first for exactly this
+  reason; do the same in ad-hoc chains (`rm -f .vitest/*.json` before Vitest) or print the report mtime. (2026-09-05)
+- **Chromium makes cross-origin HTML unobservable to a page-level oracle.** An `<img>` of an HTML document fails with
+  `net::ERR_BLOCKED_BY_ORB`, a cross-origin `fetch` without CORS headers with `net::ERR_FAILED`; Playwright emits
+  `requestfailed` and no `response` event even though the server answered. A status-keyed oracle is blind to exactly
+  the reachable case; classify by `requestfailed` text (refused/timed out/unresolved = no route; ORB/CORS = a server
+  answered; ABORTED/RESET/CLOSED = cancellation, not a verdict). Also: a form's iframe `load` fires synchronously on
+  insertion — install the handler before `append`, or `form.submit()` never runs. (2026-09-05)
+- **`docker compose ps -aq -p <project>` lists only containers Compose itself created.** A bare `docker create`d
+  container with the project/service labels is invisible to it; a "project is empty" check must use
+  `docker ps -aq --filter label=com.docker.compose.project=<p>`. Also on Docker 29: `image inspect` omits
+  `Config.Cmd` entirely for an `ENTRYPOINT`-only image; an unspecified IPC mode inspects as `private`; the lookalike
+  canonical `/` is a 302, so a healthcheck must accept 3xx. (2026-09-05)
+- **Docker bridge-network addresses are unroutable from a Docker Desktop host; a probe to them can only time out.**
+  From the harness this means (a) `browser_close_session` hangs after a navigation to such an address (BACKLOG, M6
+  spec input) and (b) no page-level probe can produce a verdict there within its deadline — measure coverage over
+  host-routable targets and declare the exclusion. (2026-09-05)
 

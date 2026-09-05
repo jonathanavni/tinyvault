@@ -59,7 +59,7 @@ Active planning docs:
   gate; capture transfer without shared mounts; the frozen agent tool surface) and Acceptance A–P.
 - `m5-2-implementation-plan.md` — how the locked M5.2 contract is sequenced: six independently-green commits, the
   Codex/integrator ownership split, and which Acceptance criteria each commit gates. Docker enters at commit 3 and
-  never on the `make test` path. **Slices 1–2 merged (`ab52f8e`, `8133495`); slice 3 in flight.**
+  never on the `make test` path. **Slices 1–3 merged (`ab52f8e`, `8133495`, slice 3 — see `PLAN.md`); slice 4 next.**
 - `m5-2-review-findings.md` — the M5.2 register: C-R1 (seam recon), C-R2/C-R3/C-R5 (three adversarial paper rounds,
   which killed the original network shape, then the sidecar split and exec bridge, then found the Docker daemon was
   an unguarded alternate control transport), C-R4 and C-R6 (the user's threat-model lock and bounded cap
@@ -82,7 +82,10 @@ Active planning docs:
   and the narrowed claim for static scans. Resolves slice 2's B4, R2-4 and eval-time-interceptor residuals.
 - `m5-2-slice-3-review-findings.md` — the slice-3 register, **append-only**: C-U1/C-U1b (round 1: Codex Sol STOP
   10×P1, Claude 7×P2), C-U2/C-U2b (round 2: Codex STOP 8×P1, Claude 1×P1 — the round that beat every static scan
-  and forced the claim narrowing), round 3 and the implementation-review rounds as they land.
+  and forced the claim narrowing), C-U3/C-U3b (round 3, the lock: the entry-point files become a hash-pinned root
+  of trust), the implementation log (every adjudicated Codex stop and integrator amendment, the first real Docker
+  runs, the `browser_close_session` finding), and the three-channel post-implementation review with three fix
+  rounds under the cap. **Shipped** — see `PLAN.md` for the merge commit.
 - `project-assessment-2026-09-03.md` — Codex's read-only project teardown at `e69259d` (post-M5): two P0 gate defects, the
   fixture-topology conflict, stale docs, missing release engineering. Verified by Claude the same day; dispositions in
   `m5-review-findings.md` §C-P and the M5.1 slice in `PLAN.md`. Its milestone table is inaccurate for M1–M3 — read `PLAN.md` for those.
