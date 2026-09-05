@@ -135,8 +135,9 @@ export function classifyProbe(probe: Probe): ProbeClass {
     || (/^\d+$/.test(probe.outcome) && probe.outcome !== '404')) return 'route';
   if (probe.statuses.length > 0 || probe.outcome === '404') return 'no-route';
   if (probe.failure !== undefined) return NO_ROUTE_FAILURE.test(probe.failure) ? 'no-route' : 'unobserved';
-  // A WebSocket that neither opened nor produced network evidence is not a WebSocket control route.
-  if (probe.method === 'websocket') return 'no-route';
+  // No status, no failure text, no open socket: nothing was observed at the network layer. This includes a
+  // WebSocket that merely errored — an evidence-free error must not count as a verdict, or every target would
+  // trivially satisfy coverage through it.
   return 'unobserved';
 }
 export const detectedRoute = (probe: Probe): boolean => classifyProbe(probe) === 'route';
