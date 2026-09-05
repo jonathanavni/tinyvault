@@ -237,4 +237,10 @@ additive; `docker history` truncates by default; `vitest list --filesOnly --json
   its ownership moves to the job that owns the Dockerfile: Job C updates the skeleton and the Dockerfile together,
   every §8 named rule still enforced, and the lint self-test still red per rule. `ENTRYPOINT` per §2 (the step-6
   inspect row compares the image's `Cmd`/`Entrypoint` either way).
+- **2026-09-05 — Job C stop #2 (contract vs Docker behaviour, two facts):** (1) the step-6 table required an empty
+  `HostConfig.IpcMode`, but Docker normalizes an unspecified IPC mode to the daemon default `private` (upstream
+  `daemon_unix.go`; `docker info` on this host does not expose the field) — **amended** to `'' | 'private'`, shared
+  modes still rejected under `namespace-shared`; B1's predicate at `compose.ts:68` follows (Job C authorized). (2) The
+  pinned healthcheck required HTTP 200 on `/`, but the lookalike canonical origin answers 302 — **amended** to accept
+  2xx/3xx. Both are facts about the implementation's environment that no paper round could see; recorded as such.
 

@@ -166,8 +166,8 @@ auditable way to get one file per entry. Alternatives considered and rejected: `
 runtime dependency and a second TypeScript toolchain in the security fixture); publishing a prebuilt image (M10,
 and it breaks "provenance from harness-controlled creation").
 
-**Readiness.** Each service declares a Compose `healthcheck` (a `node -e` probe of its own HTTP port and the
-control socket's existence) with pinned `interval`, `timeout`, `retries` and `start_period`, and the harness runs
+**Readiness.** Each service declares a Compose `healthcheck` (a `node -e` probe of its own HTTP port — accepting any 2xx or 3xx, because the lookalike's canonical `/` is a
+302 to the lookalike origin — and the control socket's existence) with pinned `interval`, `timeout`, `retries` and `start_period`, and the harness runs
 `compose up -d --wait --wait-timeout <N>` with a **finite** constant timeout, so "container is up" means healthy
 and an unhealthy or never-healthy service is a loud `container-unhealthy` red rather than a hang. The bridge then
 connects **once**. A bounded pre-handshake connect retry against the same immutable id would *not* be the
@@ -223,7 +223,8 @@ Order, after the slice-2 preflight has pinned the endpoint:
    | `.Config.Cmd`, `.Config.Entrypoint` | equal the image's (`image inspect`) | `command-overridden` | other cmd |
    | `.HostConfig.NetworkMode` | equals the project default network | `network-mode` | `host` |
    | `.HostConfig.Privileged` | `=== false` | `privileged` | `true` |
-   | `.HostConfig.PidMode`, `.IpcMode` | empty | `namespace-shared` | `host` |
+   | `.HostConfig.PidMode` | empty | `namespace-shared` | `host` |
+   | `.HostConfig.IpcMode` | `''` or `'private'` — Docker normalizes an unspecified IPC mode to the daemon default, `private` (integrator amendment 2026-09-05, Job C stop #2); `host`, `shareable` and `container:<id>` are rejected | `namespace-shared` | `host` |
    | `.HostConfig.CapAdd`, `.Devices`, `.Binds` | empty | `capability-added` / `device-added` / `bind-present` | one entry |
    | `.Mounts` | empty | `mount-present` | one mount |
    | `.NetworkSettings.Networks` | exactly the project network | `network-membership` | second network |
