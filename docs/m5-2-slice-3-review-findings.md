@@ -325,3 +325,28 @@ given the locked threat model and the §9/§10 declared limits. Findings and dis
 - **Round 2** runs on the absorbed-fix diff (Codex adversarial + QA), per `docs/handoff-pattern.md` §5; its packet
   states the last-round P1 criteria up front.
 
+**Correction to the entry above (append-only):** the "plan §9 U1-16 sentence corrected" line is wrong — revision 4's §9
+no longer contains that sentence; the QA channel was quoting the register's own U1-16 disposition row. The correction
+therefore lives here: no gate rule rejects "any other `*.docker.test.ts`" and none is needed, because the exclusion is one
+exact path and any other file with that suffix is part of the default inventory (it runs under the guard and must appear
+in the main report). The exact-file mechanism is what closes U1-16.
+
+### Fix round 1 verified; round 2 (Codex, on the absorbed-fix diff `5385a4b..f403c8c`)
+
+- **Fix round 1 committed:** integrator evidence-code fixes `e6b54b7`; Codex core fixes `f403c8c` (16/16 targeted
+  mutations red then green in the sandbox). **Integrator-verified at `f403c8c`:** tsc clean; `testbed/docker` 525 tests;
+  gates PASS; `make test` **1546 + 5 + 10, execution proof PASS**; `make test-docker` **4/4 in 78 s**.
+- **Round 2 Codex adversarial review (`--base 5385a4b`): NEEDS-ATTENTION** — absorption check: 10 ABSORBED, 7 PARTIAL
+  (Chromium/filesystem mutation proofs it could not run in its sandbox), 0 MISSING. **[P1]** the per-target coverage check
+  was trivially satisfiable: an evidence-free WebSocket error classified `no-route`, so a target where fetch/img/worker were
+  CORS-hidden and the form never answered still counted as covered. **[P2]** the new export positive control observed
+  its marker through its own listener, bypassing the production secret scan — a blind, draining secret scanner still
+  closed cleanly with a planted secret present. Claim boundary clean.
+- **Fix round 2:** integrator (`d9bd91e`) — an evidence-free error is `unobserved` for every method, WebSocket included,
+  and a **Docker-free classification suite** (`integrationProbes.classify.test.ts`) pins hidden answers, connection
+  failures, routes and coverage gaps so the C oracle is mutation-sensitive without Docker. Codex GPT-6 Astra dispatched
+  for the P2: marker detection must ride the **same scanning pass** as secret detection for every in-closer control, with
+  a draining-blind-scanner regression.
+- **Round 3 (the last under the cap)** will review the whole fix range `5385a4b..HEAD` with both channels under the
+  stated P1 criteria, after the integrator re-runs `make test` and `make test-docker` at the candidate head.
+
