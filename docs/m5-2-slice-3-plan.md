@@ -190,7 +190,9 @@ Order, after the slice-2 preflight has pinned the endpoint:
 
 1. **Mint the eval epoch**: `<unix-ms>-<128-bit CSPRNG hex>`. **Project name**: `tinyvault-<epoch short hash>`.
    Both are non-secret; both go into every service's labels via Compose interpolation
-   (`com.tinyvault.epoch`, `com.tinyvault.project`, `com.tinyvault.fixture`).
+   (`com.tinyvault.epoch`, `com.tinyvault.fixture`; the project name is carried by Compose's own
+   `com.docker.compose.project` label, which is verified — a custom project label would need `${TV_PROJECT}`
+   interpolation, which §8 forbids; integrator amendment 2026-09-05 after Job B2 stopped on the contradiction).
 2. **Pre-up absence**: `compose ps -aq` for the project (all states) must return **nothing**; any output is
    `project-not-fresh`. `compose up` reuses an existing container whose configuration is unchanged, so exact-one
    resolution alone cannot prove *this invocation* created the container — the absence check plus the
@@ -213,7 +215,6 @@ Order, after the slice-2 preflight has pinned the endpoint:
    | `.Created` | ≥ epoch ms − tolerance (60 s; the daemon VM clock can drift) | `created-before-epoch` | one hour earlier |
    | `.Config.Labels['com.tinyvault.fixture']` | equals the service's fixture id | `label-fixture` | other fixture |
    | `.Config.Labels['com.tinyvault.epoch']` | equals the epoch | `label-epoch` | other epoch |
-   | `.Config.Labels['com.tinyvault.project']` | equals the project | `label-project` | other project |
    | `.Config.Labels['com.docker.compose.project']` | equals the project | `label-compose-project` | other |
    | `.Config.Labels['com.docker.compose.service']` | equals the service | `label-compose-service` | other |
    | `.Config.Hostname` | 12-hex, prefix of the id | `hostname-mismatch` | unrelated hostname |

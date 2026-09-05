@@ -198,4 +198,11 @@ additive; `docker history` truncates by default; `vitest list --filesOnly --json
   *after* its main thread reported completion; two later dispatches saw "another writer". No foreign process
   existed. A quiescence check (no file newer than a marker for 60 s) now precedes every dispatch and every
   integrator verification run.
+- **2026-09-05 — Job B1-b committed `d3cd3a0`** (`image-history` variant + E history scan; `make test` 1448 + 5 + 10,
+  exit 0). **Job B2 stopped on a revision-4 contradiction:** the step-6 table required `com.tinyvault.project` =
+  project name while §8 forbids `${TV_PROJECT}` interpolation, so no static Compose file can satisfy both.
+  **Resolved by removing the redundant custom label** — Compose's own `com.docker.compose.project` label carries the
+  same value and stays verified (`label-compose-project`). Integrator carve-out (four one-line removals in B1's
+  verifier, its test table, the testkit and the code enum; `docs/handoff-pattern.md` §4 "mechanically absorbing
+  review findings"), verified by tsc + the `testbed/docker` suite before commit. Plan §3 amended.
 
