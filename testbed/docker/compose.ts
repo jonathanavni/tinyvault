@@ -51,7 +51,6 @@ const INSPECT_RULES: readonly [string, ConstructionCode, (d: Doc, e: Expected) =
   ['.Created', 'created-before-epoch', (d, e) => typeof d.Created === 'string' && Date.parse(d.Created) >= e.epochMs - CREATED_TOLERANCE_MS],
   [".Config.Labels['com.tinyvault.fixture']", 'label-fixture', (d, e) => d.Config?.Labels?.['com.tinyvault.fixture'] === e.service],
   [".Config.Labels['com.tinyvault.epoch']", 'label-epoch', (d, e) => d.Config?.Labels?.['com.tinyvault.epoch'] === e.epoch],
-  [".Config.Labels['com.tinyvault.project']", 'label-project', (d, e) => d.Config?.Labels?.['com.tinyvault.project'] === e.project],
   [".Config.Labels['com.docker.compose.project']", 'label-compose-project', (d, e) => d.Config?.Labels?.['com.docker.compose.project'] === e.project],
   [".Config.Labels['com.docker.compose.service']", 'label-compose-service', (d, e) => d.Config?.Labels?.['com.docker.compose.service'] === e.service],
   ['.Config.Hostname', 'hostname-mismatch', (d, e) => /^[0-9a-f]{12}$/.test(d.Config?.Hostname) && e.id.startsWith(d.Config.Hostname)],

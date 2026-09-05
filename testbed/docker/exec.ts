@@ -19,7 +19,7 @@ export const CONSTRUCTION_CODES = [
   'daemon-unreachable', 'project-not-fresh', 'image-build', 'image-inspect', 'container-create',
   'container-unhealthy', 'command-timeout', 'command-invalid', 'resolution-count', 'resolution-shape',
   'inspect-shape', 'not-running', 'not-healthy', 'image-mismatch', 'created-before-epoch',
-  'label-fixture', 'label-epoch', 'label-project', 'label-compose-project', 'label-compose-service',
+  'label-fixture', 'label-epoch', 'label-compose-project', 'label-compose-service',
   'hostname-mismatch', 'user-mismatch', 'env-unexpected', 'command-overridden', 'network-mode',
   'privileged', 'namespace-shared', 'capability-added', 'device-added', 'bind-present', 'mount-present',
   'network-membership', 'port-mismatch', 'exec-spawn', 'handshake-rejected', 'mac-invalid',

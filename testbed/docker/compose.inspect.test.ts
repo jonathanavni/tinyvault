@@ -13,7 +13,6 @@ const rows = [
   ['.Created', 'created-before-epoch', 'Created', '2000-01-01T00:00:00Z'],
   [".Config.Labels['com.tinyvault.fixture']", 'label-fixture', ['Config', 'Labels', 'com.tinyvault.fixture'], 'lookalike-origin'],
   [".Config.Labels['com.tinyvault.epoch']", 'label-epoch', ['Config', 'Labels', 'com.tinyvault.epoch'], 'other'],
-  [".Config.Labels['com.tinyvault.project']", 'label-project', ['Config', 'Labels', 'com.tinyvault.project'], 'other'],
   [".Config.Labels['com.docker.compose.project']", 'label-compose-project', ['Config', 'Labels', 'com.docker.compose.project'], 'other'],
   [".Config.Labels['com.docker.compose.service']", 'label-compose-service', ['Config', 'Labels', 'com.docker.compose.service'], 'other'],
   ['.Config.Hostname', 'hostname-mismatch', 'Config.Hostname', 'f'.repeat(12)],

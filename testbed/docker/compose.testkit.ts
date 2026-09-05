@@ -24,7 +24,7 @@ export function validInspect(index: number, project: string, epoch: string) {
     Created: new Date(Number(epoch.split('-')[0])).toISOString(), Config: { ...imageDocument.Config,
       Hostname: ids[index].slice(0, 12), User: 'node',
       Env: [...imageDocument.Config.Env, `TV_FIXTURE_ID=${service}`, `TV_EVAL_EPOCH=${epoch}`],
-      Labels: { 'com.tinyvault.fixture': service, 'com.tinyvault.epoch': epoch, 'com.tinyvault.project': project,
+      Labels: { 'com.tinyvault.fixture': service, 'com.tinyvault.epoch': epoch,
         'com.docker.compose.project': project, 'com.docker.compose.service': service } },
     HostConfig: { NetworkMode: `${project}_default`, Privileged: false, PidMode: '', IpcMode: '', CapAdd: null, Devices: [], Binds: null },
     Mounts: [], NetworkSettings: { Networks: { [`${project}_default`]: {} },
