@@ -265,4 +265,14 @@ additive; `docker history` truncates by default; `vitest list --filesOnly --json
   is bounded at 20 s per attempt so a stall is a red, and its exclusion of container-network hosts is stated in code.
   The raw composed path — build, three authenticated bridges, stop → history/logs/export scans → down — completes in
   13 s in an instrumented run, unchanged by any of this.
+- **2026-09-05 — Docker-suite finding that IS in the slice (G, stale container):** `docker compose ps -aq -p <project>`
+  returns nothing for a bare `docker create`d container that carries `com.docker.compose.project`/`.service` and the
+  tinyvault labels (verified on this host, Compose v5.3.1), so B1's pre-up absence check could not see the very
+  stale container the C-U1-6 mutant describes; the Docker suite's stale-container test caught it (`container-unhealthy`
+  instead of `project-not-fresh`). **Amended** (plan §3 step 2, §7): the absence check is a daemon-level
+  `docker ps -aq --filter label=com.docker.compose.project=<project>`; new closed variant `ps-project` replaces
+  `compose-ps-all`. Dispatched to Codex Astra as a bounded B1 follow-up (security-core surface). Also found: the
+  override-port oracle in the Docker suite raced Playwright's `response` event against the in-page attempt's
+  resolution (a 200 recorded a few ms late read as "not detected"); fixed test-side with a per-URL settle
+  (integrator, evidence code).
 

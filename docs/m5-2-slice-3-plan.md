@@ -193,8 +193,12 @@ Order, after the slice-2 preflight has pinned the endpoint:
    (`com.tinyvault.epoch`, `com.tinyvault.fixture`; the project name is carried by Compose's own
    `com.docker.compose.project` label, which is verified — a custom project label would need `${TV_PROJECT}`
    interpolation, which §8 forbids; integrator amendment 2026-09-05 after Job B2 stopped on the contradiction).
-2. **Pre-up absence**: `compose ps -aq` for the project (all states) must return **nothing**; any output is
-   `project-not-fresh`. `compose up` reuses an existing container whose configuration is unchanged, so exact-one
+2. **Pre-up absence**: `docker ps -aq --filter label=com.docker.compose.project=<project>` (a **daemon-level** label
+   query, all states) must return **nothing**; any output is `project-not-fresh`. *Integrator amendment 2026-09-05,
+   from the first real Docker runs: `docker compose ps -aq` lists only containers Compose itself created — a bare
+   `docker create`d container carrying the project and service labels (exactly the same-image same-label stale
+   container of the G mutant) is invisible to it, so the absence check must ask the daemon, not Compose.* The same
+   query serves the post-`up` created-vs-unhealthy distinction. `compose up` reuses an existing container whose configuration is unchanged, so exact-one
    resolution alone cannot prove *this invocation* created the container — the absence check plus the
    `Created` bound in the step-6 table do.
 3. `compose build` under that project → **record the built image id** (`image inspect` → `.Id`, `sha256:` + 64
@@ -455,7 +459,7 @@ never spawn.
 
 | Variant | argv (after the fixed `docker`) | Boundary |
 |---|---|---|
-| `compose-ps-all` | `compose --env-file /dev/null -f <file> -p <project> ps -aq` | stdout must be empty (§3 step 2) |
+| `ps-project` | `ps -aq --filter label=com.docker.compose.project=<project>` | daemon-level; stdout must be empty (§3 step 2); replaces the `compose ps -aq` form, which hides containers Compose did not create (integrator amendment 2026-09-05) |
 | `compose-build` | `compose --env-file /dev/null -f <file> -p <project> build` | run to completion |
 | `compose-up` | `compose --env-file /dev/null -f <file> -p <project> up -d --wait --wait-timeout <N> --no-build` | run to completion; `<N>` a module constant |
 | `compose-ps` | `compose --env-file /dev/null -f <file> -p <project> ps -q <service>` | stdout parsed: exactly one 64-hex line |
