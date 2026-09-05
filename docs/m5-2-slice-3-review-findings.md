@@ -61,3 +61,59 @@ containment** — independently confirmed by C-U1b.
 - **Round 2** runs on revision 2 as an absorption sweep plus a bypass hunt on the new mechanisms (closed-schema lint,
   per-capability map, entry-point gate, seen-id correlation, pre-up absence check). Cap: round 3 is the last paper
   round (`docs/handoff-pattern.md` §5).
+
+## C-U2 — pre-implementation round 2, Codex GPT-5.6 Sol (read-only `task`, 2026-09-05) — on plan revision 2 @ `3298262`
+
+**Status: STOP** — 8×P1, 4×P2, 1×P3. Absorption sweep: 19 of 26 rows ABSORBED, 7 PARTIAL (U1-1, U1-3, U1-9, U1-10,
+U1-11, U1b-3, U1b-5), none MISSING. Parallel blind channel C-U2b below.
+
+| # | Sev | Finding (condensed) | Disposition |
+|---|---|---|---|
+| U2-1 | P1 | `payload === JSON.stringify(JSON.parse(payload))` accepts reordered keys — parsing preserves insertion order; the reordered-key I mutant stays green. | **ACCEPTED.** §4: rebuild a fresh object in schema key order, compare its serialization. |
+| U2-2 | P1 | Capability map does not close `make test`: `.cjs` test files are outside the scanner's extensions and the Docker inventory; `spawnSync('/usr/bin/env',['docker'])` passes the runtime guard (executable is `env`). | **ACCEPTED, with the claim narrowed.** §9: all Node extensions scanned; inventory uses Vitest's real include glob; the interceptor gains the `env` case; **wrapper launchers in general are declared outside the guard** in its header — a third scan is not added. |
+| U2-3 | P1 | The token gate does not pin shell control flow or prove execution: `check && exit 0; vitest …` is green with no tests run. | **ACCEPTED.** §9: the gate becomes an **exact grammar** (`&&`-only, exact ordered command list, no prerequisites) plus an **execution proof** (JSON reporter inventory must equal the discovered set, zero skipped bar the eval-gated test). |
+| U2-4 | P1 | One-writer rule is a blocklist; an aliased `node:process` stdout writer is invisible. | **ACCEPTED, mechanism changed.** §4: **runtime tripwire** on `process.stdout.write`/`console.*` (bound original used by the pipe; any other writer exits non-zero when it executes); static side narrowed to an exact import list for `bridge.ts`; fd-level writes declared outside hygiene. |
+| U2-5 | P1 | B4 test vacuous with a plain `{code:'EPERM'}` — `isNodeError` requires `instanceof Error`, so both versions throw before the branch. | **ACCEPTED.** §10: inject `Object.assign(new Error, {code:'EPERM'})`; paired in-process positive. |
+| U2-6 | P1 | E misses the exec process's real stderr (`docker logs` is PID 1 only). | **ACCEPTED.** §11 E row: host consumes `spawnLongLived.stderr` (bounded) and scans it, with its own sentinel. |
+| U2-7 | P1 | Positive controls do not isolate surfaces (`TV_FIXTURE_ID` proves one inspect location; a boot banner does not detect later truncation; one marker does not prove traversal or chunk matching). | **ACCEPTED.** §11 E: one marker per independently scanned surface, hex and decimal-array plants, shutdown banner, straddling marker, `history --no-trunc`. |
+| U2-8 | P1 | U1b-5 internally unabsorbed: §11 C still said "eight self-test mutants". | **ACCEPTED** — drift fixed; rule-list equality in both directions. |
+| U2-9 | P2 | L2 closes keys but not values (`user:"0"`, `read_only:false`, `healthcheck.test:["CMD","true"]`). | **ACCEPTED** (with C-U2b P2-3). §8 pins values, the exact healthcheck command, labels, environment values and every `${…}` reference. |
+| U2-10 | P2 | Correlation order-dependent; seen-set unbounded. | **ACCEPTED** (with C-U2b P2-4). §4: ordered high-water-mark classification with per-branch test inputs and an order-swap test. |
+| U2-11 | P2 | Cleanup covers established bridges, not the one spawned for the failing service; `compose down` should not run when the pre-up absence check fails. | **ACCEPTED.** §3: handle registry populated at spawn, whole registry killed; no teardown on `project-not-fresh`. |
+| U2-12 | P2 | Bodies not closed schemas; `containerId` not required 64-hex; SPKI with trailing garbage still reports `ed25519`. | **ACCEPTED.** §5: closed body schemas, 64-hex id, base64url round-trip, SPKI re-export byte equality, `mac-shape`. |
+| U2-13 | P3 | Step references and code accounting inconsistent. | **ACCEPTED.** §3 step 6 is one field→predicate→code→mutant table; references renumbered. |
+
+Codex's residual-risk note is recorded as confirmation: **no extra-port or mount bypass via anchors, `x-` fields,
+profiles, `COMPOSE_FILE` or `COMPOSE_ENV_FILES`** was found against the closed schema (probe: explicit `-f` and
+`--env-file /dev/null` win over those variables on this host), and **no same-image/same-label stale container
+survives the pre-up absence check plus the step-6 table** under the locked assumption.
+
+## C-U2b — pre-implementation round 2, fresh-context Claude reviewer (read-only, 2026-09-05) — on plan revision 2 @ `3298262`
+
+**Status: NEEDS-ATTENTION** — 1×P1, 4×P2, 12×P3. Absorption sweep: all rows ABSORBED except U1-2 PARTIAL (the
+"non-overlapping" claim was untrue as worded) and one U1b P3 (code header labels for B4/B5a). Verified on this
+host: JSON piped to `compose -f - config` accepted; `${…}` interpolated from the **process** environment under
+`--env-file /dev/null`; `dockerfile_inline` and an `x-` service key accepted by Compose; a duplicate JSON key
+**rejected** by Compose's YAML parser (fail-closed direction).
+
+| # | Sev | Finding (condensed) | Disposition |
+|---|---|---|---|
+| U2b-P1-1 | P1 | The entry gate misses npm `pre`/`post` lifecycle scripts, Makefile prerequisites, Vitest `projects`/`--root`/`--dir`, extra config files and the exact `--exclude` tokens — a guard-less Docker run on `make test` with all N gates green. | **ACCEPTED** (with U2-3). §9 grammar gate: no `pre*`/`post*`, exact command list, no Makefile prerequisites, exactly two config files, no `projects`/`root`/`dir`, exact excludes. |
+| U2b-P2-1 | P2 | Controls are ASCII substrings; a `Buffer` logs as hex or a decimal array; `docker history` truncates by default and has no needle. | **ACCEPTED** (with U2-7). Existing leak decoders run against the 32 raw bytes; `history --no-trunc` with a `LABEL` needle. |
+| U2b-P2-2 | P2 | Scan window ends at the handshake; shutdown paths unscanned; controls planted at boot. | **ACCEPTED.** §11 E: kill bridge → scans → `compose down`; SIGTERM shutdown banner; post-`close()` artifact scan. |
+| U2b-P2-3 | P2 | Interpolation from process env under `--env-file /dev/null` (verified); slice-2 env builder is pass-through; `COMPOSE_*` pass-through can put status text on stdout. | **ACCEPTED.** §7: allowlisted child environment, `--progress quiet --ansi never`; §8: `${…}` set and positions pinned; §7 sentence corrected. |
+| U2b-P2-4 | P2 | `unsolicited` and `duplicate-id` predicates overlap; order unstated. | **ACCEPTED** (= U2-10). The register's U1-2 row said "non-overlapping"; **correction appended here, not edited**: it became true only with revision 3's stated order and per-branch inputs. |
+| U2b-P3s | P3 | Dockerfile lint (`VOLUME`, `USER`, `EXPOSE`, `ENV TV_*`); nested allowlists incl. `dockerfile_inline`; override launch mechanics and a capability entry for the Docker suite; `Created` clock tolerance and `--type container`; verifier field-list export; `mac-shape`/`secret-shape`, base64url canonical; text-shaped one-writer scan (`fs.writeSync(1)`); `tls`/`http2` in the static list; Docker-suite execution gate; bounded stderr capture, SIGKILL, bounded `down`, `--rmi local`; lookalike EPERM branch equivalent → one bind site; F wording; PLAN.md "Next session" should say `exec -i`. | **ALL ACCEPTED** and absorbed in revision 3 (§2 T3, §3, §4, §5, §7, §8, §9, §11, §12); the PLAN.md wording lands at wrapup. |
+
+## Adjudications (integrator, 2026-09-05, after round 2)
+
+- **The static-scan class was beaten twice** (allowlist, one-writer scan, token gate), each time by a spelling the
+  scan did not know — the C-S1 shape. Revision 3 **narrows the claim** rather than adding a fourth scan: runtime
+  tripwires primary, static scans declared partial, `make test` pinned by an exact grammar plus an execution
+  proof. Recorded so round 3 reviews the narrowed claim, not a stronger one.
+- **Two channels again converged on disjoint evidence**: Codex found the reorder-blind canonical check and the
+  `instanceof Error` vacuity; Claude verified interpolation from the process environment and the lifecycle-script
+  hole on this host. Both confirmed no sentence exceeds the locked §D2 claim.
+- **Round 3 is the last paper round** (`docs/handoff-pattern.md` §5 cap). Its P1 criteria are stated in its packet:
+  an acceptance mutant that stays green, a claim beyond the locked spec, a Docker/`make test` breach, or a round-1/2
+  finding claimed absorbed but not. Anything else is absorbed or carried by name into the implementation review.

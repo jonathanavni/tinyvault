@@ -2,8 +2,9 @@
 
 > The spec calls this "the `docker exec -T` bridge"; the plain `docker exec` CLI has no `-T` (that flag belongs to `docker compose exec`, which takes a service selector), so the argv is `docker exec -i <id>` — see §3 step 7.
 
-**Revision 2** — absorbs round 1 of the pre-implementation review (`docs/m5-2-slice-3-review-findings.md`: C-U1
-Codex Sol **STOP** 10×P1 / 6×P2 / 3×P3; C-U1b fresh-context Claude **NEEDS-ATTENTION** 0×P1 / 7×P2). Base: `main` @ `ee23823`. Branch:
+**Revision 3** — absorbs rounds 1 and 2 of the pre-implementation review (`docs/m5-2-slice-3-review-findings.md`:
+C-U1 Codex Sol **STOP** 10×P1; C-U1b Claude **NEEDS-ATTENTION** 7×P2; C-U2 Codex Sol **STOP** 8×P1 / 4×P2; C-U2b
+Claude **NEEDS-ATTENTION** 1×P1 / 4×P2). Base: `main` @ `3298262`. Branch:
 `codex/m5-2-slice-3`. Spec: `docs/m5-2-slice-spec.md` revision 4 (LOCKED, `60520d9`) §D2, §D2.1, §D5, §D7
 (hygiene only), and the parts of §D3 the bridge must carry. Acceptance gated here: **C** (lint + probe matrix),
 **E**, **G**, **I**, plus the slice-3 subset of **A** and the standing **N**. Inherits six declared residuals from
@@ -26,6 +27,31 @@ slice 2 (§10).
 > EPERM (U1-11); **R2-4 is gated by a production-builder mutation pass, not recorded as equivalent** (U1-12); the
 > false `"type": "module"` rationale is corrected (U1-18, U1b); Job B is split (U1-19, U1b); `.dockerignore` moves to
 > the context root; `.env` interpolation is disabled by argv.
+
+> **What changed from revision 2 — and the claim that was narrowed.** Round 2 beat every *static source scan*
+> revision 2 had introduced (the per-capability allowlist, the one-writer scan, the entry-point token gate), each
+> by the C-S1 route: a spelling the scan does not know (`.cjs`, an aliased `node:process` import, `/usr/bin/env
+> docker`, `&& exit 0;`). That is two rounds on the same invariant class, so revision 3 **narrows the claim**
+> (`.claude/memory/conventions.md`) instead of adding a fourth scan: static gates are **defence in depth with
+> stated limits**, runtime tripwires are the primary guard where one exists, and the two things that actually pin
+> `make test` are an **exact grammar for the `test` script and the Makefile target** plus an **execution proof**
+> (a machine-readable reporter file whose inventory must equal the discovered test set with zero skipped) — §9.
+> Also absorbed: canonical-encoding equality is now a rebuild-in-schema-order comparison, since
+> `JSON.stringify(JSON.parse(x))` preserves insertion order (U2-1); correlation uses an ordered high-water-mark
+> classification, not an unbounded seen-set, with the check order stated (U2-10, U2b-P2-4); the one-writer
+> property is a **runtime tripwire** on `process.stdout.write` plus a narrowed import allowlist, with fd-level
+> writes declared outside it (U2-4); the B4 injection is a real `Error` with `code:'EPERM'`, the substitution lives
+> at one shared bind site, and the lookalike's second binder is recorded as an equivalent mutant (U2-5, U2b-P3-11);
+> Acceptance E scans the exec process's real stderr, every surface has its own marker, needles are planted in the
+> encodings a leak would take (raw, base64url, hex, decimal array) and checked with the existing leak decoders,
+> `docker history --no-trunc` is scanned, and the scan window runs **after** bridge close with a shutdown sentinel
+> (U2-6, U2-7, U2b-P2-1/2); the lint pins the **values** of allowed keys and every `${…}` interpolation, the
+> Compose child environment is built from an allowlist rather than pass-through, and `--progress quiet --ansi
+> never` are fixed argv (U2-9, U2b-P2-3); a Dockerfile lint joins the Compose lint (U2b-P3-1); operation bodies
+> are closed schemas, `containerId` is 64-hex, base64url values must round-trip, and the SPKI must re-export
+> byte-identically (U2-12); every spawned handle is registered before use and killed on any failure, and `compose
+> down` is **not** run when the pre-up absence check fails (U2-11); §3 step 6 is one field→predicate→code→mutant
+> table (U2-13); the eight drift items both channels listed are fixed.
 
 > **The claim this slice serves, and nothing stronger** (spec §D2, locked wording): *under the Docker-daemon
 > isolation requirement, hostile page content and the evaluated agent cannot directly address the fixture control
@@ -87,9 +113,11 @@ environment (`TV_PUBLIC_ORIGIN`, `TV_LOOKALIKE_PUBLIC_ORIGIN` — not secret) an
 host collide at `compose up` (port in use) and the second **fails closed, loudly** under Acceptance A. Accepted.
 
 **Decision T3 — the fixture listens on `0.0.0.0:<container port>` inside the container but reports the public
-origin.** `startLoginFixture` gains an injected listen spec `{host, port, publicOrigin}`; the in-process default
-stays `127.0.0.1:0` with the bound address as origin (`loginFixture.ts:114-128`, `:470-478`), so in-process
-behaviour is byte-identical. The lookalike server gets the same seam.
+origin.** `startLoginFixture` gains an injected listen spec `{host, port, publicOrigin, onListenPermissionError:
+'substitute' | 'fail'}`; the in-process default stays `127.0.0.1:0`, bound address as origin, `'substitute'`
+(`loginFixture.ts:114-128`, `:470-478`), so in-process behaviour is byte-identical. **Both** servers — the login
+fixture and the lookalike's second server (`lookalike-origin/index.ts:140-148`) — bind through **one shared
+`bindServer` helper** that owns the EPERM branch, so the substitution exists at exactly one site (§10 B4).
 
 **Decision T4 — control socket path `/tmp/tinyvault/control.sock`, inside the container filesystem.** Never
 declared in `volumes`, never published; the lint rejects any `volumes` key at all (§8). The container runs as the
@@ -141,30 +169,52 @@ Order, after the slice-2 preflight has pinned the endpoint:
 5. For each service, **resolve exactly one container**: `compose ps -q <service>` must return exactly one
    64-hex line. Zero, more than one, or anything not matching `^[0-9a-f]{64}$` is a hard failure
    (`resolution-count` / `resolution-shape`). This is also what makes `scale > 1` a rejection, not a guess.
-6. `docker inspect <id>` (a one-element JSON array, parsed strictly) and verify **every** field below; each has its
-   own closed code and its own deletion mutant (§11 G): `.State.Running === true` and `.State.Health.Status ===
-   'healthy'` (`not-running` / `not-healthy`); `.Image` equals the recorded image id (`image-mismatch`);
-   `.Created` ≥ the epoch's millisecond timestamp (`created-before-epoch`); labels `com.tinyvault.fixture`,
-   `com.tinyvault.epoch`, `com.tinyvault.project` **and** the standard `com.docker.compose.project`,
-   `com.docker.compose.service` equal the expected values (`label-mismatch`, one code per label);
-   `.Config.Hostname` is a 12-hex prefix of the id (`hostname-mismatch`); `.Config.User === 'node'`;
-   `.Config.Env` ⊆ the four `TV_*` keys plus the image's own `PATH`/`NODE_VERSION`/`YARN_VERSION` defaults
-   (`env-unexpected`); `.Config.Cmd`/`.Config.Entrypoint` equal the image's (`command-overridden`);
-   `.HostConfig.NetworkMode` is the project's default network (`network-mode`), `.HostConfig.Privileged ===
-   false`, `PidMode`/`IpcMode` empty, `CapAdd`/`Devices`/`Binds` empty (`privilege-escalation`);
-   `.Mounts` empty (`mount-present`); `.NetworkSettings.Networks` is exactly the project network
-   (`network-membership`); `.NetworkSettings.Ports` publishes **exactly** the §2 table for that service and
-   nothing else, all on `127.0.0.1` (`port-mismatch`). **This is the stale-container catch the MAC alone cannot
-   provide.** The adversary cannot reach the daemon under the deployment requirement, so these checks are
-   code-enforced hygiene for a trusted boundary — stated as such, not as isolation.
+6. `docker inspect --type container <id>` (a one-element JSON array, parsed strictly) and verify **every** row of
+   the table below. The verifier **exports its field list**, and the unit test table is asserted equal to it, so a
+   field added to code without a test row fails the suite (the same rule-list equality the lint uses).
+
+   | Field | Predicate | Code | Deletion mutant (injected `inspect` wrong in only this field) |
+   |---|---|---|---|
+   | `.State.Running` | `=== true` | `not-running` | stopped container |
+   | `.State.Health.Status` | `=== 'healthy'` | `not-healthy` | `starting` |
+   | `.Image` | equals the recorded image id | `image-mismatch` | other `sha256:` |
+   | `.Created` | ≥ epoch ms − tolerance (60 s; the daemon VM clock can drift) | `created-before-epoch` | one hour earlier |
+   | `.Config.Labels['com.tinyvault.fixture']` | equals the service's fixture id | `label-fixture` | other fixture |
+   | `.Config.Labels['com.tinyvault.epoch']` | equals the epoch | `label-epoch` | other epoch |
+   | `.Config.Labels['com.tinyvault.project']` | equals the project | `label-project` | other project |
+   | `.Config.Labels['com.docker.compose.project']` | equals the project | `label-compose-project` | other |
+   | `.Config.Labels['com.docker.compose.service']` | equals the service | `label-compose-service` | other |
+   | `.Config.Hostname` | 12-hex, prefix of the id | `hostname-mismatch` | unrelated hostname |
+   | `.Config.User` | `=== 'node'` | `user-mismatch` | `'0'` |
+   | `.Config.Env` | ⊆ `{TV_FIXTURE_ID, TV_EVAL_EPOCH, TV_PUBLIC_ORIGIN, TV_LOOKALIKE_PUBLIC_ORIGIN}` ∪ the image's own `PATH`/`NODE_VERSION`/`YARN_VERSION`, by key | `env-unexpected` | extra key |
+   | `.Config.Cmd`, `.Config.Entrypoint` | equal the image's (`image inspect`) | `command-overridden` | other cmd |
+   | `.HostConfig.NetworkMode` | equals the project default network | `network-mode` | `host` |
+   | `.HostConfig.Privileged` | `=== false` | `privileged` | `true` |
+   | `.HostConfig.PidMode`, `.IpcMode` | empty | `namespace-shared` | `host` |
+   | `.HostConfig.CapAdd`, `.Devices`, `.Binds` | empty | `capability-added` / `device-added` / `bind-present` | one entry |
+   | `.Mounts` | empty | `mount-present` | one mount |
+   | `.NetworkSettings.Networks` | exactly the project network | `network-membership` | second network |
+   | `.NetworkSettings.Ports` | exactly the §2 table for that service, all `127.0.0.1` | `port-mismatch` | extra / `0.0.0.0` |
+
+   **This is the stale-container catch the MAC alone cannot provide.** The adversary cannot reach the daemon under
+   the deployment requirement, so these checks are code-enforced hygiene for a trusted boundary — stated as such,
+   not as isolation. The `Created` bound is belt-and-braces beside the fresh 128-bit project name, hence its
+   tolerance.
 7. Only now: `docker exec -i <that exact id> node /app/bridge.mjs` (§4) — `-i` keeps stdin open, no `-t` so no
    TTY. (`-T` is a `docker compose exec` flag and Compose exec takes a *service selector*, which G forbids; do not
    "restore" it.) Never a service name, never a selector.
 
-On **any** failure in 2–7, in the handshake (§5), or in the origin probe (§6), the harness runs `compose down --remove-orphans` for the
-project and rethrows the **original** `ComposedConstructionError`; a teardown failure is recorded on the error as
-`teardownCode`, never substituted for the cause. No transport is ever returned from a failed construction — **including a partial set** when a later service fails
-after earlier ones established (earlier bridges are killed, exactly one `compose down` runs) — and the in-process
+**Handle registry and teardown.** Every long-lived process handle is **registered the moment it is spawned**, before
+any handshake or probe, and on **any** failure in 3–7, in the handshake (§5), or in the origin probe (§6) the harness
+kills **the whole registry** (SIGKILL on the exec CLI processes; a bounded wait), then runs `compose down
+--remove-orphans --rmi local` for the project (bounded by a process timeout) and rethrows the **original**
+`ComposedConstructionError`; a teardown failure is recorded on the error as
+`teardownCode`, never substituted for the cause. **Exception:** when the **pre-up absence check** (step 2) fails, nothing is torn down — the project was not proven
+harness-created, so `compose down` would act on state that is not ours; the run fails `project-not-fresh` and
+reports the project name. No transport is ever returned from a failed construction — **including a partial set**
+when a later service fails after earlier ones established, **and including the bridge spawned for the very service
+whose handshake or probe fails** (the registry, not "earlier bridges", is what gets killed; exactly one `compose
+down` runs) — and the in-process
 starter is never called from the composed path (slice-2 structural proof, retained). The no-fallback test is
 **table-driven over every construction failure code** in this section, §5 and §6, so a fallback added for a new
 class cannot hide.
@@ -181,9 +231,12 @@ closes). The bridge process is the container's **only stdout writer**.
 
 **Frame.** `u32be length` (1 ≤ length ≤ 262 144) followed by exactly `length` bytes that decode as UTF-8 with
 `TextDecoder('utf-8', {fatal: true})` and parse as one JSON object with **exactly** the keys below in the **fixed
-order shown**, no whitespace. The decoder requires `payload === JSON.stringify(parsed)` with the schema's key order
-byte-for-byte — one check that rejects duplicate keys (which `JSON.parse` would silently collapse), extra
-whitespace, non-canonical numbers and reordered keys. Value types are checked explicitly: `v === 1`; `id` a safe
+order shown**, no whitespace. The decoder **rebuilds a fresh object in the schema's fixed key order from the parsed fields** and requires
+`payload === JSON.stringify(rebuilt)` byte-for-byte — one check that rejects duplicate keys (which `JSON.parse`
+silently collapses), extra whitespace, non-canonical numbers **and reordered keys**. (`JSON.stringify(JSON.parse(x))`
+alone would *not* catch reordering, because parsing preserves insertion order — the round-2 P1.) Every base64url
+value must **round-trip** (`Buffer.from(v,'base64url').toString('base64url') === v`) to its declared byte length,
+and every operation `body` is itself a **closed schema** with exact keys and types (§5). Value types are checked explicitly: `v === 1`; `id` a safe
 non-negative integer (`Number.isSafeInteger`, not `2.0`/`1e0`); `kind`/`op` strings from closed sets; `ok` a
 boolean; `body` a plain object (not `null`, not an array); `code` from the closed enum. Slice 4 inherits this
 canonical form.
@@ -195,22 +248,29 @@ response : {"v":1,"kind":"res","id":<uint>,"op":<string>,"ok":true,"body":<objec
 ```
 
 Error codes are a closed enum; **no free text crosses the bridge in either direction** (the project's
-closed-enum-errors rule, and Acceptance F's "bridge error text" surface is then structurally empty).
+closed-enum-errors rule), so the bridge error-text surface Acceptance E scans is structurally empty for the two
+operations this slice defines.
 
-**Correlation.** Request ids are **strictly increasing from 1 for the bridge lifetime**. The host issues **at
-most one outstanding request** (a per-bridge mutex; slice 3 needs no pipelining) **and records every response id
-ever seen**, so the three wrong-response cases are distinct, non-overlapping branches with distinct codes:
-no outstanding request → `unsolicited`; id already seen → `duplicate-id` (whether or not a request is outstanding);
-id unseen but ≠ the outstanding id → `id-mismatch`. A correlated response is then checked for `kind === 'res'` and
-`op === outstanding.op`. Slice 4 keeps the mutex or re-tests correlation as an id set; either way the seen-set stays.
+**Correlation.** Request ids are **strictly increasing from 1 for the bridge lifetime**, so they are contiguous
+and a **high-water mark** replaces any unbounded seen-set. The host issues **at most one outstanding request** (a
+per-bridge mutex; slice 3 needs no pipelining). A response frame is classified in this **fixed order**, and each
+branch has a distinct code and a test input that satisfies **only** that branch:
+1. nothing outstanding → `unsolicited` (test input: an id **never issued**, nothing outstanding — so deleting this
+   branch cannot fall through to step 2);
+2. `id < outstanding.id` → `duplicate-id` (an already-answered id while a request is outstanding);
+3. `id > outstanding.id` → `id-mismatch` (a not-yet-issued id);
+4. `id === outstanding.id` → correlated; then `kind === 'res'` and `op === outstanding.op` or `op-mismatch`.
+The tests assert the **code**, not just closure, and one test swaps the order of steps 1 and 2 to prove the
+assertions distinguish them. Slice 4 keeps the mutex or re-derives correlation from the same high-water mark.
 The container likewise **serializes** request handling: an `inFlight` flag means a second request frame arriving
 before the current response has been written (coalesced `bootstrap`+`hello` in one read) is `pipelined` and
 closes the session.
 
 **Close, never resynchronise.** Both ends close the bridge — the host kills the exec process and rejects the
-outstanding operation with `bridge-closed`; the container closes the session — on any of: a frame length of 0 or
+outstanding operation with the **closing condition's own code** (`bridge-timeout` for a timeout, otherwise the
+protocol code; every *later* call is `bridge-closed`); the container closes the session — on any of: a frame length of 0 or
 above the maximum; a payload failing the canonical-encoding or value-type rules above (including invalid UTF-8);
-the three wrong-response cases (`unsolicited`, `duplicate-id`, `id-mismatch`); host side, **any frame whose
+the four wrong-response cases (`unsolicited`, `duplicate-id`, `id-mismatch`, `op-mismatch`); host side, **any frame whose
 `kind !== 'res'`**; container side, **any frame whose `kind !== 'req'`**, a request id not strictly greater than the
 previous one, an unknown `op`, or a `pipelined` request; a correctly-correlated response whose `op` does not
 match; **the per-request timeout itself** (default 5 s, injected) — a timeout transitions the bridge to closed with
@@ -222,12 +282,19 @@ inputs, not two independent reds). A bridge that has closed is dead: every later
 `bridge-closed`, the transport is marked failed, the run fails, and there is **no reconnect and no in-process
 downgrade**.
 
-**One stdout writer, structurally.** The bridge process (`container/bridge.ts`) has exactly one stdout write path
-— the socket→stdout pipe — and every diagnostic goes to stderr; a static scan (`scripts/compose-lint.mjs`'s
-sibling rule set, self-tested) rejects any `console.log`/`process.stdout` reference in `container/bridge.ts`
-other than the single pipe site, and the pipe logic is unit-tested with fake streams. The fixture/control process
-(`main.mjs`) never writes to stdout either; its stdout is `docker logs`, which is an Acceptance E surface (§11),
-not a bridge surface.
+**One stdout writer — a runtime tripwire, plus a narrowed static claim.** The bridge process
+(`container/bridge.ts`) takes a **bound reference** to the original `process.stdout.write` at startup, replaces
+`process.stdout.write` (and `console.log`/`console.info`) with a function that writes a closed diagnostic to stderr
+and **exits non-zero**, and forwards socket bytes through the bound reference only. Any other writer that reaches
+stdout through the stream object — named, aliased, destructured from `node:process`, or via `console` — hits the
+tripwire the moment it executes, dormant or not; the unit test installs the tripwire against fake streams and
+asserts that a second writer terminates the process. **Stated limit:** a write through the raw file descriptor
+(`fs.writeSync(1, …)`, `fs.createWriteStream('/dev/stdout')`) bypasses the stream object; the static allowlist
+covers that residue narrowly — `container/bridge.ts` may import **exactly** `node:net` and `node:process`, nothing
+else (an exact import list, not a capability set), so `node:fs` is unavailable to it without a computed import,
+which is declared outside hygiene as it is for the interceptor. The Docker suite additionally asserts the bridge
+stream contains exactly the expected frames. The fixture/control process (`main.mjs`) installs the same tripwire
+for hygiene; its stdout is `docker logs`, an Acceptance E surface (§11), not a bridge surface.
 
 **Session rule.** The control server accepts **one** bridge connection for the container's lifetime; a second
 connection attempt is refused and logged to stderr. Slice 3's session state machine: `awaiting-bootstrap` →
@@ -266,13 +333,21 @@ Fixed protocol prefix, fixed field order, byte-length framing on every field, on
 injectivity Acceptance G requires, and the reason a "concatenate five values" implementation fails the
 tuple-confusion mutant (§9).
 
+**Bodies are closed schemas.** `bootstrap.body` has exactly `{secret}`; `hello.body` exactly `{challenge, epoch,
+fixtureId, containerId}` with `containerId` matching `^[0-9a-f]{64}$`, `fixtureId` from the closed `FixtureId`
+set, `epoch` matching its fixed shape; the response bodies exactly `{}` and `{publicKey, mac}`. An extra, missing
+or mistyped field is `body-shape`. `secret`, `challenge` and `mac` must decode to **exactly 32 bytes**
+(`secret-shape` / `challenge-shape` / `mac-shape` — the last also prevents `timingSafeEqual`'s length `RangeError`
+from ever being the observable outcome).
+
 **Container-side refusals (refuse-only, like the prefix check).** The control process rejects a `hello` whose
 `epoch` or `fixtureId` differ from its own `TV_EVAL_EPOCH` / `TV_FIXTURE_ID` (`hello-mismatch`), and whose
 `containerId` does not have its hostname as a prefix.
 
 **Verification, host side.** The announced `publicKey` must import as an Ed25519 SPKI
-(`asymmetricKeyType === 'ed25519'`, `key-shape` otherwise) before anything else. Recompute `T` from the harness's *own* expected values (its challenge, its epoch,
-the fixture it started, the **container id it resolved in §3 step 4**, and the key the peer announced) and
+(`asymmetricKeyType === 'ed25519'`) **and re-export to byte-identical DER** — Node accepts trailing garbage on DER
+while still reporting the key type — else `key-shape`, before anything else. Recompute `T` from the harness's *own* expected values (its challenge, its epoch,
+the fixture it started, the **container id it resolved in §3 step 5**, and the key the peer announced) and
 compare MACs in constant time. A valid announcement without a valid MAC is `mac-invalid`, a hard failure, never a
 retry against whatever answered. A MAC from an earlier eval or container instance fails on the fresh challenge and
 epoch by construction, and that is tested, not assumed.
@@ -342,17 +417,21 @@ never spawn.
 | `export` | `export <64-hex id>` | **streamed** tar of the container filesystem, scanned on the host (E) |
 | `exec-bridge` | `exec -i <64-hex id> node /app/bridge.mjs` | **long-lived**: returns stdio streams |
 
-`--env-file /dev/null` disables Compose's implicit `testbed/docker/.env` interpolation source, so the only
-interpolation inputs are the allowlisted child-environment keys below; the lint additionally asserts no `.env`
-exists beside the Compose file.
+Every `compose` variant also carries the fixed `--progress quiet --ansi never`, so Compose status text can never
+land on the stdout the harness parses. `--env-file /dev/null` disables Compose's implicit `testbed/docker/.env`
+interpolation source (verified on this host to win over `COMPOSE_ENV_FILES`), **but Compose still interpolates from
+the process environment** — revision 2 said otherwise and was wrong. Two things close that: the lint pins the
+**exact set and positions** of `${…}` references in the file (§8), and the child environment is an **allowlist**,
+not pass-through.
 
 Rules: `<file>` is the module constant path of the Compose file; `<project>` and `<service>` are validated against
 `^[a-z0-9][a-z0-9-]{0,62}$`; ids against `^[0-9a-f]{64}$` at the type **and** runtime; the exec command is the
-fixed constant `node /app/bridge.mjs` and is never caller-supplied. The child environment is built as in slice 2
-(`DOCKER_HOST` from the pin; `DOCKER_CONTEXT`/`DOCKER_CONFIG` removed) plus an **allowlisted** Compose
-interpolation set: `TV_EVAL_EPOCH`, `TV_PROJECT`. **No other key is ever added**, and the bootstrap secret is
-minted by a different module that has no access to this environment builder (Acceptance E's static half, tested
-by scanning every spawn description in §9).
+fixed constant `node /app/bridge.mjs` and is never caller-supplied. The child environment is **built from an allowlist** — `PATH`, `HOME`, `TMPDIR`, `DOCKER_HOST` (from the pin),
+`TV_EVAL_EPOCH`, `TV_PROJECT` — and nothing else: no `DOCKER_CONTEXT`, `DOCKER_CONFIG`, `COMPOSE_*`,
+`DOCKER_BUILDKIT`, `DOCKER_DEFAULT_PLATFORM`. (Slice 2's builder copied `process.env` minus two keys,
+`exec.ts:17-19`; this replaces it, and the slice-2 tests that pin `DOCKER_HOST`/absence of `DOCKER_CONTEXT` stay
+green.) The bootstrap secret is minted by a different module that has no access to this environment builder
+(Acceptance E's static half, tested by scanning every spawn description in §11).
 
 **Injected process boundary.** All variants run through one `DockerProcessRunner` interface (`run(spawn) →
 {stdout, stderr, exitCode}` and `spawnLongLived(spawn) → {stdin, stdout, stderr, kill, exited}`), the sole
@@ -399,9 +478,22 @@ each also gets a **named** rule so its self-test mutant asserts the rule's code,
 - a service set other than exactly the three in §2, or an `image`/`build` not pointing at the one Dockerfile;
 - missing `healthcheck`; missing labels; `deploy.replicas` or `scale` present.
 
-- `healthcheck` present with pinned `interval`/`timeout`/`retries`/`start_period`; the required labels present;
-  exactly one service with `build` pointing at the one Dockerfile and all three sharing the one `image` name;
-  no `.env` file beside the Compose file.
+- `healthcheck` present with pinned `interval`/`timeout`/`retries`/`start_period` **and the exact `test` command**;
+  the required labels present **with pinned values**; exactly one service with `build` pointing at the one
+  Dockerfile (`build` allows only `context` and `dockerfile`; `dockerfile_inline`, `args`, `network`, `privileged`,
+  `secrets`, `ssh`, `additional_contexts` rejected) and all three sharing the one `image` name; no `.env` file
+  beside the Compose file.
+- **Values, not just keys**: `user === "node"`, `read_only === true`, `init === true`, environment values exactly
+  the §2 constants per service, and **every `${…}` reference in the whole file extracted and required to be exactly
+  `{TV_PROJECT, TV_EVAL_EPOCH}` in exactly the `image` and `labels` positions** — no other interpolation anywhere
+  (a `${HOME}` in a label value would otherwise be interpolated from the harness environment).
+- **Every nested level** (`ports[]`, `healthcheck`, `build`, `labels`, `environment`) is closed, and the self-test
+  table has at least one unknown-key mutant per level.
+
+**The Dockerfile is linted too** (same script, same table discipline): `FROM node:24-slim` only; `USER node`;
+`EXPOSE` ⊆ `{8080, 8081}`; **no `VOLUME`** (a `VOLUME` produces a mount with no Compose `volumes` key); no `ENV
+TV_*`; no `ARG`/`LABEL` carrying anything but the fixed planted-needle marker (§11 E). Mutants: add `VOLUME`, drop
+`USER`, add `EXPOSE 9000`, add `ENV TV_BOOTSTRAP`.
 
 The self-test is **table-driven**: for every rule, one mutated document that trips only that rule, asserting the
 rule's code. The spec-named four (`network_mode: host`, an extra published port, a control-socket bind mount, a
@@ -413,44 +505,62 @@ A rule with no mutant in the table fails the self-test itself (the table is chec
 
 ## 9. `make test` stays Docker-free — and the eval-time interceptor exclusion is resolved (Acceptance N)
 
+**The narrowed claim first.** Two review rounds beat every static source scan this plan added, each by a spelling
+the scan did not know. So: **static scans are defence in depth with stated limits; a runtime tripwire is the primary
+guard wherever one exists; and `make test` is pinned by an exact grammar plus an execution proof, not by a token
+search.** No sentence in code or docs may present a static scan as complete.
+
 **Two Vitest configurations, one guard.**
 
 - `vitest.config.ts` (the `make test` path and `npm run eval`) keeps the runtime interceptor
   (`testbed/docker/no-docker.setup.ts`) **unconditionally** and excludes **exactly one file by path**,
-  `testbed/docker/composed.docker.test.ts` — not a glob, so a test cannot be hidden from `make test` by renaming.
-  The in-process eval stays under the guard on purpose: it proves the in-process transport is Docker-free too.
+  `testbed/docker/composed.docker.test.ts` — not a glob. The in-process eval stays under the guard on purpose.
 - `vitest.docker.config.ts` registers **no** setup file and includes **exactly that one file**. It is run by
-  `npm run test:docker` / `make test-docker`, **never** by `make test`, and it is the only way Docker-bound tests
-  execute.
-- **An external pre-Vitest gate** (`scripts/check-test-entry.mjs`, first in the `test` script, self-tested red)
-  parses `package.json` and the `Makefile` and rejects: any `test` script token referencing
-  `vitest.docker.config.ts` or `test:docker`; any Vitest invocation in `test` without the default config; any file
-  in the tree matching `*.docker.test.ts` other than the single registered one; and a default config whose exclude
-  list is not exactly that file or whose `setupFiles` lacks the guard. An in-band Vitest test cannot pin its own
-  entry point — pointing the first Vitest invocation at the Docker config would stop that test from being
-  discovered — so this gate is external and fail-closed. When slice 4 makes composed runs possible, the composed eval entry uses this configuration — so
-  the exclusion is decided **now**, as a config boundary, rather than as an env-var branch inside the guard
-  (which a test could influence and a reviewer would have to reason about).
+  `npm run test:docker` / `make test-docker`, **never** by `make test`.
+
+**The entry-point grammar gate** (`scripts/check-test-entry.mjs`, first in `test`, self-tested red per rule) does
+not search for bad tokens; it requires the entry points to **match an exact shape**:
+- `package.json` has **no** `pretest`/`posttest` (or any `pre*`/`post*` script whose base is `test`); its `test`
+  script, split on `&&` only, is **exactly** the expected ordered command list (this gate, the boundary gates, the
+  lint, the Vitest invocations with their exact `--exclude` tokens and the execution-proof step) — any `;`, `||`,
+  `|`, `exit`, subshell, redirection, `--config`/`-c`/`--root`/`-r`/`--dir`/`--project` token, or extra command
+  fails it;
+- the `Makefile` `test` target has **no prerequisites** and exactly one recipe line, `npm run test`;
+- the repository contains **exactly two** Vitest/Vite config files by exact name, and the default one has no
+  `projects`/`workspace`/`root`/`dir` key, `setupFiles` exactly the guard, `exclude` exactly the one Docker file;
+- the set of test files Vitest would discover under the default config's include glob — **Vitest's actual default
+  pattern `**/*.{test,spec}.?(c|m)[jt]s?(x)`**, so `.cjs`/`.mjs`/`.cts`/`.mts` count — minus the single Docker
+  file, is the inventory the execution proof must match.
+
+**The execution proof** (last in `test`): the main Vitest invocation runs with `--reporter=json --outputFile`, and
+`scripts/check-test-execution.mjs` asserts the reporter file's test-file set **equals** the inventory above, that
+no file has zero tests, and that the only skipped test is the eval-gated one (`runner.eval.test.ts`). A mutated
+`test` script that exits early, a `describe.skip` around a file, or a test that vanished into a config nobody runs
+is therefore red — this is the M5.1 "silent green" lesson made a gate, and it reuses the pattern of
+`scripts/check-acceptance-j-results.mjs`. `test:docker` gets the same proof with its own exact set (one file, zero
+skipped).
 
 **Declared, in the guard's header:** the interceptor covers Vitest runs under the default configuration; the
-Docker configuration is the deliberate exception and is never on the `make test` path. This closes the slice-2
-residual "interceptor registered for every Vitest run including `npm run eval`" by making the statement true
-rather than by weakening the guard.
+Docker configuration is the deliberate exception and is never on the `make test` path. The interceptor also gains
+the cheap indirect-launch cases — an executable named `env` is checked on its first non-option argument, and the
+existing shell-form check stays — while **wrapper launchers in general (`xargs`, `nohup`, `script`, a
+user-written shim on `PATH`) are declared outside it**, in the header, next to `worker_threads` and
+`process.binding`. Its self-test adds the `env docker` mutant.
 
-**Allowlist becomes per-capability.** Today `scripts/docker-invocation.mjs:9-25` exempts a whole file before
-looking at its imports, so adding container modules to it would let them import `node:child_process` unseen — a
-dormant conditional `spawn('docker')` in an allowed module would pass the static gate and never execute under the
-runtime one. The allowlist becomes a **map from exact path to the exact capability set** it may import:
-`testbed/docker/exec.ts` → `{child_process}` (the only such entry); `testbed/docker/container/main.ts`,
-`control.ts` → `{net, http}`; `container/bridge.ts` → `{net}`; the existing entries keep only the capabilities they
-use today (measured, then pinned). The self-test gains the mutant "a `net`-allowed container module imports
-`child_process`" → red. The dependency-boundary gate is unaffected (all new code is `testbed/`).
+**The capability map, with its limit stated.** `scripts/docker-invocation.mjs` becomes a map from exact path to
+the **exact import list** it may use (`testbed/docker/exec.ts` → `node:child_process` only; `container/main.ts`,
+`control.ts` → `node:net`, `node:http`; `container/bridge.ts` → `node:net`, `node:process`;
+`composed.docker.test.ts` → `node:child_process` for its override launch; existing entries measured and pinned),
+scans **every Node-executable extension** (`.ts .mts .cts .js .mjs .cjs`), adds `tls` and `http2` to the gated
+specifiers, and rejects any **computed** `import()`/`require()` argument outright in gated directories rather than
+skipping it. Its header says what it cannot do: follow a specifier built at runtime outside those directories. The
+self-test gains "a `net`-allowed container module imports `child_process`" and "a `.cjs` test file imports
+`child_process`".
 
-**The three N gates remain three**: the runtime interceptor, the static allowlist, and the **literal clean clone**
-(`git clone` → `npm ci` → `make browsers` → `make test`) at merge. Baseline to preserve: **1182 + 5 + 10, exit 0**
-on `main` @ `8133495`, this host. The entry-point gate above is the config regression's red; a Docker-free unit
-test additionally imports the two config objects and asserts their include/exclude/setupFiles values, as a second
-signal.
+**Acceptance N now has five signals, none substituting for another**: the runtime interceptor, the static capability
+map, the entry-point grammar gate, the execution proof, and the **literal clean clone** (`git clone` → `npm ci` →
+`make browsers` → `make test`) at merge. Baseline to preserve: **1182 + 5 + 10, exit 0**
+on `main` @ `8133495`, this host (the count will grow; the execution proof asserts the inventory, never a number).
 
 ---
 
@@ -459,7 +569,7 @@ signal.
 | Residual (slice 2) | Slice-3 disposition |
 |---|---|
 | **Eval-time interceptor exclusion** | **RESOLVED** by the configuration split in §9. |
-| **B4 — deletion-isolated composed-EPERM proof** | **RESOLVED by its original shape** (revision 1 reframed it; round 1 showed the reframing was a re-labelling, because T1 runs the same `startLoginFixture` *inside the container*, and that code reaches `listen()` and converts EPERM to `'no-socket'` at `loginFixture.ts:114-128`). Mechanism: the substitution becomes an **in-process-transport-only** behaviour behind the T3 listen seam (`onListenPermissionError: 'substitute'` for the in-process default, `'fail'` for the container entry, which exits non-zero so the healthcheck never turns healthy and construction is red under `--wait-timeout`). Deletion-isolated test: the container entry's start function is unit-tested with an injected `listen` rejecting `{code:'EPERM'}` and must **throw**, never return a `'no-socket'` fixture; deleting the container-mode hard-failure branch turns it green-through-substitution and the assertion catches it. The host-side origin probe (§6) is retained as a *second*, different protection with its own two mutants: the probe replaced by a literal `'http'` (caught by the injected-unreachable negative), and any construction failure routed to the in-process starter (slice-2 structural tests). |
+| **B4 — deletion-isolated composed-EPERM proof** | **RESOLVED by its original shape** (revision 1 reframed it; round 1 showed the reframing was a re-labelling, because T1 runs the same `startLoginFixture` *inside the container*, and that code reaches `listen()` and converts EPERM to `'no-socket'` at `loginFixture.ts:114-128`). Mechanism: the substitution becomes an **in-process-transport-only** behaviour behind the T3 listen seam (`onListenPermissionError: 'substitute'` for the in-process default, `'fail'` for the container entry, which exits non-zero so the healthcheck never turns healthy and construction is red under `--wait-timeout`). Deletion-isolated test: the container entry's start function is unit-tested with an injected `listen` rejecting **a real `Error` carrying `code:'EPERM'`** (`Object.assign(new Error('listen'), {code:'EPERM'})` — a plain object would be rejected by the `instanceof Error` predicate at `loginFixture.ts:487-493` before the branch is reached, making the test vacuous) and must **throw**, never return a `'no-socket'` fixture; a paired **positive** asserts the in-process default still substitutes under the same error; deleting the container-mode hard-failure branch turns the negative green-through-substitution and the assertion catches it. Because both servers bind through the one shared helper (T3), the lookalike's former second EPERM branch no longer exists; had it stayed, its deletion would have been an **equivalent mutant** (the canonical fixture's branch or the parity check at `lookalike-origin/index.ts:72-74` throws first) and would have been recorded as such. The host-side origin probe (§6) is retained as a *second*, different protection with its own two mutants: the probe replaced by a literal `'http'` (caught by the injected-unreachable negative), and any construction failure routed to the in-process starter (slice-2 structural tests). |
 | **B5a — dead-listener socket** | **Closed via Acceptance A, integrator-verified** — not a slice-3 mechanism: the first Docker operation (`compose ps -aq`) fails and construction is red (unit: injected runner failure on the first command → `project-not-fresh`/`daemon-unreachable`; integrator: `DOCKER_HOST=unix:///tmp/stale.sock` pointing at a socket file with no listener). Nothing about liveness is claimed by the preflight. |
 | **R2-4 — endpoint-selecting argv mutant** | **Gated by the production-builder mutation pass** (§7), recorded in the register with the mutated variant and the observed red. |
 | **A2 (incl. U+FEFF) — `unix://` and edge U+FEFF rejected** | **Carried unchanged**; conveniences declined, not protections. |
@@ -489,7 +599,8 @@ Codex "passed" never covers the Docker half (`AGENTS.md`, `.claude/memory/gotcha
 
 ### C — page content cannot address the control transport
 
-- **Static:** the lint in §8, with its eight self-test mutants.
+- **Static:** the Compose and Dockerfile lint in §8 — one self-test mutant per rule, the table asserted equal to
+  the rule list in both directions (a missing or an extra rule id fails the self-test).
 - **Dynamic (integrator, Docker + Chromium):** from a page on the hostile origin (`dom-hidden-injection` and the
   lookalike origin), attempt `fetch`, form POST, `<img>`, `WebSocket` and a worker `fetch` against: every
   published port (POST to a `/control` path and a frame-shaped WebSocket upgrade), loopback ports 8080/8081 and
@@ -500,21 +611,25 @@ Codex "passed" never covers the Docker half (`AGENTS.md`, `.claude/memory/gotcha
   `browser_navigate` to each target through the real `SupervisedHost`, expected to fail identically. Evidence:
   every attempt errors or 404s, the container's stderr shows no second connection attempt, **and the control
   session's state machine never left `established`** (asserted via the bridge's own request counter). **Its
-  mutant reaches the probe:** the Docker suite starts a second project from a **test-only Compose override** that
-  publishes one extra port (bypassing the repo-file lint and the inspect verification, which target the real
-  construction) and asserts the probe matrix detects the reachable extra port — so the dynamic test is proven
+  mutant reaches the probe:** the Docker suite — which runs outside the interceptor and has its own capability-map
+  entry — spawns `docker compose` **directly** with a test-only override file that publishes one extra host port
+  mapped to container 8080 (so there is something reachable to detect; this bypasses the repo-file lint and the
+  inspect verification, which target the real construction) and asserts the probe matrix detects it — so the dynamic test is proven
   able to see what it claims to see, not green because an earlier gate fired.
 
 ### E — the bootstrap secret is stdin-only
 
 | Mutant | Red where |
 |---|---|
-| Secret in Compose environment / label / command / image | unit: every `DockerSpawn` produced during a fake construction is scanned for the secret bytes (args + env) → none; the Compose file bytes contain no interpolation of any secret-named variable; integrator: `docker inspect` (`Config.Env`, `Config.Labels`, `Config.Cmd`, `Args`) and `docker history` scanned for the secret |
-| **Secret in a container file** | integrator: `export <id>` streamed and scanned for the secret bytes after the handshake |
-| **Secret in the fixture process's Docker log** (stdout/stderr of `main.mjs`) | integrator: `logs <id>` scanned |
-| **Secret in a host artifact** | unit + integrator: the artifact tree under the eval directory is scanned after construction |
-| Secret in bridge error text / harness diagnostic | unit: bridge and constructor errors carry closed codes only; a test asserts `String(error)` and stderr capture exclude the secret |
-| **Scanner blind (silent-green)** | each scan has a **planted-needle positive control**: a known non-secret marker that legitimately reaches that surface (`TV_FIXTURE_ID` in env/inspect, a fixed stderr banner in logs, a fixed marker file in the image for `export`, the epoch in artifacts) must be **found** by the same scanner, proving the scan reads the surface it claims to |
+| Secret in Compose environment / label / command / image | unit: every `DockerSpawn` produced during a fake construction is scanned (args + env); the Compose file's `${…}` set is pinned by the lint; integrator: `docker inspect` (`Config.Env`, `Config.Labels`, `Config.Cmd`, `Args`), `docker image inspect` (`Config.Env`, `Config.Labels`) and **`docker history --no-trunc --format '{{json .}}'`** (default output truncates `CreatedBy`) scanned |
+| Secret in a container file | integrator: `export <id>` streamed and scanned **with overlap across chunk boundaries** |
+| Secret in the fixture process's Docker log | integrator: `logs <id>` scanned |
+| **Secret on the exec bridge process's stderr** (`bridge.mjs` — *not* covered by `docker logs`, which is PID 1 only) | integrator: the host consumes `spawnLongLived.stderr` (bounded ring buffer, so a chatty stderr can neither exhaust memory nor, undrained, deadlock the bridge into a timeout) and scans it |
+| Secret in a host artifact | unit + integrator: the artifact tree scanned |
+| Secret in bridge error text / harness diagnostic | unit: closed codes only; `String(error)` and captured stderr exclude the secret |
+| **Encoding the scanner does not know** — `console.error(buffer)` leaks hex, `JSON.stringify(buffer)` leaks a decimal array, a base64url-only scan misses both | every E scan runs the **existing multi-encoding leak decoders** (`testbed/checkers/leakDecoders*`) against the **32 raw secret bytes**, not a string search for one spelling |
+| **Scan window ends too early** — the likeliest leak sites are shutdown paths | teardown order is **kill bridge → `logs` + `export` + stderr + artifact scans → `compose down`**, and `close()`'s own artifact writes are scanned after `close()` |
+| **Scanner blind (silent-green)** — one control per surface, in the encodings a leak would take | each independently scanned surface has **its own** planted, non-secret marker that legitimately reaches only that surface, and the same scanner must **find** it: `Config.Env` (`TV_FIXTURE_ID`), `Config.Labels` (the epoch), `Cmd`/`Args` (a fixed argv marker), `history` (a fixed Dockerfile `LABEL`), `export` (a fixed marker file **written at the end of the image**, and one straddling the scan chunk size), `logs` (a boot banner **and a SIGTERM shutdown banner**, so truncation after boot is caught), exec stderr (a fixed bridge start line), artifacts (the epoch in the manifest). Two markers are planted in **hex and decimal-array** form to prove the decoders, not just the surfaces, are wired |
 | Secret retained after bridge close | unit: the host holder zeroes its `Buffer` on close (the one JSON string copy is stated as GC-bound); the container holder is dropped with the session |
 
 ### G — authenticated, injective trust anchor with provenance first
@@ -534,21 +649,21 @@ Codex "passed" never covers the Docker half (`AGENTS.md`, `.claude/memory/gotcha
 ### I — framing cannot be desynchronised or confused
 
 Each close condition in §4 is one unit test over `PassThrough` streams, red when its branch is deleted, and the
-branches are **non-overlapping by construction** (distinct codes): `unsolicited` (response with nothing
-outstanding); `duplicate-id` (a seen id, tested both with and without an outstanding request); `id-mismatch`
-(unseen, ≠ outstanding); non-increasing request id and `pipelined` (container state machine, in isolation); wrong
+branches are **non-overlapping by construction** (distinct codes): `unsolicited` (nothing outstanding, with a **never-issued** id); `duplicate-id` (id below the outstanding one);
+`id-mismatch` (id above it); `op-mismatch`; the **order test** that swaps steps 1 and 2 of the §4 classification and
+must fail its code assertions; non-increasing request id and `pipelined` (container state machine, in isolation); wrong
 `op` on a correlated response; wrong `kind` on each side; `bridge-timeout` (and that a frame after it is
 `bridge-closed`); oversized frame / non-frame bytes (one branch, two inputs, recorded as such); zero-length frame;
 duplicate JSON keys, reordered keys, `id: 2.0`, `body: null`, invalid UTF-8 (each caught by the canonical-encoding
 or type rules); malformed frame followed by valid bytes (the resynchronising-parser mutant: the valid frame must
-**not** be processed); EOF with a partial frame; unknown `op`. The bridge process's one-writer property is
-**structural and statically gated** (§4): the self-test mutant adds a second `process.stdout.write` site to
-`container/bridge.ts` and the scan goes red; a dormant second write site therefore cannot survive by not executing.
+**not** be processed); EOF with a partial frame; unknown `op`. The bridge process's one-writer property is a **runtime tripwire** (§4): the unit test adds a second writer through
+an aliased `node:process` import and asserts the process exits non-zero the moment it writes; the exact-import
+allowlist covers the fd-level residue, with its limit declared.
 The Docker suite additionally asserts the bridge stream contains exactly the expected frames.
 
 ### N — Docker-free `make test`, clean-clone green
 
-The three gates of §9, plus the config-boundary unit test. Verified at merge by the literal clone.
+The five signals of §9. Verified at merge by the literal clone.
 
 ### Declared for later slices
 
@@ -580,8 +695,10 @@ this rule applied to slice 2's own deferral).
 | `testbed/docker/container/bridge.ts` | the exec'd stdio↔socket pipe |
 | `testbed/docker/composed.docker.test.ts` | the Docker-required suite (§11: E inspect scan, C probe matrix, bridge death, stale container, teardown) |
 | `vitest.config.ts`, `vitest.docker.config.ts` | §9 split |
-| `scripts/check-compose.mjs`, `scripts/compose-lint.mjs`, `scripts/compose-lint.selftest.mjs` | §8 closed-schema lint, table-driven self-test, bridge one-writer scan, no-`.env` check |
-| `scripts/check-test-entry.mjs` (+ selftest) | §9 external entry-point gate |
+| `scripts/check-compose.mjs`, `scripts/compose-lint.mjs`, `scripts/compose-lint.selftest.mjs` | §8 closed-schema Compose **and Dockerfile** lint, values and interpolation pinned, table-driven self-test, no-`.env` check |
+| `scripts/check-test-entry.mjs` (+ selftest) | §9 entry-point **grammar** gate |
+| `scripts/check-test-execution.mjs` (+ selftest) | §9 execution proof over the JSON reporter file |
+| `testbed/fixtures/shared/bindServer.ts` | §2 T3 the single bind helper owning the EPERM branch |
 | `scripts/docker-invocation.mjs` (+ selftest) | §9 per-capability allowlist map |
 | `testbed/scenarios/benignLoginConstants.ts` (or equivalent leaf) | §2 T5 — `BENIGN_USERNAME`/`controlTokenFor` lifted so the fixture bundle carries no agent code |
 | `testbed/fixtures/shared/loginFixture.ts`, `testbed/fixtures/lookalike-origin/index.ts` | §2 T3 listen/public-origin seam, in-process default unchanged |
@@ -598,10 +715,11 @@ this rule applied to slice 2's own deferral).
    `compose.ts` (§3 chain, every code), `composedFixtures.ts` with the injected `probeOrigin`, runner wiring, the
    E spawn/artifact scanners with their positive controls. The table-driven A/G unit tests. All streams and
    probes injected — nothing in this job dials or spawns.
-3. **Job B2 — gates and configuration (Docker-free).** The closed-schema lint + table-driven self-test + bridge
-   one-writer scan; `scripts/check-test-entry.mjs` + self-test; the per-capability allowlist map + self-test
-   mutant; the Vitest split and config test; `package.json` `test` wiring and `Makefile` targets (not the
-   lockfile).
+3. **Job B2 — gates and configuration (Docker-free).** The closed-schema Compose + Dockerfile lint with its
+   table-driven self-test; the entry-point grammar gate and the execution proof, each with self-tests; the
+   capability map (exact import lists, all extensions, computed-import rejection) with its self-test mutants; the
+   interceptor's `env` case and header; the Vitest split; `package.json` `test` wiring and `Makefile` targets (not
+   the lockfile).
 4. **Job C — container side and the Docker suite.** Dockerfile, repo-root `.dockerignore`, `compose.json`,
    `main.ts`, container `bridge.ts`, the loginFixture/lookalike listen seam with `onListenPermissionError`, the
    leaf-constants lift, esbuild devDependency + `package-lock.json`, `composed.docker.test.ts` (E inspect/logs/
@@ -633,6 +751,10 @@ the register. Reviews (three channels: Codex adversarial on the diff, fresh-cont
 8. Does `compose config` on this host agree with the lint's model of the file (integrator cross-check), and does
    the built image's `--metafile` module list contain no agent or harness code?
 9. Does the production-builder `--host` mutation (R2-4) actually reach the assertion and fail before the runner?
+10. Does the stdout tripwire fire for an aliased `node:process` writer in the **built bundle**, and does esbuild's
+    bundling leave `process.stdout` as the same object the tripwire patched?
+11. Is the `test` script grammar gate's expected command list itself the list `make test` runs (compare against
+    `npm run test --dry-run` output, not against the gate's own constant)?
 
 ## 15. Decisions the pre-implementation reviewer should attack first
 
@@ -640,5 +762,7 @@ T2 (fixed loopback ports over ephemeral), T5 (esbuild bundle over alternatives),
 closed schema), the single-outstanding-request bridge with a lifetime seen-id set, the single-session control
 server with serialized handling, the container-id binding semantics in §5, the per-capability allowlist map, the
 external entry-point gate, and the B4 mechanism in §10. Each is a choice with a stated alternative; none is locked
-by the spec. Round 2's job is the absorption sweep (every round-1 finding present, no new sibling defect) and a
-bypass hunt on the new mechanisms.
+by the spec. Round 3 — the **last** paper round under the cap — is an absorption sweep over rounds 1–2 and a bypass hunt on
+the narrowed §9 claim, the high-water-mark correlation, the stdout tripwire and the E controls. Its findings lock
+the plan: design-level P1s that need a new mechanism stop and return to the user; everything else is absorbed or
+carried into the implementation review as a named item.
