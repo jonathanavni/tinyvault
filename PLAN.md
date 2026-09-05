@@ -11,68 +11,64 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-04-m5.2-slice2` — focus: M5.2 slice 2 (daemon-channel preflight) through the full security-core ladder,
-branch `codex/m5-2-slice-2`; `main` pushed to the private origin first. — **outcome: in progress.**
+`2026-09-04-m5.2-slice2` — focus: M5.2 slice 2 (daemon-channel preflight) through the full security-core ladder —
+**outcome: MERGED (`8133495`). Reviewed and clean-clone-tested at `41aa5f5`: 1182 + 5 + 10, exit 0. Also shipped:
+the Codex ladder moved to GPT-6 Astra with stakes-based model routing.** `main` pushed to the private origin
+(`f161f1b..8ef2e89`), still private.
 
-`2026-09-04-m5.1-m5.2-slice1` — focus: M5.1 gate repair, then the M5.2 spec through the Codex ladder, then slice 1 —
-**outcome: all three shipped. M5.1 closed (register C-Q); the M5.2 spec LOCKED at revision 4 (`60520d9`) after four
-review passes and two owner adjudications; implementation slice 1 merged (`ab52f8e`), final head `1d04f93`.**
+**M5.2 slice 2 ✅ MERGED** — the harness now resolves, validates and **pins** its Docker endpoint, invokes Docker
+through one choke point, and fails closed on composed construction. Session tests 995 → 1182.
 
-**M5.1 ✅** (2026-09-04, register C-Q) — the two P0 gate defects closed and accepted by a **literal clean clone**.
-The timing file split so the 200-event stress scan carries its own bound (64.3 s red → 15.2 s green, never a timeout
-bump); `artifacts/eval/runs` replaced by a generated deterministic corpus of the same shape. Also found: the M5-M1
-guard did not kill its own mutant (its hand-built context sat just under the flat floor) — now pinned to the
-generated corpus, verified red-then-green.
+Ladder actually run: **2 pre-impl plan rounds** (C-T1 NEEDS-ATTENTION, C-T2 STOP 3×P1; C-T3a absorption PASS,
+C-T3b STOP 4×P1) → 3 implementation jobs → **3-channel post-impl review** (Codex 4×P2, QA 43 mutations/40 red,
+security-review no findings ≥7) → **fix round 1** → **round 2 on the absorbed-fix diff** (Codex 1×P1, QA 23
+mutations) → **fix round 2** → clean clone → merge. Register: `docs/m5-2-slice-2-review-findings.md`.
 
-**M5.2 spec ✅ LOCKED at revision 4** (`60520d9`) — Docker-composed fixtures behind one implementation and two
-transports. Threat model locked; **Docker-daemon isolation is a stated deployment requirement**, not a proven
-property: the harness verifies and pins the local `unix://` endpoint it uses but cannot prove the daemon has no
-other listener, and an unsatisfied assumption makes a run **invalid** rather than a measured pass or failure.
-Topology is one container per fixture, page-origin ports only, an internal control socket, and a framed
-`docker exec -T` bridge. Register `docs/m5-2-review-findings.md` holds C-R1…C-R8 and C-S1…C-S2; four passes each
-narrowed the design or the claim rather than growing it, and three separate stop-and-return points were honoured.
+**The four findings worth carrying into slice 3:**
+- **A type-level pin pins nothing.** A TS brand erases at runtime and free-form argv let `-H/--host` override
+  `DOCKER_HOST`. Provenance is now a module-private `WeakSet` + `#private` frozen storage; commands are a closed
+  vocabulary whose argv is built internally. Same shape as slice 1's C-S1 lesson, re-learned on a new surface.
+- **Ordering must be proven on the *public* entry.** `capturePersistedRuns` launches Chromium itself and the
+  hostile suite calls it *with* a browser, so no placement of the preflight could order that call — a supplied
+  browser is now runtime-illegal in composed mode.
+- **A guard that only reads source loses to `import('node:'+'child_process')`.** The primary guard is runtime,
+  where the value has resolved; the static scan is defence in depth and says so. But patching CJS exports does not
+  reach ESM *named* exports, and **synchronous APIs never traverse `ChildProcess.prototype.spawn`** — fix round 1
+  closed the async half and left the sync half open until round 2.
+- **A fix can introduce a silent-green.** Teaching the `execFile` guard to route shell forms *masked* the `exec`
+  wrapper's own test (red → green). Found independently by both round-2 channels. This is the argument for a
+  round 2 on the absorbed-fix diff, not merging after round 1.
 
-**Slice 1 ✅ MERGED** (`ab52f8e`, 2026-09-04) — the `FixtureTransport` seam with every bridge-crossing operation
-Promise-returning (so commit 4 owns capabilities, not a sync→async rewrite); `transport` split into architecture and
-reachability, architecture reserved and documented for commit 2; a canonical model-turn snapshot taken immediately
-after `nextTurn` and consumed by every downstream reader; and the evaluated agent's tool boundary enforced at
-runtime. Gates at `1d04f93`: Acceptance J 10/10, `make test` 995 + 5 + 10 exit 0, literal clean clone green at the
-same counts.
+**Best outcome of round 2:** the dependency-gate exemption was **deleted, not narrowed**. Fix round 1's prototype
+guard made `syncBuiltinESMExports` redundant, and that call was the only reason a hole existed in a repo-wide gate.
+The `node:module` prohibition applies to every file again with no carve-out — undoing the integrator's own earlier
+change rather than defending it.
 
-**The two findings worth carrying forward (detail in C-S1/C-S2):**
-- **Source analysis cannot enforce this class.** Three designs failed — a call-site observation; an AST matcher
-  enumerating shapes (seven bypasses); a positive occurrence inventory plus reachability walk (defeated by a
-  computed dynamic-import specifier leaving the reference symbol-less, and by roots/symlink gaps). *A positive
-  allowlist over occurrences the type checker can resolve is not a positive allowlist over occurrences.* The fourth
-  design analyses no source: `runAgentLoop` accepts no caller-supplied tools or handlers and owns a private frozen
-  registry that is both offered and validated against.
-- **An authorized repair removed protection while appearing to strengthen it.** "Replace the vacuous assertion" was
-  applied to a line whose *type annotation* carried the force, deleting `Equal<keyof AgentLoopOptions, …>` and
-  `Object.isFrozen(offeredTools)`. Caught only by sharper mutants than the integrator's (an option under a
-  *different* name; `freeze`→`seal`, which a push test survives). Restored in `f7aef17`.
+**Declared residuals carried to slice 3**, each declared in code not implied: **A2** (`unix://` and `U+FEFF`
+rejected though Docker accepts them — conveniences declined, not protections); **B5a** (dead-listener sockets need
+a dial the spec forbids pre-contact); **R2-4** (no executable command variant exists to make the argv mutant fail);
+**B4** (no slice-2 composed path reaches `listen()`, so the test would pass for the wrong reason — its structural
+half *is* proven); **eval-time interceptor exclusion** (`vitest.config.ts` loads the guard for every Vitest run
+including `npm run eval`, and the broad Unix-socket rejection makes that exclusion larger); and the guard is
+**hygiene, not containment** — `worker_threads` realms and `process.binding` escape it, and the header says so.
 
-**Declared residuals (C-S2), accepted not chased** — each needs coordinated source changes through review, none is
-reachable by the evaluated model: the package/build entry point is a reviewed root of trust; `Equal<>` constrains
-option *keys*, not every semantic widening of a property type; its helper and source pins can change alongside
-production code; a future split of offering and dispatch registries would pass; source-text pins can be satisfied by
-comments.
+*Slice 1's C-S1/C-S2 lessons and the M5.1 / spec-lock detail are in `PLAN-archive.md`.*
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
-**M4 ✅** (`b8a9396`) · **M5 ✅** (`96e3ea3`) · **M5.1 ✅** (2026-09-04) · **M5.2** in flight (spec locked; slice 1 of 6 merged).
+**M4 ✅** (`b8a9396`) · **M5 ✅** (`96e3ea3`) · **M5.1 ✅** · **M5.2** in flight (spec locked; **slices 1–2 of 6 merged**).
 
-**Next session:** `/start`, then **M5.2 slice 2** per `docs/m5-2-implementation-plan.md` — the daemon-channel
-preflight (resolve the effective endpoint across `DOCKER_HOST`/`DOCKER_CONTEXT`/active context, require a canonical
-local `unix://`, reject TCP/HTTP(S)/SSH/unknown/malformed/ambiguous, and **pin** every later invocation) plus
-fail-closed composed construction, gating Acceptance A and B. It also owns the C-R7 P2 the locked spec deliberately
-left to implementation: what *canonical local `unix://`* means for absolute-path syntax, `unix://` vs `unix:///`,
-`realpath`/symlinks, socket-type verification and proxy rejection. Cadence is unchanged — Codex implements on a
-`codex/m5-2-slice-2` branch, integrator commits and runs gates, pause for three-channel review before merge.
+**Next session:** `/start`, then **M5.2 slice 3** per `docs/m5-2-implementation-plan.md` — the container, Compose
+file and the framed `docker exec -T` bridge. **Docker enters the repo at this slice and must never reach the
+`make test` path.** Slice 3 inherits all six residuals above; the eval-time interceptor exclusion and B4's
+composed-EPERM test are the two it must actively resolve rather than carry.
 
-**Blocked / needs attention:** nothing needs the user. Threads: the unexplained `terminate-before-delivery` timeout
-stays an open gate observation outside M5.2 pending its own scoped decision (BACKLOG + gotchas; assertion
-deliberately unchanged); deferred M2/M3 residuals unchanged (`docs/m3-review-findings.md` §D); the 🔴 non-cloneable
-`dom-fill` destination slice (BACKLOG) remains the strongest surviving lookalike path.
+**Blocked / needs attention:** nothing needs the user. Threads: `docs/project-assessment-2026-09-04.md` is an
+untracked assessment the user ran separately — reconcile it against the cadence decision (the next cross-model
+assessment runs after M5.2 closes; M5.1+M5.2 are treated as the M5 remediation package). `AGENTS.md` is the user's
+Codex-context file, deliberately untracked. The unexplained `terminate-before-delivery` timeout stays an open gate
+observation pending its own scoped decision; deferred M2/M3 residuals unchanged; the 🔴 non-cloneable `dom-fill`
+destination slice (BACKLOG) remains the strongest surviving lookalike path.
 
 ## Decisions Log
 
@@ -417,3 +413,11 @@ deliberately unchanged); deferred M2/M3 residuals unchanged (`docs/m3-review-fin
 - **2026-09-03** — **Hostile-fixture topology: Docker-composed fixtures are the M5 acceptance path (M5.2, after M5.1), one fixture implementation behind two transports, the spec unchanged.** Decided by the user. Constraints, which are M5.2's acceptance criteria: (1) one fixture codebase, two transports — in-process stays the fast unit/integration harness, `make test` and the coverage gate stay Docker-free; `make eval` is the Docker-backed acceptance path with **no silent fallback** to in-process (a missing daemon is a red, never a downgrade); (2) **canonical parity**, not byte equivalence — normalize transport-specific nondeterminism (ports, timestamps, ids), then require identical security-relevant evidence shapes, completion outcomes and adjudication for the same scenario through both transports; (3) the Docker control plane (run registration, receipt-signer key distribution, fixture-side capture retrieval) is **unreachable from the hostile page by network topology** — a separate network the page's origin is not on — not merely CORS, and registration is **authenticated and run-scoped**; (4) the deviation history is preserved in this log and marked resolved by M5.2 rather than deleted. Sequencing: M5.1 (the red gate) → M5.2 → M6, so M6's real-agent rows come from the acceptance topology.
 - **2026-09-04** — **M5.1 and M5.2 are treated as the M5 remediation/closure package, so the next read-only cross-model project assessment runs after M5.2 closes — not separately after M5.1.** The standing rule is "an assessment after each milestone close." M5.1 was not an independent milestone: it was the repair of the two P0 gate defects that the 2026-09-03 assessment of `main` @ `e69259d` itself found, and M5.2 is the fixture-topology work M5 required. Assessing M5.1 alone would re-audit the output of the assessment that commissioned it. Recorded explicitly rather than silently skipped, because a cadence rule that quietly lapses once stops being a rule. Decided by the user, 2026-09-04.
 - **2026-09-04** — **`main` pushed to the private origin (`40a07e2..f161f1b`, 22 commits).** Authorized for the existing private remote only; this is **not** authorization to make the repository public, which stays gated on the README readiness pass and a separate explicit go-ahead (see `.claude/memory/` and the user-memory note on the remote).
+- **2026-09-04** — **M5.2 slice 2 merged (`8133495`), reviewed and clean-clone-tested at `41aa5f5`.** Ladder run in full: two pre-impl plan rounds, three implementation jobs, a three-channel post-impl review, two fix rounds, then the clean clone. Every round narrowed a claim rather than growing a mechanism.
+- **2026-09-04** — **Pin provenance is a module-private `WeakSet` with `#private` frozen storage, not a TypeScript brand**, because brands erase at runtime (`'…' as unknown as Pin` forged one) and a genuine instance was mutable. Commands are a **closed vocabulary whose argv is built internally**, because free-form argv let `-H/--host` override a correct `DOCKER_HOST` env pin. Both defects came from review, not from implementation.
+- **2026-09-04** — **The Docker-free guard is primarily a RUNTIME interceptor, with the source scan as defence in depth**, because a scan keyed on Docker spellings is walked past by `import('node:'+'child_process')` with a base64 executable name. Two mechanisms had to be discovered empirically: patching CJS exports does **not** reach ESM *named* exports, and **synchronous APIs never traverse `ChildProcess.prototype.spawn`**, so a fix that closes the async half leaves the sync half open. Declared limits: the guard is **hygiene, not containment** — `worker_threads` realms and `process.binding` escape it.
+- **2026-09-04** — **The dependency-gate exemption was deleted rather than narrowed.** The integrator opened a hole in a repo-wide gate so a setup file could import `node:module`; a first fix narrowed a suffix match to exact equality; round 2 established the import was redundant once the prototype guard existed, so the call, the import and every exemption component were removed. Prefer deleting the thing that requires an exemption over perfecting the exemption. It only surfaced because round 2 ran on the absorbed-fix diff instead of merging after round 1.
+- **2026-09-04** — **A fix round can introduce a silent-green, so round 2 on the absorbed-fix diff is not optional for gating code.** Teaching the `execFile` guard to route shell forms masked the `exec` wrapper's own test (red → green). Found independently by both round-2 channels.
+- **2026-09-04** — **Five limits ship as declared deferrals rather than silent gaps** (A2 incl. U+FEFF, B5a, R2-4, B4, the eval-time interceptor exclusion). The rule that produced them: when a test would pass because the code failed *earlier* rather than because the guard worked, do not ship the test — declare the deferral. Codex declined to ship a vacuous composed-EPERM test and said so; that was the right call.
+- **2026-09-04** — **Codex ladder moved to GPT-6 Astra, then given stakes-based routing** (`8ef2e89`). Astra for security-core code, adversarial review of code, rescue and locked invariants; `gpt-5.6-sol` for docs, mechanical refactors, test-only additions, fact-checks and probes; escalate on a boundary stop or design question. Grounded in this session: **Sol carried both pre-impl plan rounds and found 7 P1s**, so the line is cost and stakes, not capability. Operational catch: `adversarial-review`/`review` accept **no `--model` flag**, so routing a review to Sol means `task --fresh --model gpt-5.6-sol`.
+- **2026-09-04** — **A Codex CLI upgrade does not take effect until the shared runtime broker is restarted.** `gpt-6-astra` returned "requires a newer version of Codex" on 0.144.5; upgrading to 0.153.3 did **not** fix it because `app-server-broker.mjs` still held a stale `codex app-server`. Killing the broker did. The error tells you to upgrade the thing you just upgraded.

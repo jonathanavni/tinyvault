@@ -155,3 +155,28 @@ Example:
   a machine-readable reporter and requires the exact named set to have executed and passed with zero
   skipped/todo/absent — and the command's presence *and* fail-closed `&&` composition are pinned in `package.json`,
   since presence and position alone leave `|| true`, `;`, `echo` and `node -e` as green no-ops.
+
+## M5.2 slice 2 (2026-09-04)
+
+- **Round 2 on the absorbed-fix diff is mandatory for gating code, because a fix round can introduce a
+  silent-green.** Teaching the `execFile` guard to route shell forms *masked* the `exec` wrapper's own test
+  (red → green at the very commit that fixed five other findings). Both round-2 channels found it independently.
+  Merging after round 1 would have shipped it.
+- **Prefer deleting the thing that requires an exemption over perfecting the exemption.** A hole was opened in the
+  repo-wide dependency gate so a setup file could import `node:module`; fix round 1 narrowed a suffix match to
+  exact equality; round 2 found the import redundant and removed call, import and exemption entirely. The gate has
+  no carve-out again.
+- **When verifying that an exemption or allowlist is "narrow", vary the PATH as well as the NAME.** The integrator's
+  narrowness check used a different *filename* and passed; a same-filename-different-path probe
+  (`src/testbed/docker/no-docker.setup.ts`) proved the suffix match exempted production modules.
+- **A test that passes because the code failed EARLIER is not coverage — declare the deferral instead.** Slice 2
+  ships five declared deferrals on this rule. Codex declined to write a vacuous composed-EPERM test and said so in
+  its report; that is the desired behaviour, not a failure to deliver.
+- **Split a large review into two or three narrowly-scoped parallel jobs.** Full-scope review turns died silently
+  twice; the split pairs completed every time. Read-only reviews may overlap safely — only `--write` jobs must
+  never share a worktree.
+- **Never run a mutation experiment while a verification suite or a review agent is working the same tree.** The
+  integrator did this once (suite result discarded and re-run) and had to hold all edits while a mutating review
+  subagent ran.
+- **A monitor that prints nothing is not a pass.** A grep-in-a-shell-function harness swallowed vitest output and
+  looked like "no failures"; re-run plainly, the mutants were real. Same class as the status-vs-log-mtime trap.

@@ -65,6 +65,15 @@ Active planning docs:
   an unguarded alternate control transport), C-R4 and C-R6 (the user's threat-model lock and bounded cap
   extension), C-R7 (the focused closure review, **preserved as the reason daemon exclusivity became an explicit
   deployment assumption**) and C-R8 (the continuity-owner adjudication that locked revision 4). **Append-only.**
+- `m5-2-slice-2-plan.md` — the slice-2 implementation contract (**revision 3**): the daemon-channel preflight,
+  the canonical `unix:///` endpoint policy and the C-R7 P2 decision it owns, source resolution and the ambiguity
+  rule (AP-1/AP-2/AP-3), pinning enforced at a runtime choke point, preflight ordering on the public capture
+  entry, and fail-closed composed construction. Absorbs two pre-implementation review rounds. **Shipped**
+  (`8133495`).
+- `m5-2-slice-2-review-findings.md` — the slice-2 register, **append-only**: pre-impl rounds C-T1/C-T2 and
+  C-T3a/C-T3b; the three-channel post-implementation review (Codex, fresh-context QA, security-review) with F1–F6
+  and the P3 dispositions; round 2 on the absorbed-fix diff; and the adjudications, including why the broad
+  Unix-socket rejection is a recorded compatibility restriction rather than an isolation claim.
 - `project-assessment-2026-09-03.md` — Codex's read-only project teardown at `e69259d` (post-M5): two P0 gate defects, the
   fixture-topology conflict, stale docs, missing release engineering. Verified by Claude the same day; dispositions in
   `m5-review-findings.md` §C-P and the M5.1 slice in `PLAN.md`. Its milestone table is inaccurate for M1–M3 — read `PLAN.md` for those.

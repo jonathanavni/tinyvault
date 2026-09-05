@@ -146,3 +146,31 @@ scan length, so count-invariance rather than an absent `truncated` flag is the p
 - **C-R7 (closure)** found the daemon repair validated the *client's* connection, not the daemon's exposure.
 - **C-R8** — the user adjudicated daemon isolation into a stated deployment requirement rather than a proven
   property, and revision 4 locked (`60520d9`).
+
+## M5.1, the M5.2 spec lock, and slice 1 — archived 2026-09-04 (session `2026-09-04-m5.2-slice2`)
+
+Collapsed from `PLAN.md` Current State once slice 2 merged; detail no longer load-bearing for slice 3.
+
+- **M5.1 ✅** (2026-09-04, register C-Q) — the two P0 gate defects closed, accepted by a literal clean clone. The
+  timing file split so the 200-event stress scan carries its own bound (64.3 s red → 15.2 s green, never a timeout
+  bump); `artifacts/eval/runs` replaced by a generated deterministic corpus. Also found: the M5-M1 guard did not
+  kill its own mutant (its hand-built context sat just under the flat floor) — pinned to the generated corpus and
+  verified red-then-green.
+- **M5.2 spec ✅ LOCKED at revision 4** (`60520d9`) — Docker-composed fixtures behind one implementation and two
+  transports; one container per fixture, page-origin ports only, internal control socket, framed `docker exec -T`
+  bridge. Threat model locked and **Docker-daemon isolation stated as a deployment requirement**, not a proven
+  property. Register `docs/m5-2-review-findings.md` holds C-R1…C-R8 and C-S1…C-S2.
+- **Slice 1 ✅ MERGED** (`ab52f8e`, head `1d04f93`) — the `FixtureTransport` seam with every bridge-crossing
+  operation Promise-returning; `transport` split into architecture and reachability; a canonical model-turn
+  snapshot consumed by every downstream reader; the evaluated agent's tool boundary enforced at runtime. Gates:
+  Acceptance J 10/10, `make test` 995 + 5 + 10, clean clone green at the same counts.
+- **C-S1 — source analysis cannot enforce this class.** Three designs failed (call-site observation; an AST matcher
+  enumerating shapes, seven bypasses; a positive occurrence inventory plus reachability walk, defeated by a computed
+  dynamic-import specifier leaving the reference symbol-less). *A positive allowlist over occurrences the type
+  checker can resolve is not a positive allowlist over occurrences.* The fourth design analyses no source at all.
+  **Slice 2 re-learned this on a new surface** — see the runtime Docker guard.
+- **C-S2 — an authorized repair removed protection while appearing to strengthen it.** "Replace the vacuous
+  assertion" was applied to a line whose *type annotation* carried the force, deleting
+  `Equal<keyof AgentLoopOptions, …>` and `Object.isFrozen(offeredTools)`. Caught only by sharper mutants than the
+  integrator's. Restored in `f7aef17`. Its declared residuals (reviewed build entry point; `Equal<>` constrains
+  keys not property-type widening; source-text pins satisfiable by comments) stand unchanged.

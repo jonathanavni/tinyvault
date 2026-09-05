@@ -77,3 +77,19 @@ See `PROJECT-SPEC.md` §4 (the mechanism/invariants) and §11 (model/safeguards)
   registration, receipt retrieval, capture retrieval, arbitrary event attestation, or capability/key retrieval.
   Accessor/prototype tests are robustness probes, not evidence that in-process compromise is contained.
   (user, 2026-09-04; register C-R4)
+
+
+## M5.2 slice 2 — the Docker channel (2026-09-04, merged `8133495`)
+
+- **The harness pins the Docker endpoint it validated, and nothing below re-resolves one.** Provenance is a
+  module-private `WeakSet` plus `#private` frozen storage — **not** a TypeScript brand, which erases at runtime —
+  and Docker commands are a closed vocabulary whose argv is built internally, because free-form argv lets
+  `-H/--host` override a correct env pin.
+- **`unix:///` + a normalized absolute path is the only accepted endpoint spelling.** Comparison between sources is
+  done on the `realpath`-resolved path, so one socket reached by two paths agrees rather than collides, while the
+  built-in default never counts as a disagreeing source. Trailing/edge whitespace is rejected because Docker
+  **trims** it and would dial a different socket than the one pinned.
+- **The Docker-free guarantee for `make test` is enforced at RUNTIME, not by source scanning**, and it is
+  **hygiene, not containment**: `worker_threads` realms and `process.binding` escape it, and the code says so.
+- **Nothing claims the Docker daemon has no other listeners or cannot proxy.** That remains the declared
+  deployment requirement (C-R8). All three review channels independently confirmed the claim boundary is clean.
