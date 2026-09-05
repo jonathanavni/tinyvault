@@ -117,3 +117,64 @@ host: JSON piped to `compose -f - config` accepted; `${…}` interpolated from t
 - **Round 3 is the last paper round** (`docs/handoff-pattern.md` §5 cap). Its P1 criteria are stated in its packet:
   an acceptance mutant that stays green, a claim beyond the locked spec, a Docker/`make test` breach, or a round-1/2
   finding claimed absorbed but not. Anything else is absorbed or carried by name into the implementation review.
+
+## C-U3 — pre-implementation round 3 (the last under the cap), Codex GPT-5.6 Sol (read-only `task`, 2026-09-05) — on plan revision 3 @ `e40a327`
+
+**Status: STOP** — 10×P1, 3×P2, 1×P3. Absorption sweep over rounds 1–2: 26 ABSORBED, 12 PARTIAL, 1 MISSING
+(U2b-P2-2: the shutdown banner was scanned before `compose down` delivered SIGTERM). Parallel blind channel C-U3b
+below. Both channels again confirmed **no sentence exceeds the locked §D2 claim** and **no paper path returns a
+`no-socket` composed transport**.
+
+| # | Sev | Finding (condensed) | Disposition |
+|---|---|---|---|
+| U3-1 | P1 | `vitest.config.ts` is executable: a `globalSetup` runs outside the setup-file interceptor and `process.getBuiltinModule` needs no import the capability map sees; a `globalSetup` teardown can overwrite the JSON report. `include: []` + `passWithNoTests` makes the inventory equality vacuous. | **ABSORBED BY DECLARATION + PIN** (revision 4 §9). Third round on the same invariant class → the claim is narrowed: gates catch Docker reach from *code modules*; the entry-point files are the **reviewed root of trust, hash-pinned in-suite**; `globalSetup`/`include`/`passWithNoTests`/`reporters`/`outputFile` are forbidden keys in the grammar gate; the proof deletes report paths first and checks mtime. Not a new mechanism. |
+| U3-2 | P1 | Makefile parse-time `$(shell docker …)` runs before any recipe; an in-recipe gate cannot establish the property. (Unverified in the sandbox — `make` denied a temp file.) | **ABSORBED BY DECLARATION + PIN.** Makefile hash-pinned; "no prerequisites, one recipe line"; parse-time execution declared outside the gates, in the guard's header. §14 item 16 carries the check that the declaration is where it says. |
+| U3-3 | P1 | One "main" JSON report cannot equal the whole inventory while the two timing files run in separate serial invocations. | **ACCEPTED** (= C-U3b P2-4). §9: one report per invocation, disjoint partitions, union = inventory; `runner.artifacts.test.ts` pins amended. |
+| U3-4 | P1 | The existing decoder inventory has no hex form (verified: neither contiguous hex nor `<Buffer 4a 5b …>` matched); the plan's own `console.error(buffer)` mutant stays green. | **ACCEPTED** (= C-U3b P2-5). §11 E: a slice-3-local byte-native `secretScan` with contiguous-hex, Buffer-inspect, decimal-array and base64url forms, proven with the real bytes per form; `leakDecoders.ts` untouched. |
+| U3-5 | P1 | Logs scanned before `compose down` sends SIGTERM; the shutdown banner cannot be observed. | **ACCEPTED** (= C-U3b P2-6). §3/§7/§11: `compose-stop` (bounded) → scans → `down`. |
+| U3-6 | P1 | The artifact control (epoch in the manifest) passes a walker that reads only the manifest. | **ACCEPTED.** §11 E: dedicated nested marker written last by `close()`; traversal mutants. |
+| U3-7 | P1 | Idle duplicate classified `unsolicited`; id `0` accepted. | **ACCEPTED.** §4: `id ≥ 1` schema rule; `completedHighWater`; `id ≤ completedHighWater` is `duplicate-id` idle or not; order-swap test. |
+| U3-8 | P1 | §11 A required `compose down` on `project-not-fresh`, contradicting §3. | **ACCEPTED.** Row split: zero teardown calls on `project-not-fresh`. |
+| U3-9 | P1 | Vocabulary omitted `--type container`, the `--rmi local` argv, and full image config for `Cmd`/`Entrypoint`. | **ACCEPTED, with one decision.** Typed `inspect`; full-JSON `image-inspect`; **image name fixed to `tinyvault-fixture:local`, no `--rmi`** (a per-project tag either leaks images or forces a rebuild per eval); `compose-stop` added; every `run()` bounded. |
+| U3-10 | P1 | The lint permitted `${…}` only in `image`/`labels` while §5 requires `TV_EVAL_EPOCH` in the container environment. | **ACCEPTED.** §8: `${TV_EVAL_EPOCH}` at exactly the `environment` and `labels` positions; `${TV_PROJECT}` removed entirely; any other `$` rejected. |
+| U3-11 | P2 | `process.stdout.end`, `_write`, prototype-dispatched `write` bypass an instance patch (verified). | **ACCEPTED** (= C-U3b P2-2). §4: `end` patched too; prototype dispatch, `net.Socket({fd:1})` and raw fd declared outside the tripwire, Docker-suite exact-frames the only signal there. |
+| U3-12 | P2 | First-close kills one bridge; a failed `down` leaves the other two exec processes. | **ACCEPTED.** §3/§6: one idempotent project closer kills the whole registry first. |
+| U3-13 | P2 | Close atomicity unspecified (outstanding, mutex waiters, buffered frames). | **ACCEPTED.** §4: atomic close, waiters drained `bridge-closed`, decoder stopped; queued-second-call test. |
+| U3-14 | P3 | §15 still said "lifetime seen-id set". | **ACCEPTED** — §15 replaced by the lock record. |
+
+## C-U3b — pre-implementation round 3, fresh-context Claude reviewer (read-only, 2026-09-05) — on plan revision 3 @ `e40a327`
+
+**Status: NEEDS-ATTENTION** — 1×P1, 7×P2, 11×P3, 4 drift. Verified on this host (Node 24.19.0, Vitest 4.1.11, Docker
+29.6.2): `console.*` all pass through the instance `write`; `end(chunk)`, `Writable.prototype.write.call` and
+`net.Socket({fd:1})` do not; `configDefaults.exclude` is replaced by a config `exclude` array; CLI `--exclude` is
+additive; `docker history` truncates by default; `vitest list --filesOnly --json` exists.
+
+| # | Sev | Finding (condensed) | Disposition |
+|---|---|---|---|
+| U3b-P1 | P1 | Plain-`node` gate scripts of `test` run outside the interceptor; `check-acceptance-j-results.mjs` is legitimately allowlisted for `child_process`, so a conditional `spawnSync('docker')` there is green under every signal — the spec-named N mutant. Not declared anywhere. | **ACCEPTED** (no new mechanism). §9: exactly one `scripts/` file may import `child_process`, its single spawn site allowlisted to the literal `process.execPath`; the new gate scripts read reports rather than spawn; declared in the guard's header. |
+| U3b-P2-1 | P2 | `read_only: true` makes the container unstartable (socket and capture dir on the rootfs); `tmpfs` would violate the empty-`Mounts` row. | **ACCEPTED.** `read_only` dropped (hygiene on a trusted boundary). |
+| U3b-P2-2 | P2 | Tripwire claim wider than the mechanism; `node:net` (allowed import) can write fd 1. | **ACCEPTED** (= U3-11). |
+| U3b-P2-3 | P2 | Execution proof cannot be green against the three-invocation script; `runner.artifacts.test.ts:96-107` pins go red when reporter flags are added. | **ACCEPTED** (= U3-3). |
+| U3b-P2-4 | P2 | Hex marker planted as contiguous hex passes while `util.inspect(buffer)` output is missed. | **ACCEPTED** (= U3-4). Markers planted as `util.inspect` and `JSON.stringify` output. |
+| U3b-P2-5 | P2 | Shutdown banner scanned before SIGTERM; banners must be on stderr because `main.mjs` carries the tripwire. | **ACCEPTED** (= U3-5); stderr stated. |
+| U3b-P2-6 | P2 | A config `exclude` array replaces Vitest's defaults; a hand-rolled inventory glob can drift from Vitest's. | **ACCEPTED, partly by declaration.** `exclude` pinned by value including `configDefaults.exclude`; `include` forbidden so the default pattern applies; the inventory uses a hard-coded copy of that pattern (a `vitest list` spawn would need a `child_process` entry the U3b-P1 rule forbids) — declared. |
+| U3b-P3s | P3 | In-suite pin of the `test` script constant; stale reporter; skip exception by full name; files-not-tests limit; `EXPOSE` `null` entries; full check order; braceless `$VAR`; bounded `run()`; `exitCode = 1`; image `Config.Env` marker; straddling marker in a unit test; B5a code mapping. | **ALL ACCEPTED**: absorbed in revision 4 (§2, §3, §4, §8, §9, §10, §11) except three **carried by name** into the implementation review (§14 items 12–14: bounded short-lived handles, the files-not-tests header, the synthetic-stream overlap test). |
+
+## Adjudication and lock (continuity owner, 2026-09-05)
+
+- **The cap is spent; revision 4 is LOCKED.** Round 3's findings were narrower and more implementation-level than
+  round 2's (argv flags, scan order, code mappings, a contradiction between two sections) — the "productive
+  convergence" signature of `docs/handoff-pattern.md` §5, not the "findings get harder" signature of a wrong
+  primitive. Both channels independently confirmed the §D2 boundary intact for the third time.
+- **The same invariant class was beaten three rounds running — the `make test` entry point — and the conventions'
+  prescription was applied: narrow the claim.** Revision 4 states Acceptance N as what a repository can enforce
+  (Docker reach from code modules) and moves the entry-point files to a declared, hash-pinned root of trust. This is
+  a weaker claim than revision 3 made and a truer one; it does not touch a locked spec decision and needs no new
+  mechanism, so it did not require a return to the user. **Recorded here so the implementation review checks the
+  declaration, not a stronger sentence.**
+- **One decision taken with a stated alternative:** a fixed image name (`tinyvault-fixture:local`) over a
+  per-project tag, because the alternative either accumulates an image per eval or forces `--rmi` and a rebuild
+  every run; identity comes from the recorded image id, not the tag.
+- **Carried into the implementation review by name:** plan §14 items 1–16.
+- **Implementation proceeds** on `codex/m5-2-slice-3` (worktree `../tinyvault-slice3`), Jobs A → B1 → B2 → C,
+  GPT-6 Astra, one worktree, sequential (the companion does not serialize writes). Integrator runs every gate.
