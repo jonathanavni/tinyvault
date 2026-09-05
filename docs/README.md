@@ -77,5 +77,10 @@ Active planning docs:
 - `project-assessment-2026-09-03.md` — Codex's read-only project teardown at `e69259d` (post-M5): two P0 gate defects, the
   fixture-topology conflict, stale docs, missing release engineering. Verified by Claude the same day; dispositions in
   `m5-review-findings.md` §C-P and the M5.1 slice in `PLAN.md`. Its milestone table is inaccurate for M1–M3 — read `PLAN.md` for those.
+- `project-assessment-2026-09-04.md` — a read-only cross-model project assessment the user commissioned
+  separately, reviewing `main` at `f161f1b`. Supersedes the current-state conclusions of the 09-03 assessment
+  (its two gate defects are closed). Seven findings A1–A7; **A5** (scorecard provenance) and **A7**'s doc half
+  were actioned, the rest dispositioned as M6 planning inputs or existing declared residuals. Carries an
+  integrator note recording what in it is superseded. **Append-only.**
 - `archive/implementation-plan-superseded.md` — earlier orphaned Phase 0 draft, consolidated into
   `phase-0-plan.md` (provenance only)

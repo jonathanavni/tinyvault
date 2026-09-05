@@ -87,3 +87,9 @@ work in flight, the rest stay parked here (register "Final5 round"):
   marker remains **correctly red**, and `bodiesUnobserved(events) === 1` must not be weakened to "a body or a
   marker" — the sibling fast-case shape — because a harness-observed body would make that count 0. Any future work
   here starts by explaining the timeout, not by relaxing the gate.
+
+**From the 2026-09-04 assessment (dispositioned in `PLAN.md`'s Decisions Log):**
+
+- **A5 — scorecard provenance (scheduled, pre-M6).** Record the actual source revision and relevant configuration in the scorecard instead of a hard-coded `tinyvaultVersion: '0.0.0-m1'` and a stale `CHECKER_VERSION = 'm4-v1'` (`testbed/scorecardAggregate.ts`, `testbed/runnerExecution.ts`, `testbed/scorecard.schema.ts`). Today two different implementations can emit artifacts with indistinguishable version labels, which undermines exactly the comparison M6 exists to publish. Small, self-contained; must land before any published result.
+- **A4 — `finish()` should settle evidence itself or refuse pending work** (`src/supervisor/host.ts`). It can currently return a verdict and drop state without settling pending captures; the runner happens to supply the settle/drain sequence, so the verified path passes and another caller can silently omit it. Scope before external consumers (the MCP adapter), not inside M5.2.
+- **A7 — local-vault durability.** Exclusive key creation can leave a partial file after failure, and vault replacement lacks a directory `fsync` (`src/backends/localFileWriter.ts`). Bounded follow-up.
