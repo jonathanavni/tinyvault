@@ -32,14 +32,27 @@ export function scanSpawns(spawns: readonly DockerSpawn[], scanner: SecretScanne
   return spawns.some((spawn) => [spawn.file, ...spawn.args, ...Object.entries(spawn.env).flat()]
     .some((value) => scanner.scan(value)));
 }
+export type ScanResult = { exposed: boolean; controls: boolean[] };
+export function scanSurface(surface: Uint8Array | string, secrets: readonly SecretScanner[],
+  controls: readonly SecretScanner[] = []): ScanResult {
+  const hits = [...secrets, ...controls].map((needle) => needle.scan(surface));
+  return { exposed: hits.slice(0, secrets.length).some(Boolean), controls: hits.slice(secrets.length) };
+}
+function mergeScan(target: ScanResult, next: ScanResult): void {
+  target.exposed ||= next.exposed;
+  next.controls.forEach((hit, i) => { target.controls[i] ||= hit; });
+}
 export class StreamSecretScanner {
   #tail = Buffer.alloc(0);
-  found = false;
-  constructor(readonly scanners: readonly SecretScanner[]) {}
+  readonly result: ScanResult;
+  get found(): boolean { return this.result.exposed; }
+  constructor(readonly scanners: readonly SecretScanner[], readonly controls: readonly SecretScanner[] = []) {
+    this.result = { exposed: false, controls: controls.map(() => false) };
+  }
   feed(chunk: Uint8Array): void {
     const bytes = Buffer.concat([this.#tail, chunk]);
-    this.found ||= this.scanners.some((scanner) => scanner.scan(bytes));
-    const overlap = Math.max(0, ...this.scanners.map((scanner) => scanner.overlap));
+    mergeScan(this.result, scanSurface(bytes, this.scanners, this.controls));
+    const overlap = Math.max(0, ...[...this.scanners, ...this.controls].map((scanner) => scanner.overlap));
     this.#tail.fill(0);
     this.#tail = Buffer.from(bytes.subarray(Math.max(0, bytes.length - overlap)));
     bytes.fill(0);
@@ -47,15 +60,23 @@ export class StreamSecretScanner {
   destroy(): void { this.#tail.fill(0); this.#tail = Buffer.alloc(0); }
 }
 export async function scanStream(stream: Readable, scanners: readonly SecretScanner[]): Promise<boolean> {
-  const scan = new StreamSecretScanner(scanners);
+  return (await scanStreamWithControls(stream, scanners)).exposed;
+}
+export async function scanStreamWithControls(stream: Readable, scanners: readonly SecretScanner[],
+  controls: readonly SecretScanner[] = []): Promise<ScanResult> {
+  const scan = new StreamSecretScanner(scanners, controls);
   try {
     for await (const chunk of stream) scan.feed(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    return scan.found;
+    return scan.result;
   } finally { scan.destroy(); }
 }
 export async function scanArtifactTree(root: string, scanners: readonly SecretScanner[]): Promise<boolean> {
+  return (await scanArtifactsWithControls(root, scanners)).exposed;
+}
+export async function scanArtifactsWithControls(root: string, scanners: readonly SecretScanner[],
+  controls: readonly SecretScanner[] = []): Promise<ScanResult> {
   const pending = [root];
-  let found = false;
+  const result: ScanResult = { exposed: false, controls: controls.map(() => false) };
   while (pending.length) {
     const path = pending.pop()!;
     const stat = await lstat(path);
@@ -64,15 +85,15 @@ export async function scanArtifactTree(root: string, scanners: readonly SecretSc
       for (const name of (await readdir(path)).sort().reverse()) pending.push(join(path, name));
     } else if (stat.isFile()) {
       // Do not short-circuit traversal after a finding: every file remains an observed surface.
-      const match = await scanStream(createReadStream(path), scanners);
-      found ||= match;
+      mergeScan(result, await scanStreamWithControls(createReadStream(path), scanners, controls));
     } else throw new Error('scan-failed');
   }
-  return found;
+  return result;
 }
 // Drain immediately, scan every byte with overlap, retain only a bounded diagnostic ring.
-export function observeStderr(stream: Readable, scanners: readonly SecretScanner[], limit = 65536) {
-  const scan = new StreamSecretScanner(scanners);
+export function observeStderr(stream: Readable, scanners: readonly SecretScanner[], limit = 65536,
+  controls: readonly SecretScanner[] = []) {
+  const scan = new StreamSecretScanner(scanners, controls);
   let ring = Buffer.alloc(0);
   let failed = false;
   stream.on('data', (chunk: Buffer) => {
@@ -81,6 +102,6 @@ export function observeStderr(stream: Readable, scanners: readonly SecretScanner
     ring.fill(0); ring = Buffer.from(joined.subarray(Math.max(0, joined.length - limit))); joined.fill(0);
   });
   stream.on('error', () => { failed = true; });
-  return { exposed: () => scan.found, failed: () => failed, snapshot: () => Buffer.from(ring),
+  return { result: () => scan.result, exposed: () => scan.found, failed: () => failed, snapshot: () => Buffer.from(ring),
     destroy: () => { scan.destroy(); ring.fill(0); ring = Buffer.alloc(0); } };
 }

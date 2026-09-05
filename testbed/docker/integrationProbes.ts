@@ -13,7 +13,7 @@ const topology = validateTopology(JSON.parse(readFileSync(new URL('./topology.js
 
 export const REBOUND_NAME = 'tinyvault-rebound.test';
 export type Target = { url: string; label: string; routable: boolean };
-export type Probe = { method: string; target: string; statuses: number[]; outcome: string; failure?: string };
+export type Probe = { method: string; target: string; url: string; statuses: number[]; outcome: string; failure?: string };
 export function targets(documents: Record<string, any>[]): Target[] {
   // Host classes the harness machine can route to. Container-network addresses (gateway, container IPv4/IPv6)
   // are unroutable from a Docker Desktop host by construction: the page-content matrix still probes them, but the
@@ -123,7 +123,7 @@ async function attempt(page: Page, observed: Observed, target: Target, method: P
   const outcome = await page.evaluate(browserAttempt, { url: url.href, method, frame });
   // A response that arrives within the settle window counts; a target with no response at all stays 'no route'.
   await Promise.race([settled, new Promise<void>((r) => setTimeout(r, RESPONSE_SETTLE_MS).unref())]);
-  return { method, target: target.label, statuses: observed.statuses.get(url.href) ?? [], outcome,
+  return { method, target: target.label, url: target.url, statuses: observed.statuses.get(url.href) ?? [], outcome,
     failure: observed.failures.get(url.href) };
 }
 // Connection-level or scheme-level failures mean nothing was addressed; every other failure (ORB, CORS,
@@ -144,10 +144,17 @@ export const detectedRoute = (probe: Probe): boolean => classifyProbe(probe) ===
 // Reachability (the override mutant's oracle): a route, an observed response of any status, or a server-side failure.
 export const reachedServer = (probe: Probe): boolean => classifyProbe(probe) === 'route' || probe.statuses.length > 0
   || (probe.failure !== undefined && !NO_ROUTE_FAILURE.test(probe.failure));
-// Per target, at least one method must yield an observed verdict; otherwise the matrix was blind there.
+// Per network target, at least one method must yield an observed verdict; otherwise the matrix was blind there.
+// Non-network targets (the control socket as a file: URL) are refused by the browser at the URL layer before any
+// request exists, so no network event can observe them; their check is the page-level refusal (no route, no
+// status, no open socket), which classifyProbe already enforces, and they are excluded from network coverage.
+export const isNetworkTarget = (url: string): boolean => /^https?:/.test(url);
 export function coverageGaps(probes: Probe[]): string[] {
   const byTarget = new Map<string, ProbeClass[]>();
-  for (const probe of probes) byTarget.set(probe.target, [...(byTarget.get(probe.target) ?? []), classifyProbe(probe)]);
+  for (const probe of probes) {
+    if (!isNetworkTarget(probe.url)) continue;
+    byTarget.set(probe.target, [...(byTarget.get(probe.target) ?? []), classifyProbe(probe)]);
+  }
   return [...byTarget].filter(([, classes]) => classes.every((c) => c === 'unobserved')).map(([target]) => target);
 }
 const TARGET_BATCH = 8;

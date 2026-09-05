@@ -10,7 +10,8 @@ import { ComposedConstructionError } from './exec';
 import { startComposedFixtureSet } from './composedFixtures';
 import topology from './topology.json';
 import { fakeProject, kindOf } from './compose.testkit';
-import { scanArtifactTree, scanSpawns, scanStream, SECRET_FORMS, SecretScanner, secretScan, observeStderr } from './secretScan';
+import { scanArtifactTree, scanArtifactsWithControls, scanSpawns, scanStream, scanStreamWithControls,
+  scanSurface, SECRET_FORMS, SecretScanner, secretScan, observeStderr } from './secretScan';
 
 const secret = Buffer.from(Array.from({ length: 32 }, (_, i) => (i * 37 + 128) % 256));
 const forms = [
@@ -71,11 +72,75 @@ it('closer writes a dedicated nested marker last and verifies it with the artifa
   const marker = new SecretScanner(Buffer.from(ARTIFACT_MARKER));
   expect(await scanArtifactTree(h.root, [marker])).toBe(true); marker.destroy();
 });
-it('artifact traversal omission fails the closer marker positive control', async () => {
+it('blind artifacts scanner cannot satisfy the shared-path control', async () => {
   const h = await fakeProject(vi.fn); disposals.push(h.dispose);
-  h.options.scanners = { artifacts: async () => false };
+  h.options.scanners = { artifacts: async (root, secrets, controls = []) => secrets.length
+    ? { exposed: false, controls: controls.map(() => false) } : scanArtifactsWithControls(root, secrets, controls) };
   const p = await createComposedProject(h.options);
   await expect(p.closer.close()).rejects.toMatchObject({ code: 'scan-control-missing', surface: 'artifacts' });
+});
+it('draining export scanner cannot satisfy the shared-path control', async () => {
+  const h = await fakeProject(vi.fn); disposals.push(h.dispose);
+  h.options.scanners = { stream: async (stream, _secrets, controls = []) => {
+    for await (const _chunk of stream) { /* Deliberately blind despite draining every byte. */ }
+    return { exposed: false, controls: controls.map(() => false) };
+  } };
+  const p = await createComposedProject(h.options);
+  await expect(p.closer.close()).rejects.toMatchObject({ code: 'scan-control-missing', surface: 'export' });
+});
+it.each(['logs', 'history'] as const)('blind %s scanner cannot satisfy the shared-path control', async (surface) => {
+  const h = await fakeProject(vi.fn); disposals.push(h.dispose);
+  const marker = topology.markers[surface === 'logs' ? 'BOOT_MARKER' : 'HISTORY_MARKER'];
+  h.options.scanners = { surface: (bytes, secrets, controls = []) => controls.some((control) => control.scan(marker))
+    ? { exposed: false, controls: controls.map(() => false) } : scanSurface(bytes, secrets, controls) };
+  const p = await createComposedProject(h.options);
+  await expect(p.closer.close()).rejects.toMatchObject({ code: 'scan-control-missing', surface });
+});
+it('draining exec-stderr scanner cannot satisfy the shared-path control', async () => {
+  const h = await fakeProject(vi.fn); disposals.push(h.dispose);
+  h.options.scanners = { stderr: (stream, _secrets, limit, controls = []) => {
+    const observer = observeStderr(stream, [], limit);
+    return { ...observer, result: () => ({ exposed: false, controls: controls.map(() => false) }) };
+  } };
+  const p = await createComposedProject(h.options);
+  await expect(p.closer.close()).rejects.toMatchObject({ code: 'scan-control-missing', surface: 'exec-stderr' });
+});
+it.each(['logs', 'export', 'exec-stderr', 'history', 'artifacts'] as const)(
+  '%s shared-path marker plus planted secret is secret-exposed', async (surface) => {
+    const h = await fakeProject(vi.fn); disposals.push(h.dispose);
+    const p = await createComposedProject(h.options);
+    const run = h.runner.run.getMockImplementation()!;
+    h.runner.run.mockImplementation(async (description) => {
+      const result = await run(description);
+      if (surface === 'logs' && kindOf(description) === 'logs') result.stderr += h.secrets[0].toString('hex');
+      if (surface === 'history' && kindOf(description) === 'image-history') {
+        result.stdout += JSON.stringify({ CreatedBy: h.secrets[0].toString('hex') }) + '\n';
+      }
+      if (surface === 'artifacts' && kindOf(description) === 'compose-down') await writeFile(join(h.root, 'planted'), h.secrets[0]);
+      return result;
+    });
+    const spawn = h.runner.spawnLongLived.getMockImplementation()!;
+    h.runner.spawnLongLived.mockImplementation((description) => kindOf(description) === 'export' && surface === 'export' ? {
+      stdin: new PassThrough(), stdout: Readable.from([topology.markers.EXPORT_MARKER, h.secrets[0]]),
+      stderr: Readable.from([]), kill: vi.fn(), exited: Promise.resolve(0),
+    } : spawn(description));
+    if (surface === 'exec-stderr') (h.handles[0].stderr as PassThrough).write(h.secrets[0]);
+    await expect(p.closer.close()).rejects.toMatchObject({ code: 'secret-exposed' });
+  },
+);
+it.each([true, false])('shared stream pass keeps separate hits with secret first = %s', async (secretFirst) => {
+  const scanner = new SecretScanner(secret); const marker = Buffer.from(topology.markers.EXPORT_MARKER);
+  const control = new SecretScanner(marker);
+  try {
+    const parts = secretFirst ? [secret, marker] : [marker, secret];
+    const chunks = parts.flatMap((bytes) => [bytes.subarray(0, 7), bytes.subarray(7)]);
+    expect(await scanStreamWithControls(Readable.from(chunks), [scanner], [control]))
+      .toEqual({ exposed: true, controls: [true] });
+    expect(await scanStreamWithControls(Readable.from([marker]), [scanner], [control]))
+      .toEqual({ exposed: false, controls: [true] });
+    expect(await scanStreamWithControls(Readable.from([secret]), [scanner], [control]))
+      .toEqual({ exposed: true, controls: [false] });
+  } finally { scanner.destroy(); control.destroy(); }
 });
 it('scans shutdown-only artifact leakage after stop', async () => {
   const h = await fakeProject(vi.fn); disposals.push(h.dispose);
@@ -154,7 +219,7 @@ it.each(['logs', 'export', 'exec-stderr'] as const)('closer scans real secret by
   expect(h.spawns.some((spawn) => spawn.args.includes('down'))).toBe(true);
 });
 
-// Each missing marker must fail at its own closer surface, independently of the secret scan.
+// Each missing marker must fail at its own closer surface through the secret-scanning pass.
 it.each([
   ['BOOT_MARKER', 'logs'], ['SHUTDOWN_MARKER', 'logs'],
   ['EXPORT_MARKER', 'export'], ['BRIDGE_MARKER', 'exec-stderr'],

@@ -4,6 +4,7 @@ import { capturePersistedRuns } from '../runner';
 import * as fixtures from '../fixtures';
 import { createComposedProject, HandleRegistry } from './compose';
 import { BridgeError } from './protocol';
+import { scanArtifactsWithControls } from './secretScan';
 import { COMMAND_TIMEOUT_MS, KILL_TIMEOUT_MS, ComposedConstructionError, CONSTRUCTION_CODES, runDockerCommand, systemClock } from './exec';
 import { fakeProject, ids, kindOf, mintPin } from './compose.testkit';
 
@@ -96,8 +97,8 @@ it('kills both established bridges AND the third service on failed probe, preser
 });
 it('shared closer is idempotent and scans after kill and stop, before down and again afterward', async () => {
   const h = track(await fakeProject(vi.fn)); const events: string[] = [];
-  h.options.scanners = { artifacts: async (_root, scanners) => {
-    events.push('scan'); return scanners.length === 1; // the dedicated marker check
+  h.options.scanners = { artifacts: async (root, scanners, controls) => {
+    events.push('scan'); return scanArtifactsWithControls(root, scanners, controls);
   } };
   const p = await createComposedProject(h.options);
   for (const handle of h.handles) {

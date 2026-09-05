@@ -4,6 +4,7 @@
 // existing containers mean container-unhealthy. Both are terminal Acceptance A reds; query failure is
 // container-create with the query's closed code in teardownCode. Malformed ids mean resolution-shape.
 // Positive controls: history, logs (boot + shutdown on stderr), export, exec stderr, and artifacts.
+// Each control shares its surface's secret-scanning pass and result; streams have one scan consumer.
 // E scans: spawn args/env, command output (including ps-project), history, logs, export, exec stderr, and artifacts.
 import { createHash, randomBytes, type KeyObject } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -16,7 +17,8 @@ import { bounded, buildDockerSpawn, containerId, ComposedConstructionError, crea
   COMMAND_TIMEOUT_MS, KILL_TIMEOUT_MS, ID_PATTERN, IMAGE_ID_PATTERN, runDockerCommand, systemClock,
   type ContainerId, type ConstructionCode, type DockerCommand, type DockerHandle, type DockerProcessRunner,
   type DockerResult, type DockerSpawn, type ProcessHandle } from './exec';
-import { observeStderr, scanArtifactTree, scanSpawns, scanStream, SecretScanner, StreamSecretScanner } from './secretScan';
+import { observeStderr, scanArtifactsWithControls, scanSpawns, scanStreamWithControls, scanSurface,
+  SecretScanner, type ScanResult } from './secretScan';
 import { validateTopology } from './topology.mjs';
 const topology = validateTopology(JSON.parse(readFileSync(new URL('./topology.json', import.meta.url), 'utf8')));
 export { ComposedConstructionError, COMPOSE_FILE, IMAGE_NAME, WAIT_TIMEOUT_SECONDS, STOP_TIMEOUT_SECONDS } from './exec';
@@ -105,7 +107,8 @@ export class HandleRegistry {
   }
 }
 export type ScanDependencies = {
-  spawns: typeof scanSpawns; artifacts: typeof scanArtifactTree; stream: typeof scanStream;
+  spawns: typeof scanSpawns; artifacts: typeof scanArtifactsWithControls; stream: typeof scanStreamWithControls;
+  surface: typeof scanSurface; stderr: typeof observeStderr;
 };
 export type ProjectOptions = {
   pin: PinnedDockerEndpoint; runner?: DockerProcessRunner; clock?: ComposeClock;
@@ -115,7 +118,7 @@ export type ProjectOptions = {
 type Context = Identity & {
   pin: PinnedDockerEndpoint; runner: DockerProcessRunner; clock: ComposeClock; registry: HandleRegistry;
   spawns: DockerSpawn[]; surfaces: string[]; secrets: SecretScanner[]; ids: ContainerId[];
-  stderr: { secrets: ReturnType<typeof observeStderr>; control: ReturnType<typeof observeStderr>; marker: SecretScanner }[];
+  stderr: { scan: ReturnType<typeof observeStderr>; marker: SecretScanner }[];
   options: ProjectOptions;
   imageId?: string;
 };
@@ -143,6 +146,13 @@ function scanFailure(first: ComposedConstructionError | undefined, error: unknow
   const next = error instanceof ComposedConstructionError ? error : new ComposedConstructionError(code);
   return first && preferConstructionCode(first.code, next.code) === first.code ? first : next;
 }
+function checkScan(result: ScanResult, surface: ComposedConstructionError['surface'], count = 1,
+  command?: DockerCommand['kind']): void {
+  if (result.exposed) throw new ComposedConstructionError('secret-exposed', command, undefined, surface);
+  if (result.controls.length !== count || result.controls.some((hit) => hit !== true)) {
+    throw new ComposedConstructionError('scan-control-missing', command, undefined, surface);
+  }
+}
 export class ProjectCloser {
   #closing?: Promise<void>;
   constructor(readonly ctx: Context) {}
@@ -161,7 +171,7 @@ export class ProjectCloser {
     await attempt(() => run(ctx, composeCommand(ctx, 'compose-down'), 'compose-down'), 'compose-down');
     await attempt(() => this.#artifacts(true), 'scan-failed');
     await attempt(async () => this.#scanDescriptions(), 'scan-failed');
-    for (const h of ctx.stderr) { h.secrets.destroy(); h.control.destroy(); h.marker.destroy(); }
+    for (const h of ctx.stderr) { h.scan.destroy(); h.marker.destroy(); }
     for (const secret of ctx.secrets) secret.destroy();
     if (failure) throw failure;
   }
@@ -170,15 +180,13 @@ export class ProjectCloser {
     const root = ctx.options.artifactRoot;
     await mkdir(join(root, 'composed-scan'), { recursive: true });
     if (marker) await writeFile(join(root, 'composed-scan', 'close.marker'), ARTIFACT_MARKER);
-    const scan = ctx.options.scanners?.artifacts ?? scanArtifactTree;
-    const check = (secrets: SecretScanner[]) => bounded(scan(root, secrets), COMMAND_TIMEOUT_MS,
-      ctx.clock, new ComposedConstructionError('scan-failed'));
-    if (await check(ctx.secrets)) throw new ComposedConstructionError('secret-exposed');
-    if (marker) {
-      const control = new SecretScanner(Buffer.from(ARTIFACT_MARKER));
-      try { if (!await check([control])) throw new ComposedConstructionError('scan-control-missing', undefined, undefined, 'artifacts'); }
-      finally { control.destroy(); }
-    }
+    const scan = ctx.options.scanners?.artifacts ?? scanArtifactsWithControls;
+    const controls = marker ? [new SecretScanner(Buffer.from(ARTIFACT_MARKER))] : [];
+    try {
+      const result = await bounded(scan(root, ctx.secrets, controls), COMMAND_TIMEOUT_MS,
+        ctx.clock, new ComposedConstructionError('scan-failed'));
+      checkScan(result, 'artifacts', controls.length);
+    } finally { controls.forEach((control) => control.destroy()); }
   }
   async #scan(): Promise<void> {
     const ctx = this.ctx;
@@ -193,30 +201,28 @@ export class ProjectCloser {
     }
     await attempt(() => this.#scanDescriptions());
     for (const stderr of ctx.stderr) await attempt(() => {
-      if (stderr.secrets.exposed()) throw new ComposedConstructionError('secret-exposed', 'exec-bridge', undefined, 'exec-stderr');
-      if (!stderr.control.exposed()) throw new ComposedConstructionError('scan-control-missing', 'exec-bridge', undefined, 'exec-stderr');
-      if (stderr.secrets.failed() || stderr.control.failed()) throw new ComposedConstructionError('scan-failed');
+      checkScan(stderr.scan.result(), 'exec-stderr', 1, 'exec-bridge');
+      if (stderr.scan.failed()) throw new ComposedConstructionError('scan-failed');
     });
     await attempt(() => this.#artifacts());
     if (failure) throw failure;
   }
   async #logs(id: ContainerId): Promise<void> {
     const { stdout, stderr } = await run(this.ctx, { kind: 'logs', id }, 'scan-failed');
-    if (this.ctx.secrets.some((secret) => secret.scan(stdout) || secret.scan(stderr))) {
-      throw new ComposedConstructionError('secret-exposed', 'logs', undefined, 'logs');
-    }
-    for (const marker of [topology.markers.BOOT_MARKER, topology.markers.SHUTDOWN_MARKER]) {
-      const control = new SecretScanner(Buffer.from(marker));
-      try {
-        if (!control.scan(stderr)) throw new ComposedConstructionError('scan-control-missing', 'logs', undefined, 'logs');
-      } finally { control.destroy(); }
-    }
+    const scan = this.ctx.options.scanners?.surface ?? scanSurface;
+    const controls = [topology.markers.BOOT_MARKER, topology.markers.SHUTDOWN_MARKER]
+      .map((marker) => new SecretScanner(Buffer.from(marker)));
+    try {
+      const result = scan(stderr, this.ctx.secrets, controls);
+      result.exposed = scan(stdout, this.ctx.secrets).exposed || result.exposed;
+      checkScan(result, 'logs', controls.length, 'logs');
+    } finally { controls.forEach((control) => control.destroy()); }
   }
   async #history(id: string): Promise<void> {
     const { stdout, stderr } = await run(this.ctx, { kind: 'image-history', id }, 'scan-failed');
     const control = new SecretScanner(Buffer.from(HISTORY_MARKER));
-    let observed = false;
-    let exposed = this.ctx.secrets.some((secret) => secret.scan(stderr));
+    const scan = this.ctx.options.scanners?.surface ?? scanSurface;
+    const result: ScanResult = { exposed: scan(stderr, this.ctx.secrets).exposed, controls: [false] };
     try {
       // Runner output is byte-preserving latin1; JSON text itself is strict UTF-8.
       const text = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.from(stdout, 'latin1'));
@@ -228,15 +234,15 @@ export class ProjectCloser {
         while (pending.length) {
           const value = pending.pop();
           if (typeof value === 'string') {
-            observed = control.scan(value) || observed;
-            exposed = this.ctx.secrets.some((secret) => secret.scan(value)) || exposed;
+            const match = scan(value, this.ctx.secrets, [control]);
+            result.exposed ||= match.exposed;
+            result.controls[0] ||= match.controls[0];
           } else if (value && typeof value === 'object') pending.push(...Object.values(value));
         }
       }
     } catch { throw new ComposedConstructionError('history-parse', 'image-history', undefined, 'history'); }
     finally { control.destroy(); }
-    if (exposed) throw new ComposedConstructionError('secret-exposed', 'image-history', undefined, 'history');
-    if (!observed) throw new ComposedConstructionError('scan-control-missing', 'image-history', undefined, 'history');
+    checkScan(result, 'history', 1, 'image-history');
   }
   async #export(id: ContainerId): Promise<void> {
     const ctx = this.ctx;
@@ -246,20 +252,17 @@ export class ProjectCloser {
     ctx.registry.register(handle);
     const stderr = observeStderr(handle.stderr, ctx.secrets);
     const marker = new SecretScanner(Buffer.from(topology.markers.EXPORT_MARKER));
-    const control = new StreamSecretScanner([marker]);
-    const feedControl = (chunk: Buffer | string) => control.feed(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    handle.stdout.on('data', feedControl);
     try {
       handle.stdin.end();
-      const [exposed, exit] = await bounded(Promise.all([
-        (ctx.options.scanners?.stream ?? scanStream)(handle.stdout, ctx.secrets), handle.exited,
+      const [result, exit] = await bounded(Promise.all([
+        (ctx.options.scanners?.stream ?? scanStreamWithControls)(handle.stdout, ctx.secrets, [marker]), handle.exited,
       ]), COMMAND_TIMEOUT_MS, ctx.clock, new ComposedConstructionError('command-timeout', 'export'));
-      if (exposed || stderr.exposed()) throw new ComposedConstructionError('secret-exposed');
+      if (result.exposed || stderr.exposed()) throw new ComposedConstructionError('secret-exposed');
       if (exit !== 0 || stderr.failed()) throw new ComposedConstructionError('scan-failed');
-      if (!control.found) throw new ComposedConstructionError('scan-control-missing', 'export', undefined, 'export');
+      checkScan(result, 'export', 1, 'export');
     } finally {
       ctx.registry.kill(handle); handle.stdout.destroy(); handle.stderr.destroy(); stderr.destroy();
-      handle.stdout.off('data', feedControl); control.destroy(); marker.destroy();
+      marker.destroy();
     }
   }
   #scanDescriptions(): void {
@@ -339,8 +342,7 @@ async function openPeer(ctx: Context, fixtureId: FixtureId, id: ContainerId): Pr
   const secret = randomBytes(32);
   ctx.secrets.push(new SecretScanner(secret));
   const marker = new SecretScanner(Buffer.from(topology.markers.BRIDGE_MARKER));
-  ctx.stderr.push({ secrets: observeStderr(handle.stderr, ctx.secrets),
-    control: observeStderr(handle.stderr, [marker]), marker });
+  ctx.stderr.push({ scan: (ctx.options.scanners?.stderr ?? observeStderr)(handle.stderr, ctx.secrets, 65536, [marker]), marker });
   const bridge = new BridgeSession(handle, { kill: () => ctx.registry.kill(handle), clock: ctx.clock });
   ctx.registry.sessions.push(bridge);
   let exited = false;

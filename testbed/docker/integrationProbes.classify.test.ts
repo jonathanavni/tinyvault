@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { classifyProbe, coverageGaps, detectedRoute, reachedServer, type Probe } from './integrationProbes';
 
-const probe = (over: Partial<Probe>): Probe => ({ method: 'fetch', target: 't', statuses: [], outcome: 'error', ...over });
+const probe = (over: Partial<Probe>): Probe => ({ method: 'fetch', target: 't', url: 'http://127.0.0.1:1/control', statuses: [], outcome: 'error', ...over });
 
 describe('probe classification', () => {
   it('observed statuses decide: 404 is no-route, anything else is a route', () => {
@@ -50,5 +50,13 @@ describe('probe classification', () => {
     const probes = [probe({ method: 'fetch', target: 'c', failure: 'net::ERR_FAILED' }), probe({ method: 'form', target: 'c', statuses: [200], outcome: 'loaded' })];
     expect(probes.filter(detectedRoute).map((p) => p.method)).toEqual(['form']);
     expect(coverageGaps(probes)).toEqual([]);
+  });
+});
+  it('a non-network (file:) target is excluded from network coverage but must still show no route', () => {
+    const fileProbes = ['fetch', 'form', 'img', 'websocket', 'worker'].map((method) =>
+      probe({ method, target: 'internal-socket-file-url', url: 'file:///tmp/tinyvault/control.sock' }));
+    expect(coverageGaps(fileProbes)).toEqual([]);
+    expect(fileProbes.filter(detectedRoute)).toEqual([]);
+    expect(coverageGaps([probe({ target: 'net', url: 'http://127.0.0.1:1/control' })])).toEqual(['net']);
   });
 });
