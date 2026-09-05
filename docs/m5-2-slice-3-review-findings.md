@@ -385,4 +385,8 @@ in the main report). The exact-file mechanism is what closes U1-16.
   exclusions** — still probed, still required to show no route (`classifyProbe` never yields `route` for them), stated
   in `integrationProbes.ts` next to the supervised leg's identical exclusion. This is the same shape as the BACKLOG
   `browser_close_session` entry: the host cannot observe those addresses, and the honest claim says so.
+- **Fix round 3 committed `2838931` — the candidate head.** Integrator-verified there: tsc clean; `testbed/docker` 545
+  tests; invocation gate PASS; **`make test` 1566 + 5 + 10, execution proof PASS**; **`make test-docker` 4/4 in 78 s**,
+  no containers or networks left. Remaining gates before merge: the round 3 QA channel on `5385a4b..2838931` and the
+  literal clean clone at `2838931`.
 
