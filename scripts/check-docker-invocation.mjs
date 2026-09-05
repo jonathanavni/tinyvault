@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// The runtime interceptor, capability map and execution proof catch Docker reach from code modules
+// reachable from make test. Entry points are the reviewed root of trust, hash-pinned in-suite;
+// hostile root edits are outside the locked threat model. No static gate is complete.
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';

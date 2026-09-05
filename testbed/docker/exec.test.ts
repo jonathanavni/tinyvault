@@ -1,12 +1,14 @@
 import cp, { spawn } from 'node:child_process';
 import { request } from 'node:http';
 import net from 'node:net';
+import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildDockerSpawn, runDockerCommand, type DockerCommand } from './exec';
+import { buildDockerSpawn, createDockerProcessRunner, COMMAND_TIMEOUT_MS, runDockerCommand, type DockerCommand } from './exec';
 import { dockerPreflight, DockerPreflightError, type PinnedDockerEndpoint } from './preflight';
 
-const noCommand = undefined as never;
+const noCommand: DockerCommand = { kind: 'image-inspect' };
+const runner = { run: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })), spawnLongLived: vi.fn() };
 const forbidden = /Docker access forbidden during tests:/;
 const forbiddenConnection = /Unix socket access forbidden during Docker-free tests\./;
 
@@ -21,9 +23,9 @@ function mintPin() {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('slice 2 Docker choke point', () => {
-  it('keeps the command vocabulary empty at compile time', () => {
-    const empty: [DockerCommand] extends [never] ? true : false = true;
-    expect(empty).toBe(true);
+  it('has executable closed command variants at compile time', () => {
+    const empty: [DockerCommand] extends [never] ? true : false = false;
+    expect(empty).toBe(false);
   });
 
   it.each([undefined, null, 'unix:///tmp/forged.sock', { dockerHost: 'unix:///tmp/forged.sock' }])(
@@ -31,7 +33,7 @@ describe('slice 2 Docker choke point', () => {
       const pin = forgery as PinnedDockerEndpoint;
       expect(() => buildDockerSpawn(pin, noCommand)).toThrow(DockerPreflightError);
       expect(() => buildDockerSpawn(pin, noCommand)).toThrow(expect.objectContaining({ code: 'unpinned' }));
-      await expect(runDockerCommand(pin, noCommand)).rejects.toMatchObject({ code: 'unpinned' });
+      await expect(runDockerCommand(pin, noCommand, runner)).rejects.toMatchObject({ code: 'unpinned' });
     },
   );
 
@@ -39,7 +41,7 @@ describe('slice 2 Docker choke point', () => {
     const real = await mintPin();
     const clone = Object.create(Object.getPrototypeOf(real), Object.getOwnPropertyDescriptors(real));
     expect(() => buildDockerSpawn(clone, noCommand)).toThrow(expect.objectContaining({ code: 'unpinned' }));
-    await expect(runDockerCommand(clone, noCommand)).rejects.toMatchObject({ code: 'unpinned' });
+    await expect(runDockerCommand(clone, noCommand, runner)).rejects.toMatchObject({ code: 'unpinned' });
   });
 
   it('checks provenance before reading any supplied endpoint property', () => {
@@ -57,9 +59,10 @@ describe('slice 2 Docker command construction', () => {
     vi.stubEnv('DOCKER_CONFIG', '/injected/attacker');
     vi.stubEnv('TINYVAULT_EXEC_CONTROL', 'retained');
     const result = buildDockerSpawn(await mintPin(), noCommand);
-    expect(result).toMatchObject({ file: 'docker', args: [], env: {
-      DOCKER_HOST: 'unix:///injected/canonical.sock', TINYVAULT_EXEC_CONTROL: 'retained',
+    expect(result).toMatchObject({ file: 'docker', args: ['image', 'inspect', 'tinyvault-fixture:local'], env: {
+      DOCKER_HOST: 'unix:///injected/canonical.sock',
     } });
+    expect(Object.hasOwn(result.env, 'TINYVAULT_EXEC_CONTROL')).toBe(false);
     expect(Object.hasOwn(result.env, 'DOCKER_CONTEXT')).toBe(false);
     expect(Object.hasOwn(result.env, 'DOCKER_CONFIG')).toBe(false);
     expect(process.env.DOCKER_HOST).toBe('tcp://attacker:2375');
@@ -69,14 +72,13 @@ describe('slice 2 Docker command construction', () => {
 
   it('does not consume an erased caller command as global argv', async () => {
     const supplied = ['-H', 'tcp://attacker:2375', '--context=attacker'];
-    expect(buildDockerSpawn(await mintPin(), supplied as never).args).toEqual([]);
+    const pin = await mintPin();
+    expect(() => buildDockerSpawn(pin, supplied as never)).toThrow(expect.objectContaining({ code: 'command-invalid' }));
     // This proves no argv pass-through, NOT the deferred endpoint-token assertion mutant.
   });
 
-  it('rejects execution even with a genuine pin', async () => {
-    await expect(runDockerCommand(await mintPin(), noCommand)).rejects.toMatchObject({
-      code: 'not-implemented', message: 'Docker execution is not implemented until slice 3.',
-    });
+  it('executes a closed command with a genuine pin through an injected runner', async () => {
+    await expect(runDockerCommand(await mintPin(), noCommand, runner)).resolves.toMatchObject({ exitCode: 0 });
   });
 });
 
@@ -87,9 +89,11 @@ describe('runtime Docker interceptor installed by Vitest setup', () => {
   });
 
   it('rejects the computed-import and base64-executable bypass (R2-2)', async () => {
-    const computed = await import('node:' + 'child_process');
-    const exe = Buffer.from('ZG9ja2Vy', 'base64').toString();
-    expect(() => computed.spawn(exe, ['-H', 'tcp://attacker:2375', 'info'])).toThrow(forbidden);
+    guardProbe('', `
+      const computed = await import('node:' + 'child_process');
+      const exe = Buffer.from('ZG9ja2Vy', 'base64').toString();
+      throws(() => computed.spawn(exe, ['-H', 'tcp://attacker:2375', 'info']), /Docker access forbidden during tests:/);
+    `);
   });
 
   it.each(['spawn', 'spawnSync', 'execFile', 'execFileSync'] as const)(
@@ -194,6 +198,25 @@ function promisifiedProbe(method: 'exec' | 'execFile', shell: boolean): void {
   `);
 }
 
+describe('env launcher guard deletion regressions', () => {
+  it.each(['spawn', 'spawnSync', 'execFile', 'execFileSync'] as const)('%s checks the first non-option env argument', (method) => {
+    guardProbe(`let calls = 0; cp.${method} = () => { calls++; };`, `
+      for (const argv of [['docker', 'info'], ['--', '/nonexistent/docker-compose', 'version']]) {
+        throws(() => cp.${method}('/usr/bin/env', argv), /Docker access forbidden during tests:/);
+      }
+      equal(calls, 0);
+      cp.${method}('/usr/bin/env', ['node', 'docker']); equal(calls, 1);
+    `);
+  });
+  it('checks normalized named-export spawn and env shell commands', () => {
+    guardProbe('import { spawn as namedSpawn } from "node:child_process"; let calls = 0; cp.ChildProcess.prototype.spawn = () => { calls++; }; cp.execSync = () => { calls++; };', `
+      throws(() => namedSpawn('/usr/bin/env', ['docker', 'info']), /Docker access forbidden during tests:/);
+      throws(() => cp.execSync('/usr/bin/env -- docker info'), /Docker access forbidden during tests:/);
+      equal(calls, 0);
+    `);
+  });
+});
+
 describe('runtime guard deletion regressions', () => {
   afterEach(() => vi.restoreAllMocks());
   it('shared spawn guard rejects promisified execFile (F2)', () => promisifiedProbe('execFile', false));
@@ -294,4 +317,36 @@ describe('synchronous shell normalization deletion regressions (round 2 P1)', ()
       `);
     },
   );
+});
+
+// Stub the native child boundary before calling the sole production runner; no subprocess is created.
+it('production run registers its handle synchronously and returns both byte-preserving streams', async () => {
+  vi.spyOn(spawnPrototype, 'spawn').mockImplementation(function (this: cp.ChildProcess) {
+    this.stdin = new PassThrough(); this.stdout = new PassThrough(); this.stderr = new PassThrough();
+    queueMicrotask(() => {
+      (this.stdout as PassThrough).end(Buffer.from([0x80, 0xff]));
+      (this.stderr as PassThrough).end('stderr'); this.emit('close', 0);
+    });
+  });
+  try {
+    const registry = { register: vi.fn() }; const runner = createDockerProcessRunner(registry);
+    const description = buildDockerSpawn(await mintPin(), { kind: 'image-inspect' });
+    const result = runner.run(description);
+    expect(registry.register).toHaveBeenCalledOnce();
+    expect(await result).toEqual({ stdout: Buffer.from([0x80, 0xff]).toString('latin1'), stderr: 'stderr', exitCode: 0 });
+  } finally { vi.restoreAllMocks(); }
+});
+it('production run kills its registered child when command-timeout expires', async () => {
+  const pin = await mintPin(); vi.useFakeTimers();
+  vi.spyOn(spawnPrototype, 'spawn').mockImplementation(function (this: cp.ChildProcess) {
+    this.stdin = new PassThrough(); this.stdout = new PassThrough(); this.stderr = new PassThrough();
+  });
+  const kill = vi.spyOn(cp.ChildProcess.prototype, 'kill').mockReturnValue(true);
+  try {
+    const registry = { register: vi.fn() }; const runner = createDockerProcessRunner(registry);
+    const result = runner.run(buildDockerSpawn(pin, { kind: 'image-inspect' }));
+    const assertion = expect(result).rejects.toMatchObject({ code: 'command-timeout' });
+    await vi.advanceTimersByTimeAsync(COMMAND_TIMEOUT_MS); await assertion;
+    expect(registry.register).toHaveBeenCalledOnce(); expect(kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+  } finally { vi.restoreAllMocks(); vi.useRealTimers(); }
 });

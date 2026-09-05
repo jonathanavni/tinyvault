@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
+import { EXPECTED_TEST_COMMANDS } from '../scripts/check-test-entry.mjs';
 
 import type { OfflineEvidenceManifest } from './checkers/offline';
 import {
@@ -85,6 +86,7 @@ describe('eval runner plaintext artifact inventory', () => {
       scripts: { test: string };
     };
     const testScript = packageJson.scripts.test;
+    expect(testScript.split('&&').map((command) => command.trim())).toEqual(EXPECTED_TEST_COMMANDS);
     expect(testScript).toContain('&& node scripts/check-acceptance-j-results.mjs &&');
     expect(testScript.indexOf('node scripts/check-acceptance-j-results.mjs'))
       .toBeLessThan(testScript.indexOf('vitest run'));
@@ -98,12 +100,13 @@ describe('eval runner plaintext artifact inventory', () => {
       scripts: { test: string };
     };
     const testScript = packageJson.scripts.test;
+    expect(testScript.split('&&').map((command) => command.trim())).toEqual(EXPECTED_TEST_COMMANDS);
     const invocations = testScript.match(/vitest run[^&]*/gu) ?? [];
     expect(invocations).toHaveLength(3);
     expect(invocations[0]).toContain("--exclude 'src/supervisor/host.timing.browser.test.ts'");
     expect(invocations[0]).toContain("--exclude 'testbed/checkers/leakDecoders.timing.test.ts'");
-    expect(invocations[1].trim()).toBe('vitest run testbed/checkers/leakDecoders.timing.test.ts');
-    expect(invocations[2].trim()).toBe('vitest run src/supervisor/host.timing.browser.test.ts');
+    expect(invocations.map((command) => command.trim()))
+      .toEqual(EXPECTED_TEST_COMMANDS.filter((command) => command.startsWith('vitest run')));
   });
 
   it('preserves an existing artifact bundle when the checker meta-gate fails', async () => {

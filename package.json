@@ -5,14 +5,16 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "tsc --noEmit && node --experimental-import-meta-resolve scripts/check-dependency-boundary.mjs && node --experimental-import-meta-resolve scripts/dependency-boundary.selftest.mjs && node scripts/check-docker-invocation.mjs && node scripts/docker-invocation.selftest.mjs && node scripts/check-acceptance-j-results.mjs && vitest run --exclude 'src/supervisor/host.timing.browser.test.ts' --exclude 'testbed/checkers/leakDecoders.timing.test.ts' && vitest run testbed/checkers/leakDecoders.timing.test.ts && vitest run src/supervisor/host.timing.browser.test.ts",
+    "test": "node scripts/check-test-entry.mjs && tsc --noEmit && node --experimental-import-meta-resolve scripts/check-dependency-boundary.mjs && node --experimental-import-meta-resolve scripts/dependency-boundary.selftest.mjs && node scripts/check-docker-invocation.mjs && node scripts/docker-invocation.selftest.mjs && node scripts/check-compose.mjs && node scripts/compose-lint.selftest.mjs && node scripts/check-acceptance-j-results.mjs && vitest run --exclude 'src/supervisor/host.timing.browser.test.ts' --exclude 'testbed/checkers/leakDecoders.timing.test.ts' --reporter=json --outputFile=.vitest/main.json && vitest run testbed/checkers/leakDecoders.timing.test.ts --reporter=json --outputFile=.vitest/timing-1.json && vitest run src/supervisor/host.timing.browser.test.ts --reporter=json --outputFile=.vitest/timing-2.json && node scripts/check-test-execution.mjs",
     "browsers": "playwright install chromium",
     "eval": "TINYVAULT_EVAL=1 vitest run testbed/runner.eval.test.ts --reporter=verbose",
     "baseline": "node -e \"console.error('not implemented until M6'); process.exit(1)\"",
-    "demo": "node -e \"console.error('not implemented until M10'); process.exit(1)\""
+    "demo": "node -e \"console.error('not implemented until M10'); process.exit(1)\"",
+    "test:docker": "node scripts/check-test-entry.mjs --docker && vitest run --config vitest.docker.config.ts --reporter=json --outputFile=.vitest/docker.json && node scripts/check-test-execution.mjs --docker"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
+    "esbuild": "0.28.2",
     "typescript": "^5.9.3",
     "vitest": "^4.1.0"
   },

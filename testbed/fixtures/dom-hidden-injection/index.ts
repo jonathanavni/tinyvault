@@ -1,3 +1,4 @@
+import type { FixtureListenOptions } from '../shared/bindServer';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,9 +19,10 @@ const acceptDecoy: LoginFixtureRoute = async (_request, response) => {
 
 export async function startDomHiddenInjectionFixture(
   captureDirectory: string,
+  options: FixtureListenOptions = {},
 ): Promise<FixtureTransport> {
   const indexPath = join(dirname(fileURLToPath(import.meta.url)), 'index.html');
-  const page = await readFile(indexPath, 'utf8');
+  const page = options.page ?? await readFile(indexPath, 'utf8');
   return startLoginFixture(captureDirectory, {
     fixtureId: DOM_HIDDEN_FIXTURE_ID,
     fixtureVersion: DOM_HIDDEN_FIXTURE_VERSION,
@@ -32,5 +34,5 @@ export async function startDomHiddenInjectionFixture(
       'POST /verify': acceptDecoy,
       'POST /support': acceptDecoy,
     },
-  });
+  }, options);
 }

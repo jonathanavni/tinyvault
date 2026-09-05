@@ -1,0 +1,97 @@
+{
+  "services": {
+    "benign-login": {
+      "image": "tinyvault-fixture:local",
+      "ports": [
+        "127.0.0.1:47110:8080"
+      ],
+      "environment": {
+        "TV_FIXTURE_ID": "benign-login",
+        "TV_EVAL_EPOCH": "${TV_EVAL_EPOCH}",
+        "TV_PUBLIC_ORIGIN": "http://127.0.0.1:47110"
+      },
+      "labels": {
+        "com.tinyvault.fixture": "benign-login",
+        "com.tinyvault.epoch": "${TV_EVAL_EPOCH}"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "if(!require('node:fs').existsSync(\"/tmp/tinyvault/control.sock\"))process.exit(1);const r=require('node:http').get('http://127.0.0.1:8080/',s=>{s.resume();process.exit(s.statusCode>=200&&s.statusCode<400?0:1)});r.on('error',()=>process.exit(1));r.setTimeout(1000,()=>{r.destroy();process.exit(1)});"
+        ],
+        "interval": "1s",
+        "timeout": "2s",
+        "retries": 30,
+        "start_period": "2s"
+      },
+      "user": "node",
+      "init": true,
+      "build": {
+        "context": "../..",
+        "dockerfile": "testbed/docker/Dockerfile"
+      }
+    },
+    "lookalike-origin": {
+      "image": "tinyvault-fixture:local",
+      "ports": [
+        "127.0.0.1:47120:8080",
+        "127.0.0.1:47121:8081"
+      ],
+      "environment": {
+        "TV_FIXTURE_ID": "lookalike-origin",
+        "TV_EVAL_EPOCH": "${TV_EVAL_EPOCH}",
+        "TV_PUBLIC_ORIGIN": "http://127.0.0.1:47120",
+        "TV_LOOKALIKE_PUBLIC_ORIGIN": "http://127.0.0.1:47121"
+      },
+      "labels": {
+        "com.tinyvault.fixture": "lookalike-origin",
+        "com.tinyvault.epoch": "${TV_EVAL_EPOCH}"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "if(!require('node:fs').existsSync(\"/tmp/tinyvault/control.sock\"))process.exit(1);const r=require('node:http').get('http://127.0.0.1:8080/',s=>{s.resume();process.exit(s.statusCode>=200&&s.statusCode<400?0:1)});r.on('error',()=>process.exit(1));r.setTimeout(1000,()=>{r.destroy();process.exit(1)});"
+        ],
+        "interval": "1s",
+        "timeout": "2s",
+        "retries": 30,
+        "start_period": "2s"
+      },
+      "user": "node",
+      "init": true
+    },
+    "dom-hidden-injection": {
+      "image": "tinyvault-fixture:local",
+      "ports": [
+        "127.0.0.1:47130:8080"
+      ],
+      "environment": {
+        "TV_FIXTURE_ID": "dom-hidden-injection",
+        "TV_EVAL_EPOCH": "${TV_EVAL_EPOCH}",
+        "TV_PUBLIC_ORIGIN": "http://127.0.0.1:47130"
+      },
+      "labels": {
+        "com.tinyvault.fixture": "dom-hidden-injection",
+        "com.tinyvault.epoch": "${TV_EVAL_EPOCH}"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "if(!require('node:fs').existsSync(\"/tmp/tinyvault/control.sock\"))process.exit(1);const r=require('node:http').get('http://127.0.0.1:8080/',s=>{s.resume();process.exit(s.statusCode>=200&&s.statusCode<400?0:1)});r.on('error',()=>process.exit(1));r.setTimeout(1000,()=>{r.destroy();process.exit(1)});"
+        ],
+        "interval": "1s",
+        "timeout": "2s",
+        "retries": 30,
+        "start_period": "2s"
+      },
+      "user": "node",
+      "init": true
+    }
+  }
+}

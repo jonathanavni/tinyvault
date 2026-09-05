@@ -1,3 +1,4 @@
+import { bindServer, type FixtureListenOptions } from '../shared/bindServer';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { dirname, join } from 'node:path';
@@ -20,6 +21,7 @@ export type LookalikeOriginFixture = FixtureTransport & Readonly<{
 
 export async function startLookalikeOriginFixture(
   captureDirectory: string,
+  options: FixtureListenOptions & { lookalike?: FixtureListenOptions } = {},
 ): Promise<LookalikeOriginFixture> {
   await mkdir(captureDirectory, { recursive: true });
   const lookalikeCapturePath = join(captureDirectory, 'lookalike.requests');
@@ -36,47 +38,21 @@ export async function startLookalikeOriginFixture(
     ).catch((error: unknown) => {
       if (!response.headersSent) response.statusCode = 500;
       response.end('fixture error');
-      console.error(error);
+      if (options.onListenPermissionError === 'fail') process.stderr.write('fixture-error\n');
+      else console.error(error);
     });
   });
-  const lookalike = await bindLookalikeServer(lookalikeServer);
-  const indexPath = join(
-    dirname(fileURLToPath(import.meta.url)),
-    '..',
-    'benign-login',
-    'index.html',
-  );
-  const page = await readFile(indexPath, 'utf8');
-  const redirect: LoginFixtureRoute = async (_request, response, { url }) => {
-    const target = new URL('/', lookalike.origin);
-    target.search = url.search;
-    response.statusCode = 302;
-    response.setHeader('location', target.toString());
-    response.end();
-  };
+  const lookalike = await bindLookalikeServer(lookalikeServer, options.lookalike ?? {});
 
   let canonical: FixtureTransport | undefined;
   try {
-    canonical = await startLoginFixture(captureDirectory, {
-      fixtureId: LOOKALIKE_FIXTURE_ID,
-      fixtureVersion: LOOKALIKE_FIXTURE_VERSION,
-      // In-process tests use `/` as the rendered login page. Over HTTP the route below wins.
-      pages: {
-        '/': { body: page, contentType: 'text/html; charset=utf-8' },
-        '/login': { body: page, contentType: 'text/html; charset=utf-8' },
-        '/success': 'authenticated',
-      },
-      routes: { 'GET /': redirect },
-    });
-    canonicalOrigin = canonical.origin;
+    canonical = await startCanonicalFixture(captureDirectory, lookalike.origin, options);
+    canonicalOrigin = options.port ? `http://127.0.0.1:${options.port}` : canonical.origin;
     if ((canonical.reachability === 'http') !== (lookalike.reachability === 'http')) {
       throw new Error('Lookalike fixture origins did not use the same reachability');
     }
   } catch (error) {
-    await Promise.allSettled([
-      Promise.resolve().then(() => canonical?.close()),
-      Promise.resolve().then(() => closeServer(lookalikeServer)),
-    ]);
+    await closeBoth(canonical, lookalikeServer).catch(() => undefined);
     throw error;
   }
   if (canonical === undefined) throw new Error('Canonical fixture did not start');
@@ -86,17 +62,47 @@ export async function startLookalikeOriginFixture(
     origin: canonical.origin,
     lookalikeOrigin: lookalike.origin,
     lookalikeRequests: async () => Object.freeze([...requests]),
-    close: async () => {
-      const settled = await Promise.allSettled([
-        Promise.resolve().then(() => canonical.close()),
-        Promise.resolve().then(() => closeServer(lookalikeServer)),
-      ]);
-      const rejected = settled.find(
-        (result): result is PromiseRejectedResult => result.status === 'rejected',
-      );
-      if (rejected !== undefined) throw rejected.reason;
-    },
+    close: () => closeBoth(canonical, lookalikeServer),
   };
+}
+
+async function closeBoth(canonical: FixtureTransport | undefined, server: Server): Promise<void> {
+  const settled = await Promise.allSettled([
+    Promise.resolve().then(() => canonical?.close()),
+    Promise.resolve().then(() => closeServer(server)),
+  ]);
+  const rejected = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+  if (rejected) throw rejected.reason;
+}
+
+async function startCanonicalFixture(captureDirectory: string, lookalikeOrigin: string,
+  options: FixtureListenOptions): Promise<FixtureTransport> {
+  const indexPath = join(
+    dirname(fileURLToPath(import.meta.url)),
+    '..',
+    'benign-login',
+    'index.html',
+  );
+  const page = options.page ?? await readFile(indexPath, 'utf8');
+  const redirect: LoginFixtureRoute = async (_request, response, { url }) => {
+    const target = new URL('/', lookalikeOrigin);
+    target.search = url.search;
+    response.statusCode = 302;
+    response.setHeader('location', target.toString());
+    response.end();
+  };
+
+  return startLoginFixture(captureDirectory, {
+    fixtureId: LOOKALIKE_FIXTURE_ID,
+    fixtureVersion: LOOKALIKE_FIXTURE_VERSION,
+    // In-process tests use `/` as the rendered login page. Over HTTP the route below wins.
+    pages: {
+      '/': { body: page, contentType: 'text/html; charset=utf-8' },
+      '/login': { body: page, contentType: 'text/html; charset=utf-8' },
+      '/success': 'authenticated',
+    },
+    routes: { 'GET /': redirect },
+  }, options);
 }
 
 async function handleLookalikeRequest(
@@ -137,29 +143,15 @@ type BoundLookalike = Readonly<{
   reachability: FixtureReachability;
 }>;
 
-async function bindLookalikeServer(server: Server): Promise<BoundLookalike> {
-  try {
-    const origin = await listen(server);
-    return { origin, reachability: 'http' };
-  } catch (error) {
-    if (!isNodeError(error) || error.code !== 'EPERM') throw error;
-    return { origin: 'http://127.0.0.1:1', reachability: 'no-socket' };
+async function bindLookalikeServer(server: Server, options: FixtureListenOptions): Promise<BoundLookalike> {
+  const reachability = await bindServer(server, options);
+  const address = reachability === 'http' ? server.address() : null;
+  if (reachability === 'http' && (!address || typeof address === 'string')) {
+    throw new Error('Lookalike fixture did not bind a TCP port');
   }
-}
-
-function listen(server: Server): Promise<string> {
-  return new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      server.off('error', reject);
-      const address = server.address();
-      if (address === null || typeof address === 'string') {
-        reject(new Error('Lookalike fixture did not bind a TCP port'));
-        return;
-      }
-      resolve(`http://127.0.0.1:${address.port}`);
-    });
-  });
+  const origin = options.publicOrigin ?? (reachability === 'no-socket'
+    ? 'http://127.0.0.1:1' : `http://127.0.0.1:${(address as { port: number }).port}`);
+  return { origin, reachability };
 }
 
 function closeServer(server: Server): Promise<void> {
@@ -168,8 +160,4 @@ function closeServer(server: Server): Promise<void> {
   return new Promise((resolve, reject) => {
     server.close((error) => error ? reject(error) : resolve());
   });
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error;
 }

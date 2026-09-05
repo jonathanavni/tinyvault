@@ -1,7 +1,10 @@
-.PHONY: test browsers eval baseline demo
+.PHONY: test test-docker browsers eval baseline demo
 
 test:
 	npm run test
+
+test-docker:
+	npm run test:docker
 
 browsers:
 	npm run browsers
