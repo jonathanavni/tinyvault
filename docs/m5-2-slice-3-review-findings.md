@@ -230,4 +230,11 @@ additive; `docker history` truncates by default; `vitest list --filesOnly --json
   assertions depend on it), and the new gate CLIs accept `--root` for their real-CLI self-tests while the pinned
   grammar forbids `--root` in the actual `test` command. Job C dispatched with B2's Compose file, Dockerfile and
   topology as inherited inputs.
+- **2026-09-05 — Job C stop #1 (ownership):** B2's Dockerfile lint enforces **byte-equality with a canonical skeleton**
+  (`scripts/compose-schema.mjs` `canonicalDockerfile()`) rather than only §8's named rules, and that skeleton says
+  `CMD` and omits `--target=node24`, so the Dockerfile the plan (§2 T5) specifies cannot pass. **Adjudication:** the
+  skeleton is kept — it is a stricter, reviewable form of §8 and a root-of-trust pin for the image definition — but
+  its ownership moves to the job that owns the Dockerfile: Job C updates the skeleton and the Dockerfile together,
+  every §8 named rule still enforced, and the lint self-test still red per rule. `ENTRYPOINT` per §2 (the step-6
+  inspect row compares the image's `Cmd`/`Entrypoint` either way).
 
