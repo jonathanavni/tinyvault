@@ -298,3 +298,30 @@ this host. Channels dispatched in parallel, blind to each other, with base and h
 `slice3-postimpl-qa-packet.md`); **`/security-review`** as the security-specialized third channel in its own checkout,
 given the locked threat model and the §9/§10 declared limits. Findings and dispositions follow when all three are in.
 
+### Findings and dispositions (all four channels in; blind to each other)
+
+| Channel | Status | Findings |
+|---|---|---|
+| **Codex GPT-6 Astra** `adversarial-review` (different-family) | **NEEDS-ATTENTION** | 2×P1, both in the C probe matrix (evidence code, `integrationProbes.ts`): **P1-1** the form probe installed its iframe load handler *after* insertion, so the synchronous blank load was missed and `form.submit()` never ran — the method was a silent no-op (deleting `form.submit()` left every assertion green). **P1-2** `detectedRoute` ignored `requestfailed` evidence, so a CORS/ORB-hidden answer passed as "no route", and no positive control exercised the oracle itself (`() => false` left the main and extra-port assertions green). Checklists 1–8 otherwise clean: shared transcript builder, golden + tuple-confusion tests, no secret in any spawn/env, daemon-level absence check, exact-one resolution, no fallback, gates reject their named mutants (`posttest`, `globalSetup`, `.cjs` + `child_process`, extra `--exclude`, stale report, `env docker`), ten root pins matched, `--host`/`-H` builder mutants rejected before the runner, bundle has no agent or runner input, tripwire kills an aliased writer in the built bundle. Claim boundary: only `integrationProbes.ts:1` over-reached. |
+| **Fresh-context Claude QA** (95 mutants, own worktree) | **PASS** | 83 red; 5 survivors of which C5 (`timingSafeEqual` → `Buffer.equals`: timing not unit-observable, declared), G2b/X20 equivalent, X2/X2b a redundant pair pinned together (X2c red). 5×P3: an untested `exec-bridge` caller-field argv pin; the final closed-bridge check at `compose.ts:342` untested; host-side request-body validation redundant with the container's (X3); `main.ts` `exitCode = 1` Docker-suite-only (I2); plan §9 sentence about rejecting other `*.docker.test.ts` describes a rule that does not exist (the exact-file mechanism closes U1-16 anyway). No survivor on an A/C/E/G/I/N property; no leak; no `make test` breach. |
+| **Security ch. 1** (the stalled agent's own identify-vulns sub-task, which completed) | 2 findings | **Medium:** `ProjectCloser` aggregates step failures first-wins, so a benign early `handle-timeout`/`compose-stop`/`history-parse` masks a later `secret-exposed` — a verdict-integrity defect (the run still fails closed). **Low:** the `export` scan has no positive control although `EXPORT_MARKER` is baked into the image for exactly that. Observation: `main.ts`'s `0o700` socket-dir mode never takes effect (the captures `mkdir` creates the parent first). Everything else in its sweep clean. |
+| **Security ch. 2** (single-pass replacement) | **PASS** | 5×P3: in-closer positive controls only for `history` and artifacts (converges with ch. 1); `.dockerignore` lacked `.env*`/`*.pem`/`*.key`/`secrets/`; `integrationProbes.ts:1` "prove no route" too strong; `protocol.ts:1` wording; a second bootstrap-install path in `bridge.ts`. Residuals: `node:24-slim` by tag not digest (M10), composed eval entry absent until a later slice (declared in §9). |
+
+**Dispositions — fix round 1 (of at most three):**
+- **Integrator, evidence code, committed `e6b54b7`:** form probe handler installed before insertion (Codex P1-1); probes
+  classified `route` / `no-route` / `unobserved` with a **per-target coverage assertion** (every method unobserved = red)
+  and `detectedRoute` = `route` (Codex P1-2); an **oracle positive control** in test 1 — the lookalike origin answers
+  200 to any `POST /login` and a form-navigation response is observable without CORS, so the `form` probe must
+  classify `route` there or the oracle is blind; `.dockerignore` gains the operator secret patterns; `integrationProbes.ts`
+  and `protocol.ts` headers reworded; plan §9 U1-16 sentence corrected.
+- **Codex GPT-6 Astra, security core, dispatched:** `secret-exposed`/`scan-control-missing` **dominate** both closer
+  aggregators and the `teardownCode` sites; in-closer positive controls for `logs` (boot + shutdown banners), `export`
+  (`EXPORT_MARKER`) and exec stderr (`BRIDGE_MARKER`); the direct `request('bootstrap')` path becomes `protocol-order`;
+  the `exec-bridge` caller-field argv pin test; the closed-bridge-during-construction test; a no-frame-written test for
+  host-side body validation; the `handshake.ts` constant-time declaration; the socket-directory mode ordering and the
+  `exitCode` declaration in `main.ts`.
+- **Carried as declared residuals:** C5 (constant-time not unit-observable); tag-not-digest base image (M10);
+  composed eval entry (later slice); the §9 static-gate limits.
+- **Round 2** runs on the absorbed-fix diff (Codex adversarial + QA), per `docs/handoff-pattern.md` §5; its packet
+  states the last-round P1 criteria up front.
+
