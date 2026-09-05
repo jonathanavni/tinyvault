@@ -377,4 +377,12 @@ in the main report). The exact-file mechanism is what closes U1-16.
 - **Cap status:** three post-implementation review rounds and three fix rounds are spent. The QA channel runs once more
   on the final range as round 3's second channel; per the conventions, any further finding is a recorded residual (or
   a return to the user if it is a leak or an undeclared gate blind spot), not a fourth fix round.
+- **Fix round 3's own catch, and a declared limit:** with cancellation reclassified as `unobserved`, the Docker suite
+  reported a coverage gap on every Docker bridge-network target (`172.21.0.x`, 24 targets): from a Docker Desktop host
+  those addresses are unroutable by construction, so a probe can only end in its own 1.5 s deadline abort, which is
+  not a verdict either way (Chromium's own connect timeout would take minutes per batch). **Disposition:** coverage is
+  measured over **host-routable** network targets; bridge-network addresses and the `file:` socket URL are **declared
+  exclusions** — still probed, still required to show no route (`classifyProbe` never yields `route` for them), stated
+  in `integrationProbes.ts` next to the supervised leg's identical exclusion. This is the same shape as the BACKLOG
+  `browser_close_session` entry: the host cannot observe those addresses, and the honest claim says so.
 
