@@ -132,6 +132,8 @@ export function runClaude({ repo, prompt, timeoutMs, onStdout = () => {}, onStde
         if (event.type === 'assistant' && event.message?.model !== MODEL) stop('Unexpected assistant model');
       } catch (error) { stop(`Invalid Claude event: ${error.message}`); }
     }
+    child.stdout.on('error', () => stop('Cannot read reviewer stdout'));
+    child.stderr.on('error', () => stop('Cannot read reviewer stderr'));
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (text) => {

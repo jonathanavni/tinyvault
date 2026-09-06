@@ -1401,3 +1401,146 @@ Stage the explicit accepted changed-file inventory, including preserved prerequi
 then commit. Literal git clone + npm ci + make browsers + make test precedes local merge; merged-tree make test
 then make test-docker remain serial. Record exact SHAs/reports/results, keeping unrun checks pending. Prior
 reviews and final-round limits remain accepted; no repeat planning or implementation review for Git packaging.
+
+## Entry 39 — integration gate failure; helper diagnostic repair in progress, 2026-09-05
+
+Candidate0e274bf57ca94fa3f1ab5a80d72980b5abef35b5 committed the exact reviewed source and owner integration
+checkpoint. First literal clean clone npm ci/make browsers passed, but make test failed1873/1/1skip on the
+review helper's malformed-output mode: expected exit1 occurred, then summary.json was absent. The original
+fixture cleanup removed stderr. Focused unchanged helper suite6/6 and40malformed local fake-CLI runs did not
+reproduce it. Fresh read-only Astra triage identified possible unhandled subprocess stream errors or startup/
+filesystem errors; cause was unproven. A second fresh literal clone of the SAME commit passed npm ci,
+make browsers and full make test1874+5+10, one expected skip, execution gate and clean status.
+
+User-authorized local merge5210988721c79233581993f5e39b24ed9ef37846 has EXACT candidate tree
+ aedf1e6840163a9e1c923db4209ad837f6f2da87. Merged-tree make test then reproduced the same malformed/summary
+failure (1873/1/1skip); Docker did not run. Initial failure is not resolved or relabeled environment-blocked.
+No remote push. Integration remains incomplete, despite accepted Slice4 implementation and second clone green.
+
+Owner opens a bounded new integration-failure investigation in scripts/claude-review.test.mjs and, only after
+root-cause evidence, scripts/claude-review.mjs. First add assertion diagnostics preserving child stderr/stdout
+when summary is missing; reproduce under normal full-suite concurrency. Do not weaken timeout, gating,
+worker count, rejection behavior, evidence requirements, tool/model restrictions or locked Slice4 scope.
+This new helper process failure is not a fourth Job D repair/review or a reset of its accepted three rounds.
+Any runtime repair requires focused rejection/production-path proof and independent review before claiming
+integration complete, then a new exact-commit clean clone and merged-tree verification. No blind retry-to-green.
+Evidence root /private/tmp/tinyvault-slice4-integration/; initial/merged failure reports remain intact.
+
+## Entry 40 — independent helper stream-error finding and bounded repair, 2026-09-05
+
+The stderr-instrumented main-only run and exact make-test run both passed; this does NOT identify or resolve
+the two historical missing-summary failures. Separately, deterministic injection of ECONNRESET onto each
+actual spawned child's stdout/stderr in a copied real helper reproduces uncontrolled exit1 and no summary
+(stream-error-before.json). No real Claude invoked; existing local fake CLI/actual helper caller used.
+Fresh read-only Astra analysis supports a narrow repair of this independently demonstrated runtime failure-
+handling gap. It does not establish ECONNRESET as the original OS failure or a false-PASS/credential defect.
+The helper already fails closed; not every pre-launch failure promises a summary. Ordinary launched-review
+errors should reach controlled closure and structured failure evidence, as existing caller tests require.
+
+This evidence refines Entry39's runtime-edit precondition: repair the now-proven stream-error path only,
+while retaining the original failures as unexplained. Own exactly scripts/claude-review.mjs and its existing
+.test.mjs: add stdout/stderr error listeners through existing stop/first-failure/close handling, fixed channel
+error codes, no early resolve or swallowed errors. Add real copied-helper caller proofs for each stream and
+for a secondary error after malformed parsing; delete each listener independently. No timeout/model/tool/
+permission/command/profile/gate/concurrency change. Fresh independent focused repair review and exact-commit
+clean-clone/merged-tree checks are required; accepted Job D cap/reviews are not restarted.
+
+## Entry 41 — helper stream-error repair verified; focused reviews pending, 2026-09-05
+
+Exactly two runtime listeners now route stdout/stderr read errors through existing stop/first-failure/close
+handling, using fixed channel strings. No model/tool/permission/profile/timeout/concurrency change. Existing
+helper malformed test now preserves stderr/stdout if a summary is absent. Two added caller tests each run
+both an early stream error and a secondary error after malformed output; failure summary/no report and
+original malformed reason are asserted. Copied helper + local fakeCLI follows the existing test pattern.
+
+Before runtime repair, both new tests failed at missing failed summary with uncaught ECONNRESET. After repair,
+full helper suite8/8. Independently deleting stdout or stderr listener fails its corresponding named test;
+exact runtime bytes restored, after hash29fc821e3107b43cbd9a513d158a5b4041413fb3e8c97fe5f1cdd615e336045e.
+Typecheck, invocation CLI and diff check PASS. Full ordered make test PASS1876+5+10=1891, one expected opt-in
+skip, execution gate PASS. Fresh reports and unchanged source hashes verified. Evidence: helper-fix/
+{before-tests,after-tests,delete-stdout,delete-stderr,deletion-results,verification}.json and full logs/diffs.
+No live Docker rerun yet for this helper-only repair; exact committed candidate and merged-tree gates follow
+independent review. Historical failures remain unexplained (Entry39); this proves the injected read-error
+class and controlled failure evidence, not its OS frequency or that the original failures had this cause.
+
+Owner freezes for fresh focused Astra, Claude QA and separate security review of this two-file repair. New
+integration-defect scope; no accepted JobD planning/fix review repeated or cap reset. All Slice4 runtime/test
+source remains unchanged. No push or completed integration claim. Deviations: integration failure interrupted
+closure, transparently retained; no weakened gate or source-boundary change outside Entries39–40.
+
+## Entry 42 — focused helper Astra PASS; managed transfer approval checkpoint, 2026-09-05
+
+Fresh independent Astra PASS, no actionable P1/P2/P3 in the two-file helper repair. Report at
+`/private/tmp/tinyvault-slice4-integration/helper-fix/astra-review.md`. Owner read the complete report and
+verified unchanged frozen303-file digest04f85bf3aae7c92b6e8a5b9c0eed093a2555760c030d2f2e17afef65a9236f56
+before this documentation update. Reviewer independently verified inventory/modes, baseline and final hashes,
+supplied before/after/deletion proof and full make1891+expectedskip. No dynamic tests or peer-report reads.
+Accept its precise evidence limits: deletions fail the early-error phase, not independently the later malformed
+precedence phase; EventEmitter injection is not OS-race frequency or general process-tree cleanup proof;
+first-error preservation is for stop-mediated failures, not every inherited child-process error route.
+Original intermittent missing summaries remain unexplained. No new repair requested by Astra.
+
+Normal focused Claude QA dispatch was rejected BEFORE launch by automatic approval review: the newly modified
+private source/repair evidence to Anthropic required specific approval for that new payload; prior consent was
+not accepted. Security dispatch did not start because the first rejection stopped the sequence. No retry via
+another route, policy change, widened tools, substituted reviewer or control bypass. No Claude report exists.
+User was asked to approve sending updated TinyVault source/diff and verification evidence, including the two-
+file helper fix, to Anthropic for focused read-only QA/security reviews. That specific response is pending.
+This renewed question is the managed runtime requirement, not a new TinyVault workflow consent rule.
+
+No active worker/reviewer/test remains. Current main HEAD5210988721c79233581993f5e39b24ed9ef37846 contains
+local Slice4 merge; exactly four files dirty: PLAN, this register, scripts/claude-review.mjs and its .test.mjs.
+The two helper source files are the reviewed uncommitted repair; preserve them. Before approved dispatch,
+verify those source hashes and refresh full inventory for checkpoint-only documentation. Do not repeat passed
+Astra review or full make for docs only. After valid required Claude reports and synthesis, package repair
+on a codex integration-fix branch, commit the explicit four-file candidate, run a new literal clean clone
+with npm ci/make browsers/make test, then merge locally and run full default plus serial Docker acceptance.
+User has authorized that integration sequence; no remote push requested. Do not claim the old successful
+clone tests this repair, or label the first/merged failures resolved. No completed integration claim.
+Deviations From Handoff: managed review dispatch block and the transparently retained integration failures.
+
+## Entry 43 — helper repair accepted after approved independent reviews, 2026-09-05
+
+User replied **"I approve"** to Entry42's specific source/diff/evidence transfer request. Both normal helper
+invocations then completed exit0/PASS on frozen303-file digest
+`f41d5cad0f15391f1ea64754770556cd1035b9b4b9272663c458c3674d6c08ea`:
+- Claude QA Opus5 session `9c989930-0a84-4dfe-9d5e-e74a0cf6c202`.
+- Separate Claude security Opus5 session `5db1f85f-48ca-4086-a0c9-2a0d7e20d745`.
+Reports: `/private/tmp/tinyvault-slice4-integration/helper-fix/claude-{qa,security}/report.md`.
+Owner read both full reports and validated complete event streams, actual Opus5 assistant models, only
+Read/Glob/Grep calls, no current peer-report reads, successful terminal metadata and unchanged complete
+inventory/modes/status. Auxiliary Haiku usage remains separately recorded. Evidence: helper-fix/
+owner-review-validation.json. Astra PASS is Entry42; only owner checkpoint docs changed between its
+candidate and Claude's. No dynamic execution by Claude; supplied owner verification is Entry41.
+
+**Dispositions:** no new blocking production/security defect or weakened gate. Accept the bounded helper
+repair under §6, retaining these observations rather than extending its two-file scope:
+1. Security P3: the two loop-generated regression tests are outside gate-cli.selftest's name-level detector
+   for the six original tests. They ran and passed in the full suite; removing either listener independently
+   makes its named test fail. Deleting the entire new test block has no automatic detector. Accept this
+   test-inventory drift gap: no existing detector was weakened and no contract requires name-level deletion
+   detection for every added test. Do not claim the new tests themselves are deletion-protected.
+2. Both channels: fixed channel strings deliberately omit the underlying errno/message. Keep that bounded
+   diagnostic choice; do not write uncontrolled error text into another evidence stream merely for richer
+   diagnostics. Historical-failure attribution remains limited. The missing-summary assertion preserves
+   child stdout/stderr but fixture cleanup still removes other partial artifacts.
+3. Existing stop-mediated first-error preservation is narrower than every child error: child.on('error')
+   can overwrite failure; non-ESRCH process.kill errors can throw. Neither is introduced by the listeners
+   or shown to cause the original failure. No false PASS demonstrated; do not claim universal summary
+   creation, universal precedence, or Windows behavior.
+4. Closure inherits SIGTERM/SIGKILL plus child close, with no independent post-failure deadline if an
+   escaped descendant holds a pipe. Synthetic emit leaves a healthy pipe; real stream destruction, OS
+   frequency, late-after-close events, kill failures and general process-tree cleanup remain unproven.
+5. Listener deletions fail the early phase, not an isolated precedence-guard mutant; only the matching
+   test ran for each deletion, not the opposite stream control. Events-file existence alone is weak
+   because it is precreated. Keep evidence claims at the observed assertions, not independent mutation
+   coverage of every assertion. Existing one-second fake-CLI timeout remains unchanged and fails closed.
+
+The two historical integration failures remain unexplained and are not declared fixed by this separate
+stream-error repair. No accepted JobD residual reopened, no review-cap reset, no new plan review.
+All required helper-review channels are complete; no active reviewer or approval pending. Next: commit
+the explicit four-file repair/checkpoint on a codex integration-fix branch, new exact-commit literal clone
+with npm ci/make browsers/make test, then local merge and serial make test/make test-docker. Old clone or
+merged-tree reports cannot satisfy this repaired candidate's gates. No remote push authorized or performed.
+Deviations From Handoff: Entry42 managed dispatch block resolved by specific user approval; Entry39
+integration failures and their unproven cause remain recorded. No scope/gate deviation in this repair.
