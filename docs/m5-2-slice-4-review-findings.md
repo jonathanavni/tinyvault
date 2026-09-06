@@ -1544,3 +1544,56 @@ with npm ci/make browsers/make test, then local merge and serial make test/make 
 merged-tree reports cannot satisfy this repaired candidate's gates. No remote push authorized or performed.
 Deviations From Handoff: Entry42 managed dispatch block resolved by specific user approval; Entry39
 integration failures and their unproven cause remain recorded. No scope/gate deviation in this repair.
+
+## Entry 44 — exact repaired clone and merged-tree acceptance complete, 2026-09-05
+
+**Slice4 complete and merged locally.** The authorized repair branch
+`codex/m5-2-slice-4-integration-fix` committed the explicit four-file reviewed/checkpoint candidate as
+`7a02d3ad84751a1db35678551836ca5e426caba3`. All non-owner-document hashes matched the reviewed inventory;
+staged bytes and paths were checked explicitly. Literal `git clone --no-local --branch
+codex/m5-2-slice-4-integration-fix /Users/jonathanavni/Documents/Coding/tinyvault
+/private/tmp/tinyvault-slice4-integration/helper-acceptance/clean-clone` was followed serially by:
+- `npm ci`: exit0; clean status.
+- `make browsers`: exit0; clean status.
+- `make test`: exit0;1876 main +5 decoder timing +10 browser timing =1891 pass; one expected opt-in skip;
+  test execution PASS. All reports fresh, correct commit and clean final status.
+
+Only after that clone PASS, local main was verified unchanged at5210988 and merged with `--no-ff`. Final
+source merge `39169a6c81fc2da4a29532ac46ea9e961197b145` has EXACT candidate tree
+`6a416a798b135fc4340fe39400aaed8a117cbae5`. No remote push. Original accepted incoming changes remain
+preserved in0e274bf/5210988; the helper repair is7a02d3a/39169a6. No lost work or unrelated source edit.
+
+**Merged-tree checks, in required serial order:**
+1. `make test`: exit0,1876+5+10=1891 pass; one expected opt-in skip; execution proof PASS.
+2. `make test-docker`: exit0,5/5, no skip; Docker execution proof PASS. Fresh complete live reports.
+
+Fresh maximum-budget probe:579scanners, three249467904–249469440-byte exports took
+89198.0–89255.2ms each, all below unchanged120000ms; total teardown268994.2ms. Probe
+registration-through-attestation10.6–22.5ms is the non-browser partition. Separate composed browser-runner
+registration-through-attestation131.5–143.8ms; zero normal409responses;21scanners; exports3941.0–3994.8ms.
+Both partitions retained26exec-stderr bytes per fixture with65510bytes headroom; exports had zero stderr
+bytes and65536headroom. No maximum-RSS/slower-host or broader security claim inferred.
+Final read-only Docker inventory: zero containers carrying `com.tinyvault.fixture`; the same three
+pre-existing TinyVault networks retained. No unrelated resources removed.
+
+Evidence root `/private/tmp/tinyvault-slice4-integration/helper-acceptance/`:
+`candidate-commit.json`, `clean-clone-results.json`, `merge-commit.json`, `merged-verification.json`,
+`cleanup.json`, exact main/timing/Docker/metric JSONs and full command logs. All303 candidate file hashes
+unchanged after the tests; main clean before owner closure docs. No tests remain running.
+
+Owner closure updates only PLAN, this append-only register, docs/README and the phase-0 build-status
+paragraph. No locked behavior/threshold, source/test, dependency, or gate change. Owner verified explicit doc-only
+diff and git diff --check before the authorized documentation commit; source remains exactly the tested
+merge. **Not run:** full suites again after documentation-only closure; exact source is unchanged and the
+required fresh clone/merged suites above passed. Remote push/release not requested or performed.
+
+**Residuals remain explicit:** Entry39's two intermittent malformed-review/missing-summary failures are
+unexplained. These new successful gates do not attribute them to stream errors or prove nonrecurrence.
+The independently reproduced stream-error class is repaired with bounded evidence (Entries40–43); all
+accepted JobA/B/C/D and helper review limits remain. Integration acceptance is of this exact repaired
+candidate and its observed gates, not erasure of earlier failures. Completed planning/reviews were not
+repeated. **Deviations From Handoff:** integration was interrupted by the recorded failures and managed
+review transfer block; the block was resolved by explicit approval. No unresolved scope/gate deviation.
+
+Next planned slice is5 (attestation), followed by6 (parity/claim closure); neither began here. M5.2 remains
+in progress with4of6 slices merged; its milestone-close assessment is due after the whole milestone.

@@ -9,9 +9,9 @@ When a planning doc or spec is superseded or shipped, move it to [`archive/`](ar
 
 Active planning docs:
 - `m5-2-slice-4-plan.md` — Slice 4 revision 5, **LOCKED**, after capped final paper review and the user-approved SCHEMA amendment.
-  Control operations, capabilities and capture transfer; baseline prerequisite complete, feature acceptance gates pending.
+  Control operations, capabilities and capture transfer accepted and merged locally (`39169a6`); exact clone and final gates PASS (register Entry44).
 - `m5-2-slice-4-review-findings.md` — append-only Slice 4 findings/dispositions and exact baseline prerequisite
-  decision packet. No implementation dispatched.
+  decision packet, Jobs A–D acceptance, helper integration repair, reviews and exact clone/merge verification through Entry44.
 - `phase-0-plan.md` — the canonical Phase 0 implementation plan. **LOCKED** after a 3-round Codex
   adversarial ladder + a fresh-context alignment review; carries the §8 milestone ladder, the §5
   eval contract, and the §10 residual risks. Amended post-lock where recorded in `PLAN.md`.
@@ -63,7 +63,7 @@ Active planning docs:
   gate; capture transfer without shared mounts; the frozen agent tool surface) and Acceptance A–P.
 - `m5-2-implementation-plan.md` — how the locked M5.2 contract is sequenced: six independently-green commits, the
   Codex/integrator ownership split, and which Acceptance criteria each commit gates. Docker enters at commit 3 and
-  never on the `make test` path. **Slices 1–3 merged (`ab52f8e`, `8133495`, `8afce07`); slice 4 next.**
+  never on the `make test` path. **Slices 1–4 merged (`ab52f8e`, `8133495`, `8afce07`, final source merge `39169a6`); slice 5 next.**
 - `m5-2-review-findings.md` — the M5.2 register: C-R1 (seam recon), C-R2/C-R3/C-R5 (three adversarial paper rounds,
   which killed the original network shape, then the sidecar split and exec bridge, then found the Docker daemon was
   an unguarded alternate control transport), C-R4 and C-R6 (the user's threat-model lock and bounded cap

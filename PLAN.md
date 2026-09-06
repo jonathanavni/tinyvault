@@ -11,40 +11,34 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-05-m5.2-slice4` — focus: **M5.2 slice 4**; owner: codex; state: active integration.
+`2026-09-05-m5.2-slice4` — focus: **M5.2 slice 4**; owner: codex; state: complete, merged locally.
 State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`.
-User assigned ownership and authorized implementation, reviews, commit, literal clean clone, local merge and
-merged-tree verification. No remote push requested. All incoming work preserved in candidate
-`0e274bf57ca94fa3f1ab5a80d72980b5abef35b5`, locally merged as
-`5210988721c79233581993f5e39b24ed9ef37846`; original base `dc0796fa8616548c6fa61315fed4b2b9bde97620`.
-Current checkout main at that local merge; four dirty files: PLAN, Slice4 register, review helper and its test.
+Locked revision5 Jobs **A/B/C/D accepted** (register Entries16/23/27/37). All incoming changes preserved
+in candidate `0e274bf57ca94fa3f1ab5a80d72980b5abef35b5` and local merge `5210988`. Bounded helper repair
+accepted after fresh Astra, Claude QA and separate security PASS (Entries40–43), committed as
+`7a02d3ad84751a1db35678551836ca5e426caba3` on `codex/m5-2-slice-4-integration-fix`.
+Final source merge on main: **`39169a6c81fc2da4a29532ac46ea9e961197b145`**, exact repair-candidate tree
+`6a416a798b135fc4340fe39400aaed8a117cbae5`. Owner closure is a subsequent documentation-only commit.
 
-Locked revision5 Jobs **A/B/C/D accepted** (canonical register Entries16/23/27/37). Planning and prerequisite
-reviews are complete; do not repeat them. Final JobD working-tree checks: make test1889 pass/one expected
-opt-in skip; serial Docker5/5 and execution proof PASS; 30 final mutant reds/restored, with earlier rounds
-separately recorded. Exact scope, accepted residuals, private-key proof partition and reviews live in
-`docs/m5-2-slice-4-review-findings.md`; governing contract is `docs/m5-2-slice-4-plan.md` revision5.
+**Final acceptance PASS (Entry44):** new literal exact-commit clone of7a02d3a + npm ci + make browsers +
+make test1891 pass/one expected opt-in skip/execution PASS. After local merge, serial make test1891 pass/
+same expected skip, then make test-docker5/5 and execution PASS. All reports fresh;303 candidate file hashes
+unchanged after tests. Maximum-budget579-scanner exports89.20–89.26s each below120s; separate composed
+browser registration-through-attestation131.5–143.8ms, zero normal409s. Final zero fixture containers;
+three pre-existing networks preserved. Canonical evidence/dispositions: `docs/m5-2-slice-4-review-findings.md`;
+raw evidence `/private/tmp/tinyvault-slice4-integration/helper-acceptance/`.
 
-**Integration remains incomplete.** Original candidate first clean clone failed, second literal clone passed;
-merged-tree make test reproduced an intermittent malformed-review/missing-summary failure (Entry39).
-Historical cause remains unexplained. Separately reproduced stdout/stderr read errors bypassed controlled
-helper failure evidence; a two-listener repair and two copied-helper caller tests are accepted (Entries40–43).
-Focused tests8/8, each listener deletion red/restored; repaired make test1891 pass/one expected skip,
-typecheck/invocation/diff checks PASS. Synthetic error proof is not attribution of the historical failure.
+**Retained limits:** the original clone/merged-tree intermittent missing-helper-summary failures remain
+unexplained (Entry39). The separately reproduced stream-error path is repaired; new green gates do not
+prove historical attribution or nonrecurrence. Exact synthetic/mutation, cleanup, diagnostic and test-
+inventory limits live in Entry43. All accepted JobA/B/C/D private-key/observation/deployment limits remain.
+Do not repeat completed planning or accepted reviews absent new evidence. Locked contract remains
+`docs/m5-2-slice-4-plan.md` revision5. No release or whole-M5.2 completion claim.
 
-Fresh Astra, Claude QA and separate Claude security all PASS for the bounded helper repair. Owner validated
-full reports, Opus5/tool/event metadata and unchanged303-file candidate digest
-`f41d5cad0f15391f1ea64754770556cd1035b9b4b9272663c458c3674d6c08ea` before this owner documentation update.
-Specific user approval resolved the managed source-transfer rejection; no review/worker/approval pending.
-Review dispositions and remaining diagnostic/test/closure limits: Entry43. Evidence:
-`/private/tmp/tinyvault-slice4-integration/helper-fix/`; integration evidence in its sibling `helper-acceptance/`.
-
-**Next authorized steps:** package the explicit four-file repair on `codex/m5-2-slice-4-integration-fix`,
-commit, then new literal exact-commit clone + npm ci + make browsers + make test. Only after PASS, locally
-merge and run make test then make test-docker serially. Record exact SHAs/results and final owner closure.
-Do not reuse the original candidate's clone success for the repair; do not call the historical failures resolved.
-Standing routine Claude transfer consent is in `docs/handoff-pattern.md`; managed controls remain unchanged.
-No completed-integration or remote-push claim.
+No active worker/reviewer/test or required approval remains. User authorized all local commits/merges;
+**nothing pushed remotely**. Standing routine Claude review consent is in `docs/handoff-pattern.md`; the
+managed transfer block was resolved by specific approval with no policy bypass. Next planned work is
+**Slice5: attestation**, then Slice6 parity/claim closure. Neither began in this session.
 
 `2026-09-05-m5.2-slice3` — focus: assessment fold-in check, commit `AGENTS.md`, then **M5.2 slice 3** through the
 full security-core ladder via Astra; prune `codex/m5-2-slice-2` — **outcome: MERGED (`8afce07`).** Merged tree:
@@ -94,21 +88,14 @@ slice 3 (above); full detail in `PLAN-archive.md`.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
-**M4 ✅** (`b8a9396`) · **M5 ✅** (`96e3ea3`) · **M5.1 ✅** · **M5.2** in flight (spec locked; **slices 1–3 of 6 merged**, slice 3 `8afce07`).
+**M4 ✅** (`b8a9396`) · **M5 ✅** (`96e3ea3`) · **M5.1 ✅** · **M5.2** in flight (spec locked; **slices 1–4 of 6 merged**, slice 4 final source merge `39169a6`).
 
-**Resume checkpoint:** retain Codex continuity. Local main @5210988721c79233581993f5e39b24ed9ef37846 merges
-accepted Slice4 candidate0e274bf; subsequent integration failure led to the bounded helper fix (Entries39–42).
-Exactly four dirty files: scripts/claude-review.mjs/.test.mjs, PLAN/register. Preserve all. Repaired full make
-1891+expectedskip and fresh Astra PASS; two Claude reviews blocked before launch by managed transfer control.
-Specific user approval request pending for updated repository source/diff/evidence to Anthropic including
-helper repair. After approval, verify unchanged helper hashes, refresh doc-only inventory, dispatch the two
-normal restricted reviews and validate them. No repeated Astra/planning reviews or cap reset. Then use a codex
-integration-fix branch, commit reviewed repair, run literal new clone + npm ci + make browsers + make test,
-merge locally and run make test followed by make test-docker. User authorized integration; no push requested.
-Old clone PASS is not repaired-commit acceptance. Original intermittent failure cause remains unproven.
-No worker/reviewer/test active. Evidence root /private/tmp/tinyvault-slice4-integration/helper-fix/.
+**Resume checkpoint:** Slice4 complete; final tested source merge39169a6, with subsequent owner closure
+docs only. All required review/clone/default/Docker gates passed (Entry44). No active jobs or approval
+pending; no remote push. Preserve the unexplained historical helper failures and the accepted evidence
+limits. Next authorized-scope decision is Slice5 planning; do not repeat Slice4 reviews.
 
-**Blocked / needs attention:** no known Slice 4 implementation-start blocker; prerequisite and contract decisions are complete.
+**Blocked / needs attention:** no open Slice4 acceptance blocker; recorded residuals remain in its register.
 The A5 scorecard-provenance slice is still scheduled before
 M6 publishes anything. The `tinyvault-fixture:local` image (347 MB) stays on the host between eval runs (rebuilt by
 every composed construction). Threads unchanged: `terminate-before-delivery` timeout parked; deferred M2/M3
@@ -573,3 +560,9 @@ residuals; the 🔴 `dom-fill` destination slice still owes its launch dispositi
   Independently injected stream errors demonstrated uncontrolled failure handling, repaired with two listeners
   and actual-helper tests;1891+skip and fresh Astra PASS. New Claude payload blocked by managed runtime;
   specific approval pending. No cause conflation, gate weakening, fourth JobD repair or remote push.
+
+- **2026-09-05 — Slice4 local integration complete (Entries43–44).** Specific approval resolved the helper
+  review transfer block; fresh Astra/Claude QA/security PASS. Exact repair7a02d3a passed a new literal clone;
+  source merge39169a6 passed make test1891+expectedskip then Docker5/5. Accepted the two-file stream-error
+  repair with its narrow proof and retained the original intermittent failure cause as unknown. Updated
+  progress to4of6 M5.2 slices; no push and no whole-milestone closure assessment yet.
