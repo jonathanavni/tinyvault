@@ -102,6 +102,8 @@ test('real helper process separates findings from success, failure, denial, stal
     ['model', 1], ['denied', 1], ['mutate', 1], ['hang', 124]]) {
     const run = await invoke(f, mode);
     assert.equal(run.code, expected, `${mode}: ${run.stderr}`);
+    assert.ok(existsSync(resolve(run.output, 'summary.json')),
+      `${mode}: missing summary; stderr=${run.stderr}; stdout=${run.stdout}`);
     const summary = JSON.parse(readFileSync(resolve(run.output, 'summary.json')));
     assert.equal(summary.executionStatus, expected === 0 || expected === 2 ? 'completed' : 'failed');
     assert.equal(existsSync(resolve(run.output, 'report.md')), expected === 0 || expected === 2);
@@ -185,3 +187,32 @@ test('missing or empty CLAUDE.md fails before launching Claude', async (t) => {
   assert.match(empty.stderr, /Required CLAUDE.md is empty/);
   assert.equal(existsSync(resolve(f.root, 'received-prompt.txt')), false);
 }, 30_000);
+
+for (const stream of ['stdout', 'stderr']) {
+  test(`real helper records ${stream} read errors and preserves prior malformed failure`, async (t) => {
+    const f = fixture(t);
+    const original = readFileSync(helper, 'utf8');
+    const entry = resolve(realpathSync(f.root), 'helper-read-error.mjs');
+    const inject = `child.${stream}.emit('error', Object.assign(new Error('probe-read-reset'), { code: 'ECONNRESET' }));`;
+    for (const phase of ['read', 'after-malformed']) {
+      const anchor = phase === 'read'
+        ? "    child.stdout.setEncoding('utf8');"
+        : '      } catch (error) { stop(`Invalid Claude event: ${error.message}`); }';
+      assert.equal(original.split(anchor).length, 2);
+      const replacement = phase === 'read'
+        ? `    setImmediate(() => { ${inject} });\n${anchor}`
+        : '      } catch (error) { stop(`Invalid Claude event: ${error.message}`); ' + inject + ' }';
+      writeFileSync(entry, original.replace(anchor, replacement));
+      const run = await invoke(f, phase === 'read' ? 'pass' : 'malformed', resolve(f.root, `${stream}-${phase}`), entry);
+      assert.equal(run.code, 1, `${phase}: ${run.stderr}`);
+      assert.ok(existsSync(resolve(run.output, 'summary.json')),
+        `${phase}: missing failed summary; stderr=${run.stderr}; stdout=${run.stdout}`);
+      const summary = JSON.parse(readFileSync(resolve(run.output, 'summary.json')));
+      assert.equal(summary.executionStatus, 'failed');
+      if (phase === 'read') assert.equal(summary.error, `Cannot read reviewer ${stream}`);
+      else assert.match(summary.error, /^Invalid Claude event:/);
+      assert.equal(existsSync(resolve(run.output, 'report.md')), false);
+      assert.ok(existsSync(resolve(run.output, 'events.jsonl')));
+    }
+  }, 30_000);
+}
