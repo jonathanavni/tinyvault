@@ -1,8 +1,8 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,10 +41,10 @@ test('accepts a completed finding report, but rejects false completion and model
 
 function fixture(t) {
   const root = mkdtempSync(resolve(tmpdir(), 'tinyvault-claude-review-test-'));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.onTestFinished(() => rmSync(root, { recursive: true, force: true }));
   const repo = resolve(root, 'repo'), bin = resolve(root, 'bin');
   mkdirSync(repo); mkdirSync(bin);
-  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { stdio: 'pipe', encoding: 'utf8' });
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { stdio: 'pipe', encoding: 'utf8', shell: false });
   git('init', '-q');
   writeFileSync(resolve(repo, 'source.txt'), 'original\n');
   writeFileSync(resolve(repo, 'CLAUDE.md'), '# Fixture project\nProject context from the reviewed checkout.\n');
@@ -81,13 +81,13 @@ for(const e of es)process.stdout.write(JSON.stringify(e)+'\\n');
   return { root, repo, bin, packet, git };
 }
 
-function invoke(f, mode, output = resolve(f.root, mode)) {
+function invoke(f, mode, output = resolve(f.root, mode), entry = helper) {
   return new Promise((accept) => {
-    const child = spawn(process.execPath, [helper, '--repo', f.repo, '--packet', f.packet,
+    const child = spawn(process.execPath, [entry, '--repo', f.repo, '--packet', f.packet,
       '--channel', 'qa', '--output', output, '--timeout-seconds', '1'], {
       env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, REVIEW_FAKE_MODE: mode,
         REVIEW_FAKE_CAPTURE: resolve(f.root, 'received-prompt.txt') },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'], shell: false,
     });
     let stdout = '', stderr = '';
     child.stdout.on('data', (data) => { stdout += data; });
@@ -107,7 +107,32 @@ test('real helper process separates findings from success, failure, denial, stal
     assert.equal(existsSync(resolve(run.output, 'report.md')), expected === 0 || expected === 2);
     assert.ok(existsSync(resolve(run.output, 'events.jsonl')));
   }
-});
+
+  // Exercise the actual helper under the same dynamic rebinding with the wrapper
+  // present, deleted, and restored. Deletion must reach only our existing fake CLI.
+  const original = readFileSync(helper, 'utf8');
+  const signature = 'export function runClaude({ repo, prompt, timeoutMs, onStdout = () => {}, onStderr = () => {} }) {';
+  assert.equal(original.split(signature).length, 2);
+  assert.equal(original.split('[...claudeArgs()]').length, 2);
+  const rebound = original.replace(signature, signature + '\n  eval("claudeArgs = () => ({shell:true})");');
+  const deleted = rebound.replace('[...claudeArgs()]', 'claudeArgs()');
+  // Node resolves import.meta.url through macOS /var symlinks; match its entry check.
+  const entry = resolve(realpathSync(f.root), 'helper-mutant.mjs');
+  const capture = resolve(f.root, 'received-prompt.txt');
+  for (const [name, text, launched, expected] of [
+    ['argv-guarded', rebound, false, 1],
+    ['argv-deleted', deleted, true, 1],
+    ['argv-restored', rebound, false, 1],
+    ['argv-ordinary', original, true, 0],
+  ]) {
+    rmSync(capture, { force: true });
+    writeFileSync(entry, text);
+    const run = await invoke(f, 'pass', resolve(f.root, name), entry);
+    assert.equal(run.code, expected, `${name}: ${run.stderr}; stdout=${run.stdout}`);
+    assert.equal(existsSync(capture), launched, `${name}: fake Claude launch marker`);
+    if (!launched) assert.match(run.stderr, /iterable/);
+  }
+}, 30_000);
 
 test('refuses in-repo or existing report directories, including symlinked parents', async (t) => {
   const f = fixture(t);
@@ -119,7 +144,7 @@ test('refuses in-repo or existing report directories, including symlinked parent
     assert.match(run.stderr, /outside all source worktrees|must be new/);
   }
   assert.equal(existsSync(resolve(f.repo, 'evidence')), false);
-});
+}, 30_000);
 
 test('candidate digest sees untracked changes, tracked deletions, and rejects symlinks', (t) => {
   const f = fixture(t), head = f.git('rev-parse', 'HEAD').trim();
@@ -130,7 +155,7 @@ test('candidate digest sees untracked changes, tracked deletions, and rejects sy
   assert.ok(candidate(f.repo, head).files.find((file) => file.path === 'source.txt').deleted);
   symlinkSync(f.packet, resolve(f.repo, 'external.txt'));
   assert.throws(() => candidate(f.repo, head), /symlink/);
-});
+}, 30_000);
 
 test('supplies the reviewed checkout CLAUDE.md without packet instructions and records its exact snapshot', async (t) => {
   const f = fixture(t);
@@ -146,7 +171,7 @@ test('supplies the reviewed checkout CLAUDE.md without packet instructions and r
   assert.equal(request.projectContext.sha256, createHash('sha256').update(context).digest('hex'));
   const snapshot = JSON.parse(readFileSync(resolve(run.output, 'candidate.json')));
   assert.equal(snapshot.files.find((file) => file.path === 'CLAUDE.md').sha256, request.projectContext.sha256);
-});
+}, 30_000);
 
 test('missing or empty CLAUDE.md fails before launching Claude', async (t) => {
   const f = fixture(t);
@@ -159,4 +184,4 @@ test('missing or empty CLAUDE.md fails before launching Claude', async (t) => {
   assert.equal(empty.code, 1);
   assert.match(empty.stderr, /Required CLAUDE.md is empty/);
   assert.equal(existsSync(resolve(f.root, 'received-prompt.txt')), false);
-});
+}, 30_000);

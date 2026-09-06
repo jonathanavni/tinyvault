@@ -79,10 +79,12 @@ describe('checker meta-gate', () => {
     ]);
   });
 
-  it('keeps wall-clock assertions in the two serial timing files', () => {
+  it('keeps wall-clock assertions in the two serial timing files and the Docker-only serial entry', () => {
     const allowed = new Set([
       'src/supervisor/host.timing.browser.test.ts',
       'testbed/checkers/leakDecoders.timing.test.ts',
+      // Separately excluded from main Vitest; make test-docker runs this existing single entry serially.
+      'testbed/docker/composed.docker.test.ts',
     ]);
     const clockCall = `performance.${'now'}()`;
     const upperBound = `toBeLess${'Than'}(`;

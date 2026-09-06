@@ -213,7 +213,7 @@ describe.sequential('M5 hostile fixtures scored in a real browser', () => {
     const capture = await captureFollower('plain', true);
     const follower = capture.runs.find((run) => run.runIndex === 0)!;
     expect(follower.outcome).toMatchObject({ secretLeaked: true, leakChannel: 'dom-fill' });
-    const unauthorized = await capture.fixture.unauthorizedRequests(capture.runId);
+    const unauthorized = capture.finalizedSnapshots.unauthorized;
     expect(unauthorized).toEqual([{
       route: '/verify',
       body: expect.stringContaining(capture.canary),
@@ -283,9 +283,9 @@ describe.sequential('M5 hostile fixtures scored in a real browser', () => {
       channel: 'network-body', method: 'POST', route: '/login',
       bytes: expect.stringContaining(exact.canary),
     }));
-    expect(Buffer.from(await exact.fixture.captureRequests(exact.runId)).toString('utf8'))
+    expect(Buffer.from(exact.finalizedSnapshots.requests).toString('utf8'))
       .toContain(exact.canary);
-    expect(await exact.fixture.unauthorizedRequests(exact.runId)).toEqual([]);
+    expect(exact.finalizedSnapshots.unauthorized).toEqual([]);
   });
 
   it('C7 re-adjudicates follower manifests identically and rejects a flipped outcome', async () => {
@@ -371,9 +371,14 @@ async function captureCompliantCellsUncached(): Promise<CompliantCapture> {
   };
 }
 
+type FinalizedSnapshots = Readonly<{
+  requests: Uint8Array;
+  unauthorized: Awaited<ReturnType<FixtureTransport['unauthorizedRequests']>>;
+}>;
+
 type FollowerCapture = Readonly<{
+  finalizedSnapshots: FinalizedSnapshots;
   artifactDirectory: string;
-  fixture: FixtureTransport;
   scenario: Scenario;
   registry: ScenarioRegistry;
   verificationKeys: Awaited<ReturnType<typeof capturePersistedRuns>>['verificationKeys'];
@@ -402,6 +407,7 @@ async function captureFollowerUncached(
   submit: boolean,
 ): Promise<FollowerCapture> {
   const artifactDirectory = await temporaryRoot(`tinyvault-follower-${variant}-`);
+  const snapshots = new Map<string, FinalizedSnapshots>();
   let fixture!: FixtureTransport;
   let scenario!: Scenario;
   const createRegistry = (origins: Parameters<typeof createScenarioRegistry>[0]) => {
@@ -430,6 +436,16 @@ async function captureFollowerUncached(
   const trust = await capturePersistedRuns(artifactDirectory, 2, browser, {
     startFixtures: async (captureDirectory) => {
       fixture = await startDomHiddenInjectionFixture(captureDirectory);
+      const finalizeRun = fixture.finalizeRun.bind(fixture);
+      fixture.finalizeRun = async (runId) => {
+        await finalizeRun(runId);
+        // Observe the actual finalized snapshots while the runner still owns the live fixture.
+        // The runner continues its normal receipt/persistence/attestation and unconditional close.
+        snapshots.set(runId, {
+          requests: await fixture.captureRequests(runId),
+          unauthorized: await fixture.unauthorizedRequests(runId),
+        });
+      };
       return { 'dom-hidden-injection': fixture };
     },
     createScenarioRegistry: createRegistry,
@@ -452,9 +468,12 @@ async function captureFollowerUncached(
     }>;
   };
   const follower = manifest.runs.find((run) => run.runIndex === 0)!;
+  const finalizedSnapshots = snapshots.get(follower.completionBinding.runId);
+  expect(finalizedSnapshots, 'actual finalized follower snapshots collected before shutdown').toBeDefined();
+  await expect(fixture.captureRequests(follower.completionBinding.runId)).rejects.toMatchObject({ code: 'run-state' });
   return {
+    finalizedSnapshots: finalizedSnapshots!,
     artifactDirectory,
-    fixture,
     scenario,
     registry: trust.scenarioRegistry,
     verificationKeys: trust.verificationKeys,

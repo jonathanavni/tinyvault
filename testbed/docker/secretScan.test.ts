@@ -153,12 +153,12 @@ it('scans shutdown-only artifact leakage after stop', async () => {
   await expect(p.closer.close()).rejects.toMatchObject({ code: 'secret-exposed' });
   expect(h.spawns.at(-1)!.args).toContain('down');
 });
-it('stderr is scanned before a bounded ring can discard an early leak', async () => {
+it('stderr retains the early window and fails sticky on overflow', async () => {
   const scanner = new SecretScanner(secret); const stream = Readable.from([secret, Buffer.alloc(100000, 1)]);
   const observer = observeStderr(stream, [scanner], 64);
   await new Promise<void>((resolve) => stream.on('end', resolve));
   expect(observer.exposed()).toBe(true); expect(observer.snapshot()).toHaveLength(64);
-  expect(observer.snapshot().includes(secret)).toBe(false); observer.destroy(); scanner.destroy();
+  expect(observer.snapshot().includes(secret)).toBe(true); expect(observer.failed()).toBe(true); observer.destroy(); scanner.destroy();
 });
 it('public capture scans artifacts outside fixture-captures and preserves the construction cause', async () => {
   const h = await fakeProject(vi.fn); disposals.push(h.dispose);
@@ -236,11 +236,11 @@ it.each([
   await expect(p.closer.close()).rejects.toMatchObject({ code: 'scan-control-missing', surface });
   expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
 });
-it('all closer controls present with no secret are clean, including exec marker before ring eviction', async () => {
+it('exec window overflow fails close despite all positive controls', async () => {
   const h = await fakeProject(vi.fn); disposals.push(h.dispose);
   const p = await createComposedProject(h.options);
   (h.handles[0].stderr as PassThrough).write(Buffer.alloc(100000, 1));
-  await expect(p.closer.close()).resolves.toBeUndefined();
+  await expect(p.closer.close()).rejects.toMatchObject({ code: 'scan-failed' });
 });
 it.each(['before-down', 'after-down'] as const)('secret-exposed dominates compose-stop on artifacts %s', async (when) => {
   const h = await fakeProject(vi.fn, { result: (kind) => kind === 'compose-stop'
@@ -330,4 +330,12 @@ it('secret-exposed outranks scan-control-missing in both orders', () => {
   expect(preferConstructionCode('scan-control-missing', 'secret-exposed')).toBe('secret-exposed');
   expect(preferConstructionCode('secret-exposed', 'scan-control-missing')).toBe('secret-exposed');
   expect(preferConstructionCode('compose-stop', 'scan-control-missing')).toBe('scan-control-missing');
+});
+
+it('live stderr scan preserves secret precedence for a known token beyond the retained bound', async () => {
+  const scanner = new SecretScanner(secret); const stream = new PassThrough();
+  const observer = observeStderr(stream, [scanner], 64);
+  stream.write(Buffer.alloc(64, 1)); stream.write(secret.subarray(0, 9)); stream.write(secret.subarray(9));
+  expect(observer.failed()).toBe(true); expect(observer.result().exposed).toBe(true);
+  observer.destroy(); scanner.destroy(); stream.destroy();
 });

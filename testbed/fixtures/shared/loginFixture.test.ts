@@ -77,6 +77,7 @@ describe('shared login fixture unauthorized request capture', () => {
         { route: '/login', body: wrong },
         { route: '/login?sink=1', body: queryLogin },
       ]);
+      await fixture.finalizeRun('registered');
       expect(Buffer.from(await fixture.captureRequests('registered')).toString('utf8')).toBe('');
       expect(await readFile(join(directory, 'unregistered.unauthorized.requests'), 'utf8'))
         .toContain(longId);

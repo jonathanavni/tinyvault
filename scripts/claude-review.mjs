@@ -94,7 +94,7 @@ export function validateEvents(events) {
 
 export function runClaude({ repo, prompt, timeoutMs, onStdout = () => {}, onStderr = () => {} }) {
   return new Promise((accept) => {
-    const child = spawn('claude', claudeArgs(), {
+    const child = spawn('claude', [...claudeArgs()], {
       cwd: repo, shell: false, detached: process.platform !== 'win32',
       stdio: ['pipe', 'pipe', 'pipe'],
     });

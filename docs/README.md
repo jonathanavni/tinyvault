@@ -8,6 +8,10 @@ Project documentation lives here. Two kinds:
 When a planning doc or spec is superseded or shipped, move it to [`archive/`](archive/) rather than deleting it. The history is useful, and a stale doc at the root is more confusing than an archived one. `/wrapup`'s doc-hygiene check surfaces docs that look superseded but haven't been moved.
 
 Active planning docs:
+- `m5-2-slice-4-plan.md` — Slice 4 revision 5, **LOCKED**, after capped final paper review and the user-approved SCHEMA amendment.
+  Control operations, capabilities and capture transfer; baseline prerequisite complete, feature acceptance gates pending.
+- `m5-2-slice-4-review-findings.md` — append-only Slice 4 findings/dispositions and exact baseline prerequisite
+  decision packet. No implementation dispatched.
 - `phase-0-plan.md` — the canonical Phase 0 implementation plan. **LOCKED** after a 3-round Codex
   adversarial ladder + a fresh-context alignment review; carries the §8 milestone ladder, the §5
   eval contract, and the §10 residual risks. Amended post-lock where recorded in `PLAN.md`.

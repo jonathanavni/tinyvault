@@ -1,10 +1,15 @@
 // Every runner guard exported as a pure function also needs a call-site test through
 // runEval or capturePersistedRuns; helper-only coverage does not prove production wiring.
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, writeFile, unlink, stat, symlink, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
+vi.mock('node:fs/promises', async (original) => {
+  const fs = await original<typeof import('node:fs/promises')>();
+  return { ...fs, open: vi.fn(fs.open) };
+});
+
 
 import { runAgentLoop, type ModelMessage } from '../src/agents/loop';
 import { StubClient } from '../src/agents/stub';
@@ -554,4 +559,176 @@ describe('eval runner failure and drain wiring', () => {
     expect(events).toContainEqual(expect.objectContaining(harness.drainBatches[7][0]));
     expect(await readFile(result.runs[0].transcriptPath, 'utf8')).toContain('post-loop-drain');
   });
+});
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+describe('Slice 4 production finalization and capture persistence', () => {
+  it('waits for executeStubRun host.closeAll settlement, finalized snapshot persistence, then attestation without ack', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-finalize-order-'));
+    const h = nodeEvalHarness(directory, vi.fn); const order: string[] = [];
+    const enteredClose = deferred(); const allowClose = deferred();
+    const createHost = h.options.createHost!; const start = h.options.startFixtures!;
+    h.options.createHost = async (input) => {
+      const host = await createHost(input);
+      return { ...host, closeAll: async () => { order.push('close-start'); enteredClose.resolve();
+        await allowClose.promise; await host.closeAll(); order.push('close-settled'); } };
+    };
+    let snapshot: Buffer;
+    const acknowledge = vi.fn(async () => undefined);
+    h.options.startFixtures = async (dir) => {
+      const fixtures = await start(dir); const fixture = fixtures['benign-login']!;
+      return { 'benign-login': { ...fixture,
+        finalizeRun: async (runId) => { order.push('finalize'); await fixture.finalizeRun(runId); },
+        takeReceipt: async (runId) => { order.push('receipt'); return fixture.takeReceipt(runId); },
+        captureRequests: async (runId) => {
+          order.push('capture'); snapshot = Buffer.from(await fixture.captureRequests(runId));
+          // Remove the in-process file so only the real runner persistence call can supply it for attestation.
+          await unlink(join(dir, `${runId}.requests`));
+          return snapshot;
+        },
+        attestEvents: async (runId, bytes) => {
+          expect(await readFile(join(dir, `${runId}.requests`))).toEqual(snapshot);
+          expect((await stat(join(dir, `${runId}.requests`))).mode & 0o777).toBe(0o600);
+          expect(bytes).toEqual(await readFile(join(directory, 'runs', runId, 'events.json')));
+          order.push('attest'); return fixture.attestEvents(runId, bytes);
+        }, acknowledgeReceipt: acknowledge,
+      } };
+    };
+    const pending = runEval(h.options);
+    try {
+      await enteredClose.promise;
+      expect(order).toEqual(['close-start']);
+    } finally { allowClose.resolve(); }
+    await expect(pending).resolves.toBeDefined();
+    expect(order).toEqual(['close-start', 'close-settled', 'finalize', 'receipt', 'capture', 'attest']);
+    expect(acknowledge).not.toHaveBeenCalled();
+  });
+  it('awaits finalize completion before receipt or capture reads', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-finalize-await-'));
+    const h = nodeEvalHarness(directory, vi.fn); const entered = deferred(); const release = deferred();
+    const start = h.options.startFixtures!; const receipt = vi.fn(); const capture = vi.fn();
+    h.options.startFixtures = async (dir) => {
+      const fixtures = await start(dir); const fixture = fixtures['benign-login']!;
+      return { 'benign-login': { ...fixture,
+        finalizeRun: async (runId) => { entered.resolve(); await release.promise; await fixture.finalizeRun(runId); },
+        takeReceipt: async (runId) => { receipt(); return fixture.takeReceipt(runId); },
+        captureRequests: async (runId) => { capture(); return fixture.captureRequests(runId); },
+      } };
+    };
+    const pending = runEval(h.options); void pending.catch(() => {});
+    try { await entered.promise; await new Promise((done) => setTimeout(done, 10));
+      expect(receipt).not.toHaveBeenCalled(); expect(capture).not.toHaveBeenCalled();
+    } finally { release.resolve(); }
+    await expect(pending).resolves.toBeDefined();
+  });
+  it.each(['missing', 'symlink-file', 'symlink-directory'] as const)('capture persistence %s fails the actual eval before attestation or result publication', async (mode) => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-capture-refusal-'));
+    const h = nodeEvalHarness(directory, vi.fn); const start = h.options.startFixtures!;
+    const attested = vi.fn();
+    h.options.startFixtures = async (dir) => {
+      const fixtures = await start(dir); const fixture = fixtures['benign-login']!;
+      return { 'benign-login': { ...fixture,
+        captureRequests: async (runId) => {
+          const bytes = await fixture.captureRequests(runId);
+          if (mode === 'missing') return undefined as never;
+          const path = join(dir, `${runId}.requests`);
+          if (mode === 'symlink-file') { await unlink(path); await symlink(join(directory, 'target'), path); }
+          else {
+            const { rename } = await import('node:fs/promises');
+            await rename(dir, `${dir}-real`); await symlink(`${dir}-real`, dir);
+          }
+          return bytes;
+        },
+        attestEvents: async (runId, bytes) => { attested(); return fixture.attestEvents(runId, bytes); },
+      } };
+    };
+    await expect(runEval(h.options)).rejects.toMatchObject({ code: 'capture-write' });
+    expect(attested).not.toHaveBeenCalled();
+    expect(await readdir(directory)).not.toContain('scorecard.json');
+    expect(await readdir(directory)).not.toContain('runs.captured.json');
+  });
+  it('persists an existing zero-byte capture through the production caller', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-empty-capture-'));
+    const h = nodeEvalHarness(directory, vi.fn); const start = h.options.startFixtures!;
+    h.options.startFixtures = async (dir) => {
+      const fixtures = await start(dir); const fixture = fixtures['benign-login']!;
+      return { 'benign-login': { ...fixture, captureRequests: async () => Buffer.alloc(0) } };
+    };
+    await capturePersistedRuns(directory, 1, fakeBrowser(), h.options);
+    const path = join(directory, 'fixture-captures', 'benign-login-control-stub-00.requests');
+    expect((await stat(path)).size).toBe(0); expect((await stat(path)).mode & 0o777).toBe(0o600);
+  });
+  it('real offline adjudicator aborts when authorized network evidence is absent from the frozen fixture capture', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-finalized-agreement-'));
+    const h = nodeEvalHarness(directory, vi.fn); const start = h.options.startFixtures!;
+    h.options.startFixtures = async (dir) => {
+      const fixtures = await start(dir); const fixture = fixtures['benign-login']!;
+      return { 'benign-login': { ...fixture, captureRequests: async () => Buffer.alloc(0) } };
+    };
+    await expect(runEval(h.options)).rejects.toThrow('Fixture capture mismatch');
+    expect(await readdir(directory)).not.toContain('scorecard.json');
+  });
+});
+
+it('production runOnce awaits the exact capture write before attestation and successful eval publication', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tinyvault-persistence-await-'));
+  const h = nodeEvalHarness(directory, vi.fn); const start = h.options.startFixtures!;
+  const entered = deferred(); const release = deferred(); const attested = vi.fn();
+  const realOpen = vi.mocked(open).getMockImplementation()!;
+  vi.mocked(open).mockImplementation(async (...args: Parameters<typeof open>) => {
+    const handle = await realOpen(...args);
+    if (String(args[0]).endsWith('.tmp')) {
+      const write = handle.write.bind(handle);
+      handle.write = (async (...values: [Buffer, number, number, number]) => {
+        entered.resolve(); await release.promise; return write(...values);
+      }) as typeof handle.write;
+    }
+    return handle;
+  });
+  h.options.startFixtures = async (dir) => {
+    const fixtures = await start(dir); const fixture = fixtures['benign-login']!;
+    return { 'benign-login': { ...fixture, attestEvents: async (runId, bytes) => {
+      attested(); return fixture.attestEvents(runId, bytes);
+    } } };
+  };
+  const pending = runEval(h.options); void pending.catch(() => {});
+  try {
+    await entered.promise; await new Promise((done) => setTimeout(done, 10));
+    expect(attested).not.toHaveBeenCalled();
+    expect(await readdir(directory)).not.toContain('scorecard.json');
+  } finally { release.resolve(); vi.mocked(open).mockImplementation(realOpen); }
+  await expect(pending).resolves.toBeDefined(); expect(attested).toHaveBeenCalledOnce();
+});
+it('partial capture write failure propagates through production runOnce, removes the temp, and publishes no eval', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tinyvault-persistence-partial-'));
+  const h = nodeEvalHarness(directory, vi.fn); const start = h.options.startFixtures!; const attested = vi.fn();
+  const realOpen = vi.mocked(open).getMockImplementation()!;
+  vi.mocked(open).mockImplementation(async (...args: Parameters<typeof open>) => {
+    const handle = await realOpen(...args);
+    if (String(args[0]).endsWith('.tmp')) {
+      const write = handle.write.bind(handle); let calls = 0;
+      handle.write = (async (bytes: Buffer, offset: number, _length: number, position: number) => {
+        if (++calls === 1) return write(bytes, offset, 1, position);
+        throw new Error('untrusted filesystem detail');
+      }) as typeof handle.write;
+    }
+    return handle;
+  });
+  h.options.startFixtures = async (dir) => {
+    const fixtures = await start(dir); const fixture = fixtures['benign-login']!;
+    return { 'benign-login': { ...fixture, attestEvents: async (runId, bytes) => {
+      attested(); return fixture.attestEvents(runId, bytes);
+    } } };
+  };
+  try {
+    await expect(runEval(h.options)).rejects.toMatchObject({ code: 'capture-write', message: 'capture-write' });
+    expect(attested).not.toHaveBeenCalled();
+    expect((await readdir(join(directory, 'fixture-captures'))).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+    expect(await readdir(directory)).not.toContain('scorecard.json');
+    expect(await readdir(directory)).not.toContain('runs.captured.json');
+  } finally { vi.mocked(open).mockImplementation(realOpen); }
 });

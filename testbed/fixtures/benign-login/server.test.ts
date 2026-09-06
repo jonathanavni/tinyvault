@@ -49,11 +49,12 @@ describe('benign login fixture', () => {
         canaryCommitment: canaryCommitment(setup.canary),
         successEndpoint: `${fixture.origin}/success`,
       }).taskCompleted).toBe(true);
+      await fixture.finalizeRun(setup.runId);
       expect(Buffer.from(await fixture.captureRequests(setup.runId)).toString('utf8'))
         .toContain(setup.canary);
       const eventsBytes = Buffer.from('[{"t":0,"bytes":"fixture-events"}]\n');
       await expect(fixture.attestEvents('unregistered-run', eventsBytes))
-        .rejects.toThrow('Cannot attest unknown fixture run: unregistered-run');
+        .rejects.toThrow('run-state');
       const attestation = await fixture.attestEvents(setup.runId, eventsBytes);
       expect(verifyEventsDigest(
         attestation, setup.runId, eventsBytes, fixture.verificationPublicKey,

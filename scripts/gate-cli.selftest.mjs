@@ -28,6 +28,16 @@ function prepare(root) {
 }
 function evidence(root) {
   const d = executionFixture(root);
+  // prepare copies this real test along with the gates. Its synthetic report must
+  // account for that file too; otherwise the production inventory correctly rejects it.
+  const helperTest = 'scripts/claude-review.test.mjs';
+  const names = [...fs.readFileSync(path.join(root, helperTest), 'utf8').matchAll(/^test\('([^']+)'/gm)]
+    .map((match) => match[1]);
+  assert.equal(names.length, 6, 'review helper fixture must retain all six tests');
+  const report = d.bundles[0].report;
+  report.testResults.push({ name: path.join(root, helperTest), status: 'passed',
+    assertionResults: names.map((fullName) => ({ fullName, status: 'passed' })) });
+  report.numTotalTests += names.length; report.numPassedTests += names.length;
   for (const file of d.files) write(root, file, '');
   write(root, START_FILE, JSON.stringify({ started: d.started, mode: 'test' }));
   d.bundles.forEach((b, i) => write(root, REPORTS[i], JSON.stringify(b.report)));

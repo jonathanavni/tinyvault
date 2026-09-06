@@ -685,6 +685,7 @@ async function createSignedRun(
   await mkdir(runDirectory, { recursive: true });
   const eventsBytes = Buffer.from(`${JSON.stringify(events, null, 2)}\n`);
   await writeFile(eventsPath, eventsBytes);
+  await fixture.finalizeRun(runId);
   const eventsAttestation = await fixture.attestEvents(runId, eventsBytes);
   return {
     record: signedRunRecord(

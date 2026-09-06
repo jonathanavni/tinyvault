@@ -27,7 +27,10 @@ export interface FixtureTransport {
   registerRun(setup: FixtureRunSetup): Promise<void>;
   getLoginPage(runId: string): Promise<string>;
   submitLogin(body: string): Promise<number>;
+  /** Repeatable non-destructive read; absent reads do not cache absence. */
   takeReceipt(runId: string): Promise<string | undefined>;
+  finalizeRun(runId: string): Promise<void>;
+  acknowledgeReceipt(runId: string): Promise<void>;
   verifyCompletion(
     receipt: string | undefined,
     expected: CompletionBinding,

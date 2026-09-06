@@ -217,3 +217,15 @@ Collapsed from `PLAN.md` Current State once slice 2 merged; detail no longer loa
   `Equal<keyof AgentLoopOptions, …>` and `Object.isFrozen(offeredTools)`. Caught only by sharper mutants than the
   integrator's. Restored in `f7aef17`. Its declared residuals (reviewed build entry point; `Equal<>` constrains
   keys not property-type widening; source-text pins satisfiable by comments) stand unchanged.
+
+
+## 2026-09-05 — Slice 3 execution-ladder detail archived at Slice 4 planning wrapup
+
+Moved from Current State after Slice 4 plan lock. Slice 3's merged result, carried lessons and residuals remain
+in Current State because they still govern the next implementation; the detailed ladder is historical.
+
+Ladder actually run: **3 pre-impl paper rounds × 2 blind channels** (Codex Sol STOP/STOP/STOP with 10/8/10 P1s;
+Claude 7×P2 / 1×P1 / 1×P1) → lock → **6 Codex Astra implementation jobs** (A, B1, B1-b, B1-c, B2, C; nine correct
+stop-and-return points on contract facts, each adjudicated) → integrator Docker fix cycle → **3-channel post-impl
+review** (Codex 2×P1, QA 95 mutants PASS, security PASS + a Medium) → **3 fix rounds** (Codex core + integrator
+evidence code, each re-reviewed) → QA round 3 (45 mutants) → clean clone → merge.

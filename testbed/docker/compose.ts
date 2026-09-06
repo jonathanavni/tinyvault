@@ -196,6 +196,7 @@ export class ProjectCloser {
     };
     if (ctx.imageId) await attempt(() => this.#history(ctx.imageId!));
     for (const id of ctx.ids) {
+      await attempt(() => run(ctx, { kind: 'inspect', id }, 'scan-failed'));
       await attempt(() => this.#logs(id));
       await attempt(() => this.#export(id));
     }
@@ -271,7 +272,8 @@ export class ProjectCloser {
       || ctx.surfaces.some((surface) => secret.scan(surface)))) throw new ComposedConstructionError('secret-exposed');
   }
 }
-export type ComposedPeer = { fixtureId: FixtureId; origin: string; publicKey: KeyObject; bridge: BridgeSession };
+export type ComposedPeer = { fixtureId: FixtureId; epoch: string; origin: string; publicKey: KeyObject;
+  bridge: BridgeSession; registerSecret(secret: Uint8Array): void };
 export type ComposedProject = { peers: ComposedPeer[]; closer: ProjectCloser; project: string; epoch: string };
 function context(options: ProjectOptions): Context {
   const clock = options.clock ?? systemClock;
@@ -361,7 +363,8 @@ async function openPeer(ctx: Context, fixtureId: FixtureId, id: ContainerId): Pr
     }
   } catch { throw new ComposedConstructionError('origin-unreachable'); }
   if (bridge.closed) throw new ComposedConstructionError('bridge-closed');
-  return { fixtureId, origin, publicKey, bridge };
+  return { fixtureId, epoch: ctx.epoch, origin, publicKey, bridge,
+    registerSecret: (token) => { ctx.secrets.push(new SecretScanner(token)); } };
 }
 export async function createComposedProject(options: ProjectOptions): Promise<ComposedProject> {
   assertPinned(options.pin);

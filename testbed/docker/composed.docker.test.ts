@@ -12,13 +12,33 @@ import { BridgeSession } from './bridge';
 import { startComposedFixtureSet, probeHttpOrigin } from './composedFixtures';
 import { buildDockerSpawn, bounded, COMMAND_TIMEOUT_MS, ComposedConstructionError, systemClock,
   type DockerSpawn, type DockerResult } from './exec';
-import { scanArtifactTree, SecretScanner } from './secretScan';
-import { IntegrationEvidence, localPin, commandKind, assertClean, assertMarker } from './integrationEvidence';
+import { canaryCommitment } from '../completion';
+import { BENIGN_USERNAME } from '../scenarios/benignLoginConstants';
+import { verifyEventsDigest } from '../fixtures/shared/loginFixture';
+import { persistFixtureCapture } from './captureTransfer';
+import { capturePersistedRuns, offlineArtifactPaths } from '../runner';
+import { adjudicatePersistedRuns } from '../checkers/offline';
+import { AGENT_CONFIGS } from '../evalAgents';
+import { IntegrationEvidence, localPin, commandKind, assertClean, assertMarker, checkStoppedSurfaces, checkArtifacts, adminCounts, assertProbeWindow, checkTerminalProbe } from './integrationEvidence';
 import { matrix, targets, probeBrowser, detectedRoute, coverageGaps, classifyProbe, reachedServer, supervisedMatrix } from './integrationProbes';
 import topology from './topology.json';
 
 vi.setConfig({ testTimeout: 1_800_000, hookTimeout: 180_000 });
 const markers = topology.markers;
+const PROBE_METRICS_PATH = join(process.cwd(), '.vitest', 'slice4-probe-metrics.json');
+const RUNNER_METRICS_PATH = join(process.cwd(), '.vitest', 'slice4-runner-metrics.json');
+function surfaceMetrics(e: IntegrationEvidence) {
+  return {
+    scanners: e.secrets.length,
+    execStderr: e.bridges.map((b) => ({ bytes: b.stderrBytes, headroom: 65536 - b.stderrBytes })),
+    exports: e.exports.map((x) => ({ bytes: x.bytes, elapsedMs: x.elapsedMs,
+      stderrBytes: x.stderrBytes, stderrHeadroom: 65536 - x.stderrBytes })),
+  };
+}
+async function resetMetrics(path: typeof PROBE_METRICS_PATH): Promise<void> {
+  await mkdir(join(process.cwd(), '.vitest'), { recursive: true });
+  await writeFile(path, JSON.stringify({ complete: false }) + '\n');
+}
 type Pin = Awaited<ReturnType<typeof localPin>>;
 function testSpawn(pin: Pin, args: string[], epoch?: string): DockerSpawn {
   const base = buildDockerSpawn(pin, { kind: 'image-inspect' });
@@ -40,16 +60,23 @@ async function noProjectLeft(e: IntegrationEvidence, pin: Pin, project = e.proje
   await bounded(Promise.all(e.handles.map((h) => h.exited)), 5000, systemClock,
     new ComposedConstructionError('handle-timeout'));
 }
-function assertEstablished(e: IntegrationEvidence, bridges: BridgeSession[]): void {
+function wireSnapshot(e: IntegrationEvidence, bridges: BridgeSession[]) {
   expect(bridges).toHaveLength(3);
-  for (const bridge of bridges) { expect(bridge.closed).toBe(false); expect(bridge.completedRequests).toBe(2); }
+  for (const bridge of bridges) expect(bridge.closed).toBe(false);
+  return { completed: bridges.map((b) => b.completedRequests), frames: e.bridges.map((b) => {
+    expect(b.exited()).toBe(false); expect(b.errors).toEqual([]);
+    expect(b.responses.every((f) => f.kind === 'res' && f.ok)).toBe(true);
+    return { requests: [...b.requests], responses: b.responses.map((f) => `${f.id}:${f.kind}:${f.op}`) };
+  }) };
+}
+async function primitiveSnapshot(e: IntegrationEvidence, pin: Pin) {
+  const counts = [];
   for (const bridge of e.bridges) {
-    expect(bridge.exited()).toBe(false);
-    expect(bridge.requests).toEqual(['1:bootstrap', '2:hello']);
-    expect(bridge.responses.map((f) => `${f.id}:${f.kind}:${f.op}`)).toEqual(['1:res:bootstrap', '2:res:hello']);
-    expect(bridge.responses.every((f) => f.kind === 'res' && f.ok)).toBe(true);
-    expect(bridge.errors).toEqual([]);
+    const logs = await checked(e, testSpawn(pin, ['logs', bridge.id]));
+    assertClean(logs.stdout + logs.stderr, e.secrets);
+    counts.push(adminCounts(logs.stdout + logs.stderr));
   }
+  return counts;
 }
 function inspected(e: IntegrationEvidence): Record<string, any>[] {
   return e.results.filter(({ spawn }) => commandKind(spawn) === 'inspect').map(({ result }) => JSON.parse(result.stdout)[0]);
@@ -72,44 +99,6 @@ function checkDescriptionSurfaces(e: IntegrationEvidence): void {
   assertMarker(JSON.stringify(decoded), markers.HISTORY_MARKER);
   assertClean(JSON.stringify(decoded), e.secrets);
 }
-function checkStoppedSurfaces(e: IntegrationEvidence): void {
-  const logs = e.results.filter(({ spawn }) => commandKind(spawn) === 'logs');
-  expect(logs).toHaveLength(3);
-  for (const { result } of logs) {
-    const text = result.stdout + result.stderr;
-    assertMarker(text, markers.BOOT_MARKER); assertMarker(text, markers.SHUTDOWN_MARKER);
-    expect(text.includes('control-second-connection')).toBe(false);
-    // Exact runtime-produced Buffer encodings, independently passed through the real decoder.
-    const encodedBoot = inspect(Buffer.from(markers.BOOT_MARKER));
-    const encodedStop = JSON.stringify(Buffer.from(markers.SHUTDOWN_MARKER));
-    expect(text.includes(encodedBoot)).toBe(true); expect(text.includes(encodedStop)).toBe(true);
-    assertMarker(encodedBoot, markers.BOOT_MARKER); assertMarker(encodedStop, markers.SHUTDOWN_MARKER);
-  }
-  for (const bridge of e.bridges) {
-    const stderr = bridge.stderr.snapshot();
-    assertClean(stderr, e.secrets); assertMarker(stderr, markers.BRIDGE_MARKER);
-  }
-  expect(e.exports).toHaveLength(3);
-  for (const exported of e.exports) {
-    expect(exported.marker.found, 'export marker absent').toBe(true);
-    expect(exported.errors).toEqual([]);
-    const meta = JSON.parse(exported.tar.text);
-    const inputs: string[] = Object.keys(meta.inputs);
-    expect(inputs.some((p) => /(?:src\/agents\/|testbed\/runner)/.test(p))).toBe(false);
-    expect(inputs).toContain('testbed/scenarios/benignLoginConstants.ts');
-    expect(inputs).toContain('testbed/docker/container/fixture.ts');
-    expect(Object.keys(meta.outputs).map((p) => p.split('/').at(-1)).sort()).toEqual(['bridge.mjs', 'main.mjs']);
-  }
-}
-async function checkArtifacts(e: IntegrationEvidence, root: string): Promise<void> {
-  const secrets = e.secrets.map((secret) => new SecretScanner(secret));
-  const marker = new SecretScanner(Buffer.from(markers.ARTIFACT_MARKER));
-  try {
-    expect(await scanArtifactTree(root, secrets)).toBe(false);
-    expect(await scanArtifactTree(root, [marker])).toBe(true);
-    assertMarker(await readFile(join(root, 'composed-scan', 'close.marker')), markers.ARTIFACT_MARKER);
-  } finally { [...secrets, marker].forEach((s) => s.destroy()); }
-}
 function teardownOrder(e: IntegrationEvidence): void {
   const kinds = e.spawns.map(commandKind);
   expect(kinds.filter((k) => k === 'stop')).toHaveLength(1);
@@ -120,8 +109,11 @@ function teardownOrder(e: IntegrationEvidence): void {
   }
 }
 
-describe.sequential('slice 3 real Docker construction and control-route probes', () => {
+describe.sequential('slice 4 real Docker construction and control-route probes', () => {
   it('authenticates all fixtures, probes page and supervised routes, then scans every stopped surface', async () => {
+    await resetMetrics(PROBE_METRICS_PATH);
+    const registrationThroughAttestationMs: number[] = [];
+    let metrics!: ReturnType<typeof surfaceMetrics> & { teardownMs: number };
     const pin = await localPin();
     const root = await mkdtemp(join(tmpdir(), 'tinyvault-docker-evidence-'));
     const e = new IntegrationEvidence(); const bridges: BridgeSession[] = [];
@@ -143,10 +135,39 @@ describe.sequential('slice 3 real Docker construction and control-route probes',
         expect(frame.kind === 'res' && frame.ok).toBe(true);
         if (frame.kind !== 'res' || !frame.ok) throw new Error('hello-response');
         expect(fixture.verificationPublicKey.export({ format: 'der', type: 'spki' }).toString('base64url')).toBe(frame.body.publicKey);
-        // Receipt retrieval remains slice-4; fixture.test.ts proves actual receipt/key identity via the same provider.
-        await expect(fixture.takeReceipt('unregistered')).rejects.toMatchObject({ code: 'slice-4' });
+        const start = performance.now();
+        const setup = { scenarioId: id, runId: `integration-${id}`, nonce: `nonce-${id}`, canaryId: `canary-${id}`, canary: `synthetic-${id}` };
+        await fixture.registerRun(setup);
+        const page = await fixture.getLoginPage(setup.runId); assertClean(page, e.secrets);
+        const body = new URLSearchParams({ runId: setup.runId, username: BENIGN_USERNAME, password: setup.canary }).toString();
+        expect(await fixture.submitLogin(body)).toBe(303);
+        await fixture.finalizeRun(setup.runId);
+        const receipt = await fixture.takeReceipt(setup.runId); expect(receipt).toBeDefined();
+        expect(await fixture.takeReceipt(setup.runId)).toBe(receipt);
+        expect(fixture.verifyCompletion(receipt, { fixtureId: id, fixtureVersion: id === 'benign-login' ? '2' : '1', ...setup,
+          canaryCommitment: canaryCommitment(setup.canary), successEndpoint: `${fixture.origin}/success` })).toEqual({ taskCompleted: true });
+        const capture = await fixture.captureRequests(setup.runId); expect(Buffer.from(capture).toString()).toBe(body + '\n');
+        await persistFixtureCapture(root, setup.runId, capture);
+        const events = Buffer.from('[]'); const attest = await fixture.attestEvents(setup.runId, events);
+        const elapsedMs = performance.now() - start; expect(elapsedMs).toBeLessThan(60000);
+        registrationThroughAttestationMs.push(elapsedMs);
+        expect(verifyEventsDigest(attest, setup.runId, events, fixture.verificationPublicKey)).toBe(true);
+        await fixture.acknowledgeReceipt(setup.runId);
+
       }
-      const invariant = () => assertEstablished(e, bridges);
+      let beforeWire = wireSnapshot(e, bridges);
+      let beforeAdmin = await primitiveSnapshot(e, pin);
+      for (const counts of beforeAdmin) for (const operation of ['register', 'key', 'receipt', 'capture', 'attest', 'finalize', 'ack'] as const) expect(counts[operation]).toBeGreaterThan(0);
+      const invariant = () => assertProbeWindow(beforeWire, wireSnapshot(e, bridges));
+      const administrativeInvariant = async () => assertProbeWindow(beforeAdmin, await primitiveSnapshot(e, pin));
+      // Actual idempotent control read is the absence oracle's positive control. Its result is ignored;
+      // both the wire consumer and independent primitive log consumer must detect the settled delta.
+      const registered = e.bridges[0].responses.find((frame) => frame.op === 'register')!;
+      if (registered.kind !== 'res' || !registered.ok) throw new Error('register-response');
+      await bridges[0].request('key', { epoch: e.epoch, fixtureId: 'benign-login', runId: 'integration-benign-login', capability: registered.body.key });
+      expect(invariant).toThrow('underlying administration');
+      await expect(administrativeInvariant()).rejects.toThrow('underlying administration');
+      beforeWire = wireSnapshot(e, bridges); beforeAdmin = await primitiveSnapshot(e, pin);
       invariant(); browser = await probeBrowser();
       const destinations = targets(inspected(e));
       for (const hostile of [`http://127.0.0.1:${topology.services['lookalike-origin'][1].host}`,
@@ -163,18 +184,76 @@ describe.sequential('slice 3 real Docker construction and control-route probes',
         await supervisedMatrix(browser, hostile, destinations, invariant);
       }
       await browser.close(); browser = undefined;
+      invariant(); await administrativeInvariant();
+      // Fill the locked 32-run budget only after slow probes. No expired early token is consumed.
+      for (const [id, fixture] of Object.entries(fixtures)) for (let run = 1; run < 32; run++) {
+        await fixture.registerRun({ scenarioId: id, runId: `budget-${run}`, nonce: `nonce-${run}`, canaryId: `canary-${run}`, canary: `synthetic-${run}` });
+      }
+      expect(e.secrets).toHaveLength(579);
       await mkdir(join(root, 'nested', 'last'), { recursive: true });
       await writeFile(join(root, 'nested', 'last', 'nonsecret'), 'artifact traversal control');
+      const teardownStart = performance.now();
+      await expect(fixtures['benign-login']!.registerRun({ scenarioId: 'overflow', runId: 'overflow', nonce: 'overflow', canaryId: 'overflow', canary: 'synthetic' })).rejects.toMatchObject({ code: 'bridge-protocol' });
       await fixtures['benign-login']!.close();
       await fixtures['lookalike-origin']!.close(); // The shared closer must be idempotent.
+      // stop drains admitted work; these immutable stopped logs close the early daemon-log race.
+      const terminalInvariant = () => checkTerminalProbe(e, beforeAdmin, beforeWire, bridges.map((b) => b.completedRequests));
+      terminalInvariant();
+      const stoppedLog = e.results.find(({ spawn }) => commandKind(spawn) === 'logs')!.result;
+      const originalLog = stoppedLog.stderr;
+      try {
+        stoppedLog.stderr += '\nfixture-admin:receipt\n';
+        expect(terminalInvariant, 'final stopped consumer positive control').toThrow('final stopped administration changed');
+      } finally { stoppedLog.stderr = originalLog; }
+      terminalInvariant();
       checkDescriptionSurfaces(e); checkStoppedSurfaces(e); teardownOrder(e);
       await checkArtifacts(e, root); await noProjectLeft(e, pin);
       expect(e.bridges.every((b) => b.errors.length === 0)).toBe(true);
+      for (const exported of e.exports) { expect(exported.elapsedMs).toBeGreaterThan(0); expect(exported.elapsedMs).toBeLessThan(120000); }
+      metrics = { ...surfaceMetrics(e), teardownMs: performance.now() - teardownStart };
     } finally {
       await browser?.close();
       try { await fixtures?.['benign-login']?.close(); }
       finally { spy.mockRestore(); await e.finish(); await rm(root, { recursive: true, force: true }); }
     }
+    // Fixed numeric schema only; complete is written after every assertion and cleanup succeeds.
+    await writeFile(PROBE_METRICS_PATH, JSON.stringify({ complete: true, registrationThroughAttestationMs, ...metrics }) + '\n');
+  });
+
+  it('composed real browser captures persist exactly and adjudicate offline within the capability lifetime', async () => {
+    await resetMetrics(RUNNER_METRICS_PATH);
+    let metrics!: ReturnType<typeof surfaceMetrics>;
+    const pin = await localPin(); const e = new IntegrationEvidence();
+    const root = await mkdtemp(join(tmpdir(), 'tinyvault-docker-runner-'));
+    const started = new Map<string, number>(); const timings: number[] = [];
+    const request = BridgeSession.prototype.request;
+    const spy = vi.spyOn(BridgeSession.prototype, 'request').mockImplementation(async function (this: BridgeSession, op, body) {
+      const key = `${body.fixtureId}:${body.runId}`;
+      if (op === 'register') started.set(key, performance.now());
+      const result = await request.call(this, op, body);
+      if (op === 'attest') timings.push(performance.now() - started.get(key)!);
+      return result;
+    });
+    let refusals = 0;
+    try {
+      const trust = await capturePersistedRuns(root, 1, undefined, { architecture: 'composed', dockerPreflight: async () => pin,
+        dockerRunner: e.runner, probeOrigin: probeHttpOrigin, launchChromium: async () => {
+          const browser = await probeBrowser(); const newContext = browser.newContext.bind(browser);
+          vi.spyOn(browser, 'newContext').mockImplementation(async (...args) => {
+            const context = await newContext(...args); context.on('response', (response) => { if (response.status() === 409) refusals++; }); return context;
+          }); return browser;
+        } });
+      expect(refusals).toBe(0); expect(timings).toHaveLength(3); for (const ms of timings) expect(ms).toBeLessThan(60000);
+      const paths = offlineArtifactPaths(root);
+      const runs = await adjudicatePersistedRuns({ runsPath: paths.capturedRunsPath, manifestPath: paths.manifestPath, artifactDirectory: root,
+        verificationKeys: trust.verificationKeys, scenarioRegistry: trust.scenarioRegistry, agentConfigs: AGENT_CONFIGS });
+      expect(runs).toHaveLength(3); expect(runs.every((r) => r.outcome.taskCompleted && !r.outcome.secretLeaked)).toBe(true);
+      expect(e.bridges.flatMap((b) => b.requests).some((s) => s.endsWith(':ack'))).toBe(false);
+      expect(e.secrets).toHaveLength(21); checkDescriptionSurfaces(e); checkStoppedSurfaces(e); await checkArtifacts(e, root); await noProjectLeft(e, pin);
+      metrics = surfaceMetrics(e);
+    } finally { spy.mockRestore(); await e.finish(); await rm(root, { recursive: true, force: true }); }
+    await writeFile(RUNNER_METRICS_PATH, JSON.stringify({ complete: true,
+      registrationThroughAttestationMs: timings, normal409Responses: refusals, ...metrics }) + '\n');
   });
 
   it('same-image same-label pre-existing container is project-not-fresh with zero teardown', async () => {

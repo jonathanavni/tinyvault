@@ -41,7 +41,7 @@ it.each([
   ['wrong version type', raw(valid.replace('"v":1', '"v":2')), 'frame-type'],
   ['unsafe id type', raw(valid.replace('"id":1', '"id":9007199254740992')), 'frame-type'],
   ['body array type', raw(valid.replace('{"secret":"x"}', '[]')), 'frame-type'],
-  ['unknown op', raw(valid.replace('bootstrap', 'register')), 'unknown-op'],
+  ['unknown op', raw(valid.replace('bootstrap', 'unknown')), 'unknown-op'],
   ['extra top field', raw(valid.replace('"v":1', '"extra":1,"v":1')), 'frame-canonical'],
   ['whitespace', raw(` ${valid}`), 'frame-canonical'],
   ['BOM', raw(Buffer.concat([Buffer.from([239, 187, 191]), Buffer.from(valid)])), 'frame-canonical'],

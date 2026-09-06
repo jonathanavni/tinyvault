@@ -15,6 +15,7 @@ vi.mock('node:http', async (original) => ({
     const server = new EventEmitter();
     return Object.assign(server, {
       listening: false,
+      closeAllConnections: () => {},
       listen: () => {
         binding.listen();
         queueMicrotask(() => server.emit('error', Object.assign(new Error('denied'), { code: 'EPERM' })));

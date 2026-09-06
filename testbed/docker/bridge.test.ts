@@ -229,3 +229,107 @@ it('malformed hello is rejected on the host before any frame is written', async 
   expect(p.sent.map((frame) => frame.op)).toEqual(['bootstrap']);
   expectClosed(p, 'challenge-shape');
 });
+
+const context = { epoch, fixtureId: hello.fixtureId, runId: 'A', capability: Buffer.alloc(32, 7).toString('base64url') };
+async function established() {
+  const p = setup(), secret = await boot(p);
+  const pending = p.bridge.hello(hello);
+  p.stdout.write(success(2, 'hello', announcement(secret))); await pending;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  return p;
+}
+it('administrative operation before hello is refused locally without writing', async () => {
+  const p = setup();
+  await expect(p.bridge.request('receipt', context)).rejects.toMatchObject({ code: 'protocol-order' });
+  expect(p.sent).toEqual([]); expectClosed(p, 'protocol-order');
+});
+it.each(['epoch', 'fixtureId'] as const)('client refuses explicit session %s mismatch before writing', async (field) => {
+  const p = await established();
+  await expect(p.bridge.request('receipt', { ...context, [field]: field === 'epoch' ? '2-' + 'b'.repeat(32) : 'lookalike-origin' })).rejects.toMatchObject({ code: 'capability-refused' });
+  expect(p.sent).toHaveLength(2); expectClosed(p, 'capability-refused');
+});
+it.each([
+  ['receipt body', 'receipt', context, { receipt: 'ok', extra: 'forbidden' }, 'body-shape'],
+  ['key mismatch', 'key', context, { publicKey: generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'der' }).toString('base64url') }, 'key-mismatch'],
+  ['chunk offset mismatch', 'capture', { ...context, kind: 'requests', offset: '1' }, { bytes: 'AA', total: '2', next: '1' }, 'body-shape'],
+  ['empty nonterminal', 'capture', { ...context, kind: 'requests', offset: '0' }, { bytes: '', total: '1', next: '0' }, 'body-shape'],
+  ['bad byte encoding', 'capture', { ...context, kind: 'requests', offset: '0' }, { bytes: 'AA==', total: '1', next: '1' }, 'body-shape'],
+  ['chunk exceeds total', 'capture', { ...context, kind: 'requests', offset: '0' }, { bytes: 'AA', total: '0', next: '1' }, 'body-shape'],
+  ['numeric LF', 'capture', { ...context, kind: 'requests', offset: '0' }, { bytes: 'AA', total: '1\n', next: '1' }, 'body-shape'],
+] as const)('caller response validation rejects %s and ignores later valid data', async (_name, op, body, response, code) => {
+  const p = await established();
+  const pending = p.bridge.request(op, body), queued = p.bridge.request('receipt', context);
+  const checks = [expect(pending).rejects.toMatchObject({ code }), expect(queued).rejects.toMatchObject({ code: 'bridge-closed' })];
+  p.stdout.write(Buffer.concat([success(3, op, response), success(3, op, response)]));
+  await Promise.all(checks); expectClosed(p, code); expect(p.sent).toHaveLength(3);
+});
+it('client pins capture total across same-kind requests but keeps the two streams separate', async () => {
+  const p = await established();
+  const query = { ...context, kind: 'requests', offset: '0' };
+  const first = p.bridge.request('capture', query);
+  p.stdout.write(success(3, 'capture', { bytes: 'AA', total: '2', next: '1' })); await first;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const other = p.bridge.request('capture', { ...query, kind: 'unauthorized' });
+  p.stdout.write(success(4, 'capture', { bytes: '', total: '0', next: '0' })); await other;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const changed = p.bridge.request('capture', { ...query, offset: '1' });
+  const check = expect(changed).rejects.toMatchObject({ code: 'body-shape' });
+  p.stdout.write(success(5, 'capture', { bytes: 'AA', total: '3', next: '2' })); await check;
+});
+it('queued operation snapshots caller setup and validates its actual serialized values', async () => {
+  const p = await established();
+  const first = p.bridge.request('receipt', context);
+  const body = { ...context };
+  const second = p.bridge.request('receipt', body); body.runId = 'B';
+  p.stdout.write(success(3, 'receipt', { receipt: 'A' })); await first;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(p.sent[3]).toMatchObject({ body: context });
+  p.stdout.write(success(4, 'receipt', { receipt: 'A' })); await second; p.bridge.close();
+  const q = await established();
+  let reads = 0;
+  const changing = { ...context, get runId() { return ++reads < 3 ? 'A' : 'bad/run'; } };
+  await expect(q.bridge.request('receipt', changing)).rejects.toMatchObject({ code: 'body-shape' });
+  expect(q.sent).toHaveLength(2);
+});
+it.each(['end', 'timeout'] as const)('post-operation write %s permanently rejects outstanding and abandoned queued callers', async (failure) => {
+  const p = await established();
+  const first = p.bridge.request('receipt', context), second = p.bridge.request('key', context);
+  const checks = [expect(first).rejects.toMatchObject({ code: failure === 'end' ? 'bridge-closed' : 'bridge-timeout' }),
+    expect(second).rejects.toMatchObject({ code: 'bridge-closed' })];
+  if (failure === 'end') p.stdout.emit('end'); else p.tick();
+  await Promise.all(checks); expect(p.sent).toHaveLength(3);
+  await expect(p.bridge.request('receipt', context)).rejects.toMatchObject({ code: 'bridge-closed' });
+});
+
+const registration = { epoch, fixtureId: hello.fixtureId, scenarioId: 'scenario', runId: 'A', nonce: 'nonce',
+  canaryId: 'id', canary: 'synthetic' };
+const capabilityFields = ['receipt', 'capture', 'attest', 'key', 'finalize', 'ack'] as const;
+const distinctCapabilities = Object.fromEntries(capabilityFields.map((field, index) =>
+  [field, Buffer.alloc(32, index + 1).toString('base64url')]));
+it('fake-peer register accepts exactly six distinct canonical 32-byte capabilities', async () => {
+  const p = await established();
+  const pending = p.bridge.request('register', registration);
+  p.stdout.write(success(3, 'register', distinctCapabilities));
+  expect(await pending).toEqual(distinctCapabilities);
+  expect(p.bridge.completedRequests).toBe(3);
+  expect(p.bridge.closed).toBe(false);
+  p.bridge.close();
+});
+it.each(capabilityFields.flatMap((field) => ['short', 'noncanonical', 'duplicate'].map((kind) => ({ field, kind }))))(
+  'fake-peer register refuses $kind $field capability before resolving registration', async ({ field, kind }) => {
+    const p = await established();
+    const resolved = vi.fn();
+    const pending = p.bridge.request('register', registration).then(resolved);
+    const check = expect(pending).rejects.toMatchObject({ code: 'capability-refused' });
+    const bad = kind === 'short' ? 'AA' : kind === 'noncanonical' ? distinctCapabilities[field] + '='
+      : distinctCapabilities[capabilityFields[(capabilityFields.indexOf(field) + 1) % capabilityFields.length]];
+    p.stdout.write(success(3, 'register', { ...distinctCapabilities, [field]: bad }));
+    await check;
+    expectClosed(p, 'capability-refused');
+    expect(p.bridge.completedRequests).toBe(2);
+    expect(resolved).not.toHaveBeenCalled();
+    p.stdout.write(success(3, 'register', distinctCapabilities));
+    await Promise.resolve();
+    expect(resolved).not.toHaveBeenCalled();
+  },
+);

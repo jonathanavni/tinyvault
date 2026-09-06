@@ -410,3 +410,53 @@ clone at `638bc15` → `npm ci` → `make browsers` → `make test`: **every gat
 PASS**; on the merged tree: `make test` 1568 + 5 + 10 and `make test-docker` 4/4 in 78 s, no containers or networks
 left. `codex/m5-2-slice-3` and its worktree removed after the merge. Slice 4 next.
 
+### Later tooling prerequisite — user-approved policy amendment, 2026-09-05
+
+The later `dc0796f` review helper made baseline `make test` red: its `node:child_process` imports do not fit
+the script profiles, and its Node test file is discovered by Vitest with no Vitest tests. These are subsequent
+integration defects, not retroactive changes to the Slice 3 merge evidence above.
+
+User approved the narrow prerequisite packet in `docs/m5-2-slice-4-review-findings.md` Entry 3. The current
+plan §9 paragraph now permits exactly the two helper/test subprocess profiles while retaining existing defaults:
+production helper direct git/claude calls and test direct git/Node calls, each pinned by imported API, literal
+executable, call count and shell-disabled options. `execFileSync` may retain its existing implicit shell-disabled
+default; any explicit shell option must be literal false. `spawn` requires literal false. No computed/spread/
+duplicate overrides, function aliases, extra calls, generic path exemption, or broad child_process allowance.
+
+Worker `prerequisite_impl` implements only the invocation gate, its selftest and Vitest migration; Codex owns
+documentation, candidate verification and independent review. Acceptance remains pending until those results
+are recorded in the Slice 4 register. No package/test command/config exclusion or root-pin change is authorized.
+
+### Tooling amendment — round-1 review follow-up, 2026-09-05
+
+Scope correction to the preceding worker inventory: owner also authorized `scripts/gate-cli.selftest.mjs`
+solely to include the existing six helper tests in its synthetic execution report and balance counters; the
+production discovery/partition/proof rules are unchanged. Slice 4 register Entry 4 records the authorization.
+Owner full host `make test` passed (1574 main + 5 + 10 timing; one expected pending eval; execution proof PASS).
+The candidate is nevertheless not accepted: fresh Astra demonstrated object-argv and call-spread overloads
+that bypass the new shell-options pin. Round 2 must prove array-valued argv and forbid call-level spreads.
+Claude QA also requires explicit helper-test timeouts and isolated syntax/option mutants. Exact evidence and
+review identities are in the Slice 4 register; no existing profile restriction or root pin is relaxed.
+
+### Tooling amendment — final-round simplification, 2026-09-05
+
+Round 2 full `make test` passed again (1574 + 5 + 10, one expected pending; all six helper cases in main;
+exit 0 and execution proof PASS). Claude QA PASS, but fresh Astra found direct eval could rebind the specially
+pinned argv producer to an options object. Owner reproduced acceptance and rebinding without a real subprocess.
+Owner extends the prerequisite scope to `scripts/claude-review.mjs` solely to wrap the existing argv producer
+as `[...claudeArgs()]`. This preserves behavior and makes all four call sites uniformly array-valued, removing
+special producer analysis instead of extending a general dynamic-code detector. Exact executable/import/options
+policy is unchanged. Final-round tests include the actual helper/fake CLI path and wrapper deletion under the
+same rebinding mutation. Required final criteria: no concrete shell/executable-policy bypass, no lost production
+CLI/caller/execution proof, and no red `make test`. No fourth incremental patch round; an unresolved failure
+requires redesign or owner disposition under the existing cap. Acceptance remains pending this final candidate.
+
+### Tooling amendment — accepted final prerequisite, 2026-09-05
+
+Uniform inline argv arrays and the one-expression helper wrapper complete the approved repair. CLI, 111 source
+mutants, 41 isolated guard deletions, profile/caller removals, and all six helper Vitest tests pass. Actual helper
+wrapper deletion under the same eval rebinding reaches only the fake CLI; restoration prevents launch.
+Final fresh Astra and Claude QA found no remaining code defect, holding only for completion evidence. Owner
+then collected host `make test` exit 0: 1574 + 5 + 10 pass, one expected pending, all six helper cases in main,
+execution proof PASS. Those evidence conditions are resolved. Canonical reviewer identities, digest, logs and
+residuals: Slice 4 register Entries 9–10. Accepted within the declared syntax/regression claim; uncommitted.

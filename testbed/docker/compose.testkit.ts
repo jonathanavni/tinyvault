@@ -1,10 +1,14 @@
 // Deterministic daemon descriptions and real protocol peers over memory streams; no spawn or socket.
+import { FIXTURE_BUNDLE_INPUTS } from './integrationEvidence';
+import { inspect } from 'node:util';
 import { generateKeyPairSync } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
+import type { FixtureTransport } from '../fixtures/transport';
+import { containerConfig, controlConfigForFixture } from './container/fixture';
 import { ControlSession } from './container/control';
 import { dockerPreflight } from './preflight';
 import { FIXTURE_IDS } from './protocol';
@@ -54,6 +58,8 @@ type Spy<T extends Procedure> = ((...args: Parameters<T>) => ReturnType<T>) & {
 };
 type SpyFactory = (implementation: Procedure) => unknown;
 type FakeOptions = {
+  evidence?: boolean;
+  fixtures?: readonly FixtureTransport[];
   omitMarker?: keyof typeof topology.markers;
   result?: (kind: string, spawn: DockerSpawn) => DockerResult | undefined;
   inspect?: (doc: ReturnType<typeof validInspect>, index: number) => void;
@@ -81,7 +87,7 @@ export async function fakeProject(spyFactory: SpyFactory, fake: FakeOptions = {}
         const doc = validInspect(i, project, epoch); fake.inspect?.(doc, i); stdout = JSON.stringify([doc]);
       }
       const stderr = kind === 'logs' ? (['BOOT_MARKER', 'SHUTDOWN_MARKER'] as const)
-        .filter((key) => key !== fake.omitMarker).map((key) => topology.markers[key]).join('\n') : '';
+        .filter((key) => key !== fake.omitMarker).flatMap((key) => [topology.markers[key], ...(fake.evidence ? [key === 'BOOT_MARKER' ? inspect(Buffer.from(topology.markers[key])) : JSON.stringify(Buffer.from(topology.markers[key]))] : [])]).join('\n') : '';
       return { stdout, stderr, exitCode: 0 };
     }),
     spawnLongLived: spy((spawn: DockerSpawn): DockerHandle => {
@@ -92,16 +98,21 @@ export async function fakeProject(spyFactory: SpyFactory, fake: FakeOptions = {}
       const handle = { stdin, stdout, stderr, exited, kill: spy(() => {
         stdin.destroy(); stdout.end(); stderr.end(); exit(0);
       }) };
-      if (kindOf(spawn) === 'export') { queueMicrotask(() => { stdout.end(fake.omitMarker === 'EXPORT_MARKER' ? 'safe tar' : topology.markers.EXPORT_MARKER); stderr.end(); exit(0); }); return handle; }
+      if (kindOf(spawn) === 'export') { queueMicrotask(() => { stdout.end(fake.evidence ? evidenceTar(fake.omitMarker === 'EXPORT_MARKER' ? '' : topology.markers.EXPORT_MARKER) : fake.omitMarker === 'EXPORT_MARKER' ? 'safe tar' : topology.markers.EXPORT_MARKER); stderr.end(); exit(0); }); return handle; }
       const i = ids.indexOf(spawn.args[2] as typeof ids[number]);
       handles.push(handle);
       queueMicrotask(() => { if (fake.omitMarker !== 'BRIDGE_MARKER') stderr.write(topology.markers.BRIDGE_MARKER); });
       // Capture the actual bootstrap bytes for the E spawn scan, not a marker masquerading as a secret.
       stdin.once('data', (frame: Buffer) => { secrets.push(Buffer.from(JSON.parse(frame.subarray(4).toString()).body.secret, 'base64url')); });
       fake.peer?.(handle, i);
-      new ControlSession({ input: stdin, output: stdout }, {
+      const fixture = fake.fixtures?.[i];
+      const config = fixture ? controlConfigForFixture(containerConfig({ TV_FIXTURE_ID: FIXTURE_IDS[i],
+        TV_EVAL_EPOCH: epoch, TV_PUBLIC_ORIGIN: `http://127.0.0.1:${topology.services[FIXTURE_IDS[i]][0].host}`,
+        ...(i === 1 ? { TV_LOOKALIKE_PUBLIC_ORIGIN: `http://127.0.0.1:${topology.services['lookalike-origin'][1].host}` } : {}),
+      }), fixture, ids[i].slice(0, 12), () => {}) : {
         epoch, fixtureId: FIXTURE_IDS[i], hostname: ids[i].slice(0, 12), keyPairProvider: () => pair, diagnostics: () => {},
-      });
+      };
+      new ControlSession({ input: stdin, output: stdout }, config);
       return handle;
     }),
   };
@@ -110,4 +121,11 @@ export async function fakeProject(spyFactory: SpyFactory, fake: FakeOptions = {}
     probeOrigin: spy(async () => true), diagnostics: spy(() => {}) };
   return { options, runner, spawns, handles, secrets, root,
     dispose: async () => { handles.forEach((h) => h.kill()); await rm(root, { recursive: true, force: true }); } };
+}
+
+// Exercise the live evidence tar reader with the same bounded metadata shape as esbuild.
+function evidenceTar(marker: string): Buffer {
+  const body = Buffer.from(JSON.stringify({ inputs: Object.fromEntries(FIXTURE_BUNDLE_INPUTS.map((path) => [path, {}])), outputs: { '/app/bridge.mjs': {}, '/app/main.mjs': {} }, marker }));
+  const header = Buffer.alloc(512); header.write('app/meta.json'); header.write(body.length.toString(8).padStart(11, '0'), 124);
+  return Buffer.concat([header, body, Buffer.alloc((512 - body.length % 512) % 512), Buffer.alloc(1024)]);
 }

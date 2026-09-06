@@ -1,3 +1,4 @@
+import { trackFixtureRequest, fixtureAllowsWrite, fixtureStorageFailure, shareFixtureIdentity } from '../shared/loginFixture';
 import { bindServer, type FixtureListenOptions } from '../shared/bindServer';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -28,14 +29,18 @@ export async function startLookalikeOriginFixture(
   await writeFile(lookalikeCapturePath, '');
   const requests: string[] = [];
   let canonicalOrigin = '';
+  let canonical: FixtureTransport | undefined;
   const lookalikeServer = createServer((request, response) => {
-    void handleLookalikeRequest(
+    if (!canonical) { response.statusCode = 503; response.end('fixture error'); return; }
+    const fixture = canonical;
+    void trackFixtureRequest(fixture, (admission) => handleLookalikeRequest(
       request,
       response,
       () => canonicalOrigin,
       requests,
       lookalikeCapturePath,
-    ).catch((error: unknown) => {
+      fixture, admission,
+    )).catch((error: unknown) => {
       if (!response.headersSent) response.statusCode = 500;
       response.end('fixture error');
       if (options.onListenPermissionError === 'fail') process.stderr.write('fixture-error\n');
@@ -44,7 +49,6 @@ export async function startLookalikeOriginFixture(
   });
   const lookalike = await bindLookalikeServer(lookalikeServer, options.lookalike ?? {});
 
-  let canonical: FixtureTransport | undefined;
   try {
     canonical = await startCanonicalFixture(captureDirectory, lookalike.origin, options);
     canonicalOrigin = options.port ? `http://127.0.0.1:${options.port}` : canonical.origin;
@@ -57,19 +61,23 @@ export async function startLookalikeOriginFixture(
   }
   if (canonical === undefined) throw new Error('Canonical fixture did not start');
 
-  return {
+  const wrapper: LookalikeOriginFixture = {
     ...canonical,
     origin: canonical.origin,
     lookalikeOrigin: lookalike.origin,
     lookalikeRequests: async () => Object.freeze([...requests]),
     close: () => closeBoth(canonical, lookalikeServer),
   };
+  shareFixtureIdentity(canonical, wrapper);
+  return wrapper;
 }
 
 async function closeBoth(canonical: FixtureTransport | undefined, server: Server): Promise<void> {
+  // Enter shared close synchronously so the wrapper cannot admit work after close() returns its promise.
+  const canonicalClose = canonical?.close();
   const settled = await Promise.allSettled([
-    Promise.resolve().then(() => canonical?.close()),
-    Promise.resolve().then(() => closeServer(server)),
+    canonicalClose,
+    Promise.resolve(canonicalClose).catch(() => undefined).then(() => closeServer(server)),
   ]);
   const rejected = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
   if (rejected) throw rejected.reason;
@@ -111,6 +119,7 @@ async function handleLookalikeRequest(
   getCanonicalOrigin: () => string,
   requests: string[],
   capturePath: string,
+  fixture: FixtureTransport, admission: number,
 ): Promise<void> {
   const url = new URL(request.url ?? '/', 'http://lookalike.invalid');
   const method = request.method ?? 'GET';
@@ -128,8 +137,12 @@ async function handleLookalikeRequest(
   if (method === 'POST' && url.pathname === '/login') {
     const body = await readBodyOrReject(request, response);
     if (body === undefined) return;
+    if (!fixtureAllowsWrite(fixture, url, body, admission)) {
+      response.statusCode = 409; response.end('login rejected'); return;
+    }
     requests.push(body);
-    await appendFile(capturePath, `${body}\n`);
+    try { await appendFile(capturePath, `${body}\n`); }
+    catch { throw fixtureStorageFailure(fixture); }
     response.statusCode = 200;
     response.end('thanks');
     return;

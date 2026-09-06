@@ -63,8 +63,8 @@ slice 2 (§10).
 > `package.json` scripts, `Makefile`, the two Vitest configs, and the gate scripts — are the reviewed root of trust,
 > hash-pinned in-suite so any edit is a visible red in the same diff.** A hostile edit of the root of trust is
 > outside the locked threat model (page content and the evaluated model do not edit the repository) and is declared,
-> not chased. Also absorbed (U3/U3b): plain-`node` steps of `test` run outside the interceptor, so exactly one
-> `scripts/` file may import `child_process` and its one spawn site is allowlisted to `process.execPath`; the
+> not chased. Also absorbed (U3/U3b): plain-`node` steps of `test` run outside the interceptor; their exact
+> `scripts/` capability inventory and subprocess profiles are maintained in §9's canonical paragraph; the
 > execution proof produces **one report per Vitest invocation** and asserts a disjoint union; the E scanner is
 > **byte-native** with contiguous-hex, Node `Buffer`-inspect, decimal-array and base64url forms and is proven with the
 > **real secret bytes** in each form, not markers alone; teardown is **stop → scan → down** with a bounded stop, so
@@ -624,8 +624,25 @@ set** of `scripts/` files that import `child_process` — `check-acceptance-j-re
 argument of the literal `process.execPath`** (a positive allowlist over reviewed call sites, the M4 rule form; a
 self-test mutant changes one to `'docker'` and must go red). *Revision 4 said "exactly one"; Job B2 measured four.
 Integrator amendment 2026-09-05.* The three new gate scripts have **no** `child_process`, `net` or `http` entry, so
-the execution proof **reads** the reporter files rather than spawning Vitest. A
-conditional `spawnSync('docker', …)` in any gate script is therefore caught by the map (no entry) or the call-site
+the execution proof **reads** the reporter files rather than spawning Vitest.
+
+**2026-09-05 user-approved tooling amendment:** the later independent Claude-review helper needs two additional
+exact subprocess profiles. `scripts/claude-review.mjs` may import only `spawn` and `execFileSync` from
+`node:child_process`, with one direct `spawn('claude', …)` site and one direct `execFileSync('git', …)` site.
+`scripts/claude-review.test.mjs` may use the same two bindings with one direct `spawn(process.execPath, …)` and
+one direct `execFileSync('git', …)` site. Pin shell-disabled options, imported bindings, executable expressions,
+and call counts; reject aliases, computed targets, wrapper launchers at the executable-name level, option
+spreads/overrides, and extra calls. Prove array-valued argv and reject call-level spreads so Node's argument
+overloads cannot replace the reviewed options. All four argv slots require inline array expressions; the helper
+uses `[...claudeArgs()]`, preserving its argument producer without relying on a static proof of that binding.
+Executable spelling does not pin PATH resolution or argv content;
+programs launched by trusted git/Claude configuration remain outside this static gate's containment claim.
+All other script profiles retain their existing `spawnSync(process.execPath, …)` restriction. This is not a
+directory exemption, new evaluated-agent tool, or permission to run Claude from ordinary tests: helper tests use
+the existing fake CLI, and migrate into Vitest discovery without exclusions. Independent review and real-CLI
+mutation evidence are required before accepting this repair. See Slice 3 register's tooling amendment entry.
+
+A conditional `spawnSync('docker', …)` in any gate script is therefore caught by the map (no entry) or the call-site
 pin (wrong first argument); a mutation of that one argument is the reviewed-root-of-trust residual.
 
 **Declared, in the guard's header:** the interceptor covers Vitest runs under the default configuration; the Docker
