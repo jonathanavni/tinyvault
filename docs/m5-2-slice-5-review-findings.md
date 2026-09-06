@@ -1348,3 +1348,84 @@ Staged diff hygiene caught trailing spaces in the newly tracked mutation-ledger 
 unstaged diff checks had not included. Documentation-only trailing spaces were removed; blank mutation
 lines and expression text remain, and raw replacement bytes stay in the external ledger. Source/tests
 are unchanged. Final staged diff check, rather than the earlier unstaged check, covers all new files.
+
+## Entry 10 — 2026-09-06: exact-clone and merged-tree acceptance PASS
+
+**VERDICT: Slice5 integration accepted.** User's Entry9 authorization executed in locked §7.5 order.
+No repeated paper, Slice4, or already-accepted implementation reviews. No source/test repair was needed.
+
+- Reviewed implementation committed as `005a4f37cd8279c57f58063613c45e51e9733ba8`, with the 17 explicit
+  candidate paths. Staged diff check PASS after Entry9's documentation whitespace correction.
+- Literal fresh clone: `git clone --no-local --branch codex/m5-2-slice-5
+  /Users/jonathanavni/Documents/Coding/tinyvault /private/tmp/tinyvault-slice5-integration/exact-clone`.
+  Clone HEAD verified as exact candidate005a4f3; clean worktree. `--no-local` uses Git object transport,
+  rather than copying an uncommitted working tree or relying on local object hardlinks.
+- In that clone: `npm ci` exit0 (55 packages); `make browsers` exit0 with host cache access;
+  `make test` exit0, 1963 passed plus one expected opt-in skip, final execution audit PASS.
+  Initial sandbox `make browsers` stalled in cache-lock retries, was interrupted (exit130), and was
+  rerun with host access. No browser-install success is attributed to the sandbox attempt. npm emitted
+  install-script approval notices but returned0; full checks ran successfully without changing policy.
+- `git switch main` then `git merge --no-ff 005a4f37cd8279c57f58063613c45e51e9733ba8
+  -m "Merge reviewed Slice 5 attestation implementation"` produced
+  `02929e5ba7f26de05adbd174b67f5f9e4cfb21c6`. `git diff --exit-code 005a4f3 HEAD` PASS:
+  the merge tree exactly equals the clone-tested candidate. No conflict or source adjustment.
+- On that merged tree, serial `make test` exit0 (1963 passed, one expected opt-in skip; execution audit
+  PASS), then `make test-docker` exit0 (5/5, no skip; execution audit PASS). Browser suites ran serially.
+  Both trees remained clean after execution; full candidate/merge diff still empty after Docker.
+
+### Exact report identities
+
+Raw reports copied outside the checkout into `/private/tmp/tinyvault-slice5-integration/` under the
+stage directories below. Each JSON's success flag and counters checked; no failed assertion.
+The sole main-partition skip is the gate's expected opt-in eval identity; the execution audit checked it.
+
+| Stage / partition | Passed | Skipped | JSON SHA256 |
+| --- | --- | --- | --- |
+| clone-gate / main | 1948 | 1 | `4f997953e708cdf6db9299ccb828d64a2a31be25039082afdc54138151de6d71` |
+| clone-gate / timing-1 | 5 | 0 | `aec346c823112ac4ca58d1b057d51c536b17ef93007de88b68cd00db539446c9` |
+| clone-gate / timing-2 | 10 | 0 | `bb783b6053b96b4ef4e9515e902fb4a9b34b8b87012a5280c9aaa908d7732260` |
+| merged-test / main | 1948 | 1 | `97e938eec619c199d74507224798765bbc7b5f47b239c76845bf674738b1df53` |
+| merged-test / timing-1 | 5 | 0 | `7a29b37535ca4e1538e3f16ac28366fd40c9db65436c14e13b47a8388fb1f2af` |
+| merged-test / timing-2 | 10 | 0 | `8355193a25cd13d9d57f3a288cf4b63f1837ed08a6f507cbd6a397241c25b19b` |
+| merged-docker / docker | 5 | 0 | `1c8e0ebd350c189f80642efa9c9c20fae34314c579eb6d958db96fbdb099e025` |
+
+Each `make test` also passed typecheck, dependency/invocation/Compose checks and their selftests,
+Acceptance J and final execution audit. These are full command-path gates, not counts substituted from
+worker summaries or prior candidate runs. Raw reports and summary.json files are temporary;
+this entry preserves the durable results and identities.
+
+### Live Docker evidence and limits
+
+The same composed test exercised v2 artifacts across all fixtures, same-key cross-fixture rejection,
+actual browser capture and persisted offline adjudication, plus pre-existing-container refusal without
+teardown, killed-exec/no-reconnect, and Compose override detection. Project cleanup assertions passed.
+Fresh `slice4-probe-metrics.json` and `slice4-runner-metrics.json` (legacy filenames) both had complete:true
+and modification times after this Docker gate's start. Copies are in the merged-docker evidence directory.
+
+| Measurement | Probe case | Persisted browser-run case |
+| --- | --- | --- |
+| Registration through attestation, ms | 14.2 / 23.6 / 11.5 | 343.4 / 159.6 / 128.7 |
+| Export duration, ms | 90194.3 / 90344.0 / 90361.0 | 4070.3 / 4073.6 / 4036.4 |
+| Exec stderr bytes per bridge | 26 / 26 / 26 | 26 / 26 / 26 |
+| Export stderr bytes | 0 / 0 / 0 | 0 / 0 / 0 |
+| Scanner count | 579 | 21 |
+
+Each registration-through-attestation observation is below60s; each export is below120s.
+The browser-run case recorded zero normal409 responses. Probe teardown totaled272368.5ms across its
+work; that aggregate is not the per-export120s bound. Preserve this distinction when citing timings.
+These checks establish the locked composed/caller behavior, not independent capture authenticity,
+compromised-fixture containment, Docker-daemon non-exposure, or absence of every future timing failure.
+Entry8's schema-guard attribution and prior Slice4 residuals remain unchanged.
+
+### Continuity and disposition
+
+After these gates, owner changed only PLAN.md, docs/README.md and this register to record acceptance.
+No source/tests changed after independent review, exact-clone verification or merged-tree tests.
+The final documentation commit records evidence over merge02929e5; it does not replace that tested SHA
+or claim a separate full gate for documentation-only text. Final diff hygiene and source-tree comparison
+cover the documentation checkpoint. All workers, reviewers and test commands have stopped.
+
+**Not run:** Slice6, whole-M5.2 milestone-close assessment, push and release; outside this authorization.
+No mandatory Slice5 integration gate remains pending.
+**Deviations From Handoff:** none in scope, behavior or required gate order. Browser setup required host
+cache access; documentation ledger whitespace was corrected before the candidate commit as Entry9 notes.

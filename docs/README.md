@@ -9,8 +9,8 @@ When a planning doc or spec is superseded or shipped, move it to [`archive/`](ar
 
 Active planning docs:
 - `m5-2-slice-5-plan.md` — Slice 5 attestation implementation plan, revision 3 **LOCKED** after capped Sol/Claude paper reviews;
-  v2 implementation, owner gates and all three independent implementation reviews PASS;
-  uncommitted candidate awaits authorized exact-clone/local-merge gates. No Slice6 work.
+  v2 implementation, reviews, exact-clone and merged-tree gates PASS; merged as `02929e5`
+  (final acceptance register Entry10). No Slice6 work.
 - `m5-2-slice-5-review-findings.md` — append-only Slice 5 planning/implementation findings, evidence and dispositions.
 - `m5-2-slice-4-plan.md` — Slice 4 revision 5, **LOCKED**, after capped final paper review and the user-approved SCHEMA amendment.
   Control operations, capabilities and capture transfer accepted and merged locally (`39169a6`); exact clone and final gates PASS (register Entry44).

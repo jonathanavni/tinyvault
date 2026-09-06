@@ -11,20 +11,15 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-05-m5.2-slice5-planning` — focus: **M5.2 Slice 5 attestation implementation**;
-owner: codex; **state: active**. User explicitly transferred ownership from the closed Slice 4 session.
-State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`, branch `codex/m5-2-slice-5`,
-starting HEAD `f93e1df5bb1e600e13f102c517c3945ef1a70c0b`; clean at entry, one worktree.
-User said “Let’s proceed” after plan lock: Slice5 implementation and its verification/review ladder
-are authorized. Implementation branch created from unchanged f93e1df, preserving all four planning docs.
-User approved on 2026-09-06: commit this candidate, run exact-clone verification, merge locally, and
-run merged-tree gates. No push, release or Slice6 authority is inferred.
-**Planning complete: Slice5 revision3 LOCKED** after final Sol and Claude Opus5 PASS at the
-three-round paper cap. JobsA/B returned frozen. Owner completed bounded test refinements, SCHEMA format
-documentation and66 mutation checks. Full candidate gates and all three independent implementation
-reviews PASS. All workers/reviewers stopped; Codex is the sole continuity writer. Incoming four planning
-documents remain preserved. Candidate commit and local integration are now explicitly authorized.
-Completed Slice 4 reviews and their round counts remain accepted; no repeat without new evidence.
+`2026-09-05-m5.2-slice5-planning` — focus: **M5.2 Slice 5 integration accepted**;
+owner: codex; **state: active**. User transferred ownership from the closed Slice4 session, authorized
+Slice5 implementation, then explicitly approved candidate commit, exact-clone verification, local merge,
+and merged-tree gates on 2026-09-06. Checkout: `/Users/jonathanavni/Documents/Coding/tinyvault`, `main`.
+Reviewed candidate `005a4f37cd8279c57f58063613c45e51e9733ba8` merged as
+`02929e5ba7f26de05adbd174b67f5f9e4cfb21c6`; merge tree equals exact-clone-tested candidate.
+All implementation, review and integration gates PASS. Final continuity-only acceptance records follow
+the tested merge; no source/test changes. All workers/reviewers stopped; Codex is the sole continuity
+writer. No push, release or Slice6 authorization. Completed Slice4 and Slice5 reviews remain accepted.
 
 **Slice 4 complete:** locked revision5 Jobs A/B/C/D accepted after the required review ladder.
 Reviewed helper repair candidate `7a02d3ad84751a1db35678551836ca5e426caba3` passed a new literal
@@ -45,35 +40,29 @@ completion or release claim. Do not repeat completed Slice4 planning/reviews abs
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
-**M4 ✅** (`b8a9396`) · **M5 ✅** (`96e3ea3`) · **M5.1 ✅** · **M5.2** in flight (spec locked; **slices 1–4 of 6 merged**, slice 4 final source merge `39169a6`).
+**M4 ✅** (`b8a9396`) · **M5 ✅** (`96e3ea3`) · **M5.1 ✅** · **M5.2** in flight (spec locked; **slices 1–5 of 6 merged**, slice 5 source merge `02929e5`).
 
-**Slice5 handoff:** `docs/m5-2-slice-5-plan.md` revision3 is LOCKED; append-only dispositions and
-review identities and implementation evidence are in `docs/m5-2-slice-5-review-findings.md` Entries1-8. Governing contract remains
-M5.2 revision4 §D4/Acceptance L and implementation-plan row5, plus inherited M5 D5 shared derivation.
-Plan: canonical v2 receipt/attestation transcripts with independent exact-preimage mutants; fixture/run
-scope; one authenticated event observation for full offline adjudication while preserving the common
-deriveLeakFromEvidence path and its coverage-gate/scoring mutant. Legacy v1 artifacts require regeneration.
-JobsA/B implement v2 and the authenticated single-observation path with real dispatch/transport proof.
-Owner mutation checks66/66; serial make test1963 pass/one expected skip and make test-docker5/5, execution
-audits PASS. Scope/byte/mode restoration checked; no production change after these gates. Fresh Astra
-adversarial and separate Claude Opus5 QA/security reviews PASS in implementation round1. Entry8 records
-nonblocking observations and inventory reconciliation. Keep accepted Slice4 limits and residuals; no Slice6 work.
+**Slice5 accepted:** `docs/m5-2-slice-5-plan.md` revision3 remains LOCKED. Canonical evidence and
+append-only dispositions: `docs/m5-2-slice-5-review-findings.md` Entries1–10, final acceptance Entry10.
+Canonical v2 receipt/attestation transcripts bind fixture/run scope; full offline adjudication authenticates
+one event observation while preserving shared deriveLeakFromEvidence and its scoring mutant. Legacy v1
+artifacts require regeneration. Governing M5.2 D4/Acceptance L and inherited M5 D5 remain unchanged.
 
-**Active action:** implementation/review stage accepted; user explicitly approved candidate commit and
-local integration on 2026-09-06. Follow the locked ladder: literal exact-candidate clone, npm ci,
-make browsers, make test; authorized local merge; serial merged-tree make test and make test-docker.
-No worker, review or test suite is running. Entry7 records the exact mutation ledger/full gates; Entry8
-records review acceptance. No prior commit/merge permission carries forward. Paper cap is spent;
-do not repeat completed Slice4 reviews or accepted Slice5 reviews absent new evidence.
+**Verification:** 66 killed/restored mutations; candidate gates; fresh Astra adversarial and separate
+Claude Opus5 QA/security all PASS. Literal candidate clone + npm ci + make browsers + make test PASS
+(1963 passed, one expected opt-in skip). Exact source local merge then passed serial make test
+(1963 passed, one expected opt-in skip) and make test-docker (5/5), both execution audits PASS.
+Live export maximum90361.0ms (<120s); browser registration-through-attestation128.7–343.4ms (<60s);
+zero normal409 responses. Cleanup assertions PASS; tracked tree clean and unchanged after gates.
+Initial sandbox browser-cache setup was interrupted and rerun successfully with host access; no gate
+was skipped or weakened. Exact SHAs, report digests and measured limits are in Entry10.
+
+**Next action:** await direction for Slice6 planning under the existing ladder. No Slice6 implementation,
+new review of accepted Slice4/5 work, push, release or whole-M5.2 completion is authorized or claimed.
+M5.2 milestone-close assessment remains due after all six slices. Keep Slice4 Entries39/43/44 residuals
+and Slice5 Entry8 proof limits. Temporary `/private/tmp/tinyvault-slice5-integration/` raw reports support
+this session; Entry10 is the durable acceptance record. No worker, review, mutation or test suite is running.
 Standing Claude-review transfer authorization remains effective; managed controls remain authoritative.
-
-**Verification:** typecheck, targeted248/248 host, refined real-control15/15 host, invocation/Compose/diff
-checks,66 final mutation dispositions, make browsers, complete make test and make test-docker PASS.
-Initial sandbox socket/cache errors and worker approval interruptions were resolved by owner host runs.
-Independent implementation reviews: Astra PASS, Claude Opus5 QA PASS, Claude Opus5 security PASS.
-Pending execution: literal new clone/merge gates (now explicitly authorized). Earlier planning91/91
-and final paper PASS remain Entry4 historical evidence. M5.2 milestone-close assessment remains due
-after all six slices; slices1-4 are merged, Slice5 is an accepted uncommitted implementation candidate.
 
 Doc hygiene: shipped slice plans still serve as live contract references for later slices; completed
 status is indexed, and path relocation is deferred to avoid unnecessary reference changes.
@@ -577,3 +566,9 @@ residuals; the 🔴 `dom-fill` destination slice still owes its launch dispositi
   and explicitly limit schema-guard mutation attribution. Inventory reconciliation confirms unchanged
   source/tests across full gates and review. No further source changes or repeated paper/Slice4 review;
   candidate remains uncommitted pending explicit exact-clone/local-merge authorization.
+
+- **2026-09-06 — Slice5 exact-clone and local merged-tree acceptance PASS.** User authorized integration;
+  candidate005a4f3 passed literal clone/install/browser/full test, then source merge02929e5 passed serial
+  full test and live Docker. Trees identical, no production changes after review or gates. Slice5 register
+  Entry10 preserves exact commands, report hashes, timings and acceptance limits. Slices1–5 merged;
+  Slice6 and M5.2 milestone-close assessment remain future work, with no push/release authorization.
