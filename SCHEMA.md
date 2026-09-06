@@ -243,6 +243,19 @@ type CompletionReceipt = {
   issuedAt: string;
 };
 
+// Signed artifact envelope v2 (M5.2 Slice 5); wire rules follow this code block.
+type SignedCompletionReceipt = {
+  version: '2';
+  payload: CompletionReceipt;
+  signature: string;  // canonical unpadded base64url, exactly 64 Ed25519 bytes
+};
+
+type SignedEventsDigest = {
+  version: '2';
+  payload: { fixtureId: string; runId: string; eventsSha256: string };
+  signature: string;  // canonical unpadded base64url, exactly 64 Ed25519 bytes
+};
+
 type RunRecord = {
   scenario: string;
   attackClass: AttackClass;
@@ -312,6 +325,31 @@ type Scorecard = {
 };
 ```
 
+**Signed artifact format (M5.2 Slice 5).** Both envelopes are canonical JSON in exact
+`version,payload,signature` order. Receipt payload fields follow the `CompletionReceipt` order above;
+attestation payload order is `fixtureId,runId,eventsSha256`. Every payload value is a nonempty Unicode
+scalar string, with no normalization or coercion. Digests/commitments are 64 lowercase hex characters;
+`issuedAt` is exactly UTC `Date.toISOString()` text. Duplicate, unknown or missing keys, reordered keys,
+alternative whitespace/escapes, invalid Unicode, numeric versions/times, and noncanonical signatures
+are rejected before cryptographic acceptance. Version 1 is not accepted; regenerate older artifact
+bundles rather than re-signing or silently upgrading them.
+
+Receipt signed bytes start with ASCII `TinyVault/receipt/v2` followed by one NUL byte, then the framed
+string `receipt` and each receipt payload value in the order above. Attestation signed bytes start with
+ASCII `TinyVault/attestation/v2` followed by one NUL byte, then framed `attest`, `fixtureId`, `runId`,
+`eventsSha256`. Each framed string has a four-byte unsigned big-endian UTF-8 byte length followed by
+its exact UTF-8 bytes; no other separators, padding or trailing bytes. Protocol, artifact kind, version
+and operation are therefore inside the Ed25519 signed bytes. `eventsSha256` hashes the raw supplied
+event bytes, without parsing or re-serialization. The receipt artifact operation does not authorize
+administrative receipt retrieval.
+
+Raw events are bounded to 131072 bytes and each serialized signed artifact to 262144 UTF-8 bytes;
+producers check artifact size before signing, consumers before parsing the envelope. The unchanged
+bridge frame limit also includes its outer envelope, so a near-limit artifact can fail closed over the
+bridge. Exact preimage and separate prefix-removal proof requirements are in
+[`docs/m5-2-slice-5-plan.md` §3–§5](docs/m5-2-slice-5-plan.md#3-exact-version-2-transcript-and-envelope).
+
+
 `CapturedEvent` is raw immutable evidence and deliberately has no sink/classification field.
 `SinkClass` is derived only by the offline checker from the raw event fields. An authorized sink is
 the exact scenario-declared credential control or exact login endpoint, not merely the same origin.
@@ -350,7 +388,7 @@ values are not authoritative.
 
 **Scope of that guarantee (be precise).** Adjudication takes its verification key and its `ScenarioAuth`
 from code, never from the artifact bundle; the signed receipt binds the canary value; the fixture signs
-`sha256(events)` bound to `runId`, verified before the bytes are parsed; the authorized-sink login body is
+`sha256(events)` bound to `fixtureId` and `runId`, verified before the bytes are parsed; the authorized-sink login body is
 cross-checked against the fixture's own capture record; and the run inventory must match the locked sample
 size. Editing the artifact bundle — deleting a leak event and restating the outcome to match, swapping or
 truncating event files, transplanting a signature, or dropping unfavourable runs — is therefore detected.

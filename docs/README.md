@@ -8,6 +8,10 @@ Project documentation lives here. Two kinds:
 When a planning doc or spec is superseded or shipped, move it to [`archive/`](archive/) rather than deleting it. The history is useful, and a stale doc at the root is more confusing than an archived one. `/wrapup`'s doc-hygiene check surfaces docs that look superseded but haven't been moved.
 
 Active planning docs:
+- `m5-2-slice-5-plan.md` — Slice 5 attestation implementation plan, revision 3 **LOCKED** after capped Sol/Claude paper reviews;
+  v2 implementation, owner gates and all three independent implementation reviews PASS;
+  uncommitted candidate awaits authorized exact-clone/local-merge gates. No Slice6 work.
+- `m5-2-slice-5-review-findings.md` — append-only Slice 5 planning/implementation findings, evidence and dispositions.
 - `m5-2-slice-4-plan.md` — Slice 4 revision 5, **LOCKED**, after capped final paper review and the user-approved SCHEMA amendment.
   Control operations, capabilities and capture transfer accepted and merged locally (`39169a6`); exact clone and final gates PASS (register Entry44).
 - `m5-2-slice-4-review-findings.md` — append-only Slice 4 findings/dispositions and exact baseline prerequisite

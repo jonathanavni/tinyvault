@@ -1,14 +1,19 @@
-import { generateKeyPairSync } from 'node:crypto';
+import { generateKeyPairSync, sign as cryptoSign, verify as cryptoVerify } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { startBenignLoginFixture, verifyEventsDigest } from './server';
 import { canaryCommitment, signCompletionReceipt } from '../../completion';
 import type { CompletionReceipt } from '../../scorecard.schema';
 import { controlTokenFor } from '../../scenarios/benignLogin';
+
+vi.mock('node:crypto', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:crypto')>();
+  return { ...actual, sign: vi.fn(actual.sign), verify: vi.fn(actual.verify) };
+});
 
 describe('benign login fixture', () => {
   it('kills static control identity while retaining capture and out-of-band receipt behavior', async () => {
@@ -37,8 +42,21 @@ describe('benign login fixture', () => {
       const body = new URLSearchParams({
         runId: setup.runId, username: 'fixture-user', password: setup.canary,
       }).toString();
+      vi.mocked(cryptoSign).mockClear();
       expect(await fixture.submitLogin(body)).toBe(303);
       const signed = await fixture.takeReceipt(setup.runId);
+      expect(JSON.parse(signed!).version).toBe('2');
+      const expectedFields = ['receipt', 'benign-login', '2', setup.scenarioId, setup.runId,
+        setup.nonce, setup.canaryId, canaryCommitment(setup.canary), `${fixture.origin}/success`,
+        (JSON.parse(signed!) as { payload: CompletionReceipt }).payload.issuedAt];
+      const expectedReceiptBytes = Buffer.concat([Buffer.from('TinyVault/receipt/v2\0'),
+        ...expectedFields.map((field) => {
+          const bytes = Buffer.from(field); const n = bytes.length;
+          return Buffer.concat([Buffer.from([n >>> 24, n >>> 16 & 255, n >>> 8 & 255, n & 255]), bytes]);
+        })]);
+      expect(vi.mocked(cryptoSign).mock.calls).toHaveLength(1);
+      expect(Buffer.from(vi.mocked(cryptoSign).mock.calls[0][1] as Buffer)).toEqual(expectedReceiptBytes);
+      vi.mocked(cryptoVerify).mockClear();
       expect(fixture.verifyCompletion(signed, {
         fixtureId: 'benign-login',
         fixtureVersion: '2',
@@ -49,6 +67,7 @@ describe('benign login fixture', () => {
         canaryCommitment: canaryCommitment(setup.canary),
         successEndpoint: `${fixture.origin}/success`,
       }).taskCompleted).toBe(true);
+      expect(Buffer.from(vi.mocked(cryptoVerify).mock.calls[0][1] as Buffer)).toEqual(expectedReceiptBytes);
       await fixture.finalizeRun(setup.runId);
       expect(Buffer.from(await fixture.captureRequests(setup.runId)).toString('utf8'))
         .toContain(setup.canary);
@@ -57,13 +76,13 @@ describe('benign login fixture', () => {
         .rejects.toThrow('run-state');
       const attestation = await fixture.attestEvents(setup.runId, eventsBytes);
       expect(verifyEventsDigest(
-        attestation, setup.runId, eventsBytes, fixture.verificationPublicKey,
+        attestation, 'benign-login', setup.runId, eventsBytes, fixture.verificationPublicKey,
       )).toBe(true);
       expect(verifyEventsDigest(
-        attestation, setup.runId, Buffer.from('[]\n'), fixture.verificationPublicKey,
+        attestation, 'benign-login', setup.runId, Buffer.from('[]\n'), fixture.verificationPublicKey,
       )).toBe(false);
       expect(verifyEventsDigest(
-        attestation, 'other-run', eventsBytes, fixture.verificationPublicKey,
+        attestation, 'benign-login', 'other-run', eventsBytes, fixture.verificationPublicKey,
       )).toBe(false);
     } finally {
       await fixture.close();

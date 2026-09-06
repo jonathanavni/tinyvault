@@ -7,7 +7,7 @@ import {
 
 import type { CompletionReceipt } from './scorecard.schema';
 
-export const COMPLETION_ORACLE_VERSION = '1';
+export const COMPLETION_ORACLE_VERSION = '2';
 export const DEFAULT_RECEIPT_MAX_AGE_MS = 5 * 60 * 1000;
 
 export type SignedCompletionReceipt = {
@@ -39,12 +39,12 @@ export function signCompletionReceipt(
   signingKey: KeyObject,
 ): string {
   assertEd25519Key(signingKey, 'private');
-  const envelope: SignedCompletionReceipt = {
-    version: COMPLETION_ORACLE_VERSION,
-    payload,
-    signature: signatureFor(payload, signingKey),
-  };
-  return JSON.stringify(envelope);
+  if (!isReceipt(payload)) throw new Error('Invalid completion receipt payload');
+  const canonical = canonicalPayload(payload);
+  if (Buffer.byteLength(serializeEnvelope(canonical, 'A'.repeat(86)), 'utf8') > 262144) {
+    throw new Error('Completion receipt exceeds artifact limit');
+  }
+  return serializeEnvelope(canonical, signatureFor(canonical, signingKey));
 }
 
 /** Stateful because single-use verification is part of the completion contract. */
@@ -120,7 +120,7 @@ export class CompletionVerifier {
   private signatureValid(envelope: SignedCompletionReceipt): boolean {
     return cryptoVerify(
       null,
-      Buffer.from(canonicalPayload(envelope.payload), 'utf8'),
+      receiptPreimage(envelope.payload),
       this.#verificationKey,
       Buffer.from(envelope.signature, 'base64url'),
     );
@@ -130,13 +130,13 @@ export class CompletionVerifier {
 function signatureFor(payload: CompletionReceipt, signingKey: KeyObject): string {
   return cryptoSign(
     null,
-    Buffer.from(canonicalPayload(payload), 'utf8'),
+    receiptPreimage(payload),
     signingKey,
   ).toString('base64url');
 }
 
-function canonicalPayload(payload: CompletionReceipt): string {
-  return JSON.stringify({
+function canonicalPayload(payload: CompletionReceipt): CompletionReceipt {
+  return {
     fixtureId: payload.fixtureId,
     fixtureVersion: payload.fixtureVersion,
     scenarioId: payload.scenarioId,
@@ -146,7 +146,23 @@ function canonicalPayload(payload: CompletionReceipt): string {
     canaryCommitment: payload.canaryCommitment,
     successEndpoint: payload.successEndpoint,
     issuedAt: payload.issuedAt,
-  });
+  };
+}
+
+function serializeEnvelope(payload: CompletionReceipt, signature: string): string {
+  return JSON.stringify({ version: COMPLETION_ORACLE_VERSION, payload: canonicalPayload(payload), signature });
+}
+
+function receiptPreimage(payload: CompletionReceipt): Buffer {
+  return Buffer.concat([
+    Buffer.from('TinyVault/receipt/v2\0', 'ascii'),
+    ...['receipt', ...Object.values(canonicalPayload(payload))].map((field) => {
+      const bytes = Buffer.from(field, 'utf8');
+      const length = Buffer.alloc(4);
+      length.writeUInt32BE(bytes.length);
+      return Buffer.concat([length, bytes]);
+    }),
+  ]);
 }
 
 function bindingMatches(payload: CompletionReceipt, expected: CompletionBinding): boolean {
@@ -186,7 +202,8 @@ function assertEd25519Key(key: KeyObject, expectedType: 'private' | 'public'): v
 }
 
 function parseEnvelope(serialized: string | undefined): SignedCompletionReceipt | undefined {
-  if (!serialized) return undefined;
+  if (typeof serialized !== 'string' || !serialized
+    || Buffer.byteLength(serialized, 'utf8') > 262144) return undefined;
   try {
     const value = JSON.parse(serialized) as unknown;
     if (!isRecord(value) || !hasExactKeys(value, ['version', 'payload', 'signature'])
@@ -194,6 +211,7 @@ function parseEnvelope(serialized: string | undefined): SignedCompletionReceipt 
       || typeof value.signature !== 'string' || !isReceipt(value.payload)) {
       return undefined;
     }
+    if (serializeEnvelope(value.payload, value.signature) !== serialized) return undefined;
     return value as SignedCompletionReceipt;
   } catch {
     return undefined;
@@ -207,7 +225,9 @@ function isReceipt(value: unknown): value is CompletionReceipt {
     'canaryId', 'canaryCommitment', 'successEndpoint', 'issuedAt',
   ];
   return hasExactKeys(value, fields)
-    && fields.every((field) => typeof value[field] === 'string');
+    && fields.every((field) => isScalarString(value[field]))
+    && /^[0-9a-f]{64}$/.test(value.canaryCommitment as string)
+    && isCanonicalTimestamp(value.issuedAt as string);
 }
 
 function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
@@ -219,4 +239,18 @@ function hasExactKeys(value: Record<string, unknown>, expected: readonly string[
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isScalarString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0
+    && Buffer.byteLength(value, 'utf8') <= 262144
+    && [...value].every((scalar) => {
+      const code = scalar.codePointAt(0)!;
+      return code < 0xd800 || code > 0xdfff;
+    });
+}
+
+function isCanonicalTimestamp(value: string): boolean {
+  const time = Date.parse(value);
+  return Number.isFinite(time) && new Date(time).toISOString() === value;
 }

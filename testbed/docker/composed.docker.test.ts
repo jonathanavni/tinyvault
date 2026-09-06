@@ -12,12 +12,13 @@ import { BridgeSession } from './bridge';
 import { startComposedFixtureSet, probeHttpOrigin } from './composedFixtures';
 import { buildDockerSpawn, bounded, COMMAND_TIMEOUT_MS, ComposedConstructionError, systemClock,
   type DockerSpawn, type DockerResult } from './exec';
-import { canaryCommitment } from '../completion';
+import { canaryCommitment, CompletionVerifier } from '../completion';
+import type { RunRecord } from '../scorecard.schema';
 import { BENIGN_USERNAME } from '../scenarios/benignLoginConstants';
 import { verifyEventsDigest } from '../fixtures/shared/loginFixture';
 import { persistFixtureCapture } from './captureTransfer';
 import { capturePersistedRuns, offlineArtifactPaths } from '../runner';
-import { adjudicatePersistedRuns } from '../checkers/offline';
+import { adjudicatePersistedRuns, type OfflineEvidenceManifest } from '../checkers/offline';
 import { AGENT_CONFIGS } from '../evalAgents';
 import { IntegrationEvidence, localPin, commandKind, assertClean, assertMarker, checkStoppedSurfaces, checkArtifacts, adminCounts, assertProbeWindow, checkTerminalProbe } from './integrationEvidence';
 import { matrix, targets, probeBrowser, detectedRoute, coverageGaps, classifyProbe, reachedServer, supervisedMatrix } from './integrationProbes';
@@ -144,6 +145,13 @@ describe.sequential('slice 4 real Docker construction and control-route probes',
         await fixture.finalizeRun(setup.runId);
         const receipt = await fixture.takeReceipt(setup.runId); expect(receipt).toBeDefined();
         expect(await fixture.takeReceipt(setup.runId)).toBe(receipt);
+        expect(JSON.parse(receipt!)).toMatchObject({ version: '2', payload: { fixtureId: id, runId: setup.runId } });
+        const [otherId, otherFixture] = Object.entries(fixtures).find(([candidate]) => candidate !== id)!;
+        const binding = { fixtureId: otherId, fixtureVersion: id === 'benign-login' ? '2' : '1', ...setup,
+          canaryCommitment: canaryCommitment(setup.canary), successEndpoint: `${fixture.origin}/success` };
+        expect(new CompletionVerifier(fixture.verificationPublicKey).verify(receipt, binding))
+          .toMatchObject({ taskCompleted: false, reason: 'binding-mismatch' });
+        expect(new CompletionVerifier(otherFixture.verificationPublicKey).verify(receipt, binding).taskCompleted).toBe(false);
         expect(fixture.verifyCompletion(receipt, { fixtureId: id, fixtureVersion: id === 'benign-login' ? '2' : '1', ...setup,
           canaryCommitment: canaryCommitment(setup.canary), successEndpoint: `${fixture.origin}/success` })).toEqual({ taskCompleted: true });
         const capture = await fixture.captureRequests(setup.runId); expect(Buffer.from(capture).toString()).toBe(body + '\n');
@@ -151,7 +159,10 @@ describe.sequential('slice 4 real Docker construction and control-route probes',
         const events = Buffer.from('[]'); const attest = await fixture.attestEvents(setup.runId, events);
         const elapsedMs = performance.now() - start; expect(elapsedMs).toBeLessThan(60000);
         registrationThroughAttestationMs.push(elapsedMs);
-        expect(verifyEventsDigest(attest, setup.runId, events, fixture.verificationPublicKey)).toBe(true);
+        expect(JSON.parse(attest)).toMatchObject({ version: '2', payload: { fixtureId: id, runId: setup.runId } });
+        expect(verifyEventsDigest(attest, id, setup.runId, events, fixture.verificationPublicKey)).toBe(true);
+        expect(verifyEventsDigest(attest, otherId, setup.runId, events, fixture.verificationPublicKey)).toBe(false);
+        expect(verifyEventsDigest(attest, otherId, setup.runId, events, otherFixture.verificationPublicKey)).toBe(false);
         await fixture.acknowledgeReceipt(setup.runId);
 
       }
@@ -245,6 +256,18 @@ describe.sequential('slice 4 real Docker construction and control-route probes',
         } });
       expect(refusals).toBe(0); expect(timings).toHaveLength(3); for (const ms of timings) expect(ms).toBeLessThan(60000);
       const paths = offlineArtifactPaths(root);
+      const persisted = JSON.parse(await readFile(paths.capturedRunsPath, 'utf8')) as RunRecord[];
+      const manifest = JSON.parse(await readFile(paths.manifestPath, 'utf8')) as OfflineEvidenceManifest;
+      expect(persisted).toHaveLength(3); expect(manifest.runs).toHaveLength(3);
+      for (const record of persisted) {
+        expect(record.completionOracleVersion).toBe('2');
+        expect(JSON.parse(record.completionReceipt!).version).toBe('2');
+      }
+      for (const evidence of manifest.runs) {
+        expect(JSON.parse(evidence.eventsAttestation)).toMatchObject({ version: '2', payload: {
+          fixtureId: evidence.completionBinding.fixtureId, runId: evidence.completionBinding.runId,
+        } });
+      }
       const runs = await adjudicatePersistedRuns({ runsPath: paths.capturedRunsPath, manifestPath: paths.manifestPath, artifactDirectory: root,
         verificationKeys: trust.verificationKeys, scenarioRegistry: trust.scenarioRegistry, agentConfigs: AGENT_CONFIGS });
       expect(runs).toHaveLength(3); expect(runs.every((r) => r.outcome.taskCompleted && !r.outcome.secretLeaked)).toBe(true);

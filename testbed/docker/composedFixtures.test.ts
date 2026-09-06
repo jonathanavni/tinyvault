@@ -26,7 +26,7 @@ it('reachable positive returns exactly three composed HTTP transports with the a
   }
   const fixture = set['benign-login']!;
   const expected = { fixtureId: 'benign-login', fixtureVersion: '1', scenarioId: 'benign-login', runId: 'run', nonce: 'nonce',
-    canaryId: 'canary', canaryCommitment: 'commitment', successEndpoint: `${fixture.origin}/success` };
+    canaryId: 'canary', canaryCommitment: canaryCommitment('synthetic-canary'), successEndpoint: `${fixture.origin}/success` };
   const receipt = signCompletionReceipt({ ...expected, issuedAt: new Date().toISOString() } as never, pair.privateKey);
   expect(fixture.verifyCompletion(receipt, expected)).toEqual({ taskCompleted: true });
   expect(fixture.verifyCompletion(receipt, expected)).toMatchObject({ taskCompleted: false, reason: 'replayed' });
@@ -53,7 +53,8 @@ import { startLookalikeOriginFixture } from '../fixtures/lookalike-origin';
 import { startDomHiddenInjectionFixture } from '../fixtures/dom-hidden-injection';
 import { observeFixtureAdministration, verifyEventsDigest } from '../fixtures/shared/loginFixture';
 import { BENIGN_USERNAME } from '../scenarios/benignLoginConstants';
-import { canaryCommitment } from '../completion';
+import { canaryCommitment, CompletionVerifier } from '../completion';
+import { BridgeSession } from './bridge';
 import { CAPABILITY_OPS, type Body } from './protocol';
 import { encodeFrame } from './frames';
 import { kindOf } from './compose.testkit';
@@ -104,6 +105,12 @@ it('private client runs every operation through both sessions and the real fixtu
     await Promise.all([fixture.finalizeRun('A'), fixture.finalizeRun('B')]);
     const receipt = await fixture.takeReceipt('A');
     expect(receipt).toBeDefined(); expect(await fixture.takeReceipt('A')).toBe(receipt);
+    expect(receipt).toBe(h.responses.filter((r) => r.op === 'receipt').at(-1)!.body.receipt);
+    expect(JSON.parse(receipt!)).toMatchObject({ version: '2', payload: { fixtureId: Object.keys(h.set)[i], runId: 'A' } });
+    expect(new CompletionVerifier(fixture.verificationPublicKey).verify(receipt, {
+      fixtureId: 'same-key-other-fixture', fixtureVersion: i === 0 ? '2' : '1', ...setupFor('A'),
+      canaryCommitment: canaryCommitment(setupFor('A').canary), successEndpoint: `${h.fixtures[i].origin}/success`,
+    })).toMatchObject({ taskCompleted: false, reason: 'binding-mismatch' });
     expect(fixture.verifyCompletion(receipt, { fixtureId: Object.keys(h.set)[i], fixtureVersion: i === 0 ? '2' : '1',
       ...setupFor('A'), canaryCommitment: canaryCommitment(setupFor('A').canary),
       successEndpoint: `${h.fixtures[i].origin}/success` })).toEqual({ taskCompleted: true });
@@ -113,7 +120,10 @@ it('private client runs every operation through both sessions and the real fixtu
     expect(Buffer.from(await fixture.captureRequests('A')).toString()).toBe(h.login('A') + '\n');
     expect(Buffer.from(await fixture.captureRequests('B')).toString()).toBe(h.login('B') + '\n');
     const attestation = await fixture.attestEvents('A', Buffer.from('[]'));
-    expect(verifyEventsDigest(attestation, 'A', Buffer.from('[]'), fixture.verificationPublicKey)).toBe(true);
+    expect(attestation).toBe(h.responses.filter((r) => r.op === 'attest').at(-1)!.body.attestation);
+    expect(JSON.parse(attestation)).toMatchObject({ version: '2', payload: { fixtureId: Object.keys(h.set)[i], runId: 'A' } });
+    expect(verifyEventsDigest(attestation, 'same-key-other-fixture', 'A', Buffer.from('[]'), fixture.verificationPublicKey)).toBe(false);
+    expect(verifyEventsDigest(attestation, Object.keys(h.set)[i], 'A', Buffer.from('[]'), fixture.verificationPublicKey)).toBe(true);
     await fixture.acknowledgeReceipt('A');
     expect(await h.fixtures[i].takeReceipt('A')).toBeUndefined();
     expect(Object.keys(fixture).sort()).toEqual(['origin', 'architecture', 'reachability', 'verificationPublicKey',
@@ -312,4 +322,50 @@ it('discarded actual capture chunk rereads its same offset with a fresh request 
     return reread;
   });
   expect(snapshot.equals(Buffer.from(body + '\n'))).toBe(true);
+});
+
+it('public composed client refuses 131073 events locally before attest dispatch or primitive entry', async () => {
+  const h = await realClient(); const fixture = h.set['benign-login']!;
+  await fixture.registerRun(setupFor('A')); await fixture.finalizeRun('A');
+  const calls = vi.spyOn(BridgeSession.prototype, 'request');
+  const before = [...h.entries[0]];
+  await expect(fixture.attestEvents('A', Buffer.alloc(131073))).rejects.toMatchObject({ code: 'bridge-protocol' });
+  expect(calls.mock.calls.filter(([op]) => op === 'attest')).toEqual([]);
+  expect(h.entries[0]).toEqual(before);
+  expect(h.responses.filter((r) => r.op === 'attest')).toEqual([]);
+  expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
+  for (const handle of h.handles) expect(handle.kill).toHaveBeenCalledOnce();
+  calls.mockRestore();
+  const valid = await realClient(); const other = valid.set['benign-login']!;
+  await other.registerRun(setupFor('A')); await other.finalizeRun('A');
+  const exact = Buffer.alloc(131072);
+  const raw = await other.attestEvents('A', exact);
+  expect(verifyEventsDigest(raw, 'benign-login', 'A', exact, other.verificationPublicKey)).toBe(true);
+});
+
+it.each(['receipt', 'attest'] as const)('composed transport preserves intercepted noncanonical %s text while the independent codec refuses', async (op) => {
+  let intercepted = '';
+  const h = await realClient({ response: (frame) => {
+    if (!frame.ok || frame.op !== op) return;
+    const field = op === 'receipt' ? 'receipt' : 'attestation';
+    if (!frame.body[field]) return;
+    intercepted = `${frame.body[field]}\n`; frame.body[field] = intercepted;
+  } });
+  const fixture = h.set['benign-login']!;
+  await fixture.registerRun(setupFor('A'));
+  expect(await fixture.submitLogin(h.login('A'))).toBe(303);
+  await fixture.finalizeRun('A');
+  if (op === 'receipt') {
+    const raw = await fixture.takeReceipt('A'); expect(raw).toBe(intercepted);
+    const expected = { fixtureId: 'benign-login', fixtureVersion: '2', ...setupFor('A'),
+      canaryCommitment: canaryCommitment(setupFor('A').canary), successEndpoint: `${h.fixtures[0].origin}/success` };
+    const verifier = new CompletionVerifier(fixture.verificationPublicKey);
+    expect(verifier.verify(raw, expected)).toMatchObject({ taskCompleted: false, reason: 'malformed' });
+    expect(verifier.verify(h.responses.filter((r) => r.op === 'receipt').at(-1)!.body.receipt as string, expected)).toEqual({ taskCompleted: true });
+  } else {
+    const bytes = Buffer.from('[]'); const raw = await fixture.attestEvents('A', bytes); expect(raw).toBe(intercepted);
+    expect(verifyEventsDigest(raw, 'benign-login', 'A', bytes, fixture.verificationPublicKey)).toBe(false);
+    expect(verifyEventsDigest(h.responses.filter((r) => r.op === 'attest').at(-1)!.body.attestation as string,
+      'benign-login', 'A', bytes, fixture.verificationPublicKey)).toBe(true);
+  }
 });

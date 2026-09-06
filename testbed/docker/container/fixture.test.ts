@@ -116,7 +116,7 @@ it.each(['benign-login', 'lookalike-origin', 'dom-hidden-injection'] as const)('
     expect(Buffer.from(unauthorized.bytes as string, 'base64url').toString()).toBe(JSON.stringify({ route: '/login', body: 'runId=A&password=wrong&message=☃' }) + '\n');
     const events = Buffer.from('[]\n');
     const attestation = await p.operation('attest', 'A', A, { events: events.toString('base64url') });
-    expect(verifyEventsDigest(attestation.attestation as string, 'A', events, p.key)).toBe(true);
+    expect(verifyEventsDigest(attestation.attestation as string, fixtureId, 'A', events, p.key)).toBe(true);
     expect(await p.fixture.submitLogin(p.login('A', '&late=1'))).toBe(409);
     expect(await p.operation('capture', 'A', A, { kind: 'requests', offset: '0' })).toEqual(captureA);
     expect(await p.operation('receipt', 'A', A)).toEqual(receipt);
