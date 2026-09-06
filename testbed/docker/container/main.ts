@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import { dirname } from 'node:path';
 import { inspect } from 'node:util';
 import { hostname } from 'node:os';
+import { observeFixtureAdministration } from '../../fixtures/shared/loginFixture';
 import type { FixtureTransport } from '../../fixtures/transport';
 import { createControlServer, type ControlSession } from './control';
 import { installStdoutTripwire } from './stdoutTripwire';
@@ -36,6 +37,7 @@ async function start(): Promise<void> {
   // Create the private socket parent before the captures directory can create it with default mode.
   await mkdir(dirname(topology.controlSocket), { recursive: true, mode: 0o700 });
   fixture = await startContainerFixture(config, '/tmp/tinyvault/captures');
+  observeFixtureAdministration(fixture, (operation) => process.stderr.write(`fixture-admin:${operation}\n`));
   if (closing) { await fixture.close(); return; }
   const accept = createControlServer(controlConfigForFixture(config, fixture, hostname(),
     (code) => process.stderr.write(`${code}\n`)));

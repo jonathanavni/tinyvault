@@ -98,3 +98,43 @@ it('raw MAC and secret shape guards return only closed errors', () => {
   expect(() => computeHelloMac(secret, { ...fields, challenge: Buffer.alloc(0) })).toThrow('challenge-shape');
   expect(() => verifyHelloMac(secret, fields, Buffer.alloc(32))).toThrow('mac-invalid');
 });
+
+const registration = { epoch: hello.epoch, fixtureId: hello.fixtureId, scenarioId: 'scenario', runId: 'run-A',
+  nonce: 'nonce', canaryId: 'canary', canary: 'synthetic' };
+const operation = { epoch: hello.epoch, fixtureId: hello.fixtureId, runId: 'run-A', capability: secret.toString('base64url') };
+it.each([
+  ['run slash', { runId: 'a/b' }], ['run unicode', { runId: 'é' }], ['run too long', { runId: 'a'.repeat(129) }],
+  ['run trailing LF', { runId: 'a\n' }], ['epoch trailing LF', { epoch: hello.epoch + '\n' }],
+  ['empty scalar', { nonce: '' }], ['lone high surrogate', { nonce: '\ud800' }],
+  ['lone low surrogate', { canary: '\udc00' }], ['scalar byte limit', { canary: 'é'.repeat(2049) }],
+  ['scenario byte limit', { scenarioId: 'é'.repeat(65) }], ['canary id byte limit', { canaryId: 'a'.repeat(129) }],
+  ['extra setup', { extra: 'x' }],
+])('registration rejects %s', (_name, change) => {
+  expect(() => validateBody('register', 'req', { ...registration, ...change })).toThrow('body-shape');
+});
+it('registration accepts exact byte limits and scalar Unicode pairs', () => {
+  expect(() => validateBody('register', 'req', { ...registration, nonce: '😀'.repeat(1024),
+    scenarioId: 'é'.repeat(64), canaryId: 'a'.repeat(128), runId: 'A'.repeat(128) })).not.toThrow();
+});
+it.each(['01', '-1', '1.0', '1e0', '1\n', '1\r', ' 1', '8388609', '9'.repeat(50)])('capture refuses noncanonical/out-of-bound offset %j', (offset) => {
+  expect(() => validateBody('capture', 'req', { ...operation, kind: 'requests', offset })).toThrow('body-shape');
+});
+it('capture kind is closed and event bytes are canonical and bounded', () => {
+  expect(() => validateBody('capture', 'req', { ...operation, kind: '../requests', offset: '0' })).toThrow('body-shape');
+  expect(() => validateBody('attest', 'req', { ...operation, events: Buffer.alloc(131072).toString('base64url') })).not.toThrow();
+  expect(() => validateBody('attest', 'req', { ...operation, events: Buffer.alloc(131073).toString('base64url') })).toThrow('control-limit');
+  expect(() => validateBody('attest', 'req', { ...operation, events: 'AA==' })).toThrow('body-shape');
+});
+it.each([
+  { bytes: '', total: '1', next: '0' }, { bytes: 'AA', total: '0', next: '1' },
+  { bytes: 'AA', total: '01', next: '1' }, { bytes: 'AA', total: '1', next: '1\n' },
+  { bytes: 'AA==', total: '1', next: '1' },
+  { bytes: Buffer.alloc(65537).toString('base64url'), total: '65537', next: '65537' },
+  { bytes: '', total: '8388609', next: '8388609' },
+])('capture response rejects invalid bounded chunk %#', (body) => {
+  expect(() => validateBody('capture', 'res', body)).toThrow('body-shape');
+});
+it('capture accepts empty snapshots and terminal rereads', () => {
+  expect(() => validateBody('capture', 'res', { bytes: '', total: '0', next: '0' })).not.toThrow();
+  expect(() => validateBody('capture', 'res', { bytes: '', total: '1', next: '1' })).not.toThrow();
+});

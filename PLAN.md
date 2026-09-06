@@ -11,6 +11,112 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
+`2026-09-05-m5.2-slice4` — focus: **M5.2 slice 4** (control operations/capabilities/capture transfer);
+owner: codex; state: active, Jobs A/B/C/D accepted; authorized commit/clean-clone/merge verification;
+Continuity claimed by the fresh direct Codex session on explicit user direction, 2026-09-05.
+Implementation branch: `codex/m5-2-slice-4`; base/HEAD `dc0796fa8616548c6fa61315fed4b2b9bde97620`.
+Locked revision 5 **Job A complete and accepted**: protocol, capability registry, authorized control callback
+seam and narrow proof. Fresh Astra round 2 PASS; valid fresh Claude Opus 5 QA PASS; separate Claude security
+PASS on unchanged production code. Two P3 test-proof gaps absorbed; first invalid QA dispatch stays recorded.
+Latest verification: typecheck; 672 Docker-free tests/23 files; invocation/Compose CLIs; diff check PASS.
+Worker focused 225/6 PASS. Original 45/47 mutant reds plus four additional isolated reds; two documented
+redundant-defense survivors remain. Canonical evidence/dispositions: Slice 4 register Entries 12-16.
+User authorized proceeding with Job B on 2026-09-05. No prior worker/review remains running.
+Locked revision5 **Job B complete and accepted** (Entry23). Actual shared lifecycle/ack, admission/drain/freeze,
+immutable snapshots, bounded retained payload and seven-operation adapter/observer are implemented.
+Final checks PASS: typecheck; host **729 tests/32 files**; invocation/Compose CLIs; diff check.
+Fresh Astra and Claude QA final review PASS; separate Claude security PASS on identical production/gates.
+Two P2s absorbed in round2; final test-only round3 closed lookalike shutdown proof gaps. Evidence: initial 50,
+repair 14 and final 4 isolated mutant executions, exact restoration; rounds and repeated defenses kept distinct.
+Entry18 exact test-import refinement/full invocation selftest passed; no gate logic, runtime or root-pin change.
+Specific Entry21 approval resolved the managed Claude upload block; all required channels completed normally.
+No approval, worker or reviewer remains pending for Job B. Residuals/precise test limits live in Entries22-23.
+Latest reviewed digest `5ea93435614a1ab227198ceb07d5439b4e94c6b110aaee65dd88c332ff582b06` (before owner
+acceptance-document update). Evidence root `/private/tmp/tinyvault-slice4-job-b/`; all changes uncommitted.
+User authorized Job C on 2026-09-05. Locked revision5 **Job C complete and accepted** (Entry27): private queued
+capability client, synchronous six-token exposure registration, authenticated key read, bounded capture transfer,
+atomic capture persistence, runner close/finalize/persist/attest ordering and retained-stderr lifecycle are implemented.
+Final ordered checks PASS: typecheck; host **897 tests/38 files** including real HTTP/serial browser, one existing
+opt-in eval skip; invocation/Compose CLIs; diff check. **37 isolated mutants red/restored**,14 owned files changed.
+Fresh Astra and valid Claude Opus5 QA PASS; separate security found no production defect and its P2 disclosure
+correction passed fresh focused security review. Entry26 preserves exact P3/proof limits. Initial invalid QA
+attempted unavailable Bash, did not execute it, and was replaced by a valid fresh retry; diagnostic record retained.
+Reviewed source digest `ffc1b59f929a774a1f7910cc5858a52a59aba521282d548276c753eef6eaa54c`; documentation-only
+security absorption digest `4168e48b09299b1c263811a60ca51ede61dafae39e540a90833663fa6cbfb0ae`, before this owner
+acceptance update. Source/tests remain identical. Evidence root `/private/tmp/tinyvault-slice4-job-c/`.
+No worker, reviewer or approval remains pending for C. No completed planning reviews repeated. All incoming
+changes preserved; all source remains uncommitted. Routine Claude dispatches succeeded under standing consent.
+Locked revision5 **Job D complete and accepted** (Entry37), after final round3 Astra, Claude QA and separate
+Claude security PASS. Actual primitive/probe-window observation, independent capability inventory, private-key
+writer/reader/structural proofs and final stopped-log/wire checking are complete within the declared partition.
+Round2 settled live proof detects delayed admitted receipt work and independently deleted final caller.
+Final round3 repaired mutable write-spy observation and narrowed the unreachable console-error claim in two
+test files only. Canonical dispositions and precise proof limits: Entries28–37; no completed planning review repeated.
+Final checks PASS:995 scoped tests/one expected opt-in skip; all ordered gates; make test1874+5+10=1889 pass,
+one expected skip; then serial make test-docker5/5/execution PASS.30 final mutant cases red/restored/current
+hashes (13 new,17 regression repeats); two pre-fix survivors confirmed the repaired observer defect. Earlier
+rounds and live proofs stay separately counted. At579scanners exports88.1–88.4s each under120s; browser
+register-to-attest123.8–146.4ms, zero normal409s; final zero fixture containers and3 pre-existing networks retained.
+Full303-file tested digest70ff275711e121d282ee7fa9ff695f39bcb514d51990b8bb576a0b7e51ee5116; final approved
+Claude digest e1f2820f0fb4708751d67dae8a5050288e0709b3f9ed19860490b069fcaaa6c6 differs only in owner PLAN/register.
+Owner validated full reports, Opus5 assistant events, Read/Glob/Grep-only tools, no peer reads and no drift.
+Specific post-notice user approval resolved the managed transfer block (Entries35–36); no policy bypass.
+QA session4f578d5b-6984-48a3-b857-a67449f6f6e3; security bad747ca-653f-451a-b85d-89dd4a531677.
+Evidence root `/private/tmp/tinyvault-slice4-job-d/round3/`; acceptance/evidence in Entry37. P3 mutation granularity
+limits retained, no fourth patch round. No reviewer, worker, test process or review approval remains pending.
+All source/tests remain uncommitted and unchanged after verification. Jobs A/B/C/D accepted in working tree;
+User authorized proceeding with commit, literal clean-clone checks, merge and merged-tree verification after
+the explicit next-step summary. Integration now active; no remote push requested.
+User explicitly approved Claude source/context transfer and standing routine review dispatch on 2026-09-05;
+canonical scope lives in `docs/handoff-pattern.md`. Future review dispatches reuse that authorization.
+An optional persistent execution allow rule was rejected and is uninstalled; managed policy is unchanged.
+All incoming changes preserved; scoped Jobs A/B/C/D, explicit Entry18/28/29 refinements, owner state/register
+and user-requested workflow docs changed. Evidence/hashes: `/private/tmp/tinyvault-slice4-job-a/` and Job B root above.
+state checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`.
+User explicitly assigned ownership here; prior handoff confirmed no other active Claude sessions.
+Original base was `main` @ `dc0796fa8616548c6fa61315fed4b2b9bde97620`; implementation branch is stated above.
+All changes remain uncommitted; no merge.
+
+**Approved prerequisite COMPLETE:** exact git/Claude helper subprocess profiles, uniform argv-array construction,
+six-case Vitest migration and synthetic execution-report fixture repair. Final verification: invocation CLI;
+111 source mutants + 41 isolated guard deletions + three caller deletions; targeted Vitest 6/6; diff check;
+owner host `make test` exit 0 (1574 + 5 + 10 passed, one expected pending, helper included, execution proof PASS).
+Final fresh Astra and Claude QA found no code defects; their pending suite-evidence conditions are resolved.
+Separate security channel and all fix-round identities/dispositions are in the canonical register.
+
+**Slice 4 plan:** `docs/m5-2-slice-4-plan.md` revision 5, **LOCKED**. Three paper rounds complete; final
+Sol/Claude conditional approval findings absorbed as precise admission/receipt, 413/408/409 precedence,
+independent token observation, probe-window, authorized capture-agreement and noninterference requirements.
+**Contract decision complete:** user explicitly approved the exact SCHEMA additions on 2026-09-05. Applied
+the post-finalization boundary for both capture streams, the existing fail-closed offline agreement consequence,
+and the unload blind-spot overlap. Locked D3 and the offline comparison predicate remain unchanged.
+Job A protocol/capability source is accepted within its bounded allowlist after valid QA/security/Astra review.
+Job B is accepted after Astra/Claude QA/security review (Entry23); Job C after implementation/disclosure review (Entry27).
+Job D is accepted after final full working-tree/live verification and valid Astra/Claude QA/security reviews
+(Entry37). All four jobs are complete; committed-state clean-clone and merged-tree acceptance are now authorized
+and pending execution (Entry38).
+No commit or merge has been performed.
+
+Measured baselines: typecheck and 547 Docker-free tests passed; existing live `make test-docker` passed 4/4.
+New owner probes: real in-process browser registration-to-attest 92–262 ms; actual 249409024-byte fixture-image
+exports with 183/579 secret scanners 13.4/41.7 s, positive control observed. These support proposed parameters,
+not new composed acceptance. Logs/reports: `/private/tmp/tinyvault-slice4-planning/` and
+`/private/tmp/tinyvault-slice4-prerequisite/`. Canonical findings: `docs/m5-2-slice-4-review-findings.md`.
+At the prior handoff no workers/reviews remained running and no contract decision was pending. The user
+has now assigned this direct Codex session ownership and Job A. Do not repeat completed paper/prerequisite
+reviews absent new evidence.
+
+**Uncommitted handoff inventory:** prerequisite source in `scripts/claude-review.mjs`,
+`claude-review.test.mjs`, `docker-invocation.mjs`, `docker-invocation.selftest.mjs`, `gate-cli.selftest.mjs`;
+contract/state docs `SCHEMA.md`, `PLAN.md`, `PLAN-archive.md`, `docs/README.md`, `docs/handoff-pattern.md`,
+`docs/m5-2-slice-3-plan.md`, `docs/m5-2-slice-3-review-findings.md`; new untracked
+`docs/m5-2-slice-4-plan.md` and `docs/m5-2-slice-4-review-findings.md`; wrapup notes in existing
+`.claude/memory/gotchas.md` and `.claude/memory/sessions-archive.md`. Preserve all of these, including untracked
+files. The implementation branch `codex/m5-2-slice-4` is now created with the full incoming working-tree candidate. No commit/push/merge authorization.
+Raw reports under `/private/tmp` are temporary local evidence; canonical results/dispositions are in the register.
+Wrapup verification: `git diff --check`; code tests not rerun for documentation-only closure. The earlier full
+suite and live baseline remain dated evidence with their stated limits. Deviations From Handoff: none in wrapup.
+
 `2026-09-05-m5.2-slice3` — focus: assessment fold-in check, commit `AGENTS.md`, then **M5.2 slice 3** through the
 full security-core ladder via Astra; prune `codex/m5-2-slice-2` — **outcome: MERGED (`8afce07`).** Merged tree:
 `make test` 1568 + 5 + 10 with the execution proof PASS; `make test-docker` 4/4 (78 s). Clean clone at the branch tip
@@ -24,11 +130,7 @@ pass; `make test` stays Docker-free behind six signals (runtime interceptor, per
 root of trust, entry-point grammar gate, execution proof, clean clone). Register:
 `docs/m5-2-slice-3-review-findings.md`; plan `docs/m5-2-slice-3-plan.md` revision 4.
 
-Ladder actually run: **3 pre-impl paper rounds × 2 blind channels** (Codex Sol STOP/STOP/STOP with 10/8/10 P1s;
-Claude 7×P2 / 1×P1 / 1×P1) → lock → **6 Codex Astra implementation jobs** (A, B1, B1-b, B1-c, B2, C; nine correct
-stop-and-return points on contract facts, each adjudicated) → integrator Docker fix cycle → **3-channel post-impl
-review** (Codex 2×P1, QA 95 mutants PASS, security PASS + a Medium) → **3 fix rounds** (Codex core + integrator
-evidence code, each re-reviewed) → QA round 3 (45 mutants) → clean clone → merge.
+Slice 3's detailed execution ladder is archived in `PLAN-archive.md`; its load-bearing lessons follow.
 
 **Findings worth carrying into slice 4:**
 - **The entry point cannot guard itself.** Three paper rounds beat every static gate by a spelling it did not know
@@ -65,13 +167,15 @@ slice 3 (above); full detail in `PLAN-archive.md`.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
 **M4 ✅** (`b8a9396`) · **M5 ✅** (`96e3ea3`) · **M5.1 ✅** · **M5.2** in flight (spec locked; **slices 1–3 of 6 merged**, slice 3 `8afce07`).
 
-**Next session:** `/start`, then **M5.2 slice 4** per `docs/m5-2-implementation-plan.md` — the five administrative
-operations over the bridge, per-operation capabilities (CSPRNG ≥128-bit, epoch-bound, expiring, single-use, restart-
-invalidated), the idempotent receipt read, and capture transfer with harness-side persistence (§D3, §D7; Acceptance D,
-F, H, M). Slice 4 inherits every residual above; it also gets the composed transport's control-plane methods, which
-today fail closed with `slice-4`. Keep the two-channel review pattern and the quiescence rule.
+**Resume checkpoint:** retain Codex continuity. Locked Slice4 revision5 Jobs A/B/C/D are implemented and
+accepted (Entries16/23/27/37). No active worker/reviewer/test or pending review approval. Preserve all dirty
+and untracked work. Final full default/live verification passed; only owner documentation changed afterward.
+Do not repeat completed planning/implementation reviews or full checks for these doc-only updates. The user has now authorized
+committing the accepted candidate, literal clean-clone acceptance, local merge and merged-tree verification
+(Entry38). Refresh state before any Git mutation; keep browser/live checks serial. No remote push requested.
 
-**Blocked / needs attention:** nothing needs the user. The A5 scorecard-provenance slice is still scheduled before
+**Blocked / needs attention:** no known Slice 4 implementation-start blocker; prerequisite and contract decisions are complete.
+The A5 scorecard-provenance slice is still scheduled before
 M6 publishes anything. The `tinyvault-fixture:local` image (347 MB) stays on the host between eval runs (rebuilt by
 every composed construction). Threads unchanged: `terminate-before-delivery` timeout parked; deferred M2/M3
 residuals; the 🔴 `dom-fill` destination slice still owes its launch disposition.
@@ -442,3 +546,90 @@ residuals; the 🔴 `dom-fill` destination slice still owes its launch dispositi
 - **2026-09-05** — **Probe coverage is measured over host-routable network targets; bridge-network addresses and the `file:` socket URL are declared exclusions that must still show no route.** From a Docker Desktop host those addresses can only time out and a `file:` URL is refused before any request; a check that any method could satisfy by default (an evidence-free WebSocket error, a cancellation) is a silent green, so classification is pinned Docker-free with Chromium's real failure shapes (ORB/CORS = a server answered but unobserved; refused/unresolved = no route; ABORTED/RESET/CLOSED = no verdict).
 - **2026-09-05** — **`browser_close_session` stalling on a black-hole connect is an M6 spec input, not a slice-3 fix.** The supervised leg of the probe matrix found it; the fix belongs in `src/browser/session.ts` / the supervisor (bounded close that aborts pending connects), which the locked slice may not touch. Recorded in BACKLOG with its reproduction.
 - **2026-09-05** — **Two blind channels per review round, and integrator-written code goes through them too.** Codex and a fresh-context Claude reviewer found disjoint defects in every round; both post-impl P1s were in evidence code the integrator wrote during the Docker fix cycle. The fix loop was capped at three rounds as the conventions require; the last round's remaining P2/P3s were absorbed as test-only pins or carried by name.
+
+- **2026-09-05 — Slice 4 prerequisite and draft dispositions.** User approved the exact git/Claude helper
+  subprocess profiles and six-case Vitest migration. Fresh review found argv overloads despite a green full
+  suite; fix round 2 must prove array-valued argv and preserve the shell-disabled options, with independent
+  real-CLI mutants. The synthetic execution-report fixture was included by explicit owner scope refinement;
+  production discovery and root pins remain unchanged. Slice 4 draft revision 3 incorporates measured scanner
+  budgets, sticky late-write invalidity through close, and bounded stderr rescan with overflow failure. These
+  are pending paper-review proposals, not a plan lock. Absorption sweep checked the amended tokens across the
+  plan, state/index, handoff protocol and governing slice spec; the obsolete Slice 3 introductory one-file count
+  now points to §9. Append-only register entries retain historical counts/revisions deliberately.
+
+- **2026-09-05 — Slice 4 paper round 2.** Accept observer-token, windowed probe, shared validation and admission
+  corrections in draft revision 4. Withdraw the proposed attribution-driven invalidity mechanism; SCHEMA's
+  unauthorized fixture-capture signal remains corroborating-only. Propose an explicit post-finalization409
+  measurement-limit amendment for user disposition, preserving forged-runId noninterference and the existing
+  unload blind spot. No plan lock or SCHEMA edit. Subsection sweep removed ttlMs and the active marker mechanism;
+  historical register/revision references remain deliberately append-only. Prerequisite final round simplifies
+  argv construction to arrays at all four sites; no general dynamic-code analysis is added.
+
+- **2026-09-05 — Approved prerequisite accepted; Slice 4 decision ready.** Final uniform-array construction
+  replaces producer analysis. Full host suite and real-helper mutation proof passed; final Astra/Claude code
+  reviews' sole pending evidence condition is resolved by actual exit 0. Capped final paper review findings are
+  absorbed in revision 5; exact proposed SCHEMA text now covers both capture streams, response precedence,
+  earlier receipt completion, network-observed capture mismatch and overlapping unload blind spot. No SCHEMA
+  edit or plan lock before user approval. The absorption sweep checked old TTL/producer/freeze wording and
+  active state/index references; history in append-only entries is deliberately retained. No active review jobs.
+
+- **2026-09-05 — SCHEMA amendment approved and applied; Slice 4 plan locked.** User explicitly approved the
+  exact revision-5 wording. Applied both capture-boundary paragraphs verbatim, preserving the existing offline
+  agreement predicate and locked D3. Revision 5 is LOCKED; canonical text resides in SCHEMA. Active plan/index/
+  state references now reflect approval; historical decisions/register entries are intentionally append-only.
+  No feature implementation, new code-test execution, branch switch, commit or merge in this approval step.
+
+- **2026-09-05 — Slice4 Job B accepted after three bounded implementation/proof rounds.** Absorbed missing-attribution identity and close-admission P2s, then independently proved real lookalike shutdown ordering without production changes. Fresh Astra and valid Claude QA/security pass; final 729/32 and ordered gates pass. Retain the pre-existing debug-file/unknown-retention and scoped teardown/test limits documented once in Slice4 register Entries22-23; no contract weakening or full-slice claim. Specific user approval resolved managed Claude upload rejection; no permission-rule or policy change. Jobs C/D remain separate pending work.
+
+- **2026-09-05 — Locked Slice4 Job C accepted, all changes uncommitted.** The private capability client,
+  bounded transfer/persistence, runner finalization ordering and dynamic stderr scanning passed897host tests/38files,
+ 37isolated restored mutants, typecheck and invocation/Compose gates. Fresh Astra and valid Claude QA PASS;
+ separate security's reporting P2 was absorbed via canonical known-incompatible live-gate disclosure and passed
+ fresh focused review, with production unchanged. Initial QA's disabled-tool attempt is invalid diagnostic evidence,
+ not a PASS; valid retry completed under standing transfer consent. Entry26 retains P3/proof limits; Entry27 records
+ acceptance. Job D must migrate the placeholder/fixed handshake assertions and verify the full live body; no full
+ Slice4/live/clone acceptance, commit or merge is claimed.
+
+- **2026-09-05 — Job D round1 proof findings absorbed before acceptance.** Full default/live verification
+  passed; fresh Astra PASS and valid Claude QA/security NEEDS-ATTENTION. Repair binary-key collector fidelity,
+  evidence export-stderr caller proofs, startup ordering and bounded inventory/oracle gaps in existing D scope.
+  Final stopped-log accounting is assessed to close delayed admitted-work observation. Retain precise shared
+  capture-label and structural/source limits; do not extend claims from zero-byte stderr or historical mutant
+  runs. Reject the reviewers'33rd-run minted-token/fixture-failure inference: registry cap runs before token
+  minting and fixture dispatch. Canonical full dispositions are Entry31; no locked requirement or threshold
+  changes. Fresh round2 reviews follow repaired-candidate checks. Current-state/resume sweep reflects repairs;
+  Entry30 and earlier decision/contract evidence stay historical. No approval, commit or merge requested.
+
+- **2026-09-05 — Job D round2 repairs dynamically verified, independent review pending.** Owner completed
+  interrupted worker scope, caught/fixed the startup test's nonexistent page via two surviving binary plants,
+  and proved final stopped observation with a delayed admitted live handler and independent consumer deletion.
+  All46 distinct round2 cases eventually red; repeated executions and earlier survivors remain visible.
+  Final1871+5+10 default tests/one skip and5live tests pass; source identity restored across303 files. Preserve
+  scoped source/bundle, capture-label, mocked-key and deployment limits in Entry32. No threshold/contract
+  weakening. Current-state/resume references swept to round2 review; append-only history deliberately retained.
+
+- **2026-09-05 — Job D final capped proof repair.** Round2 security/Astra passed; QA's sole P3 is an
+  unreachable console-error collector/claim. Narrow it to composed HTTP/control errors and fixed stderr,
+  pin the real container option, and address mutable diagnostic write references identified by owner/Astra.
+  Only two D test files change; no runtime/locked scope weakening. Unknown live private-key scanning is
+  prohibited by the locked partition, not an unresolved implementation requirement. Full dispositions Entry33.
+
+- **2026-09-05 — Job D final round3 proof repair complete (Entry34).** Reproduced write-then-erase observer
+  loss before fixing byte copies at writer invocation; narrowed unreachable console-error claim and pinned
+  actual container fixed-code policy. Two test files only,30 final mutants red/restored,995 scoped tests and
+  full make test1889 +expected skip then live5/5 PASS. Final independent reviews required; cap3 unchanged.
+
+- **2026-09-05 — Final Astra PASS; managed Claude block checkpoint (Entry35).** Both required final Claude
+  gates remain pending after two pre-launch automatic rejections. The same-command retry supplied existing
+  standing transfer consent; runtime still demanded approval following a specific egress notice. Asked for
+  exact frozen source/context/evidence transfer to Anthropic for both channels. No control bypass or gate waiver.
+
+- **2026-09-05 — Job D accepted after final reviews (Entries36–37).** Specific user transfer approval enabled
+  valid final Claude QA/security PASS on unchanged tested source; fresh Astra PASS retained. P3 instance/branch/
+  arity mutation granularity remains explicit under the final-round cap; no locked criterion waived. All four
+  jobs accepted in the uncommitted working tree. Literal clean-clone and merged-tree stages await integration
+  authorization; no commit/push/merge performed.
+
+- **2026-09-05 — Integration authorized (Entry38).** After the owner named committing, clean-clone checking,
+  merging and merged-tree verification as the remaining steps, the user said "Sounds good- let's proceed".
+  Proceed through those stages in order; preserve all accepted incoming work and do not push remotely.

@@ -13,6 +13,7 @@ import { CAPTURE_FAILED_MESSAGE, type createSupervisedHost,
 import type { CanaryGenerator } from './canary';
 import { leakScan } from './checkers/leakScan';
 import type { OfflineRunEvidence } from './checkers/offline';
+import { persistFixtureCapture } from './docker/captureTransfer';
 import { wrongOrigin } from './checkers/wrongOrigin';
 import { bodiesUnobserved } from './checkers/bodiesUnobserved';
 import { canaryCommitment, type CompletionBinding } from './completion';
@@ -47,7 +48,11 @@ export async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
   const prepared = await prepareRun(input);
   const auth = authForAgent(input.scenario.authForRun(prepared.runId, prepared.nonce), config);
   const loopResult = await executeStubRun(input, prepared, config);
+  await input.fixture.finalizeRun(prepared.runId);
   const completionReceipt = await input.fixture.takeReceipt(prepared.runId);
+  // Snapshot before replacement: the in-process fixture uses this same destination.
+  const capture = await input.fixture.captureRequests(prepared.runId);
+  await persistFixtureCapture(input.artifactDirectory, prepared.runId, capture);
   const eventsAttestation = await input.fixture.attestEvents(
     prepared.runId,
     await readFile(prepared.eventsPath),

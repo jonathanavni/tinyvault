@@ -4,7 +4,7 @@ import type { KeyObject } from 'node:crypto';
 import type { Readable, Writable } from 'node:stream';
 import { FrameDecoder, encodeFrame } from './frames';
 import {
-  decodeBase64url, encodeBase64url, importAnnouncedKey, validateBody, verifyHelloMac, type HelloRequest,
+  canonicalInteger, decodeBase64url, encodeBase64url, importAnnouncedKey, validateBody, verifyHelloMac, type HelloRequest,
 } from './handshake';
 import { BridgeError, errorCode, type Body, type BridgeCode, type BridgeOp, type Frame } from './protocol';
 
@@ -31,6 +31,8 @@ export class BridgeSession {
   #settlingResponse = false;
   #queue: Waiter[] = [];
   #secret: Buffer | undefined;
+  #established: { epoch: string; fixtureId: string; publicKey: string } | undefined;
+  readonly #captureTotals = new Map<string, string>();
   readonly #decoder: FrameDecoder;
   readonly #write: Writable['write'];
   readonly #clock: BridgeClock;
@@ -58,6 +60,7 @@ export class BridgeSession {
       try {
         validateBody(op, 'req', body);
         const snapshot = JSON.parse(JSON.stringify(body)) as Body;
+        validateBody(op, 'req', snapshot);
         this.#queue.push({ op, body: snapshot, resolve, reject });
         this.#pump();
       } catch (error) {
@@ -91,6 +94,12 @@ export class BridgeSession {
       if (pending.op === 'bootstrap' && !this.#secret) {
         throw new BridgeError('protocol-order');
       }
+      if (pending.op !== 'bootstrap' && pending.op !== 'hello') {
+        if (!this.#established) throw new BridgeError('protocol-order');
+        if (pending.body.epoch !== this.#established.epoch || pending.body.fixtureId !== this.#established.fixtureId) {
+          throw new BridgeError('capability-refused');
+        }
+      }
       pending.timer = this.#clock.setTimeout(() => this.close('bridge-timeout'), this.#timeoutMs);
       this.#write(encodeFrame({ v: 1, kind: 'req', id: pending.id, op: pending.op, body: pending.body }),
         (error) => { if (error) this.close(); });
@@ -111,6 +120,18 @@ export class BridgeSession {
       if (!frame.ok) throw new BridgeError(frame.code);
       validateBody(frame.op, 'res', frame.body);
       if (frame.op === 'hello') this.#verifyHello(pending.body, frame.body);
+      if (frame.op === 'key' && frame.body.publicKey !== this.#established?.publicKey) {
+        throw new BridgeError('key-mismatch');
+      }
+      if (frame.op === 'capture') {
+        const offset = canonicalInteger(pending.body.offset as string);
+        const bytes = decodeBase64url(frame.body.bytes as string, undefined, 'body-shape');
+        if (canonicalInteger(frame.body.next as string) !== offset + bytes.length) throw new BridgeError('body-shape');
+        const index = `${pending.body.runId}:${pending.body.kind}`;
+        const total = frame.body.total as string;
+        if (this.#captureTotals.has(index) && this.#captureTotals.get(index) !== total) throw new BridgeError('body-shape');
+        this.#captureTotals.set(index, total);
+      }
       this.#completedHighWater = frame.id;
       this.#clock.clearTimeout(pending.timer);
       this.#complete(pending, frame.body);
@@ -135,6 +156,8 @@ export class BridgeSession {
       containerId: expected.containerId as string,
       publicKeyDer: decodeBase64url(body.publicKey as string, undefined, 'key-shape'),
     }, decodeBase64url(body.mac as string, 32, 'mac-shape'));
+    this.#established = { epoch: expected.epoch as string, fixtureId: expected.fixtureId as string,
+      publicKey: body.publicKey as string };
   }
   close(code: BridgeCode = 'bridge-closed'): void {
     if (this.#closed) return;
@@ -147,6 +170,8 @@ export class BridgeSession {
     this.#decoder.stop();
     this.#secret?.fill(0);
     this.#secret = undefined;
+    this.#established = undefined;
+    this.#captureTotals.clear();
     if (pending) this.#clock.clearTimeout(pending.timer);
     try { this.#kill(); } catch { /* The terminal state survives a failing injected cleanup. */ }
   }

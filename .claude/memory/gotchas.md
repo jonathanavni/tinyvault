@@ -310,3 +310,15 @@ Example:
   docs, so nothing broke, but a code edit at that moment would have tested a tree that was not the one committed.
   One writer per checkout applies to the integrator too. (2026-09-05)
 
+
+- **Subprocess argv must be an array at the call, not merely look array-valued through a producer.** Node's
+  child_process overload can promote a non-array second argument to options and ignore the reviewed third
+  argument. Call-level spreads can also shift the effective slots. The review helper now constructs
+  `[...claudeArgs()]`; its profile uniformly pins inline arrays. This closes the options-overload dependency
+  even after producer rebinding, without claiming to constrain argv contents or PATH. Preserve the real-helper
+  wrapper present/deleted/restored proof and the isolated CLI mutants. Canonical policy: Slice 3 plan §9;
+  evidence: Slice 4 register Entries 7–9. (2026-09-05)
+- **Temporary copies of the review helper need canonical entry paths on macOS.** Node resolves import.meta.url
+  through `/var` symlinks; a noncanonical argv entry can miss the helper's direct-execution check and silently
+  skip the intended probe. `claude-review.test.mjs` uses `realpathSync` for its temporary helper entry and proves
+  fake-CLI launch when the wrapper is deleted. Exit status alone was insufficient. (2026-09-05)

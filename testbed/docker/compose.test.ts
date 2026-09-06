@@ -124,8 +124,8 @@ it('bounds each teardown command without letting an aggregate timeout race scans
   const close = p.closer.close();
   const assertion = expect(close).resolves.toBeUndefined();
   await vi.advanceTimersByTimeAsync(180000); await assertion;
-  expect(h.spawns.map(kindOf).slice(-9)).toEqual(['compose-stop', 'image-history', 'logs', 'export', 'logs', 'export',
-    'logs', 'export', 'compose-down']);
+  expect(h.spawns.map(kindOf).slice(-12)).toEqual(['compose-stop', 'image-history', 'inspect', 'logs', 'export', 'inspect', 'logs', 'export',
+    'inspect', 'logs', 'export', 'compose-down']);
 });
 it('a hanging export is killed on its own bound and remaining scans precede down', async () => {
   const h = track(await fakeProject(vi.fn));

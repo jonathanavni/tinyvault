@@ -27,7 +27,7 @@ export const CONSTRUCTION_CODES = [
   'privileged', 'namespace-shared', 'capability-added', 'device-added', 'bind-present', 'mount-present',
   'network-membership', 'port-mismatch', 'exec-spawn', 'handshake-rejected', 'mac-invalid',
   'bridge-protocol', 'bridge-closed', 'origin-unreachable', 'secret-exposed', 'scan-failed',
-  'history-parse', 'scan-control-missing',
+  'history-parse', 'scan-control-missing', 'capture-write',
   'compose-stop', 'compose-down', 'handle-timeout',
 ] as const;
 export type ConstructionCode = typeof CONSTRUCTION_CODES[number];

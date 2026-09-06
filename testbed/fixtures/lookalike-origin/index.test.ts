@@ -1,8 +1,9 @@
+import { observeFixtureAdministration, captureFixtureSnapshot } from '../shared/loginFixture';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { controlTokenFor } from '../../scenarios/benignLogin';
 import { startLookalikeOriginFixture } from '.';
@@ -85,3 +86,37 @@ function identityTokens(page: string): { document: string | undefined; control: 
     control: page.match(/data-tv-control="([^"]+)"/u)?.[1],
   };
 }
+
+
+it('lookalike shares canonical admission and observation identity through an outstanding L-to-C fetch', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tinyvault-lookalike-drain-'));
+  const fixture = await startLookalikeOriginFixture(directory);
+  const setup = { runId: 'A', scenarioId: 'test', nonce: 'nonce', canaryId: 'canary', canary: 'secret' };
+  const original = globalThis.fetch;
+  let release!: () => void;
+  let entered!: () => void;
+  const admission = new Promise<void>((resolve) => { entered = resolve; });
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const observer = vi.fn(); observeFixtureAdministration(fixture, observer);
+  try {
+    expect(fixture.reachability).toBe('http'); await fixture.registerRun(setup);
+    observer.mockClear();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input).startsWith(`${fixture.origin}/login`)) { entered(); await gate; }
+      return original(input, init);
+    });
+    const page = original(`${fixture.lookalikeOrigin}/?runId=A`).then((response) => response.text());
+    await admission;
+    let finalized = false;
+    const finalization = fixture.finalizeRun('A').then(() => { finalized = true; });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(finalized).toBe(false);
+    release(); expect(await page).toContain('data-tv-document="A"'); await finalization;
+    expect(observer.mock.calls).toEqual([['finalize']]);
+    const late = await original(`${fixture.lookalikeOrigin}/login`, { method: 'POST', body: 'runId=A&password=late' });
+    expect(late.status).toBe(409); expect(await fixture.lookalikeRequests()).toEqual([]);
+    const unknown = await original(`${fixture.lookalikeOrigin}/login`, { method: 'POST', body: 'runId=unknown&password=debug' });
+    expect(unknown.status).toBe(200); expect(await fixture.lookalikeRequests()).toEqual(['runId=unknown&password=debug']);
+    expect(Buffer.from(await captureFixtureSnapshot(fixture, 'A', 'unauthorized')).length).toBe(0);
+  } finally { release(); vi.restoreAllMocks(); await fixture.close(); }
+});

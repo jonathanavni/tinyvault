@@ -139,6 +139,18 @@ includes and hashes the versioned [security methodology](../templates/claude-sec
 a dedicated static security review, not a claim that `/security-review` or an external scanner ran.
 Explicitly mandated auditors and dynamic tests remain separate gates.
 
+**Standing user authorization — 2026-09-05.** The user explicitly approved sending TinyVault review
+source/context to Claude and asked that routine dispatch no longer depend on repeated approval. Within an
+already authorized TinyVault task, the continuity owner may choose and run the required read-only Claude
+plan, QA, security and fix-absorption reviews through `scripts/claude-review.mjs`, using the existing Claude
+login. This includes transmitting the scoped repository source/diff, project guidance, contracts and relevant
+verification evidence to Anthropic's Claude service. Do not ask the user to approve that same transfer again.
+Keep the helper's pinned model, read-only tools, safe mode, external report location and candidate-freeze checks.
+This authorization covers the review workflow; it does not authorize unrelated destinations, real credentials,
+publication, commits, pushes, merges or changes to managed sandbox/approval policy. Runtime approval controls
+remain authoritative: if a dispatch is still rejected, report the specific rejection and the existing standing
+authorization rather than bypassing the control or presenting another consent request as a project requirement.
+
 Model identity is checked against CLI initialization and every assistant event. CLI auxiliary model usage
 may appear in usage metadata and is preserved; it is not relabeled as reviewer output. Missing or malformed
 results, denied permissions, wrong reviewer models/tools, timeouts, or candidate drift fail dispatch.
@@ -150,7 +162,7 @@ command, and evidence location. Do not resume the author's conversation as the i
 synthetic origin-prefix bug. The report identified the bug, reproduced a randomly generated file-read
 marker, returned NEEDS-ATTENTION (exit 2), and left the candidate and startup-hook sentinel unchanged.
 Raw evidence: `/private/tmp/tinyvault-opus-live-vtzlsp54/security-report` (temporary local artifacts).
-`node --test scripts/claude-review.test.mjs` covers result/model/tool validation, process failures,
+`npx vitest run scripts/claude-review.test.mjs` covers result/model/tool validation, process failures,
 timeouts, candidate drift, and output-location checks without making model calls. This validates the
 dispatch path, not TinyVault's security or the quality of every reviewer conclusion. The standard skill
 validator could not run because PyYAML is absent; the skill's YAML was parsed and checked with Ruby Psych.

@@ -1,3 +1,4 @@
+import { BridgeError, MAX_CAPTURE_BYTES, type CaptureKind } from '../../docker/protocol';
 import { bindServer, type FixtureListenOptions } from './bindServer';
 import { signEventsDigest } from './eventsDigest';
 export { verifyEventsDigest } from './eventsDigest';
@@ -71,6 +72,8 @@ export async function startLoginFixture(
     issued: new Set(),
     unauthorizedRequests: new Map(),
     captureDirectory,
+    lifecycle: new Map(), retainedBytes: 0, sequence: 0, pending: new Map(), observers: new Set(),
+    publicKey, closing: false, closed: false,
   };
   const server = createFixtureServer(state, listenOptions);
   const reachability = await bindFixtureServer(server, state, listenOptions);
@@ -84,7 +87,7 @@ function createInProcessTransport(
   completionVerifier: CompletionVerifier,
   reachability: FixtureReachability,
 ): FixtureTransport {
-  return {
+  const transport: FixtureTransport = {
     origin: state.origin,
     architecture: 'in-process',
     reachability,
@@ -93,18 +96,22 @@ function createInProcessTransport(
     getLoginPage: (runId) => getFixtureLoginPage(state, reachability, runId),
     submitLogin: (body) => submitFixtureLogin(state, reachability, body),
     takeReceipt: async (runId) => takeFixtureReceipt(state, runId),
+    finalizeRun: (runId) => finalizeFixtureRun(state, runId),
+    acknowledgeReceipt: async (runId) => acknowledgeFixtureReceipt(state, runId),
     verifyCompletion: (receipt, expected, nowMs) =>
       completionVerifier.verify(receipt, expected, nowMs),
     attestEvents: async (runId, eventsBytes) => attestFixtureEvents(state, runId, eventsBytes),
-    captureRequests: (runId) => readCaptureRequests(state.captureDirectory, runId),
+    captureRequests: async (runId) => readCaptureSnapshot(state, runId, 'requests'),
     unauthorizedRequests: async (runId) => fixtureUnauthorizedRequests(state, runId),
-    close: () => closeServer(server),
+    close: () => closeFixture(server, state),
   };
+  fixtureStates.set(transport, state);
+  return transport;
 }
 
 function createFixtureServer(state: RequestState, options: FixtureListenOptions): ReturnType<typeof createServer> {
   return createServer((request, response) => {
-    void handleRequest(request, response, state).catch((error: unknown) => {
+    void trackRequest(state, (admission) => handleRequest(request, response, state, admission)).catch((error: unknown) => {
       response.statusCode = 500;
       response.end('fixture error');
       if (options.onListenPermissionError === 'fail') process.stderr.write('fixture-error\n');
@@ -127,14 +134,31 @@ async function bindFixtureServer(
 }
 
 async function registerFixtureRun(state: RequestState, setup: FixtureRunSetup): Promise<void> {
-  assertRunId(setup.runId);
-  if (state.runs.has(setup.runId)) throw new Error(`Duplicate fixture run: ${setup.runId}`);
-  state.runs.set(setup.runId, setup);
-  await Promise.all([
-    writeFile(capturePath(state.captureDirectory, setup.runId), ''),
-    writeFile(unauthorizedCapturePath(state.captureDirectory, setup.runId), ''),
-  ]);
-  state.unauthorizedRequests.set(setup.runId, []);
+  observe(state, 'register');
+  assertHealthy(state);
+  const copy = Object.freeze({ scenarioId: setup.scenarioId, runId: setup.runId, nonce: setup.nonce,
+    canaryId: setup.canaryId, canary: setup.canary });
+  assertRunId(copy.runId);
+  if (state.runs.has(copy.runId)) throw new BridgeError('run-state');
+  if (state.runs.size >= 32) throw storageFailure(state);
+  for (const field of ['scenarioId', 'nonce', 'canaryId', 'canary'] as const) {
+    const value = copy[field];
+    const maximum = field === 'scenarioId' || field === 'canaryId' ? 128 : 4096;
+    if (typeof value !== 'string' || value.length === 0 || Buffer.byteLength(value) > maximum
+      || [...value].some((character) => { const cp = character.codePointAt(0)!; return cp >= 0xd800 && cp <= 0xdfff; })) {
+      throw new BridgeError('run-state');
+    }
+  }
+  state.runs.set(copy.runId, copy);
+  state.lifecycle.set(copy.runId, { phase: 'active', highWater: Infinity,
+    requests: newCaptureStream(), unauthorized: newCaptureStream(), attested: false, acknowledged: false });
+  state.unauthorizedRequests.set(copy.runId, []);
+  try {
+    await Promise.all([
+      writeFile(capturePath(state.captureDirectory, copy.runId), ''),
+      writeFile(unauthorizedCapturePath(state.captureDirectory, copy.runId), ''),
+    ]);
+  } catch { throw storageFailure(state); }
 }
 
 function getFixtureLoginPage(
@@ -154,7 +178,16 @@ async function submitFixtureLogin(
   reachability: FixtureReachability,
   body: string,
 ): Promise<number> {
-  if (reachability === 'no-socket') return processLoginBody(body, state);
+  if (reachability === 'no-socket') return trackRequest(state, async (admission) => {
+    // Give an admitted caller the same asynchronous settling boundary as HTTP body parsing.
+    await Promise.resolve();
+    if (Buffer.byteLength(body) > 1024 * 1024) return 413;
+    const url = new URL('/login', state.origin);
+    if (!allowsWrite(state, url, body, admission)) return 409;
+    const status = await processLoginBody(body, state);
+    if (status === 400 || status === 401) await captureUnauthorizedRequest(state, url, body);
+    return status;
+  });
   const response = await fetch(`${state.origin}/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -165,33 +198,182 @@ async function submitFixtureLogin(
 }
 
 function takeFixtureReceipt(state: RequestState, runId: string): string | undefined {
-  const receipt = state.receipts.get(runId);
-  state.receipts.delete(runId);
-  return receipt;
+  observe(state, 'receipt');
+  registeredRun(state, runId);
+  return state.receipts.get(runId);
 }
 
-function attestFixtureEvents(
-  state: RequestState,
-  runId: string,
-  eventsBytes: Uint8Array,
-): string {
-  assertRunId(runId);
-  // These bytes belong to this REGISTERED run; completion is proven only by the receipt.
-  if (!state.runs.has(runId)) throw new Error(`Cannot attest unknown fixture run: ${runId}`);
+function acknowledgeFixtureReceipt(state: RequestState, runId: string): void {
+  observe(state, 'ack');
+  const run = finalizedRun(state, runId);
+  if (run.acknowledged) throw new BridgeError('run-state');
+  run.acknowledged = true;
+  state.receipts.delete(runId);
+}
+
+function attestFixtureEvents(state: RequestState, runId: string, eventsBytes: Uint8Array): string {
+  observe(state, 'attest');
+  const run = finalizedRun(state, runId);
+  if (run.attested) throw new BridgeError('run-state');
+  run.attested = true;
+  if (eventsBytes.byteLength > 128 * 1024) throw new BridgeError('control-limit');
   return signEventsDigest(runId, eventsBytes, state.signingKey);
 }
 
-async function readCaptureRequests(directory: string, runId: string): Promise<Uint8Array> {
-  assertRunId(runId);
-  return readFile(capturePath(directory, runId));
+function readCaptureSnapshot(state: RequestState, runId: string, kind: CaptureKind): Uint8Array {
+  observe(state, 'capture');
+  const run = finalizedRun(state, runId);
+  if (kind !== 'requests' && kind !== 'unauthorized') throw new BridgeError('run-state');
+  return Buffer.from(run[kind].snapshot!);
 }
 
-function fixtureUnauthorizedRequests(
-  state: RequestState,
-  runId: string,
-): readonly UnauthorizedRequest[] {
+function fixtureUnauthorizedRequests(state: RequestState, runId: string): readonly UnauthorizedRequest[] {
+  // Existing in-process corroborating/debug view. The control adapter reads finalized snapshots only.
+  observe(state, 'capture');
+  assertHealthy(state);
   assertRunId(runId);
-  return [...(state.unauthorizedRequests.get(runId) ?? [])];
+  const bucket = state.runs.has(runId) ? runId : runId === 'unregistered' ? UNKNOWN_RUN : runId;
+  return (state.unauthorizedRequests.get(bucket) ?? []).map((record) => ({ ...record }));
+}
+
+type CaptureStream = { bytes: number; chunks: Buffer[]; writes: Promise<void>; snapshot?: Buffer };
+type RunLifecycle = { phase: 'active' | 'finalizing' | 'finalized'; highWater: number;
+  requests: CaptureStream; unauthorized: CaptureStream; attested: boolean; acknowledged: boolean };
+export type FixtureAdministrativeOperation = 'register' | 'receipt' | 'capture' | 'attest' | 'key' | 'finalize' | 'ack';
+const UNKNOWN_RUN = Symbol('unregistered');
+const fixtureStates = new WeakMap<FixtureTransport, RequestState>();
+
+// Trusted harness instrumentation only: no secrets, callbacks, or state are returned on the transport.
+// Counters live at the shared primitives, so direct calls bypassing wire dispatch remain observable.
+export function observeFixtureAdministration(fixture: FixtureTransport,
+  observer: (operation: FixtureAdministrativeOperation) => void): () => void {
+  const state = stateFor(fixture);
+  state.observers.add(observer);
+  return () => { state.observers.delete(observer); };
+}
+// Trusted observation barrier: settles admitted data-plane work without changing run lifecycle.
+export async function settleFixtureObservation(fixture: FixtureTransport): Promise<void> {
+  const state = stateFor(fixture);
+  await drain(state, state.sequence);
+}
+export function shareFixtureIdentity(source: FixtureTransport, wrapper: FixtureTransport): void {
+  fixtureStates.set(wrapper, stateFor(source));
+}
+export async function readFixturePublicKey(fixture: FixtureTransport, runId: string): Promise<KeyObject> {
+  const state = stateFor(fixture);
+  observe(state, 'key');
+  registeredRun(state, runId);
+  return state.publicKey;
+}
+export async function captureFixtureSnapshot(fixture: FixtureTransport, runId: string,
+  kind: CaptureKind): Promise<Uint8Array> {
+  return readCaptureSnapshot(stateFor(fixture), runId, kind);
+}
+// The second lookalike server joins the same admission/drain boundary, including its L-to-C fetch.
+export function trackFixtureRequest<T>(fixture: FixtureTransport,
+  work: (admission: number) => Promise<T>): Promise<T> {
+  return trackRequest(stateFor(fixture), work);
+}
+export function fixtureAllowsWrite(fixture: FixtureTransport, url: URL, body: string, admission: number): boolean {
+  return allowsWrite(stateFor(fixture), url, body, admission);
+}
+export function fixtureStorageFailure(fixture: FixtureTransport): Error {
+  return storageFailure(stateFor(fixture));
+}
+function stateFor(fixture: FixtureTransport): RequestState {
+  const state = fixtureStates.get(fixture);
+  if (!state) throw new BridgeError('run-state');
+  return state;
+}
+function observe(state: RequestState, operation: FixtureAdministrativeOperation): void {
+  for (const observer of state.observers) observer(operation);
+}
+function assertHealthy(state: RequestState): void {
+  if (state.failure) throw state.failure;
+  if (state.closed) throw new BridgeError('run-state');
+}
+function storageFailure(state: RequestState): BridgeError {
+  return state.failure ??= new BridgeError('control-limit');
+}
+function registeredRun(state: RequestState, runId: string): RunLifecycle {
+  assertHealthy(state);
+  assertRunId(runId);
+  const run = state.lifecycle.get(runId);
+  if (!run) throw new BridgeError('run-state');
+  return run;
+}
+function finalizedRun(state: RequestState, runId: string): RunLifecycle {
+  const run = registeredRun(state, runId);
+  if (run.phase !== 'finalized') throw new BridgeError('run-state');
+  return run;
+}
+function newCaptureStream(): CaptureStream { return { bytes: 0, chunks: [], writes: Promise.resolve() }; }
+function trackRequest<T>(state: RequestState, work: (admission: number) => Promise<T>): Promise<T> {
+  if (state.closing) return Promise.reject(new BridgeError('run-state'));
+  const admission = ++state.sequence;
+  // Insert before calling work: even synchronous reentry must be included in the high-water mark.
+  let complete!: () => void;
+  const settled = new Promise<void>((resolve) => { complete = resolve; });
+  state.pending.set(admission, settled);
+  const result = Promise.resolve().then(() => { assertHealthy(state); return work(admission); });
+  return result.finally(() => { state.pending.delete(admission); complete(); });
+}
+function allowsWrite(state: RequestState, url: URL, body: string, admission: number): boolean {
+  assertHealthy(state);
+  const bucket = requestRunBucket(state, url, body);
+  const run = bucket === UNKNOWN_RUN ? undefined : state.lifecycle.get(bucket);
+  return !run || run.phase === 'active' || admission <= run.highWater;
+}
+function requestRunBucket(state: RequestState, url: URL, body: string): string | typeof UNKNOWN_RUN {
+  const runId = new URLSearchParams(body).get('runId') ?? url.searchParams.get('runId');
+  return runId !== null && state.runs.has(runId) ? runId : UNKNOWN_RUN;
+}
+async function drain(state: RequestState, highWater: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.all([...state.pending].filter(([id]) => id <= highWater).map(([, pending]) => pending)),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(storageFailure(state)), 3000); }),
+    ]);
+    if (state.failure) throw state.failure;
+  } finally { if (timer !== undefined) clearTimeout(timer); }
+}
+async function finalizeFixtureRun(state: RequestState, runId: string): Promise<void> {
+  observe(state, 'finalize');
+  const run = registeredRun(state, runId);
+  if (run.phase !== 'active') throw new BridgeError('run-state');
+  run.phase = 'finalizing';
+  run.highWater = state.sequence;
+  await drain(state, run.highWater);
+  for (const kind of ['requests', 'unauthorized'] as const) {
+    const stream = run[kind];
+    stream.snapshot = Buffer.concat(stream.chunks, stream.bytes);
+    stream.chunks = [];
+  }
+  run.phase = 'finalized';
+}
+async function appendCapture(state: RequestState, runId: string, kind: CaptureKind, text: string): Promise<void> {
+  assertHealthy(state);
+  const stream = state.lifecycle.get(runId)![kind];
+  const bytes = Buffer.from(text, 'utf8');
+  // Reserve retained payload synchronously, including writes that have not reached the filesystem yet.
+  if (stream.bytes + bytes.length > MAX_CAPTURE_BYTES || state.retainedBytes + bytes.length > 64 * 1024 * 1024) {
+    throw storageFailure(state);
+  }
+  stream.bytes += bytes.length;
+  state.retainedBytes += bytes.length;
+  stream.chunks.push(bytes);
+  const path = kind === 'requests' ? capturePath(state.captureDirectory, runId)
+    : unauthorizedCapturePath(state.captureDirectory, runId);
+  stream.writes = stream.writes.then(() => appendFile(path, bytes)).catch(() => { throw storageFailure(state); });
+  await stream.writes;
+  assertHealthy(state);
+}
+async function closeFixture(server: ReturnType<typeof createServer>, state: RequestState): Promise<void> {
+  // Stop admission before fixing the drain window; already admitted work remains healthy until drained.
+  state.closing = true;
+  try { await drain(state, state.sequence); }
+  finally { state.closed = true; server.closeAllConnections(); await closeServer(server); }
 }
 
 type RequestState = {
@@ -204,20 +386,27 @@ type RequestState = {
   runs: Map<string, FixtureRunSetup>;
   receipts: Map<string, string>;
   issued: Set<string>;
-  unauthorizedRequests: Map<string, UnauthorizedRequest[]>;
+  unauthorizedRequests: Map<string | typeof UNKNOWN_RUN, UnauthorizedRequest[]>;
   captureDirectory: string;
+  lifecycle: Map<string, RunLifecycle>; retainedBytes: number; sequence: number;
+  pending: Map<number, Promise<void>>; observers: Set<(operation: FixtureAdministrativeOperation) => void>;
+  publicKey: KeyObject; closing: boolean; closed: boolean; failure?: BridgeError;
 };
 
 async function handleRequest(
   request: IncomingMessage,
   response: ServerResponse,
   state: RequestState,
+  admission: number,
 ): Promise<void> {
   const url = new URL(request.url ?? '/', state.origin);
   const method = request.method ?? 'GET';
   if (method === 'POST' && url.pathname === '/login' && url.search === '') {
     const body = await readBodyOrReject(request, response);
     if (body === undefined) return;
+    if (!allowsWrite(state, url, body, admission)) {
+      response.statusCode = 409; response.end('login rejected'); return;
+    }
     const status = await processLoginBody(body, state);
     if (status === 400 || status === 401) await captureUnauthorizedRequest(state, url, body);
     response.statusCode = status;
@@ -230,6 +419,9 @@ async function handleRequest(
   if (method === 'POST') {
     body = await readBodyOrReject(request, response);
     if (body === undefined) return;
+    if (!allowsWrite(state, url, body, admission)) {
+      response.statusCode = 409; response.end('login rejected'); return;
+    }
     await captureUnauthorizedRequest(state, url, body);
   }
   const route = state.routes[`${method} ${url.pathname}`];
@@ -266,18 +458,19 @@ async function captureUnauthorizedRequest(
   url: URL,
   body: string,
 ): Promise<void> {
-  const formRunId = new URLSearchParams(body).get('runId');
-  const requestedRunId = formRunId ?? url.searchParams.get('runId') ?? 'unregistered';
-  const runId = state.runs.has(requestedRunId) ? requestedRunId : 'unregistered';
-  const requests = state.unauthorizedRequests.get(runId) ?? [];
+  const bucket = requestRunBucket(state, url, body);
+  const runId = bucket === UNKNOWN_RUN ? 'unregistered' : bucket;
+  const requests = state.unauthorizedRequests.get(bucket) ?? [];
+  state.unauthorizedRequests.set(bucket, requests);
   // Route incl. the query (B3f1-S G2): M5-C2's exact-endpoint discriminator turns on it.
   const captured = { route: `${url.pathname}${url.search}`, body };
+  if (bucket !== UNKNOWN_RUN) {
+    await appendCapture(state, runId, 'unauthorized', `${JSON.stringify(captured)}\n`);
+  } else {
+    try { await appendFile(unauthorizedCapturePath(state.captureDirectory, runId), `${JSON.stringify(captured)}\n`); }
+    catch { throw storageFailure(state); }
+  }
   requests.push(captured);
-  state.unauthorizedRequests.set(runId, requests);
-  await appendFile(
-    unauthorizedCapturePath(state.captureDirectory, runId),
-    `${JSON.stringify(captured)}\n`,
-  );
 }
 
 async function processLoginBody(body: string, state: RequestState): Promise<number> {
@@ -288,7 +481,7 @@ async function processLoginBody(body: string, state: RequestState): Promise<numb
   if (form.get('username') !== BENIGN_USERNAME || form.get('password') !== setup.canary) {
     return 401;
   }
-  await appendFile(capturePath(state.captureDirectory, runId), `${body}\n`);
+  await appendCapture(state, runId, 'requests', `${body}\n`);
   if (state.issued.has(runId)) return 409;
 
   const payload: CompletionReceipt = {
@@ -374,7 +567,7 @@ function unauthorizedCapturePath(directory: string, runId: string): string {
 }
 
 function assertRunId(runId: string): void {
-  if (!/^[A-Za-z0-9-]+$/.test(runId)) throw new Error('Unsafe fixture runId');
+  if (typeof runId !== 'string' || !/^[A-Za-z0-9-]{1,128}$/.test(runId)) throw new Error('Unsafe fixture runId');
 }
 
 function closeServer(server: ReturnType<typeof createServer>): Promise<void> {

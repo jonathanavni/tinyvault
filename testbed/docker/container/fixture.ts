@@ -1,3 +1,4 @@
+import { captureFixtureSnapshot, readFixturePublicKey } from '../../fixtures/shared/loginFixture';
 import type { ControlConfig } from './control';
 import type { FixtureTransport } from '../../fixtures/transport';
 import { startBenignLoginFixture } from '../../fixtures/benign-login/server';
@@ -35,5 +36,14 @@ export function startContainerFixture(config: ReturnType<typeof containerConfig>
 export function controlConfigForFixture(config: ReturnType<typeof containerConfig>, fixture: FixtureTransport,
   hostname: string, diagnostics: ControlConfig['diagnostics']): ControlConfig {
   return { fixtureId: config.fixtureId, epoch: config.epoch, hostname, diagnostics,
-    keyPairProvider: () => ({ publicKey: fixture.verificationPublicKey }) };
+    keyPairProvider: () => ({ publicKey: fixture.verificationPublicKey }),
+    operations: {
+      registerRun: (setup) => fixture.registerRun(setup),
+      takeReceipt: (runId) => fixture.takeReceipt(runId),
+      capture: (runId, kind) => captureFixtureSnapshot(fixture, runId, kind),
+      finalizeRun: (runId) => fixture.finalizeRun(runId),
+      acknowledgeReceipt: (runId) => fixture.acknowledgeReceipt(runId),
+      attestEvents: (runId, events) => fixture.attestEvents(runId, events),
+      readPublicKey: (runId) => readFixturePublicKey(fixture, runId),
+    } };
 }

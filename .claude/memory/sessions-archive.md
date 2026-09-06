@@ -36,3 +36,4 @@ running code. (commits `9f216b0`..`6a6b67c`)
   round 3 → clean clone → merge. Found for M6: `browser_close_session` stalls on a black-hole connect. Pruned
   `codex/m5-2-slice-2` and `codex/m5-2-slice-3`.
 
+- **2026-09-05 (`m5.2-slice4-planning`, Codex owner, closed)** — Slice 4 plan revision 5 LOCKED after three paper rounds and explicit SCHEMA approval; baseline review-tool prerequisite accepted after real CLI/helper mutants and final `make test` 1574 + 5 + 10 (one expected pending). All work uncommitted on `main` at `dc0796f`; no Slice 4 feature implementation. Ownership relinquished for the user's fresh Codex implementation session; start bounded Job A from the dirty candidate. Handoff: PLAN Current State; canonical evidence/dispositions: `docs/m5-2-slice-4-review-findings.md`.

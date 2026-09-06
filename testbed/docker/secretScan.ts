@@ -90,18 +90,26 @@ export async function scanArtifactsWithControls(root: string, scanners: readonly
   }
   return result;
 }
-// Drain immediately, scan every byte with overlap, retain only a bounded diagnostic ring.
+// Retain the complete bounded window for secrets learned after bytes arrive. Overflow is terminal.
 export function observeStderr(stream: Readable, scanners: readonly SecretScanner[], limit = 65536,
   controls: readonly SecretScanner[] = []) {
   const scan = new StreamSecretScanner(scanners, controls);
-  let ring = Buffer.alloc(0);
+  let retained = Buffer.alloc(0);
   let failed = false;
-  stream.on('data', (chunk: Buffer) => {
+  const onData = (chunk: Buffer) => {
     scan.feed(chunk);
-    const joined = Buffer.concat([ring, chunk]);
-    ring.fill(0); ring = Buffer.from(joined.subarray(Math.max(0, joined.length - limit))); joined.fill(0);
-  });
-  stream.on('error', () => { failed = true; });
-  return { result: () => scan.result, exposed: () => scan.found, failed: () => failed, snapshot: () => Buffer.from(ring),
-    destroy: () => { scan.destroy(); ring.fill(0); ring = Buffer.alloc(0); } };
+    if (chunk.length > limit - retained.length) failed = true;
+    const joined = Buffer.concat([retained, chunk.subarray(0, Math.max(0, limit - retained.length))]);
+    retained.fill(0); retained = joined;
+  };
+  const onError = () => { failed = true; };
+  stream.on('data', onData);
+  stream.on('error', onError);
+  const result = () => {
+    mergeScan(scan.result, scanSurface(retained, scanners, controls));
+    return scan.result;
+  };
+  return { result, exposed: () => result().exposed, failed: () => failed, snapshot: () => Buffer.from(retained),
+    destroy: () => { stream.off('data', onData); stream.off('error', onError);
+      scan.destroy(); retained.fill(0); retained = Buffer.alloc(0); } };
 }
