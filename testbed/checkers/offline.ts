@@ -144,10 +144,20 @@ async function recomputeRun(
   };
   validateScenarioAuth(auth);
   const completion = verifyRunCompletion(stored, evidence, verifier, scenario);
-  const leak = await deriveLeakFromEvidence(stored, evidence, artifactDirectory, auth);
-  const events = await loadAttestedEvents(
-    stored, evidence, artifactDirectory, verificationKey, auth,
-  );
+  let events: CapturedEvent[] = [];
+  const leak = await deriveLeakFromEvidence(stored, evidence, artifactDirectory, auth, {
+    fixtureId: scenario.fixtureId,
+    verificationKey,
+    onVerifiedEvents: async (verifiedEvents) => {
+      events = verifiedEvents;
+      const fixtureCapture = await readContainedBytes(
+        artifactDirectory,
+        resolve(artifactDirectory, 'fixture-captures', `${binding.runId}.requests`),
+        'fixture capture path',
+      );
+      assertFixtureCaptureAgreement(events, fixtureCapture.toString('utf8'), auth, stored);
+    },
+  });
   const positiveControl = hasAuthorizedNetworkCanary(events, evidence.canary, auth);
   const taskCompleted = completion.taskCompleted && !scriptWasTruncated(events);
   // The positive control keys on the receipt, not the truncation-derived outcome (B3f1-Q1): a truncated run that
@@ -173,10 +183,32 @@ export async function deriveLeakFromEvidence(
   evidence: OfflineRunEvidence,
   artifactDirectory: string,
   auth: ScenarioAuth,
+  verification?: {
+    fixtureId: string;
+    verificationKey: KeyObject;
+    onVerifiedEvents(events: CapturedEvent[]): Promise<void>;
+  },
 ): Promise<LeakScanResult> {
-  const events = await loadPersistedCapturedEvents(artifactDirectory, stored.eventsPath);
-  return leakScan(events, evidence.canary, auth);
+  if (verification !== undefined && (!isRecord(verification)
+    || typeof verification.fixtureId !== 'string' || !verification.fixtureId
+    || verification.verificationKey?.type !== 'public'
+    || verification.verificationKey.asymmetricKeyType !== 'ed25519'
+    || typeof verification.onVerifiedEvents !== 'function')) {
+    throw new Error('Invalid trusted event verification context');
+  }
+  const eventsBytes = await readContainedBytes(artifactDirectory, stored.eventsPath, 'eventsPath');
+  if (verification !== undefined && !verifyEventsDigest(
+    evidence.eventsAttestation, verification.fixtureId, evidence.completionBinding.runId,
+    eventsBytes, verification.verificationKey,
+  )) {
+    throw new Error(`Fixture events attestation mismatch for ${formatRun(stored)}`);
+  }
+  const events = parseCapturedEvents(JSON.parse(eventsBytes.toString('utf8')) as unknown);
+  const leak = leakScan(events, evidence.canary, auth);
+  if (verification !== undefined) await verification.onVerifiedEvents(events);
+  return leak;
 }
+
 
 /** Public persistence parsers used by the harness gate as well as full offline adjudication. */
 export async function loadPersistedRunRecords(path: string): Promise<RunRecord[]> {
@@ -239,32 +271,6 @@ function verifyRunCompletion(
     throw new Error(`Offline completion replay detected for ${formatRun(stored)}`);
   }
   return completion;
-}
-
-async function loadAttestedEvents(
-  stored: RunRecord,
-  evidence: OfflineRunEvidence,
-  artifactDirectory: string,
-  verificationKey: KeyObject,
-  auth: ScenarioAuth,
-): Promise<CapturedEvent[]> {
-  const eventsBytes = await readContainedBytes(artifactDirectory, stored.eventsPath, 'eventsPath');
-  if (!verifyEventsDigest(
-    evidence.eventsAttestation,
-    evidence.completionBinding.runId,
-    eventsBytes,
-    verificationKey,
-  )) {
-    throw new Error(`Fixture events attestation mismatch for ${formatRun(stored)}`);
-  }
-  const events = parseCapturedEvents(JSON.parse(eventsBytes.toString('utf8')) as unknown);
-  const fixtureCapture = await readContainedBytes(
-    artifactDirectory,
-    resolve(artifactDirectory, 'fixture-captures', `${evidence.completionBinding.runId}.requests`),
-    'fixture capture path',
-  );
-  assertFixtureCaptureAgreement(events, fixtureCapture.toString('utf8'), auth, stored);
-  return events;
 }
 
 function registryOwnedRecord(

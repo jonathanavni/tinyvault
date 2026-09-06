@@ -11,12 +11,20 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-05-m5.2-slice4` — focus: **M5.2 Slice 4**; owner: codex; **state: closed**.
-Ownership relinquished for a fresh session; no worker, reviewer, test or approval remains pending.
-State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`, branch `main`.
-Final tested source merge: `39169a6c81fc2da4a29532ac46ea9e961197b145`; acceptance docs:
-`f6b6a425880ccfef3ff0e2652923809eb275827b`. This wrapup adds only owner documentation.
-All incoming changes preserved and merged locally; nothing pushed remotely.
+`2026-09-05-m5.2-slice5-planning` — focus: **M5.2 Slice 5 attestation implementation**;
+owner: codex; **state: active**. User explicitly transferred ownership from the closed Slice 4 session.
+State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`, branch `codex/m5-2-slice-5`,
+starting HEAD `f93e1df5bb1e600e13f102c517c3945ef1a70c0b`; clean at entry, one worktree.
+User said “Let’s proceed” after plan lock: Slice5 implementation and its verification/review ladder
+are authorized. Implementation branch created from unchanged f93e1df, preserving all four planning docs.
+User approved on 2026-09-06: commit this candidate, run exact-clone verification, merge locally, and
+run merged-tree gates. No push, release or Slice6 authority is inferred.
+**Planning complete: Slice5 revision3 LOCKED** after final Sol and Claude Opus5 PASS at the
+three-round paper cap. JobsA/B returned frozen. Owner completed bounded test refinements, SCHEMA format
+documentation and66 mutation checks. Full candidate gates and all three independent implementation
+reviews PASS. All workers/reviewers stopped; Codex is the sole continuity writer. Incoming four planning
+documents remain preserved. Candidate commit and local integration are now explicitly authorized.
+Completed Slice 4 reviews and their round counts remain accepted; no repeat without new evidence.
 
 **Slice 4 complete:** locked revision5 Jobs A/B/C/D accepted after the required review ladder.
 Reviewed helper repair candidate `7a02d3ad84751a1db35678551836ca5e426caba3` passed a new literal
@@ -39,22 +47,34 @@ completion or release claim. Do not repeat completed Slice4 planning/reviews abs
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
 **M4 ✅** (`b8a9396`) · **M5 ✅** (`96e3ea3`) · **M5.1 ✅** · **M5.2** in flight (spec locked; **slices 1–4 of 6 merged**, slice 4 final source merge `39169a6`).
 
-**Fresh-session handoff:** run `tinyvault-start`, inspect actual branch/HEAD/status, and explicitly
-claim this closed checkpoint before writing. Next scope is **Slice5 planning: attestation** under
-`docs/m5-2-slice-spec.md` revision4 §D4 / Acceptance L and `docs/m5-2-implementation-plan.md` row5.
-Read SCHEMA and Slice4 revision5 plus the acceptance/residual entries above; identify what the existing
-control/capture implementation already provides before drafting bounded Slice5 jobs and proof. Preserve
-fixture-control-only, capability-scoped, bounded, single-use post-finalization attestation and separate
-receipt/attestation domain prefixes with independent prefix-removal mutants asserting exact preimages.
-Follow the existing planning/implementation/review ladder; do not invent a new contract or start Slice6.
-Slice5 has not been planned, locked or implemented here. A fresh session needs user direction for that
-scope; the prior local integration approval was for Slice4, not blanket future commit/push authority.
-Standing routine Claude-review transfer consent remains in `docs/handoff-pattern.md`; managed controls
-remain authoritative. M5.2 milestone-close assessment is due after all six slices, not at this boundary.
+**Slice5 handoff:** `docs/m5-2-slice-5-plan.md` revision3 is LOCKED; append-only dispositions and
+review identities and implementation evidence are in `docs/m5-2-slice-5-review-findings.md` Entries1-8. Governing contract remains
+M5.2 revision4 §D4/Acceptance L and implementation-plan row5, plus inherited M5 D5 shared derivation.
+Plan: canonical v2 receipt/attestation transcripts with independent exact-preimage mutants; fixture/run
+scope; one authenticated event observation for full offline adjudication while preserving the common
+deriveLeakFromEvidence path and its coverage-gate/scoring mutant. Legacy v1 artifacts require regeneration.
+JobsA/B implement v2 and the authenticated single-observation path with real dispatch/transport proof.
+Owner mutation checks66/66; serial make test1963 pass/one expected skip and make test-docker5/5, execution
+audits PASS. Scope/byte/mode restoration checked; no production change after these gates. Fresh Astra
+adversarial and separate Claude Opus5 QA/security reviews PASS in implementation round1. Entry8 records
+nonblocking observations and inventory reconciliation. Keep accepted Slice4 limits and residuals; no Slice6 work.
 
-**Wrapup verification:** source unchanged from tested39169a6; doc-only diff/link checks and
-`git diff --check`. Not run: repeated code/browser/Docker suites for documentation-only wrapup.
-Deviations From Handoff: none in wrapup; historical integration failures/managed block remain recorded.
+**Active action:** implementation/review stage accepted; user explicitly approved candidate commit and
+local integration on 2026-09-06. Follow the locked ladder: literal exact-candidate clone, npm ci,
+make browsers, make test; authorized local merge; serial merged-tree make test and make test-docker.
+No worker, review or test suite is running. Entry7 records the exact mutation ledger/full gates; Entry8
+records review acceptance. No prior commit/merge permission carries forward. Paper cap is spent;
+do not repeat completed Slice4 reviews or accepted Slice5 reviews absent new evidence.
+Standing Claude-review transfer authorization remains effective; managed controls remain authoritative.
+
+**Verification:** typecheck, targeted248/248 host, refined real-control15/15 host, invocation/Compose/diff
+checks,66 final mutation dispositions, make browsers, complete make test and make test-docker PASS.
+Initial sandbox socket/cache errors and worker approval interruptions were resolved by owner host runs.
+Independent implementation reviews: Astra PASS, Claude Opus5 QA PASS, Claude Opus5 security PASS.
+Pending execution: literal new clone/merge gates (now explicitly authorized). Earlier planning91/91
+and final paper PASS remain Entry4 historical evidence. M5.2 milestone-close assessment remains due
+after all six slices; slices1-4 are merged, Slice5 is an accepted uncommitted implementation candidate.
+
 Doc hygiene: shipped slice plans still serve as live contract references for later slices; completed
 status is indexed, and path relocation is deferred to avoid unnecessary reference changes.
 
@@ -529,3 +549,31 @@ residuals; the 🔴 `dom-fill` destination slice still owes its launch dispositi
   source merge39169a6 passed make test1891+expectedskip then Docker5/5. Accepted the two-file stream-error
   repair with its narrow proof and retained the original intermittent failure cause as unknown. Updated
   progress to4of6 M5.2 slices; no push and no whole-milestone closure assessment yet.
+
+- **2026-09-05 — Slice5 planning round1 absorbed into revision2.** Preserve accepted Slice4 lifecycle;
+  implement D4/L through separate v2 receipt/attestation domains and canonical envelopes. Sol's caller
+  finding and owner's independent read establish an early unauthenticated scan and two event reads;
+  plan one authenticated observation for all offline scoring, instead of merely reordering helpers.
+  Explicit owner-only temporary mutation scope repairs JobB's test-only ownership gap. Claude's
+  transport/size-lifecycle and evidence-precision findings are absorbed; exact dispositions are Slice5
+  register Entry2. Still draft, no source implementation or new commit authority.
+
+- **2026-09-05 — Slice5 round2 P1: preserve locked M5 shared derivation.** Claude identified that removing
+  deriveLeakFromEvidence from recomputeRun would invalidate M5 D5.5 and its mutant. Revision3 keeps
+  both direct callers and the existing return, adds trusted pre-parse verification/events consumption
+  inside the shared function, and retains the constant-false scorer mutant for adjudication plus the
+  mandatory coverage gate. This supersedes round1's proposed caller split; no M5 amendment required.
+  Final capped paper absorption remains pending (Slice5 register Entry3).
+
+- **2026-09-05 — Slice5 revision3 LOCKED after capped final Sol/Claude Opus5 PASS.** Final paper
+  review accepts preserved M5 shared derivation and new authenticated single-observation flow. At lock,
+  name the browser-only coverage mutant, retain score-before-capture-consumer ordering, and distinguish
+  synthetic-gate coverage from verification-branch proof (register Entry4). No contract/claim expansion,
+  no source implementation or integration authorization; four planning docs remain uncommitted.
+
+- **2026-09-06 — Slice5 implementation round1 accepted by Astra and separate Claude Opus5 QA/security.**
+  All three PASS; owner gates and 66 mutation dispositions accepted. Low observations are recorded in
+  Slice5 register Entry8: preserve bounded producer scalar checks, retain current awaited event consumer,
+  and explicitly limit schema-guard mutation attribution. Inventory reconciliation confirms unchanged
+  source/tests across full gates and review. No further source changes or repeated paper/Slice4 review;
+  candidate remains uncommitted pending explicit exact-clone/local-merge authorization.

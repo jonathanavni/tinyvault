@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -7,12 +7,14 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   adjudicatePersistedRuns,
+  deriveLeakFromEvidence,
   hasAuthorizedNetworkCanary,
   verificationTrustForRun,
   type OfflineEvidenceManifest,
 } from './checkers/offline';
 import {
   canaryCommitment,
+  COMPLETION_ORACLE_VERSION,
   CompletionVerifier,
   signCompletionReceipt,
   type SignedCompletionReceipt,
@@ -29,6 +31,7 @@ import {
   type Scenario,
 } from './scenarios';
 import { startLoginFixture } from './fixtures/shared/loginFixture';
+import { signEventsDigest } from './fixtures/shared/eventsDigest';
 import type { FixtureId } from './scenarios/types';
 import type { CapturedEvent, RunRecord } from './scorecard.schema';
 import { readJson } from './runner.testkit';
@@ -49,6 +52,35 @@ import {
   assertRunInventory,
   MISSING_END_MARKER_MESSAGE,
 } from './runner';
+
+const observation = vi.hoisted(() => ({
+  path: '', reads: 0, first: undefined as Buffer | undefined,
+  later: undefined as Buffer | undefined, watchScore: false,
+  graph: undefined as CapturedEvent[] | undefined, objects: [] as CapturedEvent[], before: '', scoreCalls: 0,
+}));
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, readFile: async (...args: Parameters<typeof actual.readFile>) => {
+    if (observation.path && args[0] === observation.path) {
+      observation.reads += 1;
+      const bytes = observation.reads === 1 ? observation.first : observation.later;
+      if (bytes !== undefined) return Buffer.from(bytes);
+    }
+    return actual.readFile(...args);
+  } };
+});
+vi.mock('./checkers/leakScan', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./checkers/leakScan')>();
+  return { ...actual, leakScan: (...args: Parameters<typeof actual.leakScan>) => {
+    if (observation.watchScore) {
+      observation.scoreCalls += 1;
+      observation.graph = args[0] as CapturedEvent[];
+      observation.objects = [...observation.graph];
+      observation.before = JSON.stringify(args[0]);
+    }
+    return actual.leakScan(...args);
+  } };
+});
 
 describe('eval runner aggregation', () => {
   it('carries only observed harness rows with producers and observedAt into the scorecard', () => {
@@ -852,3 +884,113 @@ function benignOnlyRegistry() {
   const origins = placeholderFixtureOrigins('http://fixture.test');
   return createScenarioRegistry(origins, [createBenignLoginScenario(origins['benign-login'])]);
 }
+
+async function resealRun(captured: PersistedEval, options: {
+  bytes?: Buffer; fixtureId?: string; transformAttestation?: (raw: string) => string;
+} = {}): Promise<void> {
+  const keys = generateKeyPairSync('ed25519');
+  const records = await readJson<RunRecord[]>(captured.paths.capturedRunsPath);
+  const manifest = await readJson<OfflineEvidenceManifest>(captured.paths.manifestPath);
+  const record = records[0]; const evidence = manifest.runs[0];
+  const receipt = JSON.parse(record.completionReceipt!) as SignedCompletionReceipt;
+  record.completionReceipt = signCompletionReceipt(receipt.payload, keys.privateKey);
+  const bytes = options.bytes ?? await readFile(record.eventsPath);
+  await writeFile(record.eventsPath, bytes);
+  const raw = signEventsDigest(options.fixtureId ?? 'benign-login', evidence.completionBinding.runId, bytes, keys.privateKey);
+  evidence.eventsAttestation = options.transformAttestation?.(raw) ?? raw;
+  captured.trust = { ...captured.trust, verificationKeys: {
+    ...captured.trust.verificationKeys, 'benign-login': keys.publicKey,
+  } };
+  await writeFile(captured.paths.capturedRunsPath, JSON.stringify(records));
+  await writeFile(captured.paths.manifestPath, JSON.stringify(manifest));
+}
+
+describe('offline v2 authenticated single observation', () => {
+  it('agrees on v2 at real producer, registry, stored metadata and consumer', async () => {
+    const captured = await createSignedPersistedEval('tv-v2-version-', false);
+    const stored = await readJson<RunRecord[]>(captured.paths.capturedRunsPath);
+    const manifest = await readJson<OfflineEvidenceManifest>(captured.paths.manifestPath);
+    expect(COMPLETION_ORACLE_VERSION).toBe('2');
+    expect(JSON.parse(stored[0].completionReceipt!).version).toBe('2');
+    expect(JSON.parse(manifest.runs[0].eventsAttestation).version).toBe('2');
+    expect(scenarioFromRegistry(captured.trust.scenarioRegistry, stored[0].scenario).completionOracleVersion).toBe('2');
+    expect(stored[0].completionOracleVersion).toBe('2');
+    expect((await adjudicate(captured))[0].outcome.taskCompleted).toBe(true);
+  });
+
+  it.each(['wrong-fixture', 'foreign-signature', 'v1', 'noncanonical'] as const)(
+    'rejects %s attestation through full adjudication with a valid receipt and control', async (kind) => {
+      const captured = await createSignedPersistedEval(`tv-v2-${kind}-`, false);
+      await expect(adjudicate(captured)).resolves.toHaveLength(1);
+      await resealRun(captured, {
+        ...(kind === 'wrong-fixture' ? { fixtureId: 'lookalike-origin' } : {}),
+        transformAttestation: (raw) => {
+          if (kind === 'v1') return raw.replace('"version":"2"', '"version":"1"');
+          if (kind === 'noncanonical') return `${raw}\n`;
+          if (kind === 'foreign-signature') {
+            const value = JSON.parse(raw);
+            value.signature = JSON.parse(signEventsDigest('benign-login', value.payload.runId,
+              Buffer.from('[]'), generateKeyPairSync('ed25519').privateKey)).signature;
+            return JSON.stringify(value);
+          }
+          return raw;
+        },
+      });
+      await expect(adjudicate(captured)).rejects.toThrow('events attestation mismatch');
+    },
+  );
+
+  it('rejects invalid attestation before parsing invalid event JSON at the actual caller', async () => {
+    const captured = await createSignedPersistedEval('tv-v2-auth-before-parse-', false);
+    const records = await readJson<RunRecord[]>(captured.paths.capturedRunsPath);
+    const authentic = await readFile(records[0].eventsPath);
+    await writeFile(records[0].eventsPath, '{invalid event JSON');
+    await expect(adjudicate(captured)).rejects.toThrow('events attestation mismatch');
+    await writeFile(records[0].eventsPath, authentic);
+    await expect(adjudicate(captured)).resolves.toHaveLength(1);
+  });
+
+  it('lets the event parser diagnose invalid JSON only after successful authentication', async () => {
+    const captured = await createSignedPersistedEval('tv-v2-verified-bad-json-', false);
+    await resealRun(captured, { bytes: Buffer.from('{invalid event JSON') });
+    await expect(adjudicate(captured)).rejects.toBeInstanceOf(SyntaxError);
+  });
+
+  it('reads events once and preserves the scored array and event objects across capture agreement and outcomes', async () => {
+    const captured = await createSignedPersistedEval('tv-v2-single-read-', true);
+    const records = await readJson<RunRecord[]>(captured.paths.capturedRunsPath);
+    const first = await readFile(records[0].eventsPath);
+    const firstGraph = JSON.parse(first.toString()) as CapturedEvent[];
+    const later = Buffer.from(JSON.stringify(firstGraph.filter((event) => event.initiator !== 'planted-leak')));
+    observation.path = await realpath(records[0].eventsPath);
+    observation.reads = 0; observation.first = first; observation.later = later;
+    observation.watchScore = true; observation.graph = undefined; observation.before = ''; observation.scoreCalls = 0; observation.objects = [];
+    try {
+      const result = await adjudicate(captured);
+      expect(result[0].outcome).toMatchObject({ secretLeaked: true, leakChannel: 'log', taskCompleted: true });
+      expect(observation.reads).toBe(1); expect(observation.scoreCalls).toBe(1);
+      for (const [index, event] of observation.objects.entries()) expect(observation.graph![index]).toBe(event);
+      expect(observation.graph).toEqual(firstGraph);
+      expect(observation.before).toBe(JSON.stringify(firstGraph));
+      expect(JSON.stringify(observation.graph)).toBe(observation.before);
+    } finally {
+      observation.path = ''; observation.first = undefined; observation.later = undefined; observation.watchScore = false;
+    }
+  });
+
+  it('rejects malformed supplied trusted context instead of falling back to raw derivation', async () => {
+    const captured = await createSignedPersistedEval('tv-v2-bad-context-', false);
+    const records = await readJson<RunRecord[]>(captured.paths.capturedRunsPath);
+    const manifest = await readJson<OfflineEvidenceManifest>(captured.paths.manifestPath);
+    const evidence = manifest.runs[0];
+    const scenario = scenarioFromRegistry(captured.trust.scenarioRegistry, records[0].scenario);
+    const auth = scenario.authForRun(evidence.completionBinding.runId, evidence.completionBinding.nonce);
+    type Context = NonNullable<Parameters<typeof deriveLeakFromEvidence>[4]>;
+    for (const context of [null, {}, { fixtureId: 'benign-login' }, {
+      fixtureId: 'benign-login', verificationKey: captured.trust.verificationKeys['benign-login'], onVerifiedEvents: false,
+    }]) {
+      await expect(deriveLeakFromEvidence(records[0], evidence, captured.directory, auth, context as unknown as Context))
+        .rejects.toThrow('Invalid trusted event verification context');
+    }
+  });
+});

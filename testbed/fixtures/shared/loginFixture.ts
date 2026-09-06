@@ -217,7 +217,7 @@ function attestFixtureEvents(state: RequestState, runId: string, eventsBytes: Ui
   if (run.attested) throw new BridgeError('run-state');
   run.attested = true;
   if (eventsBytes.byteLength > 128 * 1024) throw new BridgeError('control-limit');
-  return signEventsDigest(runId, eventsBytes, state.signingKey);
+  return signEventsDigest(state.fixtureId, runId, eventsBytes, state.signingKey);
 }
 
 function readCaptureSnapshot(state: RequestState, runId: string, kind: CaptureKind): Uint8Array {
