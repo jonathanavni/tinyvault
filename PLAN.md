@@ -11,89 +11,52 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-05-m5.2-slice4` — focus: **M5.2 slice 4**; owner: codex; state: complete, merged locally.
-State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`.
-Locked revision5 Jobs **A/B/C/D accepted** (register Entries16/23/27/37). All incoming changes preserved
-in candidate `0e274bf57ca94fa3f1ab5a80d72980b5abef35b5` and local merge `5210988`. Bounded helper repair
-accepted after fresh Astra, Claude QA and separate security PASS (Entries40–43), committed as
-`7a02d3ad84751a1db35678551836ca5e426caba3` on `codex/m5-2-slice-4-integration-fix`.
-Final source merge on main: **`39169a6c81fc2da4a29532ac46ea9e961197b145`**, exact repair-candidate tree
-`6a416a798b135fc4340fe39400aaed8a117cbae5`. Owner closure is a subsequent documentation-only commit.
+`2026-09-05-m5.2-slice4` — focus: **M5.2 Slice 4**; owner: codex; **state: closed**.
+Ownership relinquished for a fresh session; no worker, reviewer, test or approval remains pending.
+State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`, branch `main`.
+Final tested source merge: `39169a6c81fc2da4a29532ac46ea9e961197b145`; acceptance docs:
+`f6b6a425880ccfef3ff0e2652923809eb275827b`. This wrapup adds only owner documentation.
+All incoming changes preserved and merged locally; nothing pushed remotely.
 
-**Final acceptance PASS (Entry44):** new literal exact-commit clone of7a02d3a + npm ci + make browsers +
-make test1891 pass/one expected opt-in skip/execution PASS. After local merge, serial make test1891 pass/
-same expected skip, then make test-docker5/5 and execution PASS. All reports fresh;303 candidate file hashes
-unchanged after tests. Maximum-budget579-scanner exports89.20–89.26s each below120s; separate composed
-browser registration-through-attestation131.5–143.8ms, zero normal409s. Final zero fixture containers;
-three pre-existing networks preserved. Canonical evidence/dispositions: `docs/m5-2-slice-4-review-findings.md`;
-raw evidence `/private/tmp/tinyvault-slice4-integration/helper-acceptance/`.
+**Slice 4 complete:** locked revision5 Jobs A/B/C/D accepted after the required review ladder.
+Reviewed helper repair candidate `7a02d3ad84751a1db35678551836ca5e426caba3` passed a new literal
+clone + npm ci + make browsers + make test. Exact source merge then passed serial make test
+(**1,891 pass, one expected opt-in skip**) and make test-docker (**5/5**), both execution gates PASS.
+Live exports under120s; browser registration-through-attestation131.5–143.8ms; zero normal409s.
+Final fixture containers absent; three pre-existing networks preserved. No source changed after tests.
+Canonical acceptance and evidence: `docs/m5-2-slice-4-review-findings.md` Entry44; prior job acceptance
+Entries16/23/27/37, helper dispositions Entry43. Detailed narrative is in `PLAN-archive.md`.
+Raw `/private/tmp/tinyvault-slice4-integration/helper-acceptance/` evidence is temporary; the register
+is the durable record. Do not depend on scratch files surviving the next session.
 
-**Retained limits:** the original clone/merged-tree intermittent missing-helper-summary failures remain
-unexplained (Entry39). The separately reproduced stream-error path is repaired; new green gates do not
-prove historical attribution or nonrecurrence. Exact synthetic/mutation, cleanup, diagnostic and test-
-inventory limits live in Entry43. All accepted JobA/B/C/D private-key/observation/deployment limits remain.
-Do not repeat completed planning or accepted reviews absent new evidence. Locked contract remains
-`docs/m5-2-slice-4-plan.md` revision5. No release or whole-M5.2 completion claim.
-
-No active worker/reviewer/test or required approval remains. User authorized all local commits/merges;
-**nothing pushed remotely**. Standing routine Claude review consent is in `docs/handoff-pattern.md`; the
-managed transfer block was resolved by specific approval with no policy bypass. Next planned work is
-**Slice5: attestation**, then Slice6 parity/claim closure. Neither began in this session.
-
-`2026-09-05-m5.2-slice3` — focus: assessment fold-in check, commit `AGENTS.md`, then **M5.2 slice 3** through the
-full security-core ladder via Astra; prune `codex/m5-2-slice-2` — **outcome: MERGED (`8afce07`).** Merged tree:
-`make test` 1568 + 5 + 10 with the execution proof PASS; `make test-docker` 4/4 (78 s). Clean clone at the branch tip
-`638bc15`: green. Session tests 1182 → 1568 (+ the Docker suite's 4).
-
-**M5.2 slice 3 ✅ MERGED** — each fixture runs in its own container behind a framed `docker exec -i` bridge with a
-stdin-delivered bootstrap secret and an injective challenge/MAC; construction is provenance-first (daemon-level
-absence check, exact-one resolution, a 20-row inspect table) and fail-closed through one idempotent closer whose
-Acceptance-E scans (logs, export, history, exec stderr, artifacts) each carry a positive control in the same scanning
-pass; `make test` stays Docker-free behind six signals (runtime interceptor, per-path capability map, hash-pinned
-root of trust, entry-point grammar gate, execution proof, clean clone). Register:
-`docs/m5-2-slice-3-review-findings.md`; plan `docs/m5-2-slice-3-plan.md` revision 4.
-
-Slice 3's detailed execution ladder is archived in `PLAN-archive.md`; its load-bearing lessons follow.
-
-**Findings worth carrying into slice 4:**
-- **The entry point cannot guard itself.** Three paper rounds beat every static gate by a spelling it did not know
-  (`.cjs`, `env docker`, `globalSetup`, a Makefile `$(shell …)`); the answer was to narrow the claim — gates catch
-  Docker reach from *code modules*; the entry-point files are a hash-pinned, reviewed root of trust.
-- **Measure the environment before locking a sentence about it.** Four rev-4 sentences were false on this host
-  (label vs interpolation, TS constants vs a bare-Node lint, `child_process` count, `IpcMode`); `compose ps` hides
-  non-Compose containers; Docker 29 omits `Config.Cmd`; ORB/CORS hide cross-origin answers from a page oracle.
-- **A coverage assertion must be able to fail.** The first two versions of the probe-coverage check were trivially
-  satisfiable (a WebSocket error counted as a verdict; cancellation counted as "no route"); the third is pinned
-  Docker-free with the failure shapes Chromium actually produces, and its exclusions (bridge-network addresses,
-  the `file:` socket URL) are declared, not hidden.
-- **Integrator-written evidence code is not exempt from review.** Both post-impl P1s were in code I wrote during
-  the Docker fix cycle; the ladder caught them because the code went through the same channels.
-
-**Declared residuals carried to slice 4** (each in code or the register): constant-time compare not unit-observable;
-`node:24-slim` by tag (M10); no composed eval entry until a later slice (the in-process eval stays under the guard);
-the §9 static-gate limits (wrapper launchers, `worker_threads`, `process.binding`, `getBuiltinModule`, parse-time
-Make, root-of-trust edits); bridge-network and `file:` targets excluded from probe coverage; `checkScan`'s
-control-count guard and exec-stderr's `failed()` path unpinned; `.dockerignore` entries untested. **Outside the
-slice, filed as an M6 spec input:** `browser_close_session` never resolves after a navigation to a black-hole
-address (BACKLOG, with reproduction).
-
-*Slice 2's detail is below; slice 1 and earlier in `PLAN-archive.md`.*
-
-**M5.2 slice 2 ✅ MERGED (`8133495`)** — daemon-channel preflight, canonical `unix:///` policy, runtime-unforgeable pin,
-single Docker choke point, fail-closed composed construction; 2 pre-impl rounds → 3 impl jobs → 3-channel review →
-2 fix rounds → clean clone. Its four carried lessons and six declared residuals were all resolved or re-declared by
-slice 3 (above); full detail in `PLAN-archive.md`.
-
-*Slice 1's C-S1/C-S2 lessons and the M5.1 / spec-lock detail are also in `PLAN-archive.md`.*
+**Carry forward:** Entry39's intermittent missing-helper-summary failures remain unexplained. The
+separately demonstrated stream-error path was repaired; passing gates do not establish historical
+attribution or nonrecurrence. Preserve Entry43's synthetic-test, deletion-inventory, diagnostic and
+process-closure limits, plus accepted Slice4 private-key/observation/deployment limits. No whole-M5.2
+completion or release claim. Do not repeat completed Slice4 planning/reviews absent new evidence.
 
 **Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
 **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
 **M4 ✅** (`b8a9396`) · **M5 ✅** (`96e3ea3`) · **M5.1 ✅** · **M5.2** in flight (spec locked; **slices 1–4 of 6 merged**, slice 4 final source merge `39169a6`).
 
-**Resume checkpoint:** Slice4 complete; final tested source merge39169a6, with subsequent owner closure
-docs only. All required review/clone/default/Docker gates passed (Entry44). No active jobs or approval
-pending; no remote push. Preserve the unexplained historical helper failures and the accepted evidence
-limits. Next authorized-scope decision is Slice5 planning; do not repeat Slice4 reviews.
+**Fresh-session handoff:** run `tinyvault-start`, inspect actual branch/HEAD/status, and explicitly
+claim this closed checkpoint before writing. Next scope is **Slice5 planning: attestation** under
+`docs/m5-2-slice-spec.md` revision4 §D4 / Acceptance L and `docs/m5-2-implementation-plan.md` row5.
+Read SCHEMA and Slice4 revision5 plus the acceptance/residual entries above; identify what the existing
+control/capture implementation already provides before drafting bounded Slice5 jobs and proof. Preserve
+fixture-control-only, capability-scoped, bounded, single-use post-finalization attestation and separate
+receipt/attestation domain prefixes with independent prefix-removal mutants asserting exact preimages.
+Follow the existing planning/implementation/review ladder; do not invent a new contract or start Slice6.
+Slice5 has not been planned, locked or implemented here. A fresh session needs user direction for that
+scope; the prior local integration approval was for Slice4, not blanket future commit/push authority.
+Standing routine Claude-review transfer consent remains in `docs/handoff-pattern.md`; managed controls
+remain authoritative. M5.2 milestone-close assessment is due after all six slices, not at this boundary.
+
+**Wrapup verification:** source unchanged from tested39169a6; doc-only diff/link checks and
+`git diff --check`. Not run: repeated code/browser/Docker suites for documentation-only wrapup.
+Deviations From Handoff: none in wrapup; historical integration failures/managed block remain recorded.
+Doc hygiene: shipped slice plans still serve as live contract references for later slices; completed
+status is indexed, and path relocation is deferred to avoid unnecessary reference changes.
 
 **Blocked / needs attention:** no open Slice4 acceptance blocker; recorded residuals remain in its register.
 The A5 scorecard-provenance slice is still scheduled before

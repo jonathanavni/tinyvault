@@ -322,3 +322,15 @@ Example:
   through `/var` symlinks; a noncanonical argv entry can miss the helper's direct-execution check and silently
   skip the intended probe. `claude-review.test.mjs` uses `realpathSync` for its temporary helper entry and proves
   fake-CLI launch when the wrapper is deleted. Exit status alone was insufficient. (2026-09-05)
+
+- **Subprocess stream failures and historical flakes are different evidence claims.** A real helper can
+  exit1 without a summary when a child stdout/stderr emits an unhandled error. Each stream needs a
+  controlled failure path; test through the copied real helper and local fake CLI, with the listener
+  independently deleted. Synthetic EventEmitter errors do not prove OS stream destruction, general
+  process-tree cleanup, or the cause of an earlier intermittent missing summary. Preserve subprocess
+  stderr/stdout in the missing-summary assertion before fixture cleanup. Slice4 register Entries39–43
+  carries the exact observed defect and remaining limits. (2026-09-05)
+- **A write spy must snapshot bytes at invocation.** Retaining a Buffer reference lets production zero
+  or reuse its backing memory before the test scans it, making an actual write look empty. Copy bytes
+  synchronously in the observer; prove it with a write/erase mutant. Slice4 JobD round3 exposed this
+  test-observer defect; the accepted key-proof partition remains in register Entries34–37. (2026-09-05)

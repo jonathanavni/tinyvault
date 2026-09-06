@@ -229,3 +229,91 @@ Claude 7×P2 / 1×P1 / 1×P1) → lock → **6 Codex Astra implementation jobs**
 stop-and-return points on contract facts, each adjudicated) → integrator Docker fix cycle → **3-channel post-impl
 review** (Codex 2×P1, QA 95 mutants PASS, security PASS + a Medium) → **3 fix rounds** (Codex core + integrator
 evidence code, each re-reviewed) → QA round 3 (45 mutants) → clean clone → merge.
+
+
+## 2026-09-05-m5.2-slice4 — implementation and local integration (archived at full wrapup)
+
+Archived from Current State after exact-candidate and merged-tree acceptance. Source merge `39169a6`,
+acceptance-document commit `f6b6a42`; canonical results and residuals remain in Slice4 register Entries16,
+23,27,37,39–44. No review or test was repeated for this documentation-only wrapup. The completed Slice3
+carry-forward narrative is retained below with its historical wording. Decisions Log stays in PLAN.
+
+`2026-09-05-m5.2-slice4` — focus: **M5.2 slice 4**; owner: codex; state: complete, merged locally.
+State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`.
+Locked revision5 Jobs **A/B/C/D accepted** (register Entries16/23/27/37). All incoming changes preserved
+in candidate `0e274bf57ca94fa3f1ab5a80d72980b5abef35b5` and local merge `5210988`. Bounded helper repair
+accepted after fresh Astra, Claude QA and separate security PASS (Entries40–43), committed as
+`7a02d3ad84751a1db35678551836ca5e426caba3` on `codex/m5-2-slice-4-integration-fix`.
+Final source merge on main: **`39169a6c81fc2da4a29532ac46ea9e961197b145`**, exact repair-candidate tree
+`6a416a798b135fc4340fe39400aaed8a117cbae5`. Owner closure is a subsequent documentation-only commit.
+
+**Final acceptance PASS (Entry44):** new literal exact-commit clone of7a02d3a + npm ci + make browsers +
+make test1891 pass/one expected opt-in skip/execution PASS. After local merge, serial make test1891 pass/
+same expected skip, then make test-docker5/5 and execution PASS. All reports fresh;303 candidate file hashes
+unchanged after tests. Maximum-budget579-scanner exports89.20–89.26s each below120s; separate composed
+browser registration-through-attestation131.5–143.8ms, zero normal409s. Final zero fixture containers;
+three pre-existing networks preserved. Canonical evidence/dispositions: `docs/m5-2-slice-4-review-findings.md`;
+raw evidence `/private/tmp/tinyvault-slice4-integration/helper-acceptance/`.
+
+**Retained limits:** the original clone/merged-tree intermittent missing-helper-summary failures remain
+unexplained (Entry39). The separately reproduced stream-error path is repaired; new green gates do not
+prove historical attribution or nonrecurrence. Exact synthetic/mutation, cleanup, diagnostic and test-
+inventory limits live in Entry43. All accepted JobA/B/C/D private-key/observation/deployment limits remain.
+Do not repeat completed planning or accepted reviews absent new evidence. Locked contract remains
+`docs/m5-2-slice-4-plan.md` revision5. No release or whole-M5.2 completion claim.
+
+No active worker/reviewer/test or required approval remains. User authorized all local commits/merges;
+**nothing pushed remotely**. Standing routine Claude review consent is in `docs/handoff-pattern.md`; the
+managed transfer block was resolved by specific approval with no policy bypass. Next planned work is
+**Slice5: attestation**, then Slice6 parity/claim closure. Neither began in this session.
+
+`2026-09-05-m5.2-slice3` — focus: assessment fold-in check, commit `AGENTS.md`, then **M5.2 slice 3** through the
+full security-core ladder via Astra; prune `codex/m5-2-slice-2` — **outcome: MERGED (`8afce07`).** Merged tree:
+`make test` 1568 + 5 + 10 with the execution proof PASS; `make test-docker` 4/4 (78 s). Clean clone at the branch tip
+`638bc15`: green. Session tests 1182 → 1568 (+ the Docker suite's 4).
+
+**M5.2 slice 3 ✅ MERGED** — each fixture runs in its own container behind a framed `docker exec -i` bridge with a
+stdin-delivered bootstrap secret and an injective challenge/MAC; construction is provenance-first (daemon-level
+absence check, exact-one resolution, a 20-row inspect table) and fail-closed through one idempotent closer whose
+Acceptance-E scans (logs, export, history, exec stderr, artifacts) each carry a positive control in the same scanning
+pass; `make test` stays Docker-free behind six signals (runtime interceptor, per-path capability map, hash-pinned
+root of trust, entry-point grammar gate, execution proof, clean clone). Register:
+`docs/m5-2-slice-3-review-findings.md`; plan `docs/m5-2-slice-3-plan.md` revision 4.
+
+Slice 3's detailed execution ladder is archived in `PLAN-archive.md`; its load-bearing lessons follow.
+
+**Findings worth carrying into slice 4:**
+- **The entry point cannot guard itself.** Three paper rounds beat every static gate by a spelling it did not know
+  (`.cjs`, `env docker`, `globalSetup`, a Makefile `$(shell …)`); the answer was to narrow the claim — gates catch
+  Docker reach from *code modules*; the entry-point files are a hash-pinned, reviewed root of trust.
+- **Measure the environment before locking a sentence about it.** Four rev-4 sentences were false on this host
+  (label vs interpolation, TS constants vs a bare-Node lint, `child_process` count, `IpcMode`); `compose ps` hides
+  non-Compose containers; Docker 29 omits `Config.Cmd`; ORB/CORS hide cross-origin answers from a page oracle.
+- **A coverage assertion must be able to fail.** The first two versions of the probe-coverage check were trivially
+  satisfiable (a WebSocket error counted as a verdict; cancellation counted as "no route"); the third is pinned
+  Docker-free with the failure shapes Chromium actually produces, and its exclusions (bridge-network addresses,
+  the `file:` socket URL) are declared, not hidden.
+- **Integrator-written evidence code is not exempt from review.** Both post-impl P1s were in code I wrote during
+  the Docker fix cycle; the ladder caught them because the code went through the same channels.
+
+**Declared residuals carried to slice 4** (each in code or the register): constant-time compare not unit-observable;
+`node:24-slim` by tag (M10); no composed eval entry until a later slice (the in-process eval stays under the guard);
+the §9 static-gate limits (wrapper launchers, `worker_threads`, `process.binding`, `getBuiltinModule`, parse-time
+Make, root-of-trust edits); bridge-network and `file:` targets excluded from probe coverage; `checkScan`'s
+control-count guard and exec-stderr's `failed()` path unpinned; `.dockerignore` entries untested. **Outside the
+slice, filed as an M6 spec input:** `browser_close_session` never resolves after a navigation to a black-hole
+address (BACKLOG, with reproduction).
+
+*Slice 2's detail is below; slice 1 and earlier in `PLAN-archive.md`.*
+
+**M5.2 slice 2 ✅ MERGED (`8133495`)** — daemon-channel preflight, canonical `unix:///` policy, runtime-unforgeable pin,
+single Docker choke point, fail-closed composed construction; 2 pre-impl rounds → 3 impl jobs → 3-channel review →
+2 fix rounds → clean clone. Its four carried lessons and six declared residuals were all resolved or re-declared by
+slice 3 (above); full detail in `PLAN-archive.md`.
+
+*Slice 1's C-S1/C-S2 lessons and the M5.1 / spec-lock detail are also in `PLAN-archive.md`.*
+
+
+Wrapup hygiene: shipped Slice4 and earlier slice plans remain indexed at their existing paths because
+their contracts and review references are still inputs to later slices. Their completed status is already
+explicit in docs/README; physical archival/link migration is deferred, not silently performed here.

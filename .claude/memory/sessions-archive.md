@@ -37,3 +37,11 @@ running code. (commits `9f216b0`..`6a6b67c`)
   `codex/m5-2-slice-2` and `codex/m5-2-slice-3`.
 
 - **2026-09-05 (`m5.2-slice4-planning`, Codex owner, closed)** — Slice 4 plan revision 5 LOCKED after three paper rounds and explicit SCHEMA approval; baseline review-tool prerequisite accepted after real CLI/helper mutants and final `make test` 1574 + 5 + 10 (one expected pending). All work uncommitted on `main` at `dc0796f`; no Slice 4 feature implementation. Ownership relinquished for the user's fresh Codex implementation session; start bounded Job A from the dirty candidate. Handoff: PLAN Current State; canonical evidence/dispositions: `docs/m5-2-slice-4-review-findings.md`.
+
+- **2026-09-05 (`m5.2-slice4-implementation`, Codex owner, closed)** — Locked revision5 Jobs A–D accepted
+  through the full ladder; all incoming work preserved. Independently proven helper stream-error repair
+  reviewed by Astra/Claude QA/security. Exact candidate7a02d3a clean clone PASS; final source merge39169a6
+  passed serial make test1891+one expected skip, Docker5/5 and execution gates; acceptance docsf6b6a42.
+  Historical intermittent missing summaries remain unexplained. Full wrapup relinquishes ownership for
+  fresh Slice5 attestation planning; no active jobs, no push. Canonical handoff: PLAN; evidence: Slice4
+  register Entries39–44.
