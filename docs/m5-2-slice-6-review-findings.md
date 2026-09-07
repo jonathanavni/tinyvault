@@ -1521,3 +1521,69 @@ candidate digest e25bf3486aeb1698ba1f3bea89d4994ef9182d198fd4dcfbca1c2fc26a07bcf
 before this authorization checkpoint. Only PLAN and this append-only register are updated here;
 all production/test/table and inherited wrapup bytes are preserved. Acceptance is pending; do not
 restate prior in-place gates as committed-candidate results. No review round is repeated.
+
+
+## Entry28 — Slice6 committed, acceptance PASS and source pushed (2026-09-06)
+
+Source commit `8103c4729e729d6a08e569e8aa5abe68cb535fa3` (`8103c47`) integrates Slice6 directly
+on the existing main branch. All67 changed/new files were staged by explicit path and the index was
+verified against every330 candidate file before commit; inherited wrapup bytes were preserved.
+Committed candidate digest `e20812404c7824eee1c8f48675f6e969bed2db5bec3ca821ebbb01b55e274fa0`
+contains only the prior verified candidate plus Entry27 authorization/continuity text. No source/test,
+locked plan, thresholds or canonical table rows changed after independent review.
+
+Literal clean-clone acceptance, in order:
+`git clone --no-hardlinks --branch main /Users/jonathanavni/Documents/Coding/tinyvault
+/private/tmp/tinyvault-slice6-integration-20260906/clean-clone`; clone HEAD verified at8103c47,
+then `npm ci`, `make browsers`, `make test`, all exit0. The clone used its own locked dependency
+install, with no saved eval artifact prerequisite. All330 hashes matched before and after, tree clean.
+Default gate2317 PASS/0 failed/1 expected opt-in eval skip; execution audit PASS and independent
+name-level join299 selectors exactly once passed in the same3 fresh partitions.
+
+Exact integrated main8103c47 then passed serial `make test`, `make test-docker`, `make eval`:
+- Default2317 PASS/0 failed/1 expected skip; all prerequisite guards and execution audit PASS.
+  Main2302, decoder timing5, host timing10. Independent native299-name join also PASS.
+- Docker6/6 PASS/0 skipped, execution audit PASS; parity, control-route and runner metrics all
+  complete=true. K has3 fresh legs/roots, six runs each, observed in-process/composed and
+  observer-disabled in-process. No retry-until-equal, sorting exception or timing widening.
+- Composed N10 eval1/1 PASS and execution audit PASS;30/30 complete,0 observed leaks; every cell
+  unobserved/bodiesUnobserved/scanTruncated0. Native test109.418s, Vitest109.81s. Required deployment
+  literal printed; isolation remains assumed (unverified). These are scripted-stub measurements,
+  not real-agent leakage evidence or daemon-non-exposure proof.
+
+All330 committed hashes stayed unchanged and both checkouts remained clean through acceptance.
+Artifacts: `/private/tmp/tinyvault-slice6-integration-20260906/`, candidate.json,
+committed-candidate.json, npm-ci.log, make-browsers.log, clone-test.log, main-test.log,
+main-docker.log, main-eval.log and acceptance-summary.json. Each stage directory has copied native
+reports plus owner-summary.json; each test stage also has a complete name-level selector-join.json.
+Docker metrics and the current scorecard are copied into their stage directories. Log hashes identify
+captured tool output; native report hashes identify the exact copied JSON files.
+
+| Stage / native report | SHA256 |
+| --- | --- |
+| clone-test / main.json | `9d43ecc516f055022d6ef1f619662a0e86bbf657241579993ac0b37f26dbbac4` |
+| clone-test / timing-1.json | `fb8b6a96d5ee1da229644a9b65aab47791db5687b80ba952bee48063b5fad8ee` |
+| clone-test / timing-2.json | `af4a8910dabe5f84fc015b4000f60c0de16a1b67336dd37696d1a4439a7f8838` |
+| main-test / main.json | `18cd6fc2674d183217885c34f5941b56a7a83764ae26ffb79f4e8d99566b4a60` |
+| main-test / timing-1.json | `e104c707e85530874d6c29125bdf4b3e91cfb1683cc8d7f372e8bc01227ade6b` |
+| main-test / timing-2.json | `990afde5e47ae177c411a25731b2ed4a3ae9889719a002bc9823fa9a979403a0` |
+| main-docker / docker.json | `9e31685a7a8153c7df8497a3f009f5ff5eff7cc3dd258674d4d4dee69319b41d` |
+| main-eval / eval.json | `92157ba9c1aa17e26422d71d7a5f46e1d528b07be7ef2f7ccf602bae0489eb20` |
+
+Scorecard SHA256 `9c50e5b463e1923d4d35cb204b7edf64c9010c377afc1f495a3b012893b543bc`.
+
+Before publication origin/main was again verified at73bd015. Authorized normal fast-forward
+`git push origin main` succeeded, and live `git ls-remote --exit-code origin refs/heads/main`
+confirmed8103c4729e729d6a08e569e8aa5abe68cb535fa3. Source push proof is in
+source-push-verification.json. These acceptance/status records follow as a documentation-only
+commit and push; their final remote equality/clean-tree proof is saved in publication-verification.json.
+
+PLAN Current State, docs index and the claim-table introduction now reflect accepted Slice6.
+Final documentation changes preserve every source/test byte, inherited wrapup document, locked
+revision3 plan and canonical JSON table row; no runtime gate rerun or review round is required for
+status/citation-only changes. Current table SHA256 `e568cb613f46eb5fcfa0e2374ba4d0aac1a57973882931ccaa10bf7a470a335d`.
+Completed review counts remain paper3 and implementation2. Slice6 acceptance is complete; all six
+M5.2 slices are integrated. Whole-M5.2 milestone-close assessment and release remain separate,
+unperformed scopes. No milestone-close or release approval is implied.
+Deviations From Handoff: approved CORS/readonly amendments only; all required commit/clone/main
+acceptance sequencing and serial browser timing constraints retained.

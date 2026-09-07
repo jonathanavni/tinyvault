@@ -12,45 +12,40 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 ## Current State
 
 
-`2026-09-06-m5.2-slice6-planning` — focus: **M5.2 Slice6 implementation verified; integration pending**;
-owner: codex; **state: active, authorized integration in progress**. Checkout
-`/Users/jonathanavni/Documents/Coding/tinyvault`, branch `main`, HEAD
-`73bd015bcf20ae226d7f480ef57292b2bbc539a3`. Changes remain **UNCOMMITTED**.
-No active workers, reviewers, mutations or test suites. Preserve inherited wrapup documents and
-the closed Slice4/5 acceptance. Do not repeat completed reviews: Slice6 paper rounds3, implementation rounds2.
+`2026-09-06-m5.2-slice6-planning` — focus: **M5.2 Slice6 accepted and source pushed**;
+owner: codex; **state: active**. Checkout `/Users/jonathanavni/Documents/Coding/tinyvault`,
+branch `main`. Source integration commit `8103c4729e729d6a08e569e8aa5abe68cb535fa3` (`8103c47`)
+is verified on origin/main. This acceptance documentation follows in a separate record commit;
+use live git HEAD/origin/main for its final identity. No active workers, reviewers, mutations or tests.
 
-**Completed:** A–D implementation under locked revision3,147 claim rows/299 runtime selectors.
-Compiler evidence337 mutants/695 actual invocations; original runtime290 Slice6 lineages plus7
-accepted historical selectors and2 new deployment-block selectors with3 document mutants each.
-Entry24 adds11 verified isolated pass/fail/pass triples. Preserve all recorded survivors, diagnostic-only,
-shared-observation and historical-candidate limits; evidence lives in the append-only Slice6 register.
-Current canonical table SHA256 `27d7a12bc5b45eb4f59ab32af8dab133cd97cc9b37e97fcf998b6149527e3af4`.
+**Completed:** Slice6 A–D implementation under locked revision3;147 claim rows/299 runtime selectors;
+compiler evidence337 mutants/695 invocations; runtime lineages and narrow mutation/coverage limits
+preserved in the canonical Slice6 register. Paper rounds3 and implementation rounds2 are complete.
+Fresh Astra and separate Claude Opus5 QA/security round2 all PASS (Entry26). No repeat reviews needed
+without new source/gate changes. Current table SHA256 `e568cb613f46eb5fcfa0e2374ba4d0aac1a57973882931ccaa10bf7a470a335d`.
 
-**Current gates (Entry25):** npm run typecheck and git diff --check PASS; focused fixes196 PASS,
-claim suite154 PASS on host. Serial make test2317 PASS/1 expected opt-in skip, make test-docker6/6 PASS,
-make eval1/1 PASS with actual composed N10,30/30 complete and0 observed leaks; all execution audits PASS.
-All299 linked runtime names occurred exactly once passed in the same fresh default reports.
-Evaluation is scripted-stub evidence with Docker isolation assumed (unverified), not real-agent or
-daemon-non-exposure proof. Sandbox EPERM and first failed test-expectation attempts remain excluded.
+**Acceptance (Entry28):** exact8103c47 literal clean clone + npm ci + make browsers + make test PASS.
+Clean-clone default2317 PASS/1 expected opt-in skip, with execution audit and native299-name join PASS.
+Then exact integrated main8103c47 passed serial make test2317 PASS/1 expected skip, live Docker6/6,
+and composed N10 make eval1/1 with30/30 complete and0 observed leaks; every execution audit PASS.
+All330 committed file hashes stayed unchanged through gates, and both checkouts remained clean.
+Source push succeeded and live origin/main was verified at8103c47. Acceptance records are committed
+and pushed separately; final publication proof is kept with the acceptance artifacts.
 
-**Independent reviews (Entry26):** fresh Astra, Claude Opus5 QA and separate Claude Opus5 security
-round2 all PASS on frozen330-file digest
-`be6c123b91552a97fb9366a143451995c04f65519b9c97d2a4292d60da8d1975`.
-Round1 defects were fixed and verified: BOM preservation, exact marked deployment text, dual-error
-attribution, witness budget category and stale documentation. Final changes after PASS are citation/status
-updates only; source/tests and canonical table rows remain byte-identical. Static reviewer evidence limits
-and one incorrect reviewer statement about the in-gate execution join are explicitly disposed in Entry26.
+**Evidence and limits:** `/private/tmp/tinyvault-slice6-integration-20260906/` contains native reports,
+complete299-name joins, copied Docker metrics/scorecard, hashes and source/final publication proofs.
+Earlier implementation/review artifacts remain in `/private/tmp/tinyvault-slice6-implementation/`.
+Results are scripted-stub measurements; Docker isolation remains assumed (unverified), and fixture
+signatures remain post-capture integrity rather than independent capture authenticity. All accepted
+finite decoder/observer/timing and historical mutation-attribution limits remain. Inherited wrapup
+files and the closed Slice4/5 handoff below were preserved; final edits are status/citation text only.
 
-**Approval:** User's “I always approve these file changes…stop asking me each time” is standing
-approval for routine Slice6 file edits, including the approved CORS-before-early-response and readonly
-coverage declaration corrections. Do not ask again per file. Runtime permission controls still apply.
-User authorized commit, integration acceptance and push on 2026-09-06 by saying “Ok let’s proceed” after the proposed commit → clean-clone/integrated-tree gates → push sequence. Milestone-close assessment and release remain separate, unauthorized scopes.
+**Authorization:** User approved commit → required clean-clone/integrated-tree gates → push by
+“Ok let’s proceed.” Routine Slice6 file edits have standing approval; do not ask per file. Runtime
+permission controls still apply. Whole-M5.2 assessment and release were not part of this authorization.
 
-**Next:** commit the verified candidate on main, then run the existing committed-candidate clean-clone
-and exact integrated-tree acceptance ladder before pushing. Those gates are not run
-yet; Slice6 is not merged and whole-M5.2 remains open. No further implementation review is needed absent
-new source/gate changes. Evidence: `/private/tmp/tinyvault-slice6-implementation/`; review round2 and
-repaired-candidate gates in reviews-round2/ and reviews-round1/fixed-*-gate/ respectively.
+**Next:** all six M5.2 slices are integrated; the separate whole-M5.2 milestone-close assessment is
+still pending and is the next proposed scope. M5.2 is not declared closed and no release is approved.
 
 **Previous closed handoff (preserved):**
 
