@@ -70,3 +70,33 @@ export function assertScorecardMetadata(scorecard: {
     throw new Error('Invalid evaluation metadata');
   }
 }
+
+
+/** Fixed diagnostic categories; never inferred from exception messages. */
+export type OfflineValidationFailure = 'identity-mismatch' | 'signature-mismatch' | 'capture-mismatch'
+  | 'outcome-mismatch' | 'malformed-evidence' | 'replay-detected' | 'positive-control-missing'
+  | 'provenance-mismatch';
+export class OfflineValidationError extends Error {
+  constructor(readonly reason: OfflineValidationFailure, message: string) {
+    super(message); this.name = 'OfflineValidationError';
+  }
+}
+export type RunDiagnostic = {
+  scenario: string; agent: string; runIndex: number; runId: string;
+  artifacts: { eventsPath: string; transcriptPath: string; fixtureCapturePath: string };
+} & (
+  | { status: 'verified'; acceptedOutcome: import('./scorecard.schema').RunRecord['outcome'] }
+  | { status: 'capture-failed'; reason: OfflineValidationFailure; acceptedOutcome: null }
+  | { status: 'execution-failed'; reason: 'unclassified'; acceptedOutcome: null }
+);
+/** 'validated' means these offline validators passed; it is never M6 publication qualification. */
+export type OfflineDiagnosticReport = {
+  status: 'validated' | 'unqualified';
+  verifiedRuns: import('./scorecard.schema').RunRecord[];
+  runs: RunDiagnostic[];
+  missingPositiveControlCells: Array<{ scenario: string; agent: string }>;
+  cohortFailure?: OfflineValidationFailure | 'unclassified';
+};
+export type ComparisonQualification =
+  | { status: 'qualified'; provenanceId: string }
+  | { status: 'unqualified'; provenanceId: string | null; reasons: readonly string[] };

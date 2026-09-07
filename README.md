@@ -29,9 +29,10 @@ and the repository and CI must contain no real credentials.
 (M4), and the measurement harness runs the first two hostile fixtures (M5). What does not exist yet: a real agent in
 front of those fixtures (M6), the MCP adapter (M8) and the 1Password backend (M9). The two test-gate defects a
 read-only project assessment found (`docs/project-assessment-2026-09-03.md`) are **fixed** — `make test` now passes
-from a literal clean clone, verified by one. The Docker-composed fixture path (M5.2) has five accepted slices. Slice 6 implements parity, claim
-evidence and evaluation validity under `docs/m5-2-slice-spec.md` revision 4 and the locked Slice 6 plan;
-its review and acceptance gates remain pending. The deployment requirement is stated below.
+from a literal clean clone, verified by one. **M5.2 is complete:** all six slices are accepted, including
+parity, claim evidence and evaluation validity (source `8103c47`, acceptance record `53fd94f`). The
+[whole-milestone assessment](docs/project-assessment-2026-09-06.md) verified the retained evidence and
+closed the documentation findings. The deployment requirement is stated below.
 
 | Milestone | State |
 |---|---|
@@ -42,8 +43,9 @@ its review and acceptance gates remain pending. The deployment requirement is st
 | M4 — the fill service and its integration gates | **done** (`b8a9396`) — four commits + five fix slices, each three-channel reviewed with real-Chromium exploits; probe P is a paired Holm-corrected family gate; layer-4 blind spots declared in `SCHEMA.md`; residuals with proof in `docs/m4-review-findings.md` |
 | M5 — hostile fixtures #1–#2 (`lookalike-origin`, `dom-hidden-injection`), the capture-coverage gate, the finite decoder inventory, worker-body markers | **done** (`96e3ea3`) — three slices, each three-channel reviewed with real-Chromium probes and capped fix rounds; register `docs/m5-review-findings.md` |
 | M5.1 — test-gate repair (timing file split, generated run corpus, clean-clone acceptance) | **done** — accepted by a literal `git clone` + `npm ci` + `make browsers` + `make test`; register `docs/m5-review-findings.md` §C-Q |
-| M5.2 — Docker-composed fixtures behind one implementation, two transports | spec **locked** (revision 4); slices 1–5 **merged** (Slice 5 source `02929e5`, acceptance `73bd015`); Slice 6 implementation active, acceptance pending |
-| M6–M7 — reference + naive agents | not started |
+| M5.2 — Docker-composed fixtures behind one implementation, two transports | **done** — all six slices accepted; source `8103c47`, acceptance `53fd94f`; [milestone-close assessment](docs/project-assessment-2026-09-06.md) complete |
+| M6 — reference + naive agents | [S1 complete](docs/m6-review-findings.md#s1-r3--final-capped-review-and-owner-acceptance-2026-09-07); provenance/profile contracts with recorded proof limits; S2/S4 entry decisions open |
+| M7 — hostile fixtures #3–#4 | not started |
 | M8–M10 — MCP adapter, 1Password backend, demo | not started |
 
 `make eval` defaults to 10 runs per cell across the three scenarios using Docker-composed fixtures. It

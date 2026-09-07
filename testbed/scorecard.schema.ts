@@ -132,3 +132,9 @@ export type Scorecard = {
     }>;
   }>;
 };
+
+/** Additive real-profile extensions; legacy/stub contracts above remain byte-shape compatible. */
+export type M6RunRecord = RunRecord & import('./evaluationProvenance').ProvenanceBoundRun;
+export type M6Scorecard = Scorecard & {
+  provenance: import('./evaluationProvenance').EvaluationProvenance;
+};

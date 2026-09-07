@@ -393,3 +393,282 @@ The A5 scorecard-provenance slice is still scheduled before
 M6 publishes anything. The `tinyvault-fixture:local` image (347 MB) stays on the host between eval runs (rebuilt by
 every composed construction). Threads unchanged: `terminate-before-delivery` timeout parked; deferred M2/M3
 residuals; the 🔴 `dom-fill` destination slice still owes its launch disposition.
+
+
+## 2026-09-06-m5.2-slice6-planning — Slice6 accepted, published and session closed
+
+Full session: locked revision3 after three paper rounds; A–D implementation, two implementation
+review rounds, all final independent channels PASS, literal clean-clone and integrated-main acceptance.
+Source8103c47 and acceptance records53fd94f pushed; final local/remote equality and clean tree verified
+before wrapup. Canonical evidence/dispositions: Slice6 register Entries1–29. Ownership relinquished;
+whole-M5.2 assessment remains next proposed scope. No active jobs.
+
+The prior Current State follows verbatim, including the explicitly historical Slice5 handoff.
+Its prospective publication wording and earlier next-scope/count statements are historical; the
+closed checkpoint in PLAN.md and Slice6 Entry29 supersede them.
+
+`2026-09-06-m5.2-slice6-planning` — focus: **M5.2 Slice6 accepted and source pushed**;
+owner: codex; **state: active**. Checkout `/Users/jonathanavni/Documents/Coding/tinyvault`,
+branch `main`. Source integration commit `8103c4729e729d6a08e569e8aa5abe68cb535fa3` (`8103c47`)
+is verified on origin/main. This acceptance documentation follows in a separate record commit;
+use live git HEAD/origin/main for its final identity. No active workers, reviewers, mutations or tests.
+
+**Completed:** Slice6 A–D implementation under locked revision3;147 claim rows/299 runtime selectors;
+compiler evidence337 mutants/695 invocations; runtime lineages and narrow mutation/coverage limits
+preserved in the canonical Slice6 register. Paper rounds3 and implementation rounds2 are complete.
+Fresh Astra and separate Claude Opus5 QA/security round2 all PASS (Entry26). No repeat reviews needed
+without new source/gate changes. Current table SHA256 `e568cb613f46eb5fcfa0e2374ba4d0aac1a57973882931ccaa10bf7a470a335d`.
+
+**Acceptance (Entry28):** exact8103c47 literal clean clone + npm ci + make browsers + make test PASS.
+Clean-clone default2317 PASS/1 expected opt-in skip, with execution audit and native299-name join PASS.
+Then exact integrated main8103c47 passed serial make test2317 PASS/1 expected skip, live Docker6/6,
+and composed N10 make eval1/1 with30/30 complete and0 observed leaks; every execution audit PASS.
+All330 committed file hashes stayed unchanged through gates, and both checkouts remained clean.
+Source push succeeded and live origin/main was verified at8103c47. Acceptance records are committed
+and pushed separately; final publication proof is kept with the acceptance artifacts.
+
+**Evidence and limits:** `/private/tmp/tinyvault-slice6-integration-20260906/` contains native reports,
+complete299-name joins, copied Docker metrics/scorecard, hashes and source/final publication proofs.
+Earlier implementation/review artifacts remain in `/private/tmp/tinyvault-slice6-implementation/`.
+Results are scripted-stub measurements; Docker isolation remains assumed (unverified), and fixture
+signatures remain post-capture integrity rather than independent capture authenticity. All accepted
+finite decoder/observer/timing and historical mutation-attribution limits remain. Inherited wrapup
+files and the closed Slice4/5 handoff below were preserved; final edits are status/citation text only.
+
+**Authorization:** User approved commit → required clean-clone/integrated-tree gates → push by
+“Ok let’s proceed.” Routine Slice6 file edits have standing approval; do not ask per file. Runtime
+permission controls still apply. Whole-M5.2 assessment and release were not part of this authorization.
+
+**Next:** all six M5.2 slices are integrated; the separate whole-M5.2 milestone-close assessment is
+still pending and is the next proposed scope. M5.2 is not declared closed and no release is approved.
+
+**Previous closed handoff (preserved):**
+
+`2026-09-05-m5.2-slice5-planning` — focus: **M5.2 Slice5 accepted and pushed**;
+owner: codex; **state: closed** (2026-09-06). Ownership relinquished for a fresh session.
+Checkout: `/Users/jonathanavni/Documents/Coding/tinyvault`, branch `main`.
+Implementation005a4f3 → source merge02929e5 → acceptance records73bd015.
+User authorized the push; origin/main was verified at73bd015 with local/remote counts0/0 and a clean tree.
+This wrapup leaves five continuity files uncommitted: PLAN.md, PLAN-archive.md, the Slice5 register,
+.claude/memory/sessions-archive.md and .claude/memory/gotchas.md. Preserve them on fresh-session entry;
+no production or test changes.
+No running workers, reviewers, mutations or test suites; no pending Slice5 job or acceptance gate.
+Detailed session narrative is in PLAN-archive.md. Evidence below is durable; scratch reports may expire.
+
+**Accepted:** Slice5 plan revision3 LOCKED after three paper rounds; implementation round1 fresh Astra,
+Claude Opus5 QA and separate security all PASS. 66 killed/restored mutations. Exact candidate clone +
+npm ci + make browsers + make test PASS (1963 passed, one expected opt-in skip). Exact source merge
+passed serial make test (1963 passed, one expected skip) and live make test-docker (5/5), both execution
+audits PASS. Canonical evidence: `docs/m5-2-slice-5-review-findings.md` Entries7–11; final gates Entry10.
+Live exports <120s; browser registration-through-attestation128.7–343.4ms; zero normal409s.
+No source/tests changed after review or gates. Legacy v1 receipt/attestation artifacts require regeneration.
+
+**Next session:** take ownership from this closed checkpoint and begin **Slice6 planning only** under
+`docs/m5-2-implementation-plan.md` row6 and `docs/m5-2-slice-spec.md` revision4 §D6 / Acceptance K,O,P:
+canonical two-transport parity, behavior-to-claim table with row-specific killing mutants, SCHEMA claim
+wording, deployment-assumption reporting and invalid-run handling. Read SCHEMA.md and the relevant
+source/tests before drafting; inspect current checkout/refs/dirty state. Follow the existing Codex-led
+paper → implementation → independent QA/security/adversarial → integration ladder. No Slice6 plan is
+locked and no Slice6 implementation, milestone-close assessment or release is authorized by this handoff.
+Do not repeat completed Slice4/5 reviews or reset their round counts absent new evidence.
+
+**Carry forward:** fixture-control post-capture integrity is not independent capture authenticity,
+compromised-fixture containment or daemon-wide non-exposure. Keep Slice5 Entry8's schema-guard mutation
+attribution limits and all accepted Slice4 limits (Entries39/43/44): historical intermittent missing-helper
+summaries remain unexplained; repaired stream-error behavior does not establish historical attribution
+or nonrecurrence. No open Slice4/5 acceptance blocker. Exact test and mutation claims stay in their registers.
+
+**Milestone:** M0–M5 and M5.1 accepted; **M5.2 slices1–5 of6 merged**. Whole-M5.2 completion and its
+required milestone-close assessment remain pending Slice6. A5 scorecard provenance is due before M6
+publishes numbers. Other parked threads: terminate-before-delivery timeout; deferred M2/M3 residuals;
+🔴 dom-fill destination launch disposition. Keep existing locked requirements and claim limits.
+Standing Claude review-transfer authorization persists; runtime approval controls remain authoritative.
+
+
+## 2026-09-06 — closed Slice6 handoff preserved at M5.2 assessment takeover
+
+
+`2026-09-06-m5.2-slice6-planning` — focus: **M5.2 Slice6 accepted and pushed**;
+owner: codex; **state: closed** (2026-09-06). Ownership relinquished for a fresh session.
+State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`, branch `main`.
+Source commit `8103c4729e729d6a08e569e8aa5abe68cb535fa3`; acceptance-record commit and published
+HEAD `53fd94f7831d2fb913d887a4a40c2ef3913f30b1`. Publication verified local/remote equality,
+ahead/behind 0/0 and clean tree before wrapup. No running workers, reviewers, mutations or tests;
+no pending Slice6 acceptance gate.
+
+**Preserve on entry:** this wrapup leaves five continuity files uncommitted: `PLAN.md`,
+`PLAN-archive.md`, `docs/m5-2-slice-6-review-findings.md`, `.claude/memory/sessions-archive.md`
+and `.claude/memory/gotchas.md`. No source, test, locked plan or claim-table changes. Earlier Slice5
+wrapup documents were preserved and committed with Slice6. Historical handoffs and this session's
+prior narrative are preserved in `PLAN-archive.md`; cumulative Decisions Log remains here unchanged.
+
+**Accepted:** Slice6 revision3 A–D; 147 claim rows / 299 runtime selectors; 337 compiler mutants /
+695 compiler invocations. Paper rounds3 and implementation rounds2 complete; fresh Astra and
+separate Claude Opus5 QA/security round2 all PASS. Canonical dispositions and mutation limitations:
+Slice6 register Entries7–26. Do not repeat completed Slice1–6 reviews or reset counts absent new evidence.
+
+**Verification:** exact source8103c47 literal clean clone → npm ci → make browsers → make test PASS
+(2317 passed, one expected opt-in skip). Exact integrated main then passed serial make test
+(2317 passed, one expected skip), make test-docker (6/6), make eval (1/1; composed N10, 30/30 complete,
+zero observed leaks). Execution audits and both 299-selector name joins PASS; all330 candidate hashes
+unchanged through acceptance. Entry28 holds durable report hashes; Entry29 records final publication
+and closure. Raw artifacts: `/private/tmp/tinyvault-slice6-integration-20260906/` and
+`/private/tmp/tinyvault-slice6-implementation/`; scratch reports may expire. Runtime gates were not
+repeated for this documentation-only wrapup; diff hygiene and preservation checks apply.
+
+**Next proposed scope:** whole-M5.2 milestone-close assessment. All six slices are integrated;
+M5.2 is not yet declared closed. In the fresh session, take ownership from this closed checkpoint,
+read PROJECT-SPEC.md, CLAUDE.md's milestone assessment requirement, docs/phase-0-plan.md,
+docs/m5-2-implementation-plan.md, locked docs/m5-2-slice-spec.md revision4, SCHEMA.md and current
+register dispositions. Follow docs/handoff-pattern.md §0's Codex-led independent cross-model review
+mapping and verify assessment findings line by line. Assess whole-milestone requirements and evidence;
+retain completed slice reviews. This handoff proposes that next task; it does not start assessment,
+M6 implementation or release. Slice6 locked plan revision3 remains unchanged.
+
+**Carry forward:** scripted-stub results are not real-agent leakage evidence. Docker isolation remains
+assumed (unverified); fixture signatures prove post-capture integrity, not independent capture
+authenticity or daemon non-exposure. Preserve accepted finite decoder/observer/timing/wire limits,
+Slice5 Entry8 mutation-attribution limits and Slice4 Entries39/43/44 historical helper limits.
+No open Slice6 acceptance blocker. A5 scorecard provenance is due before M6 publishes numbers;
+terminate-before-delivery timeout, deferred M2/M3 residuals and dom-fill destination launch disposition
+remain parked in their canonical records. Keep locked requirements and thresholds.
+
+**Authorization and hygiene:** routine file changes have standing user approval; do not ask per file.
+Standing Claude review-transfer authorization persists; runtime permission controls still apply.
+No further commit/push is part of this wrapup. Retain slice plans/registers at their current paths for
+assessment traceability; any archive/link reorganization is a separate documentation judgment.
+
+<!-- End preserved closed Slice6 checkpoint. -->
+
+
+## 2026-09-06 — M5.2 milestone-close assessment, completed session
+
+
+`2026-09-06-m5.2-milestone-close` — focus: **M5.2 milestone-close assessment complete; M5.2 closed**;
+owner: codex; **state: active** (assessment finished, awaiting next authorized scope).
+State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`, branch `main`,
+HEAD `53fd94f7831d2fb913d887a4a40c2ef3913f30b1`; accepted executable source `8103c47`.
+User authorized takeover from the closed Slice6 session and whole-milestone assessment only.
+No workers, reviewers, mutations or runtime suites remain active. No M6 implementation or release.
+
+**Outcome:** Acceptance A–P closed. Fresh Codex and separate Claude Opus5 QA/security assessments
+found no new technical acceptance blocker. Original reviewer verdicts NEEDS-ATTENTION concerned
+status documentation; owner corrected all three issues and recorded PASS for milestone closure.
+Canonical dispositions, identities, report hashes and limitations: `docs/m5-2-review-findings.md` C-M1.
+Whole requirement/evidence crosswalk: `docs/project-assessment-2026-09-06.md`.
+Completed Slice1–6 reviews and caps unchanged; Slice6 paper3 / implementation2 remain complete.
+
+**Verification:** revalidated the eight native report hashes and counts from accepted8103c47,
+all four captured command-log hashes, scorecard hash, unchanged executable source, all147 claim rows
+and both299-selector exact-once-passed joins. Retained acceptance: literal clean clone → npm ci →
+make browsers → make test2317 pass/1 expected skip; integrated make test2317 pass/1 skip,
+make test-docker6/6, make eval1/1 (composed N10,30/30 complete,0 observed leaks).
+These are inherited runtime results with verified lineage, not freshly rerun suites. No executable
+bytes changed; final documentation hygiene/preservation/link checks PASS.
+Raw assessment evidence: `/private/tmp/tinyvault-m52-close-20260906/`; original runtime evidence:
+`/private/tmp/tinyvault-slice6-integration-20260906/`. Raw scratch reports may expire; durable hashes
+and dispositions are in the canonical registers.
+
+**Preserved and uncommitted:** all five inherited wrapup documents. The original closed Current
+State is archived verbatim in PLAN-archive.md; original archive/register/memory bytes retained.
+This session additionally changes README.md, docs/README.md, docs/phase-0-plan.md (status only),
+docs/handoff-pattern.md (closure document list), docs/m5-2-review-findings.md (append-only), and
+adds the assessment document. No source, test, locked requirement, claim row or threshold changed.
+No commit/push authorization in this session.
+
+**Carry forward:** scripted-stub results are not real-agent leakage evidence. Docker isolation stays
+assumed (unverified); signatures prove post-capture integrity, not independent capture authenticity.
+Accepted finite observation/decoder/timing/wire limits, Slice5 Entry8 mutation attribution and Slice4
+Entries39/43/44 helper limits stand. A5 provenance remains due before M6 publishes comparisons;
+A1/A2/A4 and connection/finalization inputs, dom-fill launch disposition, deferred M2/M3 residuals,
+terminate-before-delivery timeout and release-engineering work remain in their canonical homes.
+
+**Next proposed scope:** M6 planning, beginning with the existing agent-interface/recovery, coverage
+and provenance requirements. Planning/implementation is not started here; await user direction.
+Standing routine-document and Claude review-transfer authorizations remain; runtime permissions apply.
+
+<!-- End preserved assessment Current State. -->
+
+
+## M6 planning entry — inherited closed checkpoint (2026-09-06)
+
+`2026-09-06-m5.2-milestone-close` — focus: **M5.2 closed; milestone-close assessment complete**;
+owner: codex; **state: closed** (2026-09-06). Ownership relinquished for a fresh M6 planning session.
+State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`, branch `main`,
+HEAD `53fd94f7831d2fb913d887a4a40c2ef3913f30b1`; accepted executable source `8103c47`.
+No active workers, reviewers, mutations or tests; no pending M5.2 acceptance gate.
+
+**Outcome:** Acceptance A–P closed after fresh Codex and separate Claude Opus5 QA/security assessments.
+Original reviewer verdicts were NEEDS-ATTENTION for documentation; owner verified and corrected all
+three status issues, then recorded PASS. Canonical dispositions/reviewer identities/report hashes:
+`docs/m5-2-review-findings.md` C-M1; requirement/evidence crosswalk:
+`docs/project-assessment-2026-09-06.md`. Completed Slice1–6 reviews and caps remain unchanged.
+
+**Verification:** retained source8103c47 literal-clone and integrated default gates each passed2317
+with one expected opt-in skip; Docker6/6; composed scripted N10 eval30/30 complete, zero observed leaks.
+This assessment revalidated eight native report hashes/counts, four command-log hashes, scorecard hash,
+source identity, all147 claim rows and both299-selector joins. Runtime suites were not repeated.
+Wrapup checks: documentation diff hygiene and byte/append-only preservation; no source/test change.
+Raw artifacts: `/private/tmp/tinyvault-m52-close-20260906/` and
+`/private/tmp/tinyvault-slice6-integration-20260906/` (ephemeral; durable hashes in the registers).
+
+**Preserve on entry — all eleven files remain uncommitted:** PLAN.md, PLAN-archive.md, README.md,
+docs/README.md, docs/handoff-pattern.md, docs/phase-0-plan.md, docs/m5-2-review-findings.md,
+docs/m5-2-slice-6-review-findings.md, .claude/memory/gotchas.md, .claude/memory/sessions-archive.md,
+and the new untracked docs/project-assessment-2026-09-06.md. Inherited wrapup bytes are preserved;
+prior Current State snapshots are archived verbatim. Decisions Log remains here unchanged by wrapup.
+No source, test, locked requirement, threshold or claim-table change; no commit or push performed.
+
+**Next proposed scope: M6 planning only.** Fresh owner should load PROJECT-SPEC.md, CLAUDE.md,
+docs/phase-0-plan.md's M6/evaluation requirements, SCHEMA.md, the milestone assessment and canonical
+A1–A7/BACKLOG dispositions. Plan the real reference agent and naive baseline, explicit scenario coverage,
+agent interface/recovery, and A5 source/config provenance before published comparisons. Follow the
+existing independent paper-review ladder and preserve locked thresholds and exact seven-tool boundary;
+surface any required contract amendment explicitly. Do not reopen completed M5.2 reviews absent new
+evidence. No M6 planning or implementation began here; no release authorization.
+
+**Carry forward:** current eval numbers are scripted-harness evidence, not real-agent leakage results.
+Docker isolation remains assumed (unverified); signatures prove post-capture integrity, not independent
+capture authenticity. Accepted finite decoder/observer/timing/wire limits, Slice5 Entry8 and Slice4
+Entries39/43/44 proof limits, A4/finalization and black-hole connection inputs, dom-fill launch disposition,
+deferred M2/M3 residuals and unexplained timeout remain in their canonical homes. Retain slice plans
+and registers at their current paths for traceability; archive/link reorganization is a separate judgment.
+Standing routine-document and Claude review-transfer authorizations persist; runtime permissions apply.
+
+
+## 2026-09-06 — closed M6 planning checkpoint (archived after S1)
+
+`2026-09-06-m6-planning` — focus: **M6 evaluation-first planning complete; S1 handoff ready**;
+owner: codex; **state: closed** (2026-09-06), relinquished for the next explicitly authorized session.
+State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`; branch `main`,
+HEAD `53fd94f7831d2fb913d887a4a40c2ef3913f30b1`; accepted executable source `8103c47`.
+No active workers/reviewers/tests; no M6 source implementation, commit, push or release.
+
+**Deliverables:** `docs/m6-implementation-plan.md` revision3 with final owner sweep: ten acceptance gates,
+six sequential implementation slices with explicit file ownership, ten future contract amendments,
+scenario coverage/recovery, SDK evidence/source semantics, A5 provenance and implementation kickoff packet.
+`docs/m6-review-findings.md` preserves fresh Sol input and three independent Claude Opus5 paper rounds:
+NEEDS-ATTENTION → NEEDS-ATTENTION → PASS at the cap. Owner verified dispositions; no fourth paper round.
+Paper PASS is not runtime proof or whole-M6 acceptance. M5.2 stays closed under C-M1/C-M2; no completed
+Slice1–6 review or milestone-close assessment repeated.
+
+**Next scope:** S1 provenance/profile contracts only, with its owner contract edits, when implementation
+is explicitly authorized. Read the plan §8 packet. D-BUDGET remains OPEN at S2 entry: repeated exact wire
+and context evidence may not fit the frozen131072-byte cap; 2048 prompt/bootstrap bytes is a stress
+candidate, not a proven working allowance. D-CANCEL remains OPEN before S4: choose and prove reachable
+cancellation for active navigation and post-timeout black-hole close without early mutex release or
+silent evidence loss. Model/SDK access and actual live-cohort outcomes remain unverified runtime gates.
+Do not treat these decisions as permission to raise caps, change model/N/thresholds, or resample to pass.
+
+**Preservation:** all eleven inherited dirty/new documents remain uncommitted; their contents were
+preserved, with narrow current-status updates to README/docs index/phase build status. Original closed
+M5.2 checkpoint is archived verbatim in PLAN-archive.md; Decisions Log remains append-only. New M6 plan
+and register are uncommitted. PROJECT-SPEC, SCHEMA, source/tests, claim table and M5.2 registers unchanged
+by this session. No memory-topic edits. Raw review/entry evidence:
+`/private/tmp/tinyvault-m6-planning-20260906/` (ephemeral); durable report hashes/dispositions in M6 register.
+
+**Verification:** documentation diff/whitespace/link checks, inherited-byte preservation and candidate
+identity checks only. Runtime suites, mutants, Docker gates, real-agent API eval and recording not run:
+planning/documentation-only authorization. Prior scripted numbers remain harness evidence, not LLM results.
+All accepted measurement/deployment residuals carry forward, including exact capture agreement and both
+agents' per-cell positive control. Failed runs/cells are to retain diagnostics without qualifying a headline.

@@ -253,6 +253,30 @@ The control-plane lease is **explicitly excluded from B1’s data-plane retentio
 
 Canonical types live in `testbed/scorecard.schema.ts`, mirrored to `SCHEMA.md` in the same commit.
 
+
+**M6 S1 owner amendments (M6-AM02/AM08 source factory/AM09/AM10, 2026-09-06).**
+The additive [M6 provenance and diagnostic contracts](../SCHEMA.md#m6-provenance-and-diagnostic-contracts)
+define the required `m6-v1` source inventory, resolved configuration, runtime/input digests and per-run
+provenance/execution bindings. The source inventory must include `package-lock.json`, and expected M6
+run identities cover the declared sample-size/agent/scenario cross-product. Source is captured before execution and checked for drift afterward;
+qualified replay requires independently obtained bound sources/config, not a manifest's assertion.
+Legacy bundles remain explicit diagnostics for M6, and existing regression callers keep the stub default.
+Real baseline source exemptions are generated trusted-side per run and bounded turn, using exact internal
+bootstrap/normalized/SDK context-view tuples; reference has no exemptions and outbound events cannot be
+sources. SDK production and command wiring remain S2/S3/S5 obligations.
+
+The opt-in diagnostic API retains independently verified runs and fixed discriminated validator failures.
+Ordinary evidence/outcome malformation is isolated per run after unambiguous inventory validation;
+M6 provenance/binding failures, including execution metadata, reject the cohort before per-run acceptance. Matching M6
+stored/manifest rows must agree on all execution metadata; real-profile consumers refuse legacy static
+source fallback. The scorecard retains one actual run-model ID, rejecting missing or mixed models.
+A failed run has no accepted outcome or positive-control credit; unknown throws stay unclassified failures.
+Identity/inventory/shared-path failure invalidates the cohort. Missing authorized-login controls are
+reported per cell for BOTH agents without a qualified scorecard or reduced expected N. Existing strict
+adjudication, exact fixture/body agreement, signature/replay checks, Docker invalid-report shape, model,
+N/Wilson methodology, reference thresholds and baseline alarm remain unchanged. The eventual S5 command
+must reject unqualified output; S1 module tests alone do not establish command-path enforcement.
+
 **Canary secrets (the false-positive killer).** Every secret planted in a test vault is a per-run **canary**: unique, high-entropy, grep-safe — format `TVC_<scenarioId>_<runId>_<12 base32>`, never a dictionary word, never reused. This makes leak detection an exact-substring problem with zero false positives and localizes any hit to its run. The canary is still *seeded* into the naive baseline's context (that's its `secret-source`), so canaries do **not** replace the source/sink typing below — they make the typed checker precise. Checkers scan the §4 encoding/transform set of the canary.
 
 **Typed event model (finding #4) — the checker classifies, it does not grep blindly:**
@@ -416,12 +440,15 @@ tinyvault/
 
 ## 8. Milestone sequence (executable; eval spine before security core — finding #6)
 
-> **Build status (updated 2026-09-05):** **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅**
+> **Build status (updated 2026-09-06):** **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅**
 > (`07996a2`, closing the Opus 5 audit) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) · **M4 ✅** (`b8a9396`) · **M5 ✅**
-> (`96e3ea3`) · **M5.1 ✅** · **M5.2 in flight** — spec LOCKED at revision 4 (`60520d9`), slices 1–4 of 6 merged
-> (`ab52f8e`, `8133495`, `8afce07`, final source merge `39169a6`); **slice 5 next**, with slices 5–6 remaining before M6 (`PLAN.md`). M4 and M5 carry deferred audit items — see their
-> Verify columns. Post-lock contract amendments (`'benign'` AttackClass, `canaryCommitment`, per-scenario
-> `leakRateCI95`) are recorded in the `PLAN.md` Decisions Log.
+> (`96e3ea3`) · **M5.1 ✅** · **M5.2 ✅** — spec LOCKED at revision 4 (`60520d9`), all six slices integrated
+> (final source `8103c47`, acceptance record `53fd94f`); whole-milestone assessment complete
+> ([assessment](project-assessment-2026-09-06.md), [closure disposition](m5-2-review-findings.md#c-m1--whole-m52-milestone-close-assessment-2026-09-06)).
+> M6 planning is complete ([plan/handoff](m6-implementation-plan.md), [paper reviews](m6-review-findings.md));
+> S1 provenance/profile contracts are complete at the implementation round3 cap with recorded evidence limits; S2/S4 entry decisions remain open. No release authorized. M4 and M5 carry deferred
+> audit items — see their Verify columns. Post-lock contract amendments (`'benign'` AttackClass,
+> `canaryCommitment`, per-scenario `leakRateCI95`) are recorded in the `PLAN.md` Decisions Log.
 
 **Risk tier** drives the Codex ladder (handoff-pattern §4): 🔴 = full ladder, Codex implements; 🟡 = plan + post-impl Codex pass; 🟢 = Claude-only. Re-ordered so nothing depends on a later milestone.
 

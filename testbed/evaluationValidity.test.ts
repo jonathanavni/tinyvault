@@ -12,7 +12,7 @@ import { normalizeEvaluationContext, assertValidEvaluationContext, invalidEvalua
 import type { RunRecord, Scorecard } from './scorecard.schema';
 const literal = 'A valid composed evaluation assumes the Docker Engine API is unreachable by the evaluated browser, page content and agent. Local endpoint validation does not verify this assumption. An unsatisfied assumption invalidates the evaluation.';
 const invalid = { architecture: 'composed', dockerDaemonIsolation: 'unsatisfied' } as const;
-const run = { agent: 'probe', scenario: 'probe', outcome: { secretLeaked: false, taskCompleted: true,
+const run = { agent: 'probe', scenario: 'probe', model: 'stub-scripted-v1', outcome: { secretLeaked: false, taskCompleted: true,
   wrongOriginFillBlocked: false, unobserved: 0, bodiesUnobserved: 0, scanTruncated: 0 } } as RunRecord;
 describe('O validity', () => {
   it.each(['README.md', 'SCHEMA.md'])('O-docs pins exactly one marked deployment assumption in %s', async (file) => {
@@ -97,5 +97,47 @@ describe('O validity', () => {
         }
       }
     } finally { log.mockRestore(); }
+  });
+});
+
+describe('M6 explicit inventory aggregation', () => {
+  it('keeps the selected baseline denominator and enforces the selected reference threshold', async () => {
+    const { createAgentInventory } = await import('./evalAgents');
+    const registry = createScenarioRegistry(placeholderFixtureOrigins('http://inventory.invalid'));
+    const comparison = createAgentInventory('real-comparison', 'test-sdk');
+    const rows: RunRecord[] = [...registry.values()].flatMap(scenario => [...comparison.values()].map(config => ({
+      ...run, scenario: scenario.id, attackClass: scenario.attackClass, agent: config.id, model: config.model, sdkVersion: config.sdkVersion,
+      runIndex: 0, outcome: { ...run.outcome, taskCompleted: config.requiredToPass, secretLeaked: config.expectedToLeak },
+    })));
+    expect(() => aggregation.assertRunInventory(rows, 1, registry, comparison)).not.toThrow();
+    const score = aggregateScorecard(rows, 1, normalizeEvaluationContext(), undefined, []);
+    expect(score.model).toBe('claude-haiku-4-5-20251001');
+    expect(() => aggregation.assertEvalPass(score, comparison)).not.toThrow();
+    expect(() => aggregation.enforceLiveFire(rows, score, comparison)).not.toThrow();
+    score.perAgent.find(agent => agent.agent === 'tinyvault-ref')!.tasksCompleted = 0;
+    expect(() => aggregation.assertEvalPass(score, comparison)).toThrow('Eval failed');
+    const baseline = createAgentInventory('real-baseline', 'test-sdk');
+    const baselineRows = rows.filter(row => row.agent === 'naive-baseline');
+    expect(() => aggregation.assertRunInventory(baselineRows, 1, registry, baseline)).not.toThrow();
+    expect(() => aggregation.assertRunInventory(baselineRows, 1, registry, comparison)).toThrow('missing');
+  });
+});
+
+
+describe('R1 observed scorecard model and sample-size guards', () => {
+  it('uses the actual runs model', () => {
+    const actual = { ...run, model: 'claude-haiku-4-5-20251001' };
+    expect(aggregateScorecard([actual], 1, normalizeEvaluationContext()).model).toBe(actual.model);
+  });
+  it('rejects mixed model IDs rather than emitting a list or silently using the first', () => {
+    expect(() => aggregateScorecard([run, { ...run, model: 'other-model' }], 1, normalizeEvaluationContext())).toThrow();
+  });
+  it.each([undefined, null, '', 123])('rejects missing or nonstring model %j', model => {
+    const row = { ...run, model } as RunRecord;
+    if (model === undefined) delete (row as Partial<RunRecord>).model;
+    expect(() => aggregateScorecard([row], 1, normalizeEvaluationContext())).toThrow();
+  });
+  it.each([0, -1, 1.5, NaN, Infinity])('rejects invalid sample size %j', sampleSize => {
+    expect(() => aggregation.assertRunInventory([], sampleSize)).toThrow('Invalid sample size');
   });
 });
