@@ -1,4 +1,4 @@
-# M6 S4 implementation handoff — quiescence and coverage qualification (approved for the Sol paper pass; Astra dispatch pending its findings)
+# M6 S4 implementation handoff — quiescence and coverage qualification (approved for Astra dispatch 2026-09-07)
 
 Status: drafted 2026-09-07 by the continuity owner after D-CANCEL resolved (`2bcfbbd`). Dispatch target:
 Codex `task --write --model gpt-6-astra` (security-core lifecycle code; full ladder). Before dispatch: one
@@ -94,7 +94,9 @@ sandbox: report tests you could not run as NOT RUN, never as passed or failed.
 
 ### B. Supervisor quiesce and finish (`src/supervisor/host.ts`)
 
-1. Add the trusted `quiesceEvidenceProducers()` (M6-AM04) with ONE shared 5 s deadline covering: reject new
+1. Add the trusted `quiesceEvidenceProducers()` (M6-AM04) as an OPTIONAL member of `SupervisedHost`
+   (`quiesceEvidenceProducers?(): Promise<void>`; `runHostAdapter`'s `afterLoop` calls it when present, so the
+   runner fake in `testbed/runner.testkit.ts` stays valid until it opts in) with ONE shared 5 s deadline covering: reject new
    controls → stop (via A.1 per session) → let admitted mutex work settle → attach → deferred fixed-point loop
    while targets live → close sessions (A.3–A.5) → final settle/drain. The loop needs a quiesce-specific STRICT
    attach drain: today's `settleAttach()` races each attach against 2 s, deletes the entry and leaves the
@@ -114,6 +116,14 @@ sandbox: report tests you could not run as NOT RUN, never as passed or failed.
    abort marks capture failure and the existing capture-failed path applies.
 5. A pending `Network.getRequestPostData` rejected by stop/disposal must land in `recordUnavailableBody` (marker),
    never a silent drop and never a `captureFailed` the page can trigger; `settle()` must complete after disposal.
+6. Trusted per-op bound (user-approved 2026-09-07): every browser control (`browser_navigate`, `browser_click`,
+   `browser_type`, `browser_snapshot`) and the fill path run under a supervisor-side `OP_TIMEOUT_MS` = 10 000 ms.
+   On expiry the supervisor issues `Page.stopLoading` on that session (through a trusted session-host entry point
+   added for this purpose, not a model-visible tool), awaits the op's own settlement (no race that abandons it),
+   and the op returns its EXISTING failure reason (`navigation-failed`; `no-such-element` for click/type; the
+   existing snapshot and fill failure shapes). No new enum, no new field. A hostile self-navigation therefore
+   costs at most ~10 s of a run, not ~75 s. Deletion mutant: remove the expiry trigger → the hostile
+   self-navigation regression must fail.
 
 ### C. Runner wiring (`testbed/runnerExecution.ts`, `testbed/runner.wiring.test.ts`)
 
@@ -152,8 +162,8 @@ Real-browser regressions (serial, `*.browser.test.ts`, no Docker, no API key), e
   and the cancelled request produced `Network.loadingFailed` with `ERR_ABORTED` (correlate on requestId).
 - `active goto then close`: close requested during the goto; holder settles with `navigation-failed`; close within 5 s.
 - `hostile self-navigation` (new fixture page under `testbed/fixtures/` with `location.href = <black hole>`):
-  `browser_snapshot` after the page wedges itself returns within the op bound (via A.6/stop-on-timeout or the
-  quiesce rule), and close within 5 s.
+  `browser_snapshot` after the page wedges itself returns within `OP_TIMEOUT_MS` + settle with its existing
+  failure shape (B.6), a second snapshot after that succeeds (the session is usable again), and close within 5 s.
 - `deadline expiry`: a holder that cannot settle (a hidden element click on a wedged page; the stop is defeated
   by a TEST-LOCAL `BrowserContext`/`CDPSession` decorator installed through `newContext`, exactly as
   `session.transport.browser.test.ts` already does — never a production flag or option) → quiesce expires at 5 s
@@ -192,13 +202,15 @@ rejected `getRequestPostData`; each of the E5/E6 rows in plan §8.
 
 ## File ownership
 
-Allowlist decision pending the user's answer (see "Open owner decisions" below). Codex owns (exact allowlist from
-plan §7 S4): `src/browser/session.ts`, `src/browser/session.test.ts`,
+Codex owns (exact allowlist from plan §7 S4): `src/browser/session.ts`, `src/browser/session.test.ts`,
 `src/browser/session.transport.browser.test.ts`, `src/supervisor/host.ts`, `src/supervisor/host.test.ts`,
 `src/supervisor/host.evidence.test.ts`, `src/supervisor/host.browser.test.ts`, `testbed/runnerExecution.ts`,
 `testbed/runner.wiring.test.ts`, `testbed/scenarioCoverage.ts` (new), `testbed/scenarioCoverage.test.ts` (new),
 `testbed/runner.finalization.browser.test.ts` (new), plus one new hostile fixture page under
-`testbed/fixtures/` named in the report. Any other required edit (a caller/test fallout, a `check-test-entry`
+`testbed/fixtures/` named in the report. Pre-authorized fallout (user-approved 2026-09-07), TEST-ONLY edits under
+the rule "no assertion weakened, no test deleted, no timing constant loosened": `testbed/coverage.browser.test.ts`,
+`testbed/runner.browser.test.ts`, `src/supervisor/host.timing.browser.test.ts`, `testbed/runner.testkit.ts`
+(the fake host may gain the optional method). List every such edit separately in the report. Any other required edit (a caller/test fallout, a `check-test-entry`
 inventory pin, `gate-cli.selftest` synthetic inventory) is a STOP: report the exact diff as a proposed
 extension; do not apply it.
 
@@ -227,23 +239,13 @@ Summary; Files Changed; Verification (commands, statuses, native report paths, m
 Risks / Follow-ups; **Deviations From Handoff** (mandatory section, even if empty; a code comment is not a
 deviation record). Stop and cite both contracts if anything here cannot be implemented as written.
 
-## Open owner decisions (must be resolved before dispatch; Sol pass 2026-09-07 findings 2, 7, 8)
+## Resolved owner decisions (user-approved 2026-09-07, after the Sol paper pass)
 
-1. Wedged non-navigation ops (Sol #2). `browser_snapshot`/click/type/fill have no trusted bound today, and the agent
-   loop awaits a tool indefinitely, so a hostile self-navigation stalls the run for ~75 s before quiesce is even
-   reachable. A.6 covers navigate only. DECISION NEEDED: adopt a trusted per-op bound in the supervisor (proposal:
-   10 s, same as navigation) after which the host issues `Page.stopLoading` and the op returns its EXISTING failure
-   reason (`no-such-element` for click/type, the existing snapshot/fill failure shapes); no new enum; deletion
-   mutant on the trigger via the hostile self-navigation test. Alternative: leave ops unbounded and accept the
-   ~75 s stall as a documented residual (the run still ends at the 300 s deadline).
-2. Failed-run retention (Sol #7). Applied as "S5 scope" above (an expired quiesce is a thrown failed run; no
-   publication wiring in S4). Confirm, or amend the plan/allowlist to include the runner and its tests.
-3. Fallout files (Sol #8). State-based `finish()` refusal and any new required method on `SupervisedHost` break
-   `testbed/coverage.browser.test.ts`, `testbed/runner.browser.test.ts`, `src/supervisor/host.timing.browser.test.ts`
-   and the fake host in `testbed/runner.testkit.ts`. DECISION NEEDED: (a) make the new quiesce method OPTIONAL on
-   the interface (`quiesceEvidenceProducers?()`, invoked from `afterLoop` when present) and pre-authorize those four
-   files for test-only adjustments under a "no assertion weakened, no test deleted" rule; or (b) keep the strict
-   allowlist and require the worker to STOP with proposed diffs. Recommendation: (a).
+1. Wedged non-navigation ops: trusted per-op bound of 10 s with stop-on-expiry and existing failure reasons (B.6).
+2. Failed-run retention: an expired quiesce is a thrown failed run in S4; diagnostic retention and publication
+   stay in S5 (C.2). No allowlist widening to the runner.
+3. Fallout: `quiesceEvidenceProducers` is optional on the interface; four test files pre-authorized for test-only
+   edits (File ownership).
 
 ## Owner dispatch sequence (not for the worker)
 
