@@ -18,6 +18,8 @@ import { BENIGN_USERNAME } from '../scenarios/benignLoginConstants';
 import { verifyEventsDigest } from '../fixtures/shared/loginFixture';
 import { persistFixtureCapture } from './captureTransfer';
 import { capturePersistedRuns, offlineArtifactPaths } from '../runner';
+import { captureParityBundle, type ParityBundle } from '../parity/capture';
+import { compareParityBundles, compareParityTriplet } from '../parity/compare';
 import { adjudicatePersistedRuns, type OfflineEvidenceManifest } from '../checkers/offline';
 import { AGENT_CONFIGS } from '../evalAgents';
 import { IntegrationEvidence, localPin, commandKind, assertClean, assertMarker, checkStoppedSurfaces, checkArtifacts, adminCounts, assertProbeWindow, checkTerminalProbe } from './integrationEvidence';
@@ -111,6 +113,49 @@ function teardownOrder(e: IntegrationEvidence): void {
 }
 
 describe.sequential('slice 4 real Docker construction and control-route probes', () => {
+  it('K-leg canonical two-transport parity and K-observer-inert', async () => {
+    const metricsPath = join(process.cwd(), '.vitest', 'slice6-parity-metrics.json');
+    await resetMetrics(metricsPath);
+    const e = new IntegrationEvidence(); const bundles: ParityBundle[] = [];
+    let complete = false; let failedArtifactRoot: string | undefined;
+    try {
+      const inProcess = await captureParityBundle('in-process'); bundles.push(inProcess);
+      const pin = await localPin();
+      const composed = await captureParityBundle('composed', { dockerPin: pin, dockerRunner: e.runner }); bundles.push(composed);
+      const unobserved = await captureParityBundle('in-process', { wire: false }); bundles.push(unobserved);
+      // These assertions use only fixed labels/counts, never raw evidence in Vitest diffs.
+      expect(new Set(bundles.map((bundle) => bundle.root)).size).toBe(3);
+      expect(bundles.map((bundle) => bundle.runs.length)).toEqual([6, 6, 6]);
+      for (const bundle of bundles) expect(bundle.timing.captureMs).toBeLessThanOrEqual(60000);
+      const wrongProvenance: ParityBundle = { ...composed, trust: { ...composed.trust, provenance: {
+        ...composed.trust.provenance, 'benign-login': { ...composed.trust.provenance['benign-login']!, architecture: 'in-process' },
+      } } };
+      await expect(compareParityBundles(inProcess, wrongProvenance)).rejects.toThrow('Parity provenance');
+      const altered: ParityBundle = { ...composed, runs: composed.runs.map((run, index) => index === 0
+        ? { ...run, outcome: { ...run.outcome, bodiesUnobserved: run.outcome.bodiesUnobserved + 1 } } : run) };
+      await expect(compareParityTriplet(inProcess, altered, unobserved)).rejects.toThrow('Parity difference');
+      await compareParityTriplet(inProcess, composed, unobserved);
+      expect(e.bridges).toHaveLength(3);
+      checkDescriptionSurfaces(e); checkStoppedSurfaces(e);
+      await checkArtifacts(e, composed.root); await noProjectLeft(e, pin);
+      expect(e.bridges.every((bridge) => bridge.errors.length === 0)).toBe(true);
+      for (const exported of e.exports) expect(exported.elapsedMs).toBeLessThan(120000);
+      complete = true;
+    } catch (error) {
+      if (error instanceof Error && 'artifactRoot' in error && typeof error.artifactRoot === 'string') failedArtifactRoot = error.artifactRoot;
+      throw error;
+    } finally {
+      await e.finish();
+      await writeFile(metricsPath, JSON.stringify({ complete, ...(failedArtifactRoot ? { failedArtifactRoot } : {}),
+        legs: bundles.map((bundle) => ({ architecture: bundle.architecture, observed: bundle.observed,
+          ...bundle.timing, browser: bundle.browser, auxiliary: bundle.artifacts.auxiliary,
+          ...(complete ? {} : { artifactRoot: bundle.root }) })) }) + '\n');
+      // Failed roots remain for owner diagnosis; success releases secret byte buffers and files.
+      if (complete) for (const bundle of bundles) await bundle.destroy();
+      else for (const bundle of bundles) for (const bytes of bundle.artifacts.files.values()) bytes.fill(0);
+    }
+  });
+
   it('authenticates all fixtures, probes page and supervised routes, then scans every stopped surface', async () => {
     await resetMetrics(PROBE_METRICS_PATH);
     const registrationThroughAttestationMs: number[] = [];

@@ -29,6 +29,9 @@ describe('lookalike-origin fixture', () => {
         control: expectedControl,
       });
       expect(fixture).toMatchObject({ architecture: 'in-process', reachability: 'http' });
+      expect(fixture.originRoles).toEqual({ C: fixture.origin, L: fixture.lookalikeOrigin });
+      expect(fixture.originRoles.C).not.toBe(fixture.originRoles.L);
+      expect(Object.isFrozen(fixture.originRoles)).toBe(true);
 
       const landing = await fetch(`${fixture.origin}/?runId=${setup.runId}`, {
         redirect: 'manual',

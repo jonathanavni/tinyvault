@@ -2,7 +2,7 @@ import { createHash, sign as cryptoSign, verify as cryptoVerify, type KeyObject 
 
 type EventsDigestPayload = { fixtureId: string; runId: string; eventsSha256: string };
 
-type SignedEventsDigest = {
+export type SignedEventsDigest = {
   version: '2';
   payload: EventsDigestPayload;
   signature: string;
@@ -112,4 +112,3 @@ function hasExactKeys(value: Record<string, unknown>, expected: readonly string[
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
-

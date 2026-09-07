@@ -1,3 +1,4 @@
+import { normalizeEvaluationContext, assertValidEvaluationContext, assertScorecardMetadata, type EvaluationContext } from './evaluationValidity';
 import { type KeyObject } from 'node:crypto';
 import { mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -17,6 +18,8 @@ import type { FixtureArchitecture } from './fixtures/transport';
 import { startControlsLab } from './fixtures/controls-lab';
 import { runHarnessGate } from './harnessGate';
 import { runOnce } from './runnerExecution';
+import { captureFixtureProvenance } from './parity/observe';
+import type { ParityCollector, ParityProvenance } from './parity/types';
 import type { RunRecord, Scorecard } from './scorecard.schema';
 import { createScenarioRegistry, placeholderFixtureOrigins,
   type FixtureOrigins, type ScenarioRegistry } from './scenarios';
@@ -39,6 +42,9 @@ export const FIXTURE_REACHABILITY_MESSAGE = 'Fixture is not reachable over HTTP'
 
 export type EvalOptions = {
   architecture?: FixtureArchitecture;
+  dockerDaemonIsolation?: EvaluationContext['dockerDaemonIsolation'];
+  /** Optional trusted parity collector; never exposed to agent tools. */
+  parityObserver?: ParityCollector;
   dockerPreflight?: () => Promise<PinnedDockerEndpoint>;
   dockerRunner?: DockerProcessRunner;
   probeOrigin?: ProbeOrigin;
@@ -71,7 +77,7 @@ export type EvalOptions = {
 export type CaptureOptions = Pick<
   EvalOptions,
   | 'launchChromium' | 'startFixtures' | 'createScenarioRegistry' | 'createHost' | 'createBackend'
-  | 'maxTurns' | 'architecture' | 'dockerPreflight' | 'dockerRunner' | 'probeOrigin'
+  | 'parityObserver' | 'maxTurns' | 'architecture' | 'dockerDaemonIsolation' | 'dockerPreflight' | 'dockerRunner' | 'probeOrigin'
 >;
 
 export type EvalResult = { scorecard: Scorecard; runs: RunRecord[]; scorecardPath: string };
@@ -92,6 +98,9 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
   if (!metaGate.passed) {
     throw new Error(`Checker meta-gate failed:\n${metaGate.failures.join('\n')}`);
   }
+  const context = normalizeEvaluationContext(options.architecture, options.dockerDaemonIsolation);
+  assertValidEvaluationContext(context);
+  options = { ...options, ...context };
   const artifactDirectory = resolve(options.artifactDirectory ?? 'artifacts/eval');
   const pin = await prepareArchitecture(options);
   await (options.removeArtifactDirectory ?? rm)(artifactDirectory, { recursive: true, force: true });
@@ -119,7 +128,7 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
       agentConfigs: AGENT_CONFIGS,
     });
     return finalizeEvaluation(
-      artifactDirectory, sampleSize, runs, options.generatedAt, trust.scenarioRegistry, coverage,
+      artifactDirectory, sampleSize, runs, context, options.generatedAt, trust.scenarioRegistry, coverage,
     );
   } finally {
     await browser.close();
@@ -127,6 +136,7 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
 }
 
 export type EvalTrust = {
+  provenance: ParityProvenance;
   verificationKeys: Readonly<Record<FixtureId, KeyObject>>;
   scenarioRegistry: ScenarioRegistry;
 };
@@ -137,6 +147,9 @@ export async function capturePersistedRuns(
   browser?: Browser,
   options: CaptureOptions = {},
 ): Promise<EvalTrust> {
+  const context = normalizeEvaluationContext(options.architecture, options.dockerDaemonIsolation);
+  assertValidEvaluationContext(context);
+  options = { ...options, ...context };
   if (options.architecture === 'composed' && browser !== undefined) {
     throw new Error('Composed capture cannot accept a caller-supplied browser; preflight must precede launch.');
   }
@@ -167,9 +180,11 @@ async function captureWithBrowser(
   const evidenceRuns: OfflineRunEvidence[] = [];
   try {
     for (const fixture of Object.values(fixtures)) assertHttpFixture(fixture);
+    const provenance = captureFixtureProvenance(fixtures, options.architecture ?? 'in-process');
     const origins = fixtureOrigins(fixtures);
     const scenarioRegistry = (options.createScenarioRegistry ?? createScenarioRegistry)(origins);
     assertScenarioFixturesPresent(scenarioRegistry, fixtures);
+    options.parityObserver?.captureStarted?.();
     const generator = new CanaryGenerator();
     for (const scenario of scenarioRegistry.values()) {
       const fixture = fixtureForScenario(fixtures, scenario);
@@ -178,6 +193,7 @@ async function captureWithBrowser(
           runIndex, scenario, fixture, generator, artifactDirectory, browser,
           createHost: options.createHost ?? createSupervisedHost,
           createBackend: options.createBackend ?? createLocalFileBackend,
+          parityObserver: options.parityObserver,
           maxTurns: options.maxTurns ?? STUB_SCRIPT_MAX_TURNS,
         });
         capturedRuns.push(result.record);
@@ -185,7 +201,8 @@ async function captureWithBrowser(
       }
     }
     await persistOfflineInputs(artifactDirectory, capturedRuns, { runs: evidenceRuns });
-    return { verificationKeys: fixtureVerificationKeys(fixtures), scenarioRegistry };
+    options.parityObserver?.captureCompleted?.();
+    return { verificationKeys: fixtureVerificationKeys(fixtures), scenarioRegistry, provenance };
   } finally {
     await closeFixtures(fixtures);
   }
@@ -246,12 +263,15 @@ export async function finalizeEvaluation(
   artifactDirectory: string,
   sampleSize: number,
   runs: RunRecord[],
+  evaluationContext: EvaluationContext,
   generatedAt: string | undefined,
   scenarioRegistry?: ScenarioRegistry,
   captureCoverage: Scorecard['captureCoverage'] = [],
 ): Promise<EvalResult> {
+  assertValidEvaluationContext(evaluationContext);
   assertRunInventory(runs, sampleSize, scenarioRegistry);
-  const scorecard = aggregateScorecard(runs, sampleSize, generatedAt, captureCoverage);
+  const scorecard = aggregateScorecard(runs, sampleSize, evaluationContext, generatedAt, captureCoverage);
+  assertScorecardMetadata(scorecard);
   const scorecardPath = resolve(artifactDirectory, 'scorecard.json');
   await Promise.all([
     writeFile(scorecardPath, `${JSON.stringify(scorecard, null, 2)}\n`),

@@ -2,6 +2,7 @@
 // runEval or capturePersistedRuns; helper-only coverage does not prove production wiring.
 import { mkdtemp, readFile, readdir, writeFile, unlink, stat, symlink, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
@@ -731,4 +732,141 @@ it('partial capture write failure propagates through production runOnce, removes
     expect(await readdir(directory)).not.toContain('scorecard.json');
     expect(await readdir(directory)).not.toContain('runs.captured.json');
   } finally { vi.mocked(open).mockImplementation(realOpen); }
+});
+
+// Slice6 collector hooks exercise actual prepare/execute/finalize and fixture close.
+describe('parity capture caller wiring', () => {
+  it('retains the run failure and observer failure when both reject', async () => {
+    const { createParityCollector } = await import('./parity/observe');
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-parity-dual-failure-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    const collector = createParityCollector([{ scenario: 'benign-login-control', agent: 'stub-safe', runIndex: 0 }], { wire: false });
+    const observerFailure = new Error('Parity observation failed: incomplete');
+    const endRun = vi.fn(async () => { throw observerFailure; });
+    const completed = vi.fn();
+    const error = await capturePersistedRuns(directory, 1, fakeBrowser(), { ...harness.options,
+      createHost: async () => { throw new Error('synthetic host failure'); },
+      parityObserver: { ...collector, endRun, captureCompleted: completed },
+    }).then(() => undefined, (failure: unknown) => failure);
+    expect(error).toBeInstanceOf(AggregateError);
+    const combined = error as AggregateError;
+    expect(combined.message).toBe('Parity capture-failed');
+    expect(combined.errors).toHaveLength(2);
+    expect(combined.errors[0]).toBeInstanceOf(Error);
+    expect(combined.errors[0].message).toContain(MISSING_END_MARKER_MESSAGE);
+    expect(combined.cause).toBe(combined.errors[0]);
+    expect(combined.errors[1]).toBe(observerFailure);
+    expect(endRun).toHaveBeenCalledOnce();
+    expect(completed).not.toHaveBeenCalled();
+    expect(await readdir(directory)).not.toContain('runs.captured.json');
+  });
+  it('collects actual paths and finalized unauthorized requests before fixture close, and awaits the observer barrier', async () => {
+    const { createParityCollector } = await import('./parity/observe');
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-parity-wiring-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    const collector = createParityCollector([{ scenario: 'benign-login-control', agent: 'stub-safe', runIndex: 0 }], { wire: false });
+    const order: string[] = [];
+    const starter = harness.options.startFixtures!;
+    let originalOrigin = '';
+    harness.options.startFixtures = async (captureDirectory) => {
+      const set = await starter(captureDirectory); const fixture = set['benign-login']!;
+      originalOrigin = fixture.origin;
+      const finalize = fixture.finalizeRun; const unauthorized = fixture.unauthorizedRequests; const close = fixture.close;
+      return { 'benign-login': { ...fixture,
+        finalizeRun: async (id) => { order.push('finalize'); await finalize(id); },
+        unauthorizedRequests: async (id) => { order.push('unauthorized'); return unauthorized(id); },
+        close: async () => { order.push('fixture-close'); fixture.originRoles = { C: 'http://mutated.invalid' }; await close(); },
+      } };
+    };
+    const createHost = harness.options.createHost!;
+    harness.options.createHost = async (input) => {
+      order.push('host'); const host = await createHost(input);
+      return { ...host, closeAll: async () => { await host.closeAll(); order.push('host-close'); } };
+    };
+    const observer = { ...collector,
+      beginRun: (...args: Parameters<typeof collector.beginRun>) => { order.push('begin'); return collector.beginRun(...args); },
+      endRun: async (...args: Parameters<typeof collector.endRun>) => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        order.push('end'); await collector.endRun(...args);
+      },
+    };
+    const trust = await capturePersistedRuns(directory, 1, fakeBrowser(), { ...harness.options, parityObserver: observer });
+    expect(order).toEqual(['begin', 'host', 'host-close', 'end', 'finalize', 'unauthorized', 'fixture-close']);
+    const [snapshot] = collector.snapshots();
+    expect(snapshot).not.toHaveProperty('wire');
+    const d = snapshot.descriptor;
+    const names = await readdir(join(directory, 'runs', d.runId));
+    expect(names.sort()).toEqual(['events.json', 'transcript.jsonl', `vault-${d.nonce}.json`, `vault-${d.nonce}.key`].sort());
+    for (const path of [d.vaultPath, d.keyPath, d.transcriptPath, d.eventsPath]) expect((await stat(path)).isFile()).toBe(true);
+    expect(trust.provenance['benign-login']!.originRoles.C).toBe(originalOrigin);
+    expect(Object.isFrozen(trust.provenance['benign-login']!.originRoles)).toBe(true);
+  });
+  it.each(['missing-roles', 'wrong-C', 'wrong-architecture'])('rejects %s through actual capture before host creation', async (kind) => {
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-parity-provenance-'));
+    const harness = nodeEvalHarness(directory, vi.fn); const starter = harness.options.startFixtures!;
+    const close = vi.fn(); const host = vi.fn(harness.options.createHost!);
+    harness.options.startFixtures = async (captureDirectory) => {
+      const set = await starter(captureDirectory); const f = set['benign-login']!;
+      return { 'benign-login': { ...f,
+        originRoles: kind === 'missing-roles' ? undefined as never : kind === 'wrong-C' ? { C: 'http://wrong.invalid' } : f.originRoles,
+        architecture: kind === 'wrong-architecture' ? 'composed' : f.architecture,
+        close: async () => { close(); await f.close(); },
+      } };
+    };
+    await expect(capturePersistedRuns(directory, 1, fakeBrowser(), { ...harness.options, createHost: host })).rejects.toThrow('provenance');
+    expect(host).not.toHaveBeenCalled(); expect(close).toHaveBeenCalledOnce();
+  });
+});
+
+describe('parity capture timing lifecycle', () => {
+  it('starts before prepareRun and completes after persisted roots and final attestation, before fixture close', async () => {
+    const { createParityCollector } = await import('./parity/observe');
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-parity-timing-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    const collector = createParityCollector([{ scenario: 'benign-login-control', agent: 'stub-safe', runIndex: 0 }], { wire: false });
+    const order: string[] = [];
+    const starter = harness.options.startFixtures!;
+    harness.options.startFixtures = async (captureDirectory) => {
+      const set = await starter(captureDirectory); const fixture = set['benign-login']!;
+      return { 'benign-login': { ...fixture,
+        registerRun: async (setup) => { order.push('prepare'); await fixture.registerRun(setup); },
+        attestEvents: async (...args) => { const attestation = await fixture.attestEvents(...args); order.push('attest'); return attestation; },
+        close: async () => { order.push('close'); await fixture.close(); },
+      } };
+    };
+    const started = vi.fn(() => { order.push('start'); });
+    const completed = vi.fn(() => {
+      const paths = offlineArtifactPaths(directory);
+      // Synchronous callback checks actual completed disk writes, not inferred lifecycle labels.
+      const runs = JSON.parse(readFileSync(paths.capturedRunsPath, 'utf8')) as unknown[];
+      const manifest = JSON.parse(readFileSync(paths.manifestPath, 'utf8')) as { runs: unknown[] };
+      expect(Array.isArray(runs) && runs.length === 1 && Array.isArray(manifest.runs) && manifest.runs.length === 1).toBe(true);
+      order.push('complete');
+    });
+    await capturePersistedRuns(directory, 1, fakeBrowser(), { ...harness.options,
+      parityObserver: { ...collector, captureStarted: started, captureCompleted: completed },
+    });
+    expect(started).toHaveBeenCalledOnce(); expect(completed).toHaveBeenCalledOnce();
+    expect(order).toEqual(['start', 'prepare', 'attest', 'complete', 'close']);
+  });
+  it.each(['start', 'complete', 'capture'])('cleans fixtures and never reports successful completion after %s failure', async (stage) => {
+    const { createParityCollector } = await import('./parity/observe');
+    const directory = await mkdtemp(join(tmpdir(), 'tinyvault-parity-timing-failure-'));
+    const harness = nodeEvalHarness(directory, vi.fn);
+    const collector = createParityCollector([{ scenario: 'benign-login-control', agent: 'stub-safe', runIndex: 0 }], { wire: false });
+    const starter = harness.options.startFixtures!; const closed = vi.fn();
+    harness.options.startFixtures = async (captureDirectory) => {
+      const set = await starter(captureDirectory); const fixture = set['benign-login']!;
+      return { 'benign-login': { ...fixture, close: async () => { closed(); await fixture.close(); } } };
+    };
+    const started = vi.fn(() => { if (stage === 'start') throw new Error('timing-start-failed'); });
+    const completed = vi.fn(() => { if (stage === 'complete') throw new Error('timing-complete-failed'); });
+    const createHost = stage === 'capture' ? async () => { throw new Error('capture-failed'); } : harness.options.createHost;
+    await expect(capturePersistedRuns(directory, 1, fakeBrowser(), { ...harness.options, createHost,
+      parityObserver: { ...collector, captureStarted: started, captureCompleted: completed },
+    })).rejects.toThrow(stage === 'capture' ? MISSING_END_MARKER_MESSAGE : `timing-${stage}-failed`);
+    expect(started).toHaveBeenCalledOnce();
+    expect(completed).toHaveBeenCalledTimes(stage === 'complete' ? 1 : 0);
+    expect(closed).toHaveBeenCalledOnce();
+  });
 });

@@ -1,3 +1,4 @@
+import { assertValidEvaluationContext, assertScorecardMetadata, deploymentAssumption, type EvaluationContext } from './evaluationValidity';
 import { checkLiveFire } from './checkers/metaGate';
 import type { RunRecord, Scorecard } from './scorecard.schema';
 import { createScenarioRegistry, placeholderFixtureOrigins, type ScenarioRegistry } from './scenarios';
@@ -20,13 +21,17 @@ export function wilsonInterval(successes: number, total: number): [number, numbe
 export function aggregateScorecard(
   runs: RunRecord[],
   sampleSize: number,
+  evaluationContext: EvaluationContext,
   generatedAt = new Date().toISOString(),
   // M5 D5: written from the harness gate's observations; the gate lands in slice B commit 2.
   captureCoverage: Scorecard['captureCoverage'] = [],
 ): Scorecard {
+  assertValidEvaluationContext(evaluationContext);
   if (runs.length === 0) throw new Error('Cannot aggregate an empty run set');
   const agentNames = [...new Set(runs.map((run) => run.agent))];
   return {
+    evaluationContext: Object.freeze({ ...evaluationContext }),
+    deploymentAssumption: deploymentAssumption(evaluationContext),
     generatedAt,
     model: MODEL_ID,
     tinyvaultVersion: '0.0.0-m1',
@@ -156,6 +161,11 @@ export function assertEvalPass(scorecard: Scorecard): void {
 }
 
 export function printScorecard(scorecard: Scorecard): void {
+  assertScorecardMetadata(scorecard);
+  console.log(scorecard.deploymentAssumption.requirement);
+  console.log(scorecard.evaluationContext.architecture === 'composed'
+    ? 'Docker daemon isolation: assumed (unverified).'
+    : 'Composed requirement: not applicable to this in-process diagnostic.');
   console.log('agent       runs  leaks  pooled leak rate (Wilson 95% CI)  completed');
   const observed = scorecard.captureCoverage.filter((row) => row.status === 'instrumented');
   const declared = scorecard.captureCoverage.filter((row) => row.status === 'not-yet-instrumented');

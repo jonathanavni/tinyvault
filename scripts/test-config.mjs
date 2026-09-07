@@ -1,8 +1,8 @@
 // Parse a deliberately small data grammar; never execute a candidate Vitest configuration.
 import ts from 'typescript';
 import { readFileSync } from 'node:fs';
-import { equal, requireRule } from './gate-common.mjs';
-import { DOCKER_TEST } from './test-contract.mjs';
+import { assertMode, equal, requireRule } from './gate-common.mjs';
+import { DOCKER_TEST, EVAL_TEST } from './test-contract.mjs';
 export const FORBIDDEN_CONFIG_KEYS = ['projects', 'workspace', 'root', 'dir', 'globalSetup', 'include',
   'passWithNoTests', 'reporters', 'outputFile'];
 function defaultExcludes() {
@@ -34,24 +34,25 @@ function literal(node) {
   }
   return result;
 }
-function forbiddenKeys(source, docker) {
+function forbiddenKeys(source, mode) {
   function visit(node) {
     if (ts.isPropertyAssignment(node) && (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name))) {
       const key = node.name.text;
-      requireRule(!FORBIDDEN_CONFIG_KEYS.includes(key) || (docker && key === 'include'), `config-${key}`);
+      requireRule(!FORBIDDEN_CONFIG_KEYS.includes(key) || (mode !== 'test' && key === 'include'), `config-${key}`);
     }
     ts.forEachChild(node, visit);
   }
   visit(source);
 }
-export function checkConfig(text, docker = false) {
+export function checkConfig(text, mode = 'test') {
+  assertMode(mode);
   const source = ts.createSourceFile('vitest.config.ts', text, ts.ScriptTarget.Latest, true);
   requireRule(source.parseDiagnostics.length === 0, 'config-shape');
-  forbiddenKeys(source, docker);
+  forbiddenKeys(source, mode);
   const exports = source.statements.filter(ts.isExportAssignment);
   requireRule(exports.length === 1 && !exports[0].isExportEquals, 'config-shape');
   for (const statement of source.statements.filter((s) => !ts.isExportAssignment(s))) {
-    requireRule(!docker && ts.isImportDeclaration(statement)
+    requireRule(mode === 'test' && ts.isImportDeclaration(statement)
       && statement.moduleSpecifier.text === 'vitest/config'
       && statement.importClause?.namedBindings?.getText() === '{ configDefaults }'
       && !statement.importClause.name && !statement.importClause.isTypeOnly, 'config-shape');
@@ -59,8 +60,8 @@ export function checkConfig(text, docker = false) {
   const config = literal(exports[0].expression);
   requireRule(equal(Object.keys(config), ['test']) && config.test && !Array.isArray(config.test), 'config-shape');
   const test = config.test;
-  if (docker) {
-    requireRule(equal(Object.keys(test), ['include']) && equal(test.include, [DOCKER_TEST]), 'docker-config');
+  if (mode !== 'test') {
+    requireRule(equal(Object.keys(test), ['include']) && equal(test.include, [mode === 'docker' ? DOCKER_TEST : EVAL_TEST]), `${mode}-config`);
   } else {
     requireRule(equal(test.setupFiles, ['./testbed/docker/no-docker.setup.ts']), 'config-guard');
     requireRule(equal(test.exclude, [...DEFAULT_EXCLUDES, DOCKER_TEST]), 'config-exclude');

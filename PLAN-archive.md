@@ -317,3 +317,79 @@ slice 3 (above); full detail in `PLAN-archive.md`.
 Wrapup hygiene: shipped Slice4 and earlier slice plans remain indexed at their existing paths because
 their contracts and review references are still inputs to later slices. Their completed status is already
 explicit in docs/README; physical archival/link migration is deferred, not silently performed here.
+
+## 2026-09-05-m5.2-slice5-planning — Slice5 accepted and pushed (closed 2026-09-06)
+
+Planning revision3 locked at the three-round cap; JobsA/B and 66 mutation dispositions accepted.
+Fresh Astra, Claude Opus5 QA and separate security all PASS in implementation round1. Candidate005a4f3
+passed literal clone/install/browser/full tests; merge02929e5 passed full tests and live Docker.
+Acceptance records73bd015 were pushed to origin/main after explicit user authorization; remote ref
+verified exactly and local/remote counts0/0. Canonical evidence is Slice5 register Entries1–11.
+No source changes after verification. Ownership closed for a fresh Slice6 planning session.
+
+The following is the pre-wrapup Current State; its pending push statements were superseded by the
+subsequent explicit user authorization and successful push recorded above.
+
+### Archived Current State
+
+`2026-09-05-m5.2-slice5-planning` — focus: **M5.2 Slice 5 integration accepted**;
+owner: codex; **state: active**. User transferred ownership from the closed Slice4 session, authorized
+Slice5 implementation, then explicitly approved candidate commit, exact-clone verification, local merge,
+and merged-tree gates on 2026-09-06. Checkout: `/Users/jonathanavni/Documents/Coding/tinyvault`, `main`.
+Reviewed candidate `005a4f37cd8279c57f58063613c45e51e9733ba8` merged as
+`02929e5ba7f26de05adbd174b67f5f9e4cfb21c6`; merge tree equals exact-clone-tested candidate.
+All implementation, review and integration gates PASS. Final continuity-only acceptance records follow
+the tested merge; no source/test changes. All workers/reviewers stopped; Codex is the sole continuity
+writer. No push, release or Slice6 authorization. Completed Slice4 and Slice5 reviews remain accepted.
+
+**Slice 4 complete:** locked revision5 Jobs A/B/C/D accepted after the required review ladder.
+Reviewed helper repair candidate `7a02d3ad84751a1db35678551836ca5e426caba3` passed a new literal
+clone + npm ci + make browsers + make test. Exact source merge then passed serial make test
+(**1,891 pass, one expected opt-in skip**) and make test-docker (**5/5**), both execution gates PASS.
+Live exports under120s; browser registration-through-attestation131.5–143.8ms; zero normal409s.
+Final fixture containers absent; three pre-existing networks preserved. No source changed after tests.
+Canonical acceptance and evidence: `docs/m5-2-slice-4-review-findings.md` Entry44; prior job acceptance
+Entries16/23/27/37, helper dispositions Entry43. Detailed narrative is in `PLAN-archive.md`.
+Raw `/private/tmp/tinyvault-slice4-integration/helper-acceptance/` evidence is temporary; the register
+is the durable record. Do not depend on scratch files surviving the next session.
+
+**Carry forward:** Entry39's intermittent missing-helper-summary failures remain unexplained. The
+separately demonstrated stream-error path was repaired; passing gates do not establish historical
+attribution or nonrecurrence. Preserve Entry43's synthetic-test, deletion-inventory, diagnostic and
+process-closure limits, plus accepted Slice4 private-key/observation/deployment limits. No whole-M5.2
+completion or release claim. Do not repeat completed Slice4 planning/reviews absent new evidence.
+
+**Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
+**M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
+**M4 ✅** (`b8a9396`) · **M5 ✅** (`96e3ea3`) · **M5.1 ✅** · **M5.2** in flight (spec locked; **slices 1–5 of 6 merged**, slice 5 source merge `02929e5`).
+
+**Slice5 accepted:** `docs/m5-2-slice-5-plan.md` revision3 remains LOCKED. Canonical evidence and
+append-only dispositions: `docs/m5-2-slice-5-review-findings.md` Entries1–10, final acceptance Entry10.
+Canonical v2 receipt/attestation transcripts bind fixture/run scope; full offline adjudication authenticates
+one event observation while preserving shared deriveLeakFromEvidence and its scoring mutant. Legacy v1
+artifacts require regeneration. Governing M5.2 D4/Acceptance L and inherited M5 D5 remain unchanged.
+
+**Verification:** 66 killed/restored mutations; candidate gates; fresh Astra adversarial and separate
+Claude Opus5 QA/security all PASS. Literal candidate clone + npm ci + make browsers + make test PASS
+(1963 passed, one expected opt-in skip). Exact source local merge then passed serial make test
+(1963 passed, one expected opt-in skip) and make test-docker (5/5), both execution audits PASS.
+Live export maximum90361.0ms (<120s); browser registration-through-attestation128.7–343.4ms (<60s);
+zero normal409 responses. Cleanup assertions PASS; tracked tree clean and unchanged after gates.
+Initial sandbox browser-cache setup was interrupted and rerun successfully with host access; no gate
+was skipped or weakened. Exact SHAs, report digests and measured limits are in Entry10.
+
+**Next action:** await direction for Slice6 planning under the existing ladder. No Slice6 implementation,
+new review of accepted Slice4/5 work, push, release or whole-M5.2 completion is authorized or claimed.
+M5.2 milestone-close assessment remains due after all six slices. Keep Slice4 Entries39/43/44 residuals
+and Slice5 Entry8 proof limits. Temporary `/private/tmp/tinyvault-slice5-integration/` raw reports support
+this session; Entry10 is the durable acceptance record. No worker, review, mutation or test suite is running.
+Standing Claude-review transfer authorization remains effective; managed controls remain authoritative.
+
+Doc hygiene: shipped slice plans still serve as live contract references for later slices; completed
+status is indexed, and path relocation is deferred to avoid unnecessary reference changes.
+
+**Blocked / needs attention:** no open Slice4 acceptance blocker; recorded residuals remain in its register.
+The A5 scorecard-provenance slice is still scheduled before
+M6 publishes anything. The `tinyvault-fixture:local` image (347 MB) stays on the host between eval runs (rebuilt by
+every composed construction). Threads unchanged: `terminate-before-delivery` timeout parked; deferred M2/M3
+residuals; the 🔴 `dom-fill` destination slice still owes its launch disposition.

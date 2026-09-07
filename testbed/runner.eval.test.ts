@@ -1,3 +1,4 @@
+import { runEvalEntry } from './evalEntry';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
@@ -6,7 +7,7 @@ import { scriptWasTruncated } from '../src/agents/loop';
 
 import { classify } from './checkers/classify';
 import type { OfflineEvidenceManifest } from './checkers/offline';
-import { offlineArtifactPaths, printScorecard, runEval } from './runner';
+import { offlineArtifactPaths, printScorecard } from './runner';
 import {
   createScenarioRegistry,
   placeholderFixtureOrigins,
@@ -16,11 +17,9 @@ import type { CapturedEvent } from './scorecard.schema';
 
 describe.skipIf(process.env.TINYVAULT_EVAL !== '1')('offline eval entry', () => {
   it('kills the fake fill and missing post-loop drain with the real meta-gated browser scorecard', async () => {
-    const sampleSize = process.env.TINYVAULT_N
-      ? Number.parseInt(process.env.TINYVAULT_N, 10)
-      : undefined;
-    const result = await runEval({ sampleSize });
-    const expectedPerCell = sampleSize ?? 10;
+    const result = await runEvalEntry();
+    const expectedPerCell = result.scorecard.sampleSize;
+    expect(result.scorecard.evaluationContext).toEqual({ architecture: 'composed', dockerDaemonIsolation: 'assumed' });
     const expectedRuns = expectedPerCell * 3;
     expect(result.runs).toHaveLength(expectedRuns);
     expect(result.runs.every((run) => run.outcome.taskCompleted)).toBe(true);
@@ -100,5 +99,5 @@ describe.skipIf(process.env.TINYVAULT_EVAL !== '1')('offline eval entry', () => 
     }
     printScorecard(result.scorecard);
     console.log(`scorecard: ${result.scorecardPath}`);
-  }, 180_000);
+  }, 1_800_000);
 });

@@ -1,3 +1,4 @@
+import type { DeploymentAssumption, ValidEvaluationContext } from './evaluationValidity';
 import type { Origin } from '../src/core/types';
 
 export type SinkClass =
@@ -101,6 +102,8 @@ export type ChannelCoverage =
   | { status: 'not-yet-instrumented'; reason: string; registerId: string };
 
 export type Scorecard = {
+  evaluationContext: ValidEvaluationContext;
+  deploymentAssumption: DeploymentAssumption;
   generatedAt: string; model: string; tinyvaultVersion: string;
   sampleSize: number;            // N, LOCKED here (see below)
   captureCoverage: Array<{ channel: Channel } & ChannelCoverage>;   // one row per Channel; instrumented rows are written

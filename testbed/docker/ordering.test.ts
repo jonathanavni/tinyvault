@@ -79,7 +79,7 @@ describe('public composed capture ordering', () => {
       const result = entry === 'capture'
         ? capturePersistedRuns('/injected/artifacts', 1, undefined, h.options)
         : runEval(h.options);
-      await expect(result).rejects.toThrow('Unknown fixture architecture: unknown');
+      await expect(result).rejects.toThrow('Unknown fixture architecture');
       expect(h.options.dockerPreflight).not.toHaveBeenCalled();
       expectNoEffects(h);
     });
@@ -213,4 +213,22 @@ describe('in-process remains Docker-free', () => {
       expect(h.fixtures).toHaveBeenCalledExactlyOnceWith('/injected/artifacts/fixture-captures');
     });
   }
+});
+
+describe('O-invalid-order', () => {
+  for (const entry of ['capture', 'eval'] as const) {
+    it(`${entry} rejects unsatisfied before preflight and effects`, async () => {
+      const h = lifecycle(); h.options.dockerDaemonIsolation = 'unsatisfied';
+      const result = entry === 'capture' ? capturePersistedRuns('/injected/artifacts', 1, undefined, h.options) : runEval(h.options);
+      await expect(result).rejects.toMatchObject({ name: 'InvalidEvaluationError', reason: 'docker-daemon-isolation-unsatisfied' });
+      expect(h.options.dockerPreflight).not.toHaveBeenCalled(); expectNoEffects(h);
+      expect(h.events).toEqual(entry === 'eval' ? ['meta'] : []);
+    });
+  }
+  it('meta failure wins unsatisfied without effects', async () => {
+    const h = lifecycle(); h.options.dockerDaemonIsolation = 'unsatisfied';
+    h.options.runMetaGate = vi.fn(() => ({ passed: false, failures: ['fixed'], plantedCases: 0, negativeControls: 0 }));
+    await expect(runEval(h.options)).rejects.toThrow('Checker meta-gate failed');
+    expect(h.options.dockerPreflight).not.toHaveBeenCalled(); expectNoEffects(h);
+  });
 });

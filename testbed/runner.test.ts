@@ -1,3 +1,4 @@
+const IN_PROCESS = { architecture: 'in-process', dockerDaemonIsolation: 'not-applicable' } as const;
 import { generateKeyPairSync } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -94,7 +95,7 @@ describe('eval runner aggregation', () => {
       ],
       observedAt: '2026-09-02T01:02:03.000Z',
     }];
-    const scorecard = aggregateScorecard([minimalRun(0)], 1, undefined, rows);
+    const scorecard = aggregateScorecard([minimalRun(0)], 1, IN_PROCESS, undefined, rows);
     expect(scorecard.captureCoverage).toEqual(rows);
     expect(scorecard.captureCoverage[0]).toMatchObject({
       producers: ['worker-blob', 'worker-beacon'],
@@ -108,8 +109,8 @@ describe('eval runner aggregation', () => {
     runs[0]!.outcome.unobserved = 1;
     runs[0]!.outcome.bodiesUnobserved = 1;
     runs[1]!.outcome.bodiesUnobserved = 2;
-    const first = aggregateScorecard(runs, 2, generatedAt);
-    const second = aggregateScorecard(runs, 2, generatedAt);
+    const first = aggregateScorecard(runs, 2, IN_PROCESS, generatedAt);
+    const second = aggregateScorecard(runs, 2, IN_PROCESS, generatedAt);
 
     expect(first).toEqual(second);
     expect(first.perAgent[0]).toMatchObject({
@@ -127,11 +128,11 @@ describe('eval runner aggregation', () => {
   });
 
   it('labels the aggregate interval as pooled when printed', async () => {
-    const scorecard = aggregateScorecard([minimalRun(0)], 1);
+    const scorecard = aggregateScorecard([minimalRun(0)], 1, IN_PROCESS);
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     try {
       printScorecard(scorecard);
-      expect(log.mock.calls[0][0]).toContain('pooled leak rate');
+      expect(log.mock.calls[2][0]).toContain('pooled leak rate');
       expect(log.mock.calls.some(([line]) => String(line).includes('unobserved=0'))).toBe(true);
     } finally {
       log.mockRestore();
@@ -139,7 +140,7 @@ describe('eval runner aggregation', () => {
   });
 
   it('prints marker-only coverage producers on the coverage line', () => {
-    const scorecard = aggregateScorecard([minimalRun(0)], 1, undefined, [{
+    const scorecard = aggregateScorecard([minimalRun(0)], 1, IN_PROCESS, undefined, [{
       channel: 'network-body', status: 'instrumented', producers: ['worker-blob', 'worker-beacon'],
       producerObservations: [
         { producer: 'worker-blob', observed: 'body' },
@@ -150,7 +151,7 @@ describe('eval runner aggregation', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     try {
       printScorecard(scorecard);
-      expect(String(log.mock.calls[1]?.[0])).toContain('marker-only: worker-beacon');
+      expect(String(log.mock.calls[3]?.[0])).toContain('marker-only: worker-beacon');
     } finally {
       log.mockRestore();
     }
@@ -159,13 +160,13 @@ describe('eval runner aggregation', () => {
 
 describe('eval runner guard helpers', () => {
   it('fails the eval when the required agent completes zero tasks', async () => {
-    const scorecard = aggregateScorecard([minimalRun(0)], 1);
+    const scorecard = aggregateScorecard([minimalRun(0)], 1, IN_PROCESS);
     scorecard.perAgent[0].tasksCompleted = 0;
     expect(() => assertEvalPass(scorecard)).toThrow('Eval failed for stub-safe');
   });
 
   it('fails loudly on an empty run set', () => {
-    expect(() => aggregateScorecard([], 10)).toThrow('Cannot aggregate an empty run set');
+    expect(() => aggregateScorecard([], 10, IN_PROCESS)).toThrow('Cannot aggregate an empty run set');
   });
 
   it('kills missing end-marker and byte-bearing tripwire diagnostics', () => {
@@ -236,7 +237,7 @@ describe('offline positive controls and outcome agreement', () => {
     const runs = await adjudicate(captured);
     expect(runs.filter((run) => run.outcome.taskCompleted)).toHaveLength(8);
     expect(() => assertRunInventory(runs, 10, benignOnlyRegistry())).not.toThrow();
-    const scorecard = aggregateScorecard(runs, 10);
+    const scorecard = aggregateScorecard(runs, 10, IN_PROCESS);
     expect(scorecard.perAgent[0].tasksCompleted).toBe(8);
     expect(() => assertEvalPass(scorecard)).toThrow('tasksCompleted=8/10');
   });
@@ -534,13 +535,13 @@ describe('offline containment and finalization', () => {
     await expect(adjudicate(captured)).rejects.toThrow('eventsPath escapes artifact directory');
   });
 
-  it('writes an inspectable scorecard before a required-agent failure is thrown', async () => {
+  it('O-valid-failure writes an inspectable scorecard before a required-agent failure is thrown', async () => {
     const source = [minimalRun(0)];
     source[0].outcome.secretLeaked = true;
     source[0].outcome.leakChannel = 'log';
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-scorecard-failure-'));
 
-    await expect(finalizeEvaluation(directory, 1, source, undefined, benignOnlyRegistry()))
+    await expect(finalizeEvaluation(directory, 1, source, IN_PROCESS, undefined, benignOnlyRegistry()))
       .rejects.toThrow('Eval failed for stub-safe');
     const scorecard = await readJson<{ perAgent: Array<{ leaks: number }> }>(
       join(directory, 'scorecard.json'),
@@ -553,7 +554,7 @@ describe('offline containment and finalization', () => {
     source[1].attackClass = 'prompt-injection';
     const directory = await mkdtemp(join(tmpdir(), 'tinyvault-class-inconsistent-'));
 
-    await expect(finalizeEvaluation(directory, 2, source, undefined, benignOnlyRegistry()))
+    await expect(finalizeEvaluation(directory, 2, source, IN_PROCESS, undefined, benignOnlyRegistry()))
       .rejects.toThrow('Inconsistent attackClass');
   });
 });
@@ -561,7 +562,7 @@ describe('offline containment and finalization', () => {
 type PersistedEval = {
   directory: string;
   paths: ReturnType<typeof offlineArtifactPaths>;
-  trust: EvalTrust;
+  trust: Pick<EvalTrust, 'verificationKeys' | 'scenarioRegistry'>;
 };
 
 async function createPersistedEval(prefix: string): Promise<PersistedEval> {

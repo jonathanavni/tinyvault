@@ -1,7 +1,7 @@
 // The runtime interceptor, the capability map and the execution proof catch Docker reach from code
 // modules reachable from make test — source and test files, spawn sites, plain-node gate scripts.
 // The entry-point files are the reviewed root of trust: package.json (scripts block), Makefile,
-// vitest.config.ts, vitest.docker.config.ts, and every scripts/check-*.mjs. Their exact content is
+// vitest.config.ts, vitest.docker.config.ts, vitest.eval.config.ts, and every scripts/check-*.mjs. Their exact content is
 // hash-pinned by an in-suite test. A hostile edit of that root is outside the locked threat model
 // (page content and the evaluated model do not edit the repository). No static gate is complete.
 import fs from 'node:fs';
@@ -26,13 +26,15 @@ export function runCli(url, run) {
   try { run(); }
   catch (error) { console.error(`gate FAIL: ${error.message}`); process.exitCode = 1; }
 }
-export function cliOptions(allowDocker = false) {
-  const args = process.argv.slice(2); let root = ROOT; let docker = false;
+export function cliOptions(allowMode = false) {
+  const args = process.argv.slice(2); let root = ROOT; let mode = 'test';
   if (args[0] === '--root') {
     requireRule(typeof args[1] === 'string' && !args[1].startsWith('--'), 'arguments');
     root = path.resolve(args[1]); args.splice(0, 2);
   }
-  if (allowDocker && args[0] === '--docker') { docker = true; args.shift(); }
+  if (allowMode && ['--docker', '--eval'].includes(args[0])) { mode = args.shift().slice(2); }
   requireRule(args.length === 0, 'arguments');
-  return { root, docker };
+  return { root, mode };
 }
+
+export function assertMode(mode) { requireRule(['test', 'docker', 'eval'].includes(mode), 'mode'); }

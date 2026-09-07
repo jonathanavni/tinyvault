@@ -61,6 +61,9 @@ for (const [relative, specs] of Object.entries(DOCKER_CAPABILITY_ALLOWLIST)) {
 // Job B's two fixture tests receive only their exact socket primitives. The generic
 // loop above proves permitted imports; these cases pin both scope and neighboring-path refusal.
 const lifecycleTestCapabilities = {
+  'testbed/evalEntry.test.ts': ['node:child_process'],
+  'testbed/parity/observe.browser.test.ts': ['node:http'],
+  'testbed/parity/claims.browser.test.ts': ['node:http'],
   'testbed/fixtures/shared/loginFixture.lifecycle.test.ts': ['node:http', 'node:net'],
   'testbed/fixtures/shared/loginFixture.limits.test.ts': ['node:net'],
 };
@@ -270,4 +273,4 @@ gateCliSelftest((script, root, status, extra = []) => {
   assert.equal(result.status, status, `${script}: ${result.stdout}\n${result.stderr}`);
   assert.match(status ? result.stderr : result.stdout, status ? /gate FAIL/ : /PASS/);
 });
-console.log('B2 production CLI selftest PASS (three caller-deletion mutants red, restored callers green)');
+console.log('B2 production CLI selftest PASS (entry, compose, execution and claim-linkage callers proved)');

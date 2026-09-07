@@ -19,6 +19,7 @@ import { bodiesUnobserved } from './checkers/bodiesUnobserved';
 import { canaryCommitment, type CompletionBinding } from './completion';
 import type { FixtureTransport } from './fixtures';
 import type { RunRecord } from './scorecard.schema';
+import type { ParityCollector, ParityRunDescriptor } from './parity/types';
 import { BENIGN_USERNAME, PASSWORD_SELECTOR } from './scenarios/benignLogin';
 import type { Scenario } from './scenarios/types';
 import { AGENT_ID, agentConfig, authForAgent, type AgentConfig } from './evalAgents';
@@ -36,6 +37,7 @@ type RunOnceInput = {
   createHost: typeof createSupervisedHost;
   createBackend: typeof createLocalFileBackend;
   maxTurns: number;
+  parityObserver?: ParityCollector;
 };
 
 type RunOnceResult = { record: RunRecord; evidence: OfflineRunEvidence };
@@ -47,8 +49,26 @@ export async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
   const config = agentConfig(AGENT_ID);
   const prepared = await prepareRun(input);
   const auth = authForAgent(input.scenario.authForRun(prepared.runId, prepared.nonce), config);
-  const loopResult = await executeStubRun(input, prepared, config);
+  const descriptor: ParityRunDescriptor = Object.freeze({ scenario: input.scenario.id,
+    agent: AGENT_ID, runIndex: input.runIndex, runId: prepared.runId, canary: prepared.canary,
+    canaryId: prepared.canaryId, nonce: prepared.nonce, vaultPath: prepared.vaultPath,
+    keyPath: prepared.keyPath, transcriptPath: prepared.transcriptPath, eventsPath: prepared.eventsPath });
+  const observedBrowser = input.parityObserver?.beginRun(descriptor, input.browser) ?? input.browser;
+  let loopResult: Awaited<ReturnType<typeof executeStubRun>>;
+  try { loopResult = await executeStubRun({ ...input, browser: observedBrowser }, prepared, config); }
+  catch (runError) {
+    try { await input.parityObserver?.endRun(descriptor); }
+    catch (observerError) {
+      // Keep both causes internally; the parity boundary publishes only this fixed category.
+      throw new AggregateError([runError, observerError], 'Parity capture-failed', { cause: runError });
+    }
+    throw runError;
+  }
+  await input.parityObserver?.endRun(descriptor);
   await input.fixture.finalizeRun(prepared.runId);
+  if (input.parityObserver) input.parityObserver.collectUnauthorized(
+    descriptor, await input.fixture.unauthorizedRequests(prepared.runId),
+  );
   const completionReceipt = await input.fixture.takeReceipt(prepared.runId);
   // Snapshot before replacement: the in-process fixture uses this same destination.
   const capture = await input.fixture.captureRequests(prepared.runId);

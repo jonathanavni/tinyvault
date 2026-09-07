@@ -8,6 +8,9 @@ Project documentation lives here. Two kinds:
 When a planning doc or spec is superseded or shipped, move it to [`archive/`](archive/) rather than deleting it. The history is useful, and a stale doc at the root is more confusing than an archived one. `/wrapup`'s doc-hygiene check surfaces docs that look superseded but haven't been moved.
 
 Active planning docs:
+- `m5-2-slice-6-plan.md` — Slice 6 parity/claim/validity plan, revision 3 LOCKED after three paper rounds and owner absorption; jobs A–D, repaired-candidate gates and all three independent implementation round2 reviews PASS (register Entries5–26). Changes remain uncommitted; integration acceptance is pending.
+- `m5-2-slice-6-review-findings.md` — append-only Slice 6 planning/implementation evidence and dispositions.
+- `m5-2-claim-evidence.md` — canonical147-row claim/selector/mutation/transport crosswalk; implementation boundaries are documented, while final row acceptance remains pending.
 - `m5-2-slice-5-plan.md` — Slice 5 attestation implementation plan, revision 3 **LOCKED** after capped Sol/Claude paper reviews;
   v2 implementation, reviews, exact-clone and merged-tree gates PASS; merged as `02929e5`
   (final acceptance register Entry10). No Slice6 work.
@@ -67,7 +70,7 @@ Active planning docs:
   gate; capture transfer without shared mounts; the frozen agent tool surface) and Acceptance A–P.
 - `m5-2-implementation-plan.md` — how the locked M5.2 contract is sequenced: six independently-green commits, the
   Codex/integrator ownership split, and which Acceptance criteria each commit gates. Docker enters at commit 3 and
-  never on the `make test` path. **Slices 1–4 merged (`ab52f8e`, `8133495`, `8afce07`, final source merge `39169a6`); slice 5 next.**
+  never on the `make test` path. **Slices 1–5 merged (Slice 5 source merge `02929e5`, acceptance records `73bd015`); Slice 6 implementation active under locked revision 3.**
 - `m5-2-review-findings.md` — the M5.2 register: C-R1 (seam recon), C-R2/C-R3/C-R5 (three adversarial paper rounds,
   which killed the original network shape, then the sidecar split and exec bridge, then found the Docker daemon was
   an unguarded alternate control transport), C-R4 and C-R6 (the user's threat-model lock and bounded cap

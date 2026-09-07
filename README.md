@@ -29,9 +29,9 @@ and the repository and CI must contain no real credentials.
 (M4), and the measurement harness runs the first two hostile fixtures (M5). What does not exist yet: a real agent in
 front of those fixtures (M6), the MCP adapter (M8) and the 1Password backend (M9). The two test-gate defects a
 read-only project assessment found (`docs/project-assessment-2026-09-03.md`) are **fixed** — `make test` now passes
-from a literal clean clone, verified by one. Next is the Docker-composed fixture path the spec requires (M5.2),
-whose contract is locked at `docs/m5-2-slice-spec.md` revision 4 and which adds the Docker-daemon isolation
-deployment requirement noted below.
+from a literal clean clone, verified by one. The Docker-composed fixture path (M5.2) has five accepted slices. Slice 6 implements parity, claim
+evidence and evaluation validity under `docs/m5-2-slice-spec.md` revision 4 and the locked Slice 6 plan;
+its review and acceptance gates remain pending. The deployment requirement is stated below.
 
 | Milestone | State |
 |---|---|
@@ -42,13 +42,14 @@ deployment requirement noted below.
 | M4 — the fill service and its integration gates | **done** (`b8a9396`) — four commits + five fix slices, each three-channel reviewed with real-Chromium exploits; probe P is a paired Holm-corrected family gate; layer-4 blind spots declared in `SCHEMA.md`; residuals with proof in `docs/m4-review-findings.md` |
 | M5 — hostile fixtures #1–#2 (`lookalike-origin`, `dom-hidden-injection`), the capture-coverage gate, the finite decoder inventory, worker-body markers | **done** (`96e3ea3`) — three slices, each three-channel reviewed with real-Chromium probes and capped fix rounds; register `docs/m5-review-findings.md` |
 | M5.1 — test-gate repair (timing file split, generated run corpus, clean-clone acceptance) | **done** — accepted by a literal `git clone` + `npm ci` + `make browsers` + `make test`; register `docs/m5-review-findings.md` §C-Q |
-| M5.2 — Docker-composed fixtures behind one implementation, two transports | spec **locked** (revision 4); slice 1 of 6 **merged** (`ab52f8e`) — the transport seam and a runtime-enforced agent tool boundary; slice 2 (daemon-channel preflight) next |
+| M5.2 — Docker-composed fixtures behind one implementation, two transports | spec **locked** (revision 4); slices 1–5 **merged** (Slice 5 source `02929e5`, acceptance `73bd015`); Slice 6 implementation active, acceptance pending |
 | M6–M7 — reference + naive agents | not started |
 | M8–M10 — MCP adapter, 1Password backend, demo | not started |
 
-`make eval` runs today and produces a scorecard (30 runs, three cells, currently 0 leaks), but it drives a **scripted stub
-agent** — it is exercising the harness against the hostile fixtures, not measuring a real agent. Treat every current number as a
-**deterministic-harness result**. The table below stays empty until M6 puts real agents in front of the fixtures.
+`make eval` defaults to 10 runs per cell across the three scenarios using Docker-composed fixtures. It
+drives a **scripted stub agent**, so its numbers describe the deterministic harness, not a real agent.
+The harness coverage lab runs separately in-process. Every scorecard includes its architecture and
+deployment assumption; local endpoint validation does not establish daemon isolation. The table below stays empty until M6 puts real agents in front of the fixtures.
 
 | Agent | Runs | Leaks | Leak rate (95% CI) | Tasks completed |
 |---|---:|---:|---:|---:|
@@ -61,13 +62,14 @@ Reproduce with:
 make eval
 ```
 
-> **Deployment requirement — Docker-daemon isolation.** Once `make eval` runs its fixtures Docker-composed (M5.2), a
-> valid evaluation requires that **the Docker Engine API not be reachable by the evaluated browser, page content, or
-> agent**. The harness validates and pins the local `unix://` endpoint it uses, but cannot prove the same daemon has
-> no additional TCP listener, proxy, or externally configured route — so this is an assumption about your
-> environment, not something TinyVault checks for you. **If it does not hold, the run is outside the threat model
-> and its results are invalid** — not a pass, not a failure. Published scorecards state the assumption. See
-> `SCHEMA.md` and `docs/m5-2-slice-spec.md`.
+<!-- TV-DEPLOYMENT-ASSUMPTION:START -->
+A valid composed evaluation assumes the Docker Engine API is unreachable by the evaluated browser, page content and agent. Local endpoint validation does not verify this assumption. An unsatisfied assumption invalidates the evaluation.
+<!-- TV-DEPLOYMENT-ASSUMPTION:END -->
+
+The default composed entry records isolation as assumed and unverified. Set
+`TINYVAULT_DOCKER_ISOLATION=unsatisfied make eval` for known unsatisfied isolation: it emits a typed
+invalid report, exits nonzero, and preserves prior artifacts as historical files without printing their
+numbers. Invalid evaluations have no measured outcome. See [SCHEMA.md](SCHEMA.md).
 
 ### What a green scorecard does and does not prove
 

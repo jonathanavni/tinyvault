@@ -1429,3 +1429,21 @@ cover the documentation checkpoint. All workers, reviewers and test commands hav
 No mandatory Slice5 integration gate remains pending.
 **Deviations From Handoff:** none in scope, behavior or required gate order. Browser setup required host
 cache access; documentation ledger whitespace was corrected before the candidate commit as Entry9 notes.
+
+## Entry 11 — 2026-09-06: push verified and session closed
+
+User explicitly requested “Let’s push.” `git push origin main` exited0, advancing origin/main from
+`dc0796fa8616548c6fa61315fed4b2b9bde97620` to
+`73bd015bcf20ae226d7f480ef57292b2bbc539a3` (accepted Slice4/5 work and continuity records).
+`git ls-remote --exit-code origin refs/heads/main` independently returned that exact SHA;
+`git rev-list --left-right --count origin/main...main` returned0/0; working tree clean.
+This supersedes prior pending/no-push authority statements for the completed push only.
+
+User then requested the full tinyvault-wrapup and a fresh-session continuation. Codex closes ownership,
+archives the completed Current State, and leaves the next scope at Slice6 planning under row6 / D6 / K,O,P.
+No Slice6 implementation or release is implied. All reviews and acceptance gates remain accepted;
+no workers, reviewers, mutations or tests are running. Only continuity documents change at wrapup.
+
+Not run during wrapup: repeated test/review gates, because source/tests are unchanged and their exact
+accepted results are Entry10. Verification: documentation diff hygiene and source-diff exclusion.
+Deviations From Handoff: none. No user-global memory was changed.

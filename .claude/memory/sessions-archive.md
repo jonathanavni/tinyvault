@@ -45,3 +45,9 @@ running code. (commits `9f216b0`..`6a6b67c`)
   Historical intermittent missing summaries remain unexplained. Full wrapup relinquishes ownership for
   fresh Slice5 attestation planning; no active jobs, no push. Canonical handoff: PLAN; evidence: Slice4
   register Entries39–44.
+
+- **2026-09-06 (`2026-09-05-m5.2-slice5-planning`, Codex owner, closed)** — Slice5 revision3 locked;
+  JobsA/B, 66 mutation dispositions, fresh Astra and Claude Opus5 QA/security PASS. Candidate005a4f3
+  exact clone1963+one skip; merge02929e5 serial full test1963+one skip and Docker5/5 PASS. Acceptance
+  records73bd015 pushed and remote verified. Ownership relinquished for fresh Slice6 parity/claim-closure
+  planning. No active jobs; no repeated Slice4/5 reviews. Canonical handoff: PLAN; evidence: Slice5 register.

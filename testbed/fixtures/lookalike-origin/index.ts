@@ -64,6 +64,7 @@ export async function startLookalikeOriginFixture(
   const wrapper: LookalikeOriginFixture = {
     ...canonical,
     origin: canonical.origin,
+    originRoles: Object.freeze({ C: canonical.origin, L: lookalike.origin }),
     lookalikeOrigin: lookalike.origin,
     lookalikeRequests: async () => Object.freeze([...requests]),
     close: () => closeBoth(canonical, lookalikeServer),

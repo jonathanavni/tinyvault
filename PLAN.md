@@ -11,67 +11,88 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-05-m5.2-slice5-planning` — focus: **M5.2 Slice 5 integration accepted**;
-owner: codex; **state: active**. User transferred ownership from the closed Slice4 session, authorized
-Slice5 implementation, then explicitly approved candidate commit, exact-clone verification, local merge,
-and merged-tree gates on 2026-09-06. Checkout: `/Users/jonathanavni/Documents/Coding/tinyvault`, `main`.
-Reviewed candidate `005a4f37cd8279c57f58063613c45e51e9733ba8` merged as
-`02929e5ba7f26de05adbd174b67f5f9e4cfb21c6`; merge tree equals exact-clone-tested candidate.
-All implementation, review and integration gates PASS. Final continuity-only acceptance records follow
-the tested merge; no source/test changes. All workers/reviewers stopped; Codex is the sole continuity
-writer. No push, release or Slice6 authorization. Completed Slice4 and Slice5 reviews remain accepted.
 
-**Slice 4 complete:** locked revision5 Jobs A/B/C/D accepted after the required review ladder.
-Reviewed helper repair candidate `7a02d3ad84751a1db35678551836ca5e426caba3` passed a new literal
-clone + npm ci + make browsers + make test. Exact source merge then passed serial make test
-(**1,891 pass, one expected opt-in skip**) and make test-docker (**5/5**), both execution gates PASS.
-Live exports under120s; browser registration-through-attestation131.5–143.8ms; zero normal409s.
-Final fixture containers absent; three pre-existing networks preserved. No source changed after tests.
-Canonical acceptance and evidence: `docs/m5-2-slice-4-review-findings.md` Entry44; prior job acceptance
-Entries16/23/27/37, helper dispositions Entry43. Detailed narrative is in `PLAN-archive.md`.
-Raw `/private/tmp/tinyvault-slice4-integration/helper-acceptance/` evidence is temporary; the register
-is the durable record. Do not depend on scratch files surviving the next session.
+`2026-09-06-m5.2-slice6-planning` — focus: **M5.2 Slice6 implementation verified; integration pending**;
+owner: codex; **state: active, authorized integration in progress**. Checkout
+`/Users/jonathanavni/Documents/Coding/tinyvault`, branch `main`, HEAD
+`73bd015bcf20ae226d7f480ef57292b2bbc539a3`. Changes remain **UNCOMMITTED**.
+No active workers, reviewers, mutations or test suites. Preserve inherited wrapup documents and
+the closed Slice4/5 acceptance. Do not repeat completed reviews: Slice6 paper rounds3, implementation rounds2.
 
-**Carry forward:** Entry39's intermittent missing-helper-summary failures remain unexplained. The
-separately demonstrated stream-error path was repaired; passing gates do not establish historical
-attribution or nonrecurrence. Preserve Entry43's synthetic-test, deletion-inventory, diagnostic and
-process-closure limits, plus accepted Slice4 private-key/observation/deployment limits. No whole-M5.2
-completion or release claim. Do not repeat completed Slice4 planning/reviews absent new evidence.
+**Completed:** A–D implementation under locked revision3,147 claim rows/299 runtime selectors.
+Compiler evidence337 mutants/695 actual invocations; original runtime290 Slice6 lineages plus7
+accepted historical selectors and2 new deployment-block selectors with3 document mutants each.
+Entry24 adds11 verified isolated pass/fail/pass triples. Preserve all recorded survivors, diagnostic-only,
+shared-observation and historical-candidate limits; evidence lives in the append-only Slice6 register.
+Current canonical table SHA256 `27d7a12bc5b45eb4f59ab32af8dab133cd97cc9b37e97fcf998b6149527e3af4`.
 
-**Milestone:** v0.1 build against `docs/phase-0-plan.md` §8.
-**M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅** (`07996a2`) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) ·
-**M4 ✅** (`b8a9396`) · **M5 ✅** (`96e3ea3`) · **M5.1 ✅** · **M5.2** in flight (spec locked; **slices 1–5 of 6 merged**, slice 5 source merge `02929e5`).
+**Current gates (Entry25):** npm run typecheck and git diff --check PASS; focused fixes196 PASS,
+claim suite154 PASS on host. Serial make test2317 PASS/1 expected opt-in skip, make test-docker6/6 PASS,
+make eval1/1 PASS with actual composed N10,30/30 complete and0 observed leaks; all execution audits PASS.
+All299 linked runtime names occurred exactly once passed in the same fresh default reports.
+Evaluation is scripted-stub evidence with Docker isolation assumed (unverified), not real-agent or
+daemon-non-exposure proof. Sandbox EPERM and first failed test-expectation attempts remain excluded.
 
-**Slice5 accepted:** `docs/m5-2-slice-5-plan.md` revision3 remains LOCKED. Canonical evidence and
-append-only dispositions: `docs/m5-2-slice-5-review-findings.md` Entries1–10, final acceptance Entry10.
-Canonical v2 receipt/attestation transcripts bind fixture/run scope; full offline adjudication authenticates
-one event observation while preserving shared deriveLeakFromEvidence and its scoring mutant. Legacy v1
-artifacts require regeneration. Governing M5.2 D4/Acceptance L and inherited M5 D5 remain unchanged.
+**Independent reviews (Entry26):** fresh Astra, Claude Opus5 QA and separate Claude Opus5 security
+round2 all PASS on frozen330-file digest
+`be6c123b91552a97fb9366a143451995c04f65519b9c97d2a4292d60da8d1975`.
+Round1 defects were fixed and verified: BOM preservation, exact marked deployment text, dual-error
+attribution, witness budget category and stale documentation. Final changes after PASS are citation/status
+updates only; source/tests and canonical table rows remain byte-identical. Static reviewer evidence limits
+and one incorrect reviewer statement about the in-gate execution join are explicitly disposed in Entry26.
 
-**Verification:** 66 killed/restored mutations; candidate gates; fresh Astra adversarial and separate
-Claude Opus5 QA/security all PASS. Literal candidate clone + npm ci + make browsers + make test PASS
-(1963 passed, one expected opt-in skip). Exact source local merge then passed serial make test
-(1963 passed, one expected opt-in skip) and make test-docker (5/5), both execution audits PASS.
-Live export maximum90361.0ms (<120s); browser registration-through-attestation128.7–343.4ms (<60s);
-zero normal409 responses. Cleanup assertions PASS; tracked tree clean and unchanged after gates.
-Initial sandbox browser-cache setup was interrupted and rerun successfully with host access; no gate
-was skipped or weakened. Exact SHAs, report digests and measured limits are in Entry10.
+**Approval:** User's “I always approve these file changes…stop asking me each time” is standing
+approval for routine Slice6 file edits, including the approved CORS-before-early-response and readonly
+coverage declaration corrections. Do not ask again per file. Runtime permission controls still apply.
+User authorized commit, integration acceptance and push on 2026-09-06 by saying “Ok let’s proceed” after the proposed commit → clean-clone/integrated-tree gates → push sequence. Milestone-close assessment and release remain separate, unauthorized scopes.
 
-**Next action:** await direction for Slice6 planning under the existing ladder. No Slice6 implementation,
-new review of accepted Slice4/5 work, push, release or whole-M5.2 completion is authorized or claimed.
-M5.2 milestone-close assessment remains due after all six slices. Keep Slice4 Entries39/43/44 residuals
-and Slice5 Entry8 proof limits. Temporary `/private/tmp/tinyvault-slice5-integration/` raw reports support
-this session; Entry10 is the durable acceptance record. No worker, review, mutation or test suite is running.
-Standing Claude-review transfer authorization remains effective; managed controls remain authoritative.
+**Next:** commit the verified candidate on main, then run the existing committed-candidate clean-clone
+and exact integrated-tree acceptance ladder before pushing. Those gates are not run
+yet; Slice6 is not merged and whole-M5.2 remains open. No further implementation review is needed absent
+new source/gate changes. Evidence: `/private/tmp/tinyvault-slice6-implementation/`; review round2 and
+repaired-candidate gates in reviews-round2/ and reviews-round1/fixed-*-gate/ respectively.
 
-Doc hygiene: shipped slice plans still serve as live contract references for later slices; completed
-status is indexed, and path relocation is deferred to avoid unnecessary reference changes.
+**Previous closed handoff (preserved):**
 
-**Blocked / needs attention:** no open Slice4 acceptance blocker; recorded residuals remain in its register.
-The A5 scorecard-provenance slice is still scheduled before
-M6 publishes anything. The `tinyvault-fixture:local` image (347 MB) stays on the host between eval runs (rebuilt by
-every composed construction). Threads unchanged: `terminate-before-delivery` timeout parked; deferred M2/M3
-residuals; the 🔴 `dom-fill` destination slice still owes its launch disposition.
+`2026-09-05-m5.2-slice5-planning` — focus: **M5.2 Slice5 accepted and pushed**;
+owner: codex; **state: closed** (2026-09-06). Ownership relinquished for a fresh session.
+Checkout: `/Users/jonathanavni/Documents/Coding/tinyvault`, branch `main`.
+Implementation005a4f3 → source merge02929e5 → acceptance records73bd015.
+User authorized the push; origin/main was verified at73bd015 with local/remote counts0/0 and a clean tree.
+This wrapup leaves five continuity files uncommitted: PLAN.md, PLAN-archive.md, the Slice5 register,
+.claude/memory/sessions-archive.md and .claude/memory/gotchas.md. Preserve them on fresh-session entry;
+no production or test changes.
+No running workers, reviewers, mutations or test suites; no pending Slice5 job or acceptance gate.
+Detailed session narrative is in PLAN-archive.md. Evidence below is durable; scratch reports may expire.
+
+**Accepted:** Slice5 plan revision3 LOCKED after three paper rounds; implementation round1 fresh Astra,
+Claude Opus5 QA and separate security all PASS. 66 killed/restored mutations. Exact candidate clone +
+npm ci + make browsers + make test PASS (1963 passed, one expected opt-in skip). Exact source merge
+passed serial make test (1963 passed, one expected skip) and live make test-docker (5/5), both execution
+audits PASS. Canonical evidence: `docs/m5-2-slice-5-review-findings.md` Entries7–11; final gates Entry10.
+Live exports <120s; browser registration-through-attestation128.7–343.4ms; zero normal409s.
+No source/tests changed after review or gates. Legacy v1 receipt/attestation artifacts require regeneration.
+
+**Next session:** take ownership from this closed checkpoint and begin **Slice6 planning only** under
+`docs/m5-2-implementation-plan.md` row6 and `docs/m5-2-slice-spec.md` revision4 §D6 / Acceptance K,O,P:
+canonical two-transport parity, behavior-to-claim table with row-specific killing mutants, SCHEMA claim
+wording, deployment-assumption reporting and invalid-run handling. Read SCHEMA.md and the relevant
+source/tests before drafting; inspect current checkout/refs/dirty state. Follow the existing Codex-led
+paper → implementation → independent QA/security/adversarial → integration ladder. No Slice6 plan is
+locked and no Slice6 implementation, milestone-close assessment or release is authorized by this handoff.
+Do not repeat completed Slice4/5 reviews or reset their round counts absent new evidence.
+
+**Carry forward:** fixture-control post-capture integrity is not independent capture authenticity,
+compromised-fixture containment or daemon-wide non-exposure. Keep Slice5 Entry8's schema-guard mutation
+attribution limits and all accepted Slice4 limits (Entries39/43/44): historical intermittent missing-helper
+summaries remain unexplained; repaired stream-error behavior does not establish historical attribution
+or nonrecurrence. No open Slice4/5 acceptance blocker. Exact test and mutation claims stay in their registers.
+
+**Milestone:** M0–M5 and M5.1 accepted; **M5.2 slices1–5 of6 merged**. Whole-M5.2 completion and its
+required milestone-close assessment remain pending Slice6. A5 scorecard provenance is due before M6
+publishes numbers. Other parked threads: terminate-before-delivery timeout; deferred M2/M3 residuals;
+🔴 dom-fill destination launch disposition. Keep existing locked requirements and claim limits.
+Standing Claude review-transfer authorization persists; runtime approval controls remain authoritative.
 
 ## Decisions Log
 
@@ -572,3 +593,34 @@ residuals; the 🔴 `dom-fill` destination slice still owes its launch dispositi
   full test and live Docker. Trees identical, no production changes after review or gates. Slice5 register
   Entry10 preserves exact commands, report hashes, timings and acceptance limits. Slices1–5 merged;
   Slice6 and M5.2 milestone-close assessment remain future work, with no push/release authorization.
+
+- **2026-09-06 — Slice 6 initial planning, first paper round (not locked).** User transferred ownership
+  from the closed Slice 5 checkpoint, preserving its uncommitted wrapup. Fresh Sol and Claude Opus 5
+  both returned NEEDS-ATTENTION. Accept source-grounded planning gaps for resolution: wire observation
+  and order, trusted C/L provenance, composed eval configuration/exit path, validity applicability and
+  precedence, exact claim/test/mutant inventory. Decline Claude's suggested synthetic-only status/header
+  substitute and partitioned-order comparison because they weaken locked D6. Detailed dispositions and
+  next packet: `docs/m5-2-slice-6-review-findings.md` Entry 2. No completed absorption, plan lock,
+  implementation or Slice 4/5 review restart; revision 2 and paper round 2 remain pending design closure.
+
+- **2026-09-06 — Slice 6 revision 2 planning absorption.** Choose a run-bound parity-only browser wire
+  witness plus unchanged signed/scored evidence over expanding capture channels or weakening D6. Two
+  real transport pairs and a live duplicate-response-header probe establish bounded feasibility only.
+  Specify trusted C/L provenance, global lossless normalization, third static eval config with unchanged
+  default Docker guard, architecture-specific invalidity and exact P proof inventory. Entry3 owns
+  details and evidence. Round2 paper review next; no implementation or locked-contract amendment.
+
+- **2026-09-06 — Slice6 paper round2 absorbed into revision3 (register Entry4):** both independent channels NEEDS-ATTENTION; accepted closed artifact/vault binding, independent full SCHEMA clause corpus, total wire callbacks plus actual unobserved control, explicit source/capability pins and composed outer watchdog, full publishable claim corpus, preflight ordering and compiler evidence. No D6 relaxation, new scored channel or prior-slice review. Owner added K assertion-deletion audit and direct real-adapter invalid child proof during sibling sweep. Content-Length matches in the existing12 paired captures are bounded feasibility only; old scratch-root reuse did not prove inventory. Mandatory sweep complete; fresh final paper round3 next, no implementation authorization.
+
+- **2026-09-06 — Slice6 revision3 LOCKED after capped paper absorption (register Entry5):** both final channels NEEDS-ATTENTION; owner resolved exact per-transport P fields, in-process auxiliary capture inventory/prerequisites and missing structural type IDs. Fresh unchanged-source N2 inventories passed with39/33files and6/6complete per transport. Composed unexported L/unattributed fixture diagnostics remain explicitly unpaired; full common capture/browser evidence remains subject to D6. These are bounded source-backed inventory corrections, not a new primitive or a fourth review. No final independent PASS or runtime acceptance claimed. Planning complete; implementation not authorized, all workers stopped, inherited wrapups preserved.
+
+- **2026-09-06** — User authorized proceeding from locked Slice6 planning to implementation, starting
+  bounded job A; retain Codex ownership and all uncommitted documents. Keep the locked plan bytes and
+  completed three paper rounds intact, with sequential source ownership and remaining gates unchanged.
+
+- **2026-09-06 — Slice6 P execution linkage uses the existing fresh-report audit.** Literal table agreement
+  and synthetic helper vectors did not detect removal of an underlying test. The owner connected the
+  actual static runtime selectors to checkExecution's validated default report partitions, within the
+  existing C file ownership. This requires no cached reports, dynamic test import, recursive Vitest, new
+  command or capability. Compiler evidence remains separate. Exact CLI caller deletion and restoration
+  are recorded in Slice6 register Entry16; full current-candidate gates remain pending.

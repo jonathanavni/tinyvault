@@ -52,6 +52,7 @@ function transport(peer: ComposedPeer, closeProject: () => Promise<void>, http: 
     catch { throw new ComposedConstructionError('origin-unreachable'); }
   };
   return {
+    originRoles: Object.freeze({ ...peer.originRoles }),
     origin: peer.origin, architecture: 'composed', reachability: 'http', verificationPublicKey: peer.publicKey,
     registerRun: (setup: FixtureRunSetup) => {
       // Copy at invocation, including when another registration is still in flight.

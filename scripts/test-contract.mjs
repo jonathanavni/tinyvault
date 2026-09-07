@@ -25,3 +25,8 @@ export const EXPECTED_DOCKER_COMMANDS = Object.freeze([
   `vitest run --config vitest.docker.config.ts --reporter=json --outputFile=${DOCKER_REPORT}`,
   'node scripts/check-test-execution.mjs --docker',
 ]);
+
+export const EVAL_TEST = 'testbed/runner.eval.test.ts';
+export const EVAL_REPORT = '.vitest/eval.json';
+export const EVAL_START_FILE = '.vitest/eval-start.json';
+export const EXPECTED_EVAL_COMMAND = 'node scripts/check-test-entry.mjs --eval && TINYVAULT_EVAL=1 vitest run --config vitest.eval.config.ts --reporter=verbose --reporter=json --outputFile.json=.vitest/eval.json && node scripts/check-test-execution.mjs --eval';

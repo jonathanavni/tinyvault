@@ -1,2 +1,2 @@
 export function entrySelftest(check: (doc: unknown) => void,
-  reset: (root: string, docker?: boolean) => void, rules: readonly string[]): void;
+  reset: (root: string, mode?: 'test' | 'docker' | 'eval') => void, rules: readonly string[]): void;

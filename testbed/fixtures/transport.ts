@@ -20,6 +20,7 @@ export type UnauthorizedRequest = Readonly<{ route: string; body: string }>;
 
 export interface FixtureTransport {
   origin: string;
+  originRoles: Readonly<{ C: string; L?: string }>;
   architecture: FixtureArchitecture;
   reachability: FixtureReachability;
   /** Trusted verification anchor; the private signing key never crosses the transport. */

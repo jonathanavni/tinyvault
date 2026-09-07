@@ -89,6 +89,7 @@ function createInProcessTransport(
 ): FixtureTransport {
   const transport: FixtureTransport = {
     origin: state.origin,
+    originRoles: Object.freeze({ C: state.origin }),
     architecture: 'in-process',
     reachability,
     verificationPublicKey: publicKey,

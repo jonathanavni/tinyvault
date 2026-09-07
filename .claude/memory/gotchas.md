@@ -334,3 +334,14 @@ Example:
   or reuse its backing memory before the test scans it, making an actual write look empty. Copy bytes
   synchronously in the observer; prove it with a write/erase mutant. Slice4 JobD round3 exposed this
   test-observer defect; the accepted key-proof partition remains in register Entries34–37. (2026-09-05)
+
+- **Unstaged diff hygiene omits new untracked files.** A green `git diff --check` did not cover the new
+  Slice5 mutation ledger; staging exposed trailing spaces in its diff code fences. Include newly added
+  files in the final hygiene check (`git diff --cached --check` after authorized explicit-path staging).
+  Preserve exact raw mutation replacements separately from documentation formatting. (2026-09-06)
+- **Aggregate consumer bounds do not automatically dominate producer validation.** Slice5 producers
+  validate scalar strings before serializing the envelope. Their per-field byte cap bounds the subsequent
+  `[...value]` allocation, even where consumer parsing already has a total artifact cap. Evaluate each
+  caller's order before removing apparently redundant guards. Boolean rejection vectors do not prove
+  each redundant schema limb: distinguish input vectors from guard-specific deletion proof. Slice5
+  register Entry8 records that measurement limit without a stronger security claim. (2026-09-06)

@@ -101,7 +101,7 @@ it('actual startup installs every primitive audit writer before control accepts 
     const secrets = [der, der.subarray(-32), Buffer.from(der.toString('base64')), Buffer.from(der.toString('base64url')), Buffer.from(state.pair!.privateKey.export({ type: 'pkcs8', format: 'pem' }))];
     for (const surface of [page, Buffer.concat(stderrBytes), Buffer.concat(wire),
       Buffer.concat(stdoutBytes), ...await artifactBytes(state.parent)]) assertClean(surface, secrets);
-    expect(Object.keys(state.fixture!).sort()).toEqual(['origin', 'architecture', 'reachability', 'verificationPublicKey', 'registerRun',
+    expect(Object.keys(state.fixture!).sort()).toEqual(['origin', 'originRoles', 'architecture', 'reachability', 'verificationPublicKey', 'registerRun',
       'getLoginPage', 'submitLogin', 'takeReceipt', 'finalizeRun', 'acknowledgeReceipt', 'verifyCompletion', 'attestEvents',
       'captureRequests', 'unauthorizedRequests', 'close'].sort());
     expect(CAPABILITY_OPS).toHaveLength(6);

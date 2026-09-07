@@ -10,6 +10,7 @@ import ts from 'typescript';
 
 // Exact repo-relative path -> exact capability specifiers, never a directory exemption.
 export const DOCKER_CAPABILITY_ALLOWLIST = Object.freeze({
+  'testbed/evalEntry.test.ts': ['node:child_process'],
   'testbed/docker/exec.ts': ['node:child_process'],
   'testbed/docker/no-docker.setup.ts': ['node:child_process', 'node:net'],
   'testbed/docker/exec.test.ts': ['node:child_process', 'node:http', 'node:net'],
@@ -29,6 +30,8 @@ export const DOCKER_CAPABILITY_ALLOWLIST = Object.freeze({
   'scripts/check-dependency-boundary.mjs': ['node:process'],
   'src/browser/playwright.test.ts': ['node:child_process'],
   'src/browser/controls.browser.test.ts': ['node:http'],
+  'testbed/parity/observe.browser.test.ts': ['node:http'],
+  'testbed/parity/claims.browser.test.ts': ['node:http'],
   'testbed/fixtures/controls-lab/index.test.ts': ['node:http'],
   'testbed/fixtures/controls-lab/index.ts': ['node:http'],
   'testbed/fixtures/shared/bindServer.test.ts': ['node:net'],

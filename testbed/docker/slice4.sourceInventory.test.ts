@@ -54,7 +54,7 @@ it('fixture transport return and container adapter expose only the closed public
     ts.forEachChild(node, visit);
   };
   visit(file);
-  expect(properties?.sort()).toEqual(['origin', 'architecture', 'reachability', 'verificationPublicKey', 'registerRun', 'getLoginPage',
+  expect(properties?.sort()).toEqual(['origin', 'originRoles', 'architecture', 'reachability', 'verificationPublicKey', 'registerRun', 'getLoginPage',
     'submitLogin', 'takeReceipt', 'finalizeRun', 'acknowledgeReceipt', 'verifyCompletion', 'attestEvents', 'captureRequests',
     'unauthorizedRequests', 'close'].sort());
   const adapter = await readFile(new URL('./container/fixture.ts', import.meta.url), 'utf8');

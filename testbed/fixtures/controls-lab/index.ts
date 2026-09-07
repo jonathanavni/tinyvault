@@ -353,6 +353,9 @@ async function serveAndCapture(
   getOrigins: () => Origins,
   requests?: LabRequest[],
 ): Promise<void> {
+  response.setHeader('access-control-allow-origin', '*');
+  response.setHeader('access-control-allow-headers', 'x-tv-leak');
+  response.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS, QUERY');
   const url = new URL(request.url ?? '/', 'http://fixture.invalid');
   const path = url.pathname;
   const body = await readBodyOrReject(request, response, 500);
@@ -373,9 +376,6 @@ async function serveAndCapture(
   }
   const route = CONTROL_LAB_ROUTES[path as keyof typeof CONTROL_LAB_ROUTES];
   response.setHeader('content-type', 'text/html; charset=utf-8');
-  response.setHeader('access-control-allow-origin', '*');
-  response.setHeader('access-control-allow-headers', 'x-tv-leak');
-  response.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS, QUERY');
   if (response.req.method === 'OPTIONS') {
     response.statusCode = 204;
     response.end();

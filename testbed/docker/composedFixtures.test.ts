@@ -24,6 +24,9 @@ it('reachable positive returns exactly three composed HTTP transports with the a
     });
 
   }
+  expect(set['benign-login']!.originRoles).toEqual({ C: set['benign-login']!.origin });
+  expect(set['lookalike-origin']!.originRoles).toEqual({ C: 'http://127.0.0.1:47120', L: 'http://127.0.0.1:47121' });
+  expect(Object.isFrozen(set['lookalike-origin']!.originRoles)).toBe(true);
   const fixture = set['benign-login']!;
   const expected = { fixtureId: 'benign-login', fixtureVersion: '1', scenarioId: 'benign-login', runId: 'run', nonce: 'nonce',
     canaryId: 'canary', canaryCommitment: canaryCommitment('synthetic-canary'), successEndpoint: `${fixture.origin}/success` };
@@ -126,7 +129,7 @@ it('private client runs every operation through both sessions and the real fixtu
     expect(verifyEventsDigest(attestation, Object.keys(h.set)[i], 'A', Buffer.from('[]'), fixture.verificationPublicKey)).toBe(true);
     await fixture.acknowledgeReceipt('A');
     expect(await h.fixtures[i].takeReceipt('A')).toBeUndefined();
-    expect(Object.keys(fixture).sort()).toEqual(['origin', 'architecture', 'reachability', 'verificationPublicKey',
+    expect(Object.keys(fixture).sort()).toEqual(['origin', 'originRoles', 'architecture', 'reachability', 'verificationPublicKey',
       'registerRun', 'getLoginPage', 'submitLogin', 'takeReceipt', 'finalizeRun', 'acknowledgeReceipt',
       'verifyCompletion', 'attestEvents', 'captureRequests', 'unauthorizedRequests', 'close'].sort());
   }

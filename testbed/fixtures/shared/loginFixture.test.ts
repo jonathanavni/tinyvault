@@ -22,6 +22,8 @@ describe('shared login fixture unauthorized request capture', () => {
     });
     try {
       expect(fixture).toMatchObject({ architecture: 'in-process', reachability: 'http' });
+      expect(fixture.originRoles).toEqual({ C: fixture.origin });
+      expect(Object.isFrozen(fixture.originRoles)).toBe(true);
       await fixture.registerRun({
         scenarioId: 'shared-fixture-test', runId: 'run-one', nonce: 'nonce-one',
         canaryId: 'canary-one', canary: 'TVC_shared_run-one_A234567BCDEF',
