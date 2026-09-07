@@ -381,3 +381,18 @@ Example:
   availability probe as well as list-once metadata; discovery, probe, setup mapping and filling must
   share one backend at S5 construction. Injected callbacks cannot detect a mismatched binding. Preserve
   the shallow-bootstrap/trusted-caller and probe-count/throw-arm proof limits in the M6 register. (2026-09-07)
+
+- **A pending main-frame navigation wedges the page-level CDP session; a Playwright goto timeout does not end it.**
+  While Chromium has a navigation in flight (e.g. a TCP connect to a black-hole address, 75 s on macOS), every query on a
+  `context.newCDPSession(page)` session — `Runtime.evaluate`, `DOM.getDocument`, `Page.getFrameTree`, and
+  `cdp.detach()` (it sends `Runtime.runIfWaitingForDebugger` first) — hangs until the navigation ends; Playwright's own
+  `page.evaluate` hangs too. `page.goto({timeout})` rejecting does NOT cancel the navigation. `Page.stopLoading` is browser-
+  handled, answers in ms on the wedged session and aborts the navigation; only context disposal releases the sockets. A hostile
+  page can cause this with `location.href = <black hole>` and no agent navigate. Detect: control ops or close stalling for
+  ~75 s after any navigation to an unreachable host. Evidence: D-CANCEL archive 2026-09-07. (2026-09-07)
+- **`status --all --json` has no `completed`/`failed` buckets: keys are `running`, `latestFinished` (one object) and `recent`
+  (a count), and a job can also vanish with no record at all.** D-CANCEL R3: the first dispatch (`task-mtrodla8-wv8fkf`)
+  left the running list within a minute and `result <id>` said "No job found" — a genuine silent loss; the identical
+  re-dispatch ran 8 min and completed, but a monitor that looked for it in a `completed` bucket reported "absent" for that
+  one too. Monitor on `running` only; on leaving `running`, call `result <id>`: a report means done, "No job found"
+  means lost → re-dispatch once. (2026-09-07)

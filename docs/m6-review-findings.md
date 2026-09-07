@@ -1263,3 +1263,72 @@ introduced contradiction in those passages; it did not run tests or reassess sec
 Full tests were not rerun for this documentation-only wrapup; the exact committed source's successful
 publication checks remain the executable evidence. No active worker, reviewer, test or publication job
 remains. PLAN records the closed owner checkpoint; fresh-session scope begins with D-CANCEL planning.
+
+## D-CANCEL — resolution and evidence packet (2026-09-07, owner claude)
+
+Scope: the S4 entry decision only. No source, test, gate or root-instruction file changed; S4/S5 remain undispatched.
+Raw evidence (scripts, logs, three Codex reports, the packet) is the local ignored archive
+`artifacts/review-evidence/tinyvault-m6-d-cancel-20260907/` (manifest + sha256 in
+`tinyvault-m6-d-cancel-20260907.manifest.json` / `.sha256`; tarball beside it). The packet text
+`d-cancel-packet-draft.md` is canonical for the numbers; this entry records the decision and dispositions.
+
+**Reproduction (real path, macOS host composition, black hole 10.255.255.1, exp2).** Both required cases stall:
+after `navigation-failed` (goto timeout 1.5 s + 2 s settle), `browser_close_session` sat > 56 s; with close
+requested 1 s into an active goto, the mutex holder ran its 30 s default goto + 2 s settle and then the close sat
+> 28 s more. Both were censored at 60 s by a harness `browser.close()`. The stall site is `state.cdp.detach()` in
+`disposeState`, preceded in the active case by the mutex wait. SYN_SENT sockets (2 per attempt) persisted until
+context disposal. Native abandonment on this host is 75.0 s (`net.inet.tcp.keepinit` 75000; exp0/exp5); the
+original Docker bridge observation was not re-run this session.
+
+**Cause (exp1, exp3, exp4; Sol research corroborates from Chromium/Playwright source).** While a main-frame
+navigation is pending in Chromium, the page-level CDP session stops answering the tested query commands
+(`Runtime.evaluate`, `Page.getFrameTree`, `DOM.getDocument`) and `CDPSession.detach()` (which first sends
+`Runtime.runIfWaitingForDebugger` on that channel). A Playwright goto timeout does not end the navigation.
+`Page.stopLoading` is browser-handled, answers in ≤ 9 ms on a wedged session, rejects an active goto with
+`net::ERR_ABORTED` at once and un-wedges the channel; it does not release the sockets. `context.close()`
+(`Target.disposeBrowserContext`) returns in ≤ 10 ms with a page session attached or a detach pending, and is what
+releases the sockets (SYN_SENT → 0). Raw Playwright without a project CDP session never stalls.
+
+**Adversarial variants (exp4, exp8, real supervised path).** A hostile page's own `location.href = <black hole>`
+wedges the session channel and Playwright's channel with no agent navigate (`browser_snapshot` > 8 s); one
+stop restores it in ≤ 12 ms. Re-navigation loop, popup, subframe, WebSocket/EventSource and beforeunload
+variants all closed in ≤ 5 ms after one stop with sockets released and the evidence lease clean; the popup
+target's existence was not confirmed; workers and a confirmed second target with pending evidence are untested.
+
+**Mechanism selected.** In `closeSession`: (1) unconditional `Page.stopLoading` on the session's own CDP session,
+awaited under the single 5 s quiesce deadline (immediate rejection = visible failure + abort); (2) wait for the
+mutex holder as today (it settles by itself: ≤ 2 s for navigate, exp6 S3 2003 ms on the real path); (3) admission
+barrier plus attach → deferred fixed-point settle while targets live (E6); (4) context disposal BEFORE the
+session's own page-channel cleanup (`Runtime.releaseObject`, `cdp.detach()`), which become best-effort, with the
+page-close listener's fire-and-forget `releasePinnedObjects` suppressed during disposal; (5) close success only
+after the context is observed gone from `browser.contexts()`, then final settle/drain; (6) deadline expiry aborts
+the owned browser/run (which settles any holder), fails the cohort, never a successful close while work lives.
+Proven externally on the real supervised path without code changes (exp6, exp7, exp8): close 2–5 ms after a
+failed navigation, 2.0 s end-to-end during an active goto, SYN_SENT 0, evidence lease clean, POST bodies of
+200,002 and 34 bytes to the black hole captured before cancellation.
+
+**Holder bound (R1 P1-2 / R2 P1-1).** Resolved without a contract amendment by the plan's own escape hatch:
+holders that do not settle within the shared 5 s deadline are settled by the browser abort and the run fails.
+Options "5 s after holder settlement" (mis-added, caller-visible) and "shrink op timeouts" were withdrawn.
+
+**Cross-model rounds (Sol, read-only, fresh sessions).** Research report (task-mtrn4l07-yyt7mq) ranked the same
+mechanism first. R1 (task-mtrnm9w4-whasb7) NO-SHIP 4 P1/3 P2/1 P3 — read before exp6–exp8 existed; all eight
+dispositioned in the packet §6. R2 (task-mtro1xj5-u8h8we) NO-SHIP — closed R1 1/4/7/8, added five findings, all
+accepted (holder-bound third option adopted; stop-failure semantics fixed; fixed-point settle; close-listener
+suppression; wording). R3 (task-mtroeb97-2idt4s, capped, P1 criteria stated up front) NO-SHIP with one P1 inside the criteria — the
+deadline-abort holder-settlement claim was unevidenced — closed by exp9 on the real supervised path (navigate,
+snapshot, click, type holders all settle within ~30 ms of the browser abort; pending close resolves; contexts 0;
+sockets 0; no unhandled rejections) and by narrowing the claim; R2's five findings closed by the reviewer; R1-5/R1-6
+remain S4 items. exp9 also showed that today an aborted run reports close `ok:true`, `finish()` pass and an empty
+successful snapshot — the silent-wrong path S4 step 5 must close, with mutants. No fourth round (cap).
+
+**S4 requirements carried from this decision (not silently absorbed).** F1 stop-on-timeout in `navigatePage` so a
+failed navigation leaves a usable session, and an explicit navigation timeout (a black-hole iframe costs the
+full 30 s default); F2 the self-navigating hostile page in the fixture corpus and stop-on-op-timeout as a
+lifecycle rule; F4 the delayed-CDP-body and pending-attach cases under quiesce with a marker present and
+`settle()` completing; R1-5 per-holder concurrent-close differential (result equality, lifecycle cleared once);
+R1-6 a confirmed second target with pending evidence or a fail-closed residual; `Network.loadingFailed`
+`ERR_ABORTED` correlation in the regression; deletion mutants for the stop, the context-removal check, the
+fixed-point loop and the listener suppression. Evidence limits: single macOS host, one Chromium build, IPv4
+only, SYN_SENT via `netstat` as the socket signal (no packet capture), mechanism emulated from a test-owned
+second CDP session rather than in-path.

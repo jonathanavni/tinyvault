@@ -95,7 +95,8 @@ work in flight, the rest stay parked here (register "Final5 round"):
   sources/configuration. S1 implemented provenance/profile contracts; S5 still owes trusted Git enumeration,
   composed collection/admission and actual command-path proof before any published comparison. Legacy stub
   labels do not establish real-profile provenance. Canonical scope: M6 plan §6/§7 and SCHEMA M6 contract.
-- **[M6 spec input] `browser_close_session` never resolves while a connect to a black-hole address is pending.**
+- **[RESOLVED as D-CANCEL 2026-09-07 — implementation in S4] `browser_close_session` never resolves while a connect to a black-hole address is pending.** Root cause and mechanism: M6 plan §7 D-CANCEL and the M6 register entry "D-CANCEL — resolution and evidence packet". Original entry retained below for provenance.
+  Original:
   Found by slice 3's Docker suite (2026-09-05): after `browser_navigate` to `http://172.20.0.x:8080/` (a Docker
   bridge-network address, unroutable from the macOS host) returns `navigation-failed` in ~1.5 s, the following
   `browser_close_session` on that session hangs indefinitely (18 s+ in a bounded trace, unbounded otherwise), while

@@ -89,3 +89,8 @@ running code. (commits `9f216b0`..`6a6b67c`)
   main2539/0/1 inherited skip plus15 timing PASS. Codex R2 PASS; Claude QA/security NEEDS-ATTENTION,
   no P1/P2, P3 dispositions retained in M6 register. Fresh next scope: D-CANCEL evidence before S4;
   S5 wiring/real cohorts remain due. Documentation-only wrapup remains uncommitted; all prior caps retained.
+
+- **2026-09-07 (`2026-09-07-d-cancel`, Claude owner)** — committed the S3 wrapup docs (`0acb6bb`), pruned three
+  merged codex branches, resolved D-CANCEL with a reproduction + cause isolation + externally-proven mechanism on the
+  real supervised path and three capped Sol paper rounds; no source change, S4 not dispatched. Found the hostile
+  self-navigation channel wedge. Docs uncommitted at session end pending wrapup.

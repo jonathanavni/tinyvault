@@ -11,7 +11,21 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-07-m6-s3` — focus: **M6 S3 complete and published; session closed**;
+`2026-09-07-d-cancel` — focus: **S3 wrapup docs committed (`0acb6bb`), merged codex branches pruned, D-CANCEL resolved with evidence (`b5a478e`; S4 not dispatched)**;
+owner: claude; state: active; state checkout: `/Users/jonathanavni/Documents/Coding/tinyvault`; worktree: same (main).
+
+**D-CANCEL (S4 entry gate): RESOLVED 2026-09-07.** Mechanism = `Page.stopLoading` before the mutex wait, E6 order, context
+disposal before session-CDP cleanup, context-removal check, shared 5 s expiry-abort; no contract amendment. Cause: a pending
+main-frame navigation wedges the page-level CDP session and a goto timeout does not end it; stall site `cdp.detach()`.
+Proven externally on the real supervised path (close 2–5 ms / 2.0 s, sockets released, lease clean) with seven experiment
+families and three capped Sol paper rounds (R1/R2 NO-SHIP fully dispositioned; R3 NO-SHIP with one in-criteria P1 closed by exp9; final state RESOLVED).
+Canonical: M6 plan §7 + M6 register entry; raw evidence `artifacts/review-evidence/tinyvault-m6-d-cancel-20260907/`
+(local, ignored). Also found: a hostile page can wedge the trusted host's control channel for ~75 s with one line of JS
+(self-navigation to a black hole) — carried into S4 as a fixture + lifecycle rule. **Next:** S4 dispatch packet
+(Astra, full ladder) carrying the listed requirements; S5 unchanged. Local main is two docs commits (`0acb6bb`, `b5a478e`) ahead of
+origin; nothing pushed this session — push awaits the user's go-ahead.
+
+Previous stamp: `2026-09-07-m6-s3` — focus: **M6 S3 complete and published; session closed**;
 owner: codex; **state: closed** (2026-09-07); continuity relinquished for a fresh session.
 State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`; branch main.
 Published commit `db78a1c914052d7424f9cf65e3caae654e3b85f4`; local/GitHub main equality
@@ -664,3 +678,4 @@ No active workers, reviewers, tests or pending publication jobs.
 - **2026-09-07 — M6 S3 accepted after implementation R2, uncommitted.** Full ordered gate and fresh Codex adversarial PASS; Claude Opus5 QA/security NEEDS-ATTENTION with no P1/P2. R1 correctness fixes were implemented and independently re-reviewed. R2 same-backend probe documentation and historical-margin wording were clarified; remaining trusted-input, redundancy, type/style and test-proof limits were explicitly retained under handoff §6. No executable/gate/root-instruction change after review, so §5.1 absorption sweep and claims verification suffice for documentation closure; no third code-review round opened. Canonical findings/evidence: [M6 S3 R2 dispositions](docs/m6-review-findings.md#s3-r2--owner-acceptance-and-retained-review-limits). All inherited caps/residuals and dirty wrapup records preserved. D-CANCEL remains OPEN before S4; no S4/S5, real cohort, commit/push or release authority implied.
 
 - **2026-09-07 — S3 checkpoint commit/push explicitly authorized.** User said “Let’s commit and push” after readiness verification. Publish only the accepted S3 candidate plus preserved S2 wrapup documentation, verify the committed tree and remote equality, and retain native evidence locally. This does not authorize S4/S5 implementation, cohorts or release. Historical review statuses and residual dispositions remain unchanged.
+- **2026-09-07** — **D-CANCEL resolved: cancel the navigation with `Page.stopLoading` before waiting on the mutex, dispose the context before the session's own CDP cleanup, and let the plan's 5 s expiry-abort settle any holder — over (a) amending the bound to "5 s after holder settlement" and (b) shrinking op timeouts**, because (a) was mis-added (17 s) and caller-visible and (b) left < 0.5 s for teardown, while the expiry-abort rule already exists in §7 and a close that races a still-running holder at the 300 s deadline is a failed run anyway. Chosen over abort-only context disposal as the first step because stop is the least destructive primitive that un-wedges the page channel (≤ 9 ms) and lets deferred evidence settle while targets live; disposal remains the hard step. Evidence: seven experiment families on the real supervised path (no code changed), Sol research corroborating from Chromium/Playwright source, three capped Sol paper rounds whose findings are all dispositioned in the M6 register. Recorded S4 requirements rather than silently absorbed: stop-on-timeout + explicit navigation timeout, hostile self-navigation fixture, delayed-body/pending-attach quiesce cases, per-holder concurrent-close differential, confirmed second target, loadingFailed correlation, four deletion mutants.
