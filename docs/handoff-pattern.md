@@ -111,6 +111,9 @@ commands and plugin-dispatch instructions remain specific to Claude-led sessions
    review nor a substitute for a required channel. Use the mandated round-2/round-3 fix review and caps (§5).
 5. **Astra integrates and preserves continuity:** adjudicate findings under §6, run the required candidate,
    merged-tree and clean-clone checks at the stages the active contract requires, and record exact evidence.
+   At slice or milestone closure, reconcile current-status text in `PLAN.md`, root `README.md`,
+   `docs/README.md` and the `docs/phase-0-plan.md` build-status paragraph; preserve historical registers
+   and dated assessments, and distinguish scheduled findings from completed fixes.
    Coordinate browser timing suites serially across the machine. Attempt checks allowed in the current
    environment; old Codex sandbox failures do not establish present capability. Report blocked/unrun checks
    separately. Commit, merge, push, or release only within the user's authorization; owner status grants no

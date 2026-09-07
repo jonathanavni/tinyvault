@@ -1587,3 +1587,26 @@ M5.2 slices are integrated. Whole-M5.2 milestone-close assessment and release re
 unperformed scopes. No milestone-close or release approval is implied.
 Deviations From Handoff: approved CORS/readonly amendments only; all required commit/clone/main
 acceptance sequencing and serial browser timing constraints retained.
+
+
+## Entry29 — final publication verified and session closed (2026-09-06)
+
+Acceptance-record commit `53fd94f7831d2fb913d887a4a40c2ef3913f30b1` was pushed after source
+`8103c4729e729d6a08e569e8aa5abe68cb535fa3`. Normal push exit0; live origin/main matched53fd94f,
+local/remote ahead/behind0/0 and tree clean. The record commit changed only PLAN.md, docs/README.md,
+the claim-table introduction and this register; source/tests, locked plan and canonical table rows
+were preserved. Final proof: `/private/tmp/tinyvault-slice6-integration-20260906/publication-verification.json`.
+Entry28's exact-source acceptance results and limitations stand; no further runtime claim is added.
+
+User requested full tinyvault-wrapup and a fresh-session continuation. Codex closes its ownership,
+archives the previous Current State verbatim (including the inherited closed Slice5 handoff), and
+leaves five continuity documents uncommitted: PLAN.md, PLAN-archive.md, this register,
+.claude/memory/sessions-archive.md and .claude/memory/gotchas.md. No active worker, reviewer, mutation,
+test or outstanding Slice6 gate. Paper rounds3 and implementation rounds2 remain complete.
+Whole-M5.2 milestone-close assessment is the next proposed scope; it has not run. No M6 or release
+authorization is implied. Fresh session must preserve these wrapup edits and accepted slice evidence.
+
+Verification for wrapup: git diff --check and byte-preservation checks over tracked files, unchanged
+Decisions Log, and append-only archive/register/memory additions. Not run: runtime gates or repeat
+reviews, because only continuity documentation changed after accepted source8103c47.
+Deviations From Handoff: none for wrapup; approved implementation amendments remain recorded in Entry20.

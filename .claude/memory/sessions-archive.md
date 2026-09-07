@@ -51,3 +51,15 @@ running code. (commits `9f216b0`..`6a6b67c`)
   exact clone1963+one skip; merge02929e5 serial full test1963+one skip and Docker5/5 PASS. Acceptance
   records73bd015 pushed and remote verified. Ownership relinquished for fresh Slice6 parity/claim-closure
   planning. No active jobs; no repeated Slice4/5 reviews. Canonical handoff: PLAN; evidence: Slice5 register.
+
+- **2026-09-06 (`2026-09-06-m5.2-slice6-planning`, Codex owner, closed)** — Slice6 revision3 A–D accepted
+  after paper3 / implementation2; Astra and Claude Opus5 QA/security PASS. Exact source8103c47 clone
+  and main gates2317+one skip each, Docker6/6, composed scripted eval30/30 complete and zero observed
+  leaks. Source8103c47 and acceptance records53fd94f pushed. Ownership relinquished for whole-M5.2
+  assessment; five wrapup documents uncommitted, no active jobs. Evidence: Slice6 register Entries28–29.
+
+- **2026-09-06 (`2026-09-06-m5.2-milestone-close`, Codex owner, closed)** — Whole-M5.2 assessment
+  completed; independent Codex and separate Opus5 QA/security found documentation issues only, all
+  owner-verified and corrected. M5.2 closed (register C-M1); retained source8103c47 acceptance hashes
+  and selector joins verified without repeating slice reviews/runtime suites. Eleven documents remain
+  uncommitted. Ownership relinquished for fresh M6 planning; no active jobs, M6 implementation or release.

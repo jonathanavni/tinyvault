@@ -628,3 +628,106 @@ about the whole string namespace. The universal claim is carried by the literal 
 assertion, which catches an eighth registry entry under any name. `list_vault` has been added to the representative
 set — it is a genuine host tool supplied through the bootstrap context and deliberately not one of the seven the
 loop offers, making it the forbidden name a real model is likeliest to try.
+
+
+## C-M1 — whole-M5.2 milestone-close assessment (2026-09-06)
+
+**Owner VERDICT: PASS — M5.2 closed within locked revision4 Acceptance A–P.** All six slices remain
+accepted. This is whole-milestone synthesis after Slice6 acceptance, not another slice review round.
+The independent reports originally returned NEEDS-ATTENTION for documentation; those original verdicts
+remain unchanged below. Owner verified and corrected every status finding. No new reaching security
+defect or unresolved technical Acceptance A–P blocker was found. M6 implementation and release remain
+unauthorized and unstarted. Full requirement/evidence crosswalk: [assessment](project-assessment-2026-09-06.md).
+
+Reviewed frozen checkout: main `53fd94f7831d2fb913d887a4a40c2ef3913f30b1`, accepted executable source
+`8103c4729e729d6a08e569e8aa5abe68cb535fa3`. Review candidate digest
+`57871e4074cf39a4fbc928536e5257ebd0af9850c1c6d29268920eb1f254aa03` covered330 files, including the
+five inherited dirty wrapup documents and the authorized PLAN ownership update. Owner compared all330
+file hashes with both reviewer candidate inventories after completion: unchanged. Both helper runs
+exited2 with executionStatus completed and reviewerModel `claude-opus-5`; this is completed review with
+findings, not dispatch failure. QA session `f98bb323-f1e3-4c9a-b8b8-4a2c37ff4fe1`; security session
+`74a0e9ff-679f-47bf-9d16-bd69a134d5f6`. Auxiliary CLI Haiku usage remains in metadata and is not called
+reviewer output. Fresh Codex worker `/root/milestone_assessment` completed separately; channels were blind.
+
+Raw report root: `/private/tmp/tinyvault-m52-close-20260906/` (ephemeral). Each Claude command used
+`node scripts/claude-review.mjs --repo /Users/jonathanavni/Documents/Coding/tinyvault --packet <channel>-packet.md
+--channel <qa|security> --base 53fd94f7831d2fb913d887a4a40c2ef3913f30b1 --output claude-<channel>
+--timeout-seconds 1200`, with packet/output paths absolute beneath that root. Actual commands and
+context/methodology hashes are preserved in each request.json; the security methodology was independently supplied.
+
+| Independent channel | Original verdict | Report relative to root | SHA256 |
+| --- | --- | --- | --- |
+| Fresh Codex | NEEDS-ATTENTION | `astra-report.md` | `987fa347a170cfdfaea5f8782eda30f52026ca1beede793a98aef27d83534107` |
+| Claude Opus5 QA | NEEDS-ATTENTION | `claude-qa/report.md` | `ed01a284f65d0065077550502e217f9fdd11d8f33f1aac8613cd0869fc8a5a1b` |
+| Claude Opus5 security | NEEDS-ATTENTION | `claude-security/report.md` | `f79309c6ef2fb5a8cd44f3c1bbdf120c71143c2df038b8b8c8b99413d413fc97` |
+
+### Findings verified line by line and dispositioned
+
+References in this table identify the frozen candidate before documentation correction.
+
+| ID | Independent finding | Owner evidence and disposition |
+| --- | --- | --- |
+| MC1 | README:32–34,45 says five accepted slices and Slice6 pending (Codex P3; both Claude channels Medium) | Confirmed against Slice6 Entry28/29 and source8103c47/acceptance53fd94f. Corrected paragraph and table to six accepted slices and this synthesized milestone closure. Owner P3: status drift without executable or security impact; fixed regardless of severity. |
+| MC2 | phase-0-plan:419–424 says four merged slices and Slice5 next (Codex P3; QA Medium; security Low/Medium) | Confirmed recurring status drift. Updated only the build-status paragraph. Added the four current-status surfaces to handoff §0's existing closure hygiene step; no ladder/gate/role change. Historical A7 dispositions and dated reports preserved. |
+| MC3 | docs/README:105–107 says A5 and A7 were “actioned” (security Low) | Confirmed ambiguous wording: scorecardAggregate.ts:37 and runnerExecution.ts:27 retain stale versions. Index now explicitly says A5 remains open before M6 publishes comparisons, while A7's then-current doc half was corrected. No A5 implementation or rescheduling. |
+
+### Evidence and review-limit adjudications
+
+- The owner independently recomputed all eight retained native report SHA256 values, verified their
+  assertion records and all four command-log hashes, rechecked the scorecard hash, and rejoined all299
+  runtime selectors exactly once passed in both default report sets. Source/tests remain byte-identical
+  to accepted8103c47; all147 canonical claim rows unchanged. Entry28 is the durable runtime evidence home.
+  This validates inherited evidence; no runtime gate was rerun. Verification results are under the report root.
+- A5 is correctly retained: scorecard lineage depends on surrounding candidate/register evidence until
+  source/config provenance lands. No self-identifying scorecard claim is made.
+- Security's lack-of-CI observation is accepted as the existing A6 release-engineering follow-up. Its
+  statement that M5.2 security properties live “entirely outside make test” is declined as overbroad:
+  the accepted main native report includes833 passed tests across29 files under testbed/docker alone,
+  including capabilities, control, framing, preflight and attestation. Real-Docker topology/parity still
+  requires explicit make test-docker and make eval. No CI work is added to this milestone.
+- P's mutation-death evidence is historical, not automatically re-established by the runtime-name join.
+  This accepted limit stands. The stronger statement that merely re-linking a row to a weaker selector
+  keeps every gate green is not established: claims.test.ts:1710–1717 pins exact independent selector
+  sets, and :1732–1741 rejects swapped selectors. Weakening the selected assertion or coordinated
+  implementation/test edits remains a review/mutation concern. No new universal mutant guarantee is claimed.
+- The coverage lab is in-process (runner.ts:111–119, README's disclosure); host-side capture is shared
+  across transports. Composed publication does not turn the lab into an independent composed coverage
+  measurement. The unattested wire witness and three-leg parity retain their finite scope.
+- Security's claimed on-disk hash verification is treated as reading candidate/recorded hashes under
+  Read/Glob/Grep, not independent hash execution. The owner actually recomputed the claim-table SHA256:
+  `e568cb613f46eb5fcfa0e2374ba4d0aac1a57973882931ccaa10bf7a470a335d`.
+- The harness cannot establish daemon non-exposure through selected-endpoint preflight; this is the
+  locked deployment assumption. Security's stronger “untestable ... by anyone” phrasing is not adopted.
+- All original accepted finite observation/decoder/timing/wire and mutation-attribution limits remain.
+  Seven historical admin-selector lineages, Slice5 Entry8, Slice4 Entries39/43/44 and the unexplained
+  timeout are not erased by these reports. Static reviews are not independent dynamic reproductions.
+
+Security disclosed targeted reading instead of full §0/§13 and all147 table rows; this bounds its coverage.
+QA and Codex supplied independent requirement maps, and the owner read the governing protocol and verified
+all147 row bytes and299 runtime links. No missing technical obligation was identified; full slice audits
+were deliberately not repeated. Raw reports remain unedited. No second round is required for status-only
+corrections under the existing documentation carve-out; no gating or correctness code changed.
+
+Only assessment/continuity/status documents changed after review. The inherited closed Current State is
+preserved verbatim in PLAN-archive.md; its original archive/register/memory bytes remain. Final checks:
+git diff --check, source/test/locked-contract/claim preservation and local documentation links. No commit,
+push, M6 or release. Deviations From Handoff: no owner scope deviation; reviewer coverage deviations are
+explicitly recorded above.
+
+
+## C-M2 — session wrapup and M6 planning handoff (2026-09-06)
+
+User requested tinyvault-wrapup and a kickoff prompt for a fresh session. Owner closes this session
+and relinquishes continuity; M5.2 remains closed under C-M1, with no active reviewer, worker, mutation,
+test or acceptance gate. Original assessment Current State is archived verbatim. All eleven dirty/new
+documents remain uncommitted, including the inherited Slice6 wrapup and the assessment document.
+No source/test/locked-contract/claim-row change, no commit/push, no M6 implementation or release.
+Next proposed scope is M6 planning under the existing independent review ladder, carrying A1/A2/A4,
+A5 provenance before publication and all existing residuals; completed M5.2 reviews are not repeated.
+
+Wrapup verification: git diff --check; only PLAN, PLAN-archive, this register and the session index
+changed relative to the wrapup-entry snapshot; archived Current State and Decisions Log preserved,
+archive/register/index changes append-only. No runtime gate rerun for documentation-only wrapup.
+Doc hygiene: current status and index aligned; slice contracts/registers retained for traceability,
+not silently archived. No new standing gotcha to duplicate into project memory.
+Deviations From Handoff: none. Canonical kickoff/ownership handoff is PLAN Current State.

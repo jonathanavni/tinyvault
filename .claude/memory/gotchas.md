@@ -345,3 +345,12 @@ Example:
   caller's order before removing apparently redundant guards. Boolean rejection vectors do not prove
   each redundant schema limb: distinguish input vectors from guard-specific deletion proof. Slice5
   register Entry8 records that measurement limit without a stronger security claim. (2026-09-06)
+
+- **Fatal UTF-8 decoding still strips an initial BOM by default.** Byte-sensitive parity decoding
+  needs `ignoreBOM: true` to retain U+FEFF for explicit rejection or literal comparison. Slice6's
+  transcript/capture/anchor regressions and isolated mutations prove their distinct paths; they do
+  not extend artifact-map tests into disk-ingress proof. Slice6 register Entry24. (2026-09-06)
+- **Compiler AST helpers can accidentally enter the production dependency graph.** Slice6's
+  source-comment reader pulled TypeScript into production-reachable claims.ts; moving the unchanged
+  helper/import to its sole test consumer preserved the dependency gate without a new exception.
+  Keep compiler tooling in test-only consumers. Slice6 register Entry22. (2026-09-06)
