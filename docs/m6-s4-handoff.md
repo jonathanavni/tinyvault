@@ -210,7 +210,12 @@ Codex owns (exact allowlist from plan §7 S4): `src/browser/session.ts`, `src/br
 `testbed/fixtures/` named in the report. Pre-authorized fallout (user-approved 2026-09-07), TEST-ONLY edits under
 the rule "no assertion weakened, no test deleted, no timing constant loosened": `testbed/coverage.browser.test.ts`,
 `testbed/runner.browser.test.ts`, `src/supervisor/host.timing.browser.test.ts`, `testbed/runner.testkit.ts`
-(the fake host may gain the optional method). List every such edit separately in the report. Any other required edit (a caller/test fallout, a `check-test-entry`
+(the fake host may gain the optional method). List every such edit separately in the report.
+Owner extension after the first Astra STOP (2026-09-07): `scripts/retention/allowlists.ts` — ADDITIONS ONLY to the
+`src/browser/session.ts` function inventory, one entry per new function/callback the slice introduces, placed in
+source order, each listed in the report with the function's purpose. No removals, no reordering of existing entries,
+no change to `scripts/retention/rules.ts` or its self-tests; the retention rule must still pass over the new
+functions (they are security-core code and are analysed like the rest). The owner re-reviews every added entry. Any other required edit (a caller/test fallout, a `check-test-entry`
 inventory pin, `gate-cli.selftest` synthetic inventory) is a STOP: report the exact diff as a proposed
 extension; do not apply it.
 
