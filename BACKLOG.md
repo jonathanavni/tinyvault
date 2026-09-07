@@ -90,7 +90,11 @@ work in flight, the rest stay parked here (register "Final5 round"):
 
 **From the 2026-09-04 assessment (dispositioned in `PLAN.md`'s Decisions Log):**
 
-- **A5 — scorecard provenance (scheduled, pre-M6).** Record the actual source revision and relevant configuration in the scorecard instead of a hard-coded `tinyvaultVersion: '0.0.0-m1'` and a stale `CHECKER_VERSION = 'm4-v1'` (`testbed/scorecardAggregate.ts`, `testbed/runnerExecution.ts`, `testbed/scorecard.schema.ts`). Today two different implementations can emit artifacts with indistinguishable version labels, which undermines exactly the comparison M6 exists to publish. Small, self-contained; must land before any published result.
+- **A5 — scorecard provenance (S1 contracts complete; S5 integration due).** The original concern was that
+  hard-coded `tinyvaultVersion: '0.0.0-m1'` and `CHECKER_VERSION = 'm4-v1'` labels cannot distinguish actual
+  sources/configuration. S1 implemented provenance/profile contracts; S5 still owes trusted Git enumeration,
+  composed collection/admission and actual command-path proof before any published comparison. Legacy stub
+  labels do not establish real-profile provenance. Canonical scope: M6 plan §6/§7 and SCHEMA M6 contract.
 - **[M6 spec input] `browser_close_session` never resolves while a connect to a black-hole address is pending.**
   Found by slice 3's Docker suite (2026-09-05): after `browser_navigate` to `http://172.20.0.x:8080/` (a Docker
   bridge-network address, unroutable from the macOS host) returns `navigation-failed` in ~1.5 s, the following
@@ -101,13 +105,14 @@ work in flight, the rest stay parked here (register "Final5 round"):
   stall the session close. Reproduce with `testbed/docker/integrationProbes.ts`'s supervised leg on a
   container-network target (they are excluded from that leg for exactly this reason, with a 20 s bound). Fix belongs
   in `src/browser/session.ts` / `src/supervisor/host.ts` (bounded close that aborts pending connects), not in slice 3.
-- **[M6 spec input] A1 — agent interface and recovery flow.** The frozen seven-tool registry (D8 allowlist) excludes
-  `list_vault` and `request_vault_setup`, and the stub receives fixture URLs/selectors through trusted setup. M6 must decide
-  the real agent's interface and recovery flow explicitly: widening the tool surface is a threat-model decision, not an
-  implementation detail. Dispositioned in `PLAN.md`'s Decisions Log (2026-09-04).
+- **[Graduated to M6 plan/SCHEMA] A1 — agent interface and recovery flow.** The planning decision and S3
+  controlled profiles/recipes are complete at `db78a1c`. The frozen seven-tool registry still excludes
+  `list_vault` and `request_vault_setup`; discovery/setup remains trusted and out of band. S5 same-backend
+  construction and composed command/recovery proof remain due. Tool-surface expansion still requires an
+  explicit threat-model decision. Original assessment disposition: PLAN Decisions Log (2026-09-04).
 - **[M6 spec input] A2 — explicit coverage requirements per M6 scenario.** Zero missing-body markers ≠ complete observation
   (unload beacons, screenshot text, worker/popup limits, finite decoder inventory — see the M6 capture items above and
   `SCHEMA.md`). Each M6 scenario states which channels it requires observed, and the limitations stay printed beside any
-  published result.
+  published result. Planned in M6 E5/AM05 (§5/§7); S4/S5 implementation and qualification proof remain due.
 - **A4 — `finish()` should settle evidence itself or refuse pending work** (`src/supervisor/host.ts`). It can currently return a verdict and drop state without settling pending captures; the runner happens to supply the settle/drain sequence, so the verified path passes and another caller can silently omit it. Scope before external consumers (the MCP adapter), not inside M5.2.
 - **A7 — local-vault durability.** Exclusive key creation can leave a partial file after failure, and vault replacement lacks a directory `fsync` (`src/backends/localFileWriter.ts`). Bounded follow-up.

@@ -8,7 +8,7 @@ Project documentation lives here. Two kinds:
 When a planning doc or spec is superseded or shipped, move it to [`archive/`](archive/) rather than deleting it. The history is useful, and a stale doc at the root is more confusing than an archived one. `/wrapup`'s doc-hygiene check surfaces docs that look superseded but haven't been moved.
 
 Active planning docs:
-- [`m6-implementation-plan.md`](m6-implementation-plan.md) — evaluation-first M6 plan and S1 handoff; three Opus5 paper rounds complete (final PASS), ten original scoped amendments plus approved AM11, S1 provenance/profile contracts complete at implementation round3 cap with recorded test-proof limits; D-BUDGET entry resolved by user-approved AM11; S2 SDK accepted with recorded residuals; bounded helper repair verified at final round3 with all three review channels PASS; S3 module profiles/recipes and exact sizing complete after R2 with recorded P3 limits; S4 cancellation OPEN.
+- [`m6-implementation-plan.md`](m6-implementation-plan.md) — evaluation-first M6 plan and sequential S1–S6 handoffs; three Opus5 paper rounds complete (final PASS), ten original scoped amendments plus approved AM11, S1 provenance/profile contracts complete at implementation round3 cap with recorded test-proof limits; D-BUDGET entry resolved by user-approved AM11; S2 SDK accepted with recorded residuals; bounded helper repair verified at final round3 with all three review channels PASS; S3 module profiles/recipes and exact sizing complete after R2 with recorded P3 limits, checkpoint `db78a1c` pushed; D-CANCEL OPEN before S4.
 - [`m6-review-findings.md`](m6-review-findings.md) — append-only M6 paper and implementation review evidence, dispositions and entry holds; M5.2 closure/caps unchanged.
 - `project-assessment-2026-09-06.md` — whole-M5.2 milestone-close assessment at `53fd94f` / executable source `8103c47`: Acceptance A–P closed after independent Codex and separate Claude Opus5 QA/security assessments, owner evidence verification and documentation corrections. Existing residuals and M6/release boundaries remain. Canonical disposition: `m5-2-review-findings.md` C-M1.
 - `m5-2-slice-6-plan.md` — Slice 6 parity/claim/validity plan, revision 3 LOCKED after three paper rounds and owner absorption; jobs A–D, all three independent implementation round2 reviews, exact-clone and integrated-tree acceptance PASS (register Entries5–28). Source commit `8103c47` is pushed; whole-M5.2 assessment complete; see `project-assessment-2026-09-06.md`.
@@ -105,8 +105,8 @@ Active planning docs:
   `m5-review-findings.md` §C-P and the M5.1 slice in `PLAN.md`. Its milestone table is inaccurate for M1–M3 — read `PLAN.md` for those.
 - `project-assessment-2026-09-04.md` — a read-only cross-model project assessment the user commissioned
   separately, reviewing `main` at `f161f1b`. Supersedes the current-state conclusions of the 09-03 assessment
-  (its two gate defects are closed). Seven findings A1–A7; **A5** (scorecard provenance) remains open and
-  scheduled before M6 publishes comparisons; **A7**'s doc half was corrected at that assessment. The rest
+  (its two gate defects are closed). Seven findings A1–A7; **A5** (scorecard provenance) has S1 module contracts implemented; S5 still owes
+  trusted Git enumeration, composed collection/admission and command-path proof before published comparisons; **A7**'s doc half was corrected at that assessment. The rest
   were dispositioned as M6 planning inputs or existing declared residuals. Carries an
   integrator note recording what in it is superseded. **Append-only.**
 - `archive/implementation-plan-superseded.md` — earlier orphaned Phase 0 draft, consolidated into

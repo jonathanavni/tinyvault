@@ -83,3 +83,9 @@ running code. (commits `9f216b0`..`6a6b67c`)
   findings/evidence/limits in M6 register; no active jobs. Five wrapup documents uncommitted. Fresh
   next step: read-only kickoff and S3-only proposal; implementation awaits scope authorization,
   D-CANCEL OPEN before S4, no repeated completed ladders or release.
+
+- **2026-09-07 (`2026-09-07-m6-s3`, Codex owner, closed)** — S3 profiles/recipes/root instructions and
+  exact SDK sizing accepted after R2; `db78a1c` pushed and remote equality verified. Exact-commit gate
+  main2539/0/1 inherited skip plus15 timing PASS. Codex R2 PASS; Claude QA/security NEEDS-ATTENTION,
+  no P1/P2, P3 dispositions retained in M6 register. Fresh next scope: D-CANCEL evidence before S4;
+  S5 wiring/real cohorts remain due. Documentation-only wrapup remains uncommitted; all prior caps retained.

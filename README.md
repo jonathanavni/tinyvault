@@ -26,10 +26,11 @@ and the repository and CI must contain no real credentials.
 ## Status
 
 **Pre-release, under construction.** The contracts are frozen, the fill service and its integration gates are built
-(M4), and the measurement harness runs the first two hostile fixtures (M5). What does not exist yet: a real agent in
-front of those fixtures (M6), the MCP adapter (M8) and the 1Password backend (M9). The two test-gate defects a
-read-only project assessment found (`docs/project-assessment-2026-09-03.md`) are **fixed** — `make test` now passes
-from a literal clean clone, verified by one. **M5.2 is complete:** all six slices are accepted, including
+(M4), and the measurement harness runs the first two hostile fixtures (M5). M6's SDK and reference/baseline
+profile modules are implemented through S3. The composed real-agent command path, live cohorts and published
+comparison remain unfinished, along with the MCP adapter (M8) and 1Password backend (M9). The two test-gate
+defects found by the read-only assessment (`docs/project-assessment-2026-09-03.md`) were **fixed** and verified
+by literal clean-clone acceptance at M5.1; M6's own clean-clone/cohort acceptance remains due after S5. **M5.2 is complete:** all six slices are accepted, including
 parity, claim evidence and evaluation validity (source `8103c47`, acceptance record `53fd94f`). The
 [whole-milestone assessment](docs/project-assessment-2026-09-06.md) verified the retained evidence and
 closed the documentation findings. The deployment requirement is stated below.
@@ -44,7 +45,7 @@ closed the documentation findings. The deployment requirement is stated below.
 | M5 — hostile fixtures #1–#2 (`lookalike-origin`, `dom-hidden-injection`), the capture-coverage gate, the finite decoder inventory, worker-body markers | **done** (`96e3ea3`) — three slices, each three-channel reviewed with real-Chromium probes and capped fix rounds; register `docs/m5-review-findings.md` |
 | M5.1 — test-gate repair (timing file split, generated run corpus, clean-clone acceptance) | **done** — accepted by a literal `git clone` + `npm ci` + `make browsers` + `make test`; register `docs/m5-review-findings.md` §C-Q |
 | M5.2 — Docker-composed fixtures behind one implementation, two transports | **done** — all six slices accepted; source `8103c47`, acceptance `53fd94f`; [milestone-close assessment](docs/project-assessment-2026-09-06.md) complete |
-| M6 — reference + naive agents | [S1 complete](docs/m6-review-findings.md#s1-r3--final-capped-review-and-owner-acceptance-2026-09-07); provenance/profile contracts with recorded proof limits; D-BUDGET entry resolved (AM11); S2 SDK sizing accepted; helper repair verified at final R3 with three review channels PASS; [S3 modules/recipes and exact sizing complete](docs/m6-review-findings.md#s3-r2--owner-acceptance-and-retained-review-limits) with recorded P3 limits; S4 cancellation OPEN |
+| M6 — reference + naive agents | [S1 complete](docs/m6-review-findings.md#s1-r3--final-capped-review-and-owner-acceptance-2026-09-07); provenance/profile contracts with recorded proof limits; D-BUDGET entry resolved (AM11); S2 SDK sizing accepted; helper repair verified at final R3 with three review channels PASS; [S3 modules/recipes and exact sizing complete](docs/m6-review-findings.md#s3-r2--owner-acceptance-and-retained-review-limits) with recorded P3 limits; checkpoint `db78a1c` pushed; D-CANCEL OPEN before S4 |
 | M7 — hostile fixtures #3–#4 | not started |
 | M8–M10 — MCP adapter, 1Password backend, demo | not started |
 

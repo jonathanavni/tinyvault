@@ -1216,3 +1216,50 @@ command/measurement files and a sibling manifest. Redundant external candidate t
 excluded; original native failures, selector misses and labelled evidence limits remain. The archive is
 not a GitHub artifact and is not included in the commit. Exact-commit verification and final local/remote
 SHA are recorded after execution in ignored `artifacts/review-evidence/tinyvault-m6-s3-publication.json`.
+
+
+### S3 formal session wrapup — 2026-09-07
+
+Published checkpoint: `db78a1c914052d7424f9cf65e3caae654e3b85f4`, tree
+`69a1904b6938156988622656495e8c923d0546f6`, parent3b6bbbe. Local HEAD/origin tracking/GitHub main
+were equal after push, and GitHub main was rechecked at wrapup. Exact-commit ordered targeted304,
+typecheck/diff and make test exit0; main2539pass/0fail/1 inherited skip, serial timing5+10 and final
+execution PASS. No review result is promoted: Codex R2 PASS, Claude Opus5 QA/security NEEDS-ATTENTION
+with no P1/P2 and retained P3 dispositions above. S3 completed at R2; R3 was not consumed.
+
+Both evidence archives and publication archive members were hash-verified at wrapup. In addition to the
+original S3 archive recorded above, exact-commit native reports/logs are retained locally in ignored
+`artifacts/review-evidence/tinyvault-m6-s3-publication.tar.gz`, SHA256
+`cc777a56dfedc4205420025f643eef00051a6d815a210283d07d021073f1a793`.
+The sibling publication JSON binds the commit, tree, report/member digests, clean states and remote SHA.
+Neither archive is a GitHub artifact or clean-clone prerequisite.
+
+Documentation drift sweep: replaced active publication-future status with the verified checkpoint,
+archived the old Current State including its inherited closed S2 text verbatim, retained the cumulative
+Decisions Log, refreshed README/docs index/phase build status/M6 header, and added one project session
+index entry plus two durable gotchas. A fresh read-only Sol check identified README's stale absent-agent
+claim and backlog/index A1/A5 status drift; owner reconciled them to completed modules versus S5 command/
+cohort proof, and annotated A2 as planned for S4/S5. M6 feasibility/adoption status now distinguishes
+historical projections from passed S2/S3 finite witnesses. Dated S1/S2 boundary notes and append-only
+registers remain preserved; their historical forward obligations are explicitly labelled as such.
+No source, test, root instruction, gate, locked threshold, claim span or canonical claim-row edit occurred.
+This is documentation hygiene, not a repeated plan/security review or a reopened cap.
+
+S3 session ownership is relinquished at the final closed PLAN checkpoint. Next: fresh tinyvault-start,
+preserve all ten dirty wrapup documents, and propose D-CANCEL-only resolution/evidence before S4 dispatch.
+All S1/S2/S3/M5.2 residuals remain. S4/S5, live model/cohorts, Docker/clean-clone acceptance, recording and
+release remain due at their scoped stages. No new commit/push is performed for this documentation wrapup.
+Closure verification and the final dirty-file inventory are retained under
+`/private/tmp/tinyvault-m6-s3-wrapup-20260907`; no user-global Codex memory was edited.
+
+
+Wrapup verification: actual wording/claim suite153/153 PASS; documentation diff check PASS after removing
+an EOF blank-line warning without altering the archived checkpoint bytes. Existing SCHEMA, canonical
+claims implementation, all executable/test/root-instruction/gate files and Decisions Log are unchanged.
+The old Current State is present verbatim in PLAN-archive; all previous archive/register/project-memory
+content remains an unchanged prefix. Exactly ten documentation files are dirty, with nothing staged.
+Fresh Sol's bounded closure recheck found every identified current-status drift point resolved and no
+introduced contradiction in those passages; it did not run tests or reassess security/implementation.
+Full tests were not rerun for this documentation-only wrapup; the exact committed source's successful
+publication checks remain the executable evidence. No active worker, reviewer, test or publication job
+remains. PLAN records the closed owner checkpoint; fresh-session scope begins with D-CANCEL planning.

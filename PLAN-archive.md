@@ -789,3 +789,70 @@ does not authorize S3. Inherited owner documents and historical register/log ent
 Implementation and review workers are finished. Evidence root: `/private/tmp/tinyvault-m6-s2-20260907`;
 immutable prior archive `artifacts/review-evidence/tinyvault-m6-s2-20260907.tar.gz`, with the final R3
 publication supplement stored separately. Codex retains integration and Git publication ownership.
+
+
+## 2026-09-07 — S3 publication checkpoint before formal wrapup
+
+Preserved verbatim from PLAN Current State at commit `db78a1c914052d7424f9cf65e3caae654e3b85f4`.
+The active-status/publication-future wording below is historical; the new closed checkpoint lives in PLAN.md.
+
+## Current State
+
+`2026-09-07-m6-s3` — focus: **authorized S3-only agent profiles/recipes and exact prompt sizing**;
+owner: codex; **state: active**. State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`;
+Branch main; publication parent `3b6bbbe795d7fc90ef840327b5dc8a074756baef`. User authorized implementation after read-only kickoff, then explicitly authorized commit and push on2026-09-07.
+Preserve all five inherited wrapup edits (entry copies/hashes: `/private/tmp/tinyvault-m6-s3-20260907/entry`).
+S3 plan §7 allowlist plus bounded owner docs/wording-gate integration and the approved index fixture extension. Publish this S3 checkpoint with the preserved wrapup documents.
+All S1/S2/M5 residuals and closed paper/S1/S2/M5.2 caps retained; S3 gets its own implementation ladder.
+D-CANCEL OPEN before S4; no S4/S5 wiring, live cohorts or release authorized. Commit/push authorization covers this accepted S3 checkpoint only.
+First checkpoint: usable exact instructions/bootstrap within AM11 and six intact SDK witnesses.
+
+**S3 accepted after implementation R2; checkpoint publication authorized.** Reference/baseline module adapters,
+three public recipes, exact root SKILL instructions and wording/budget checks are complete. Ordered R2
+verification: targeted304/304, typecheck/diff, main2539/0/1 inherited skip, serial timing5+10 and final
+execution PASS. R2 Codex adversarial PASS; Claude Opus5 QA/security NEEDS-ATTENTION with no P1/P2.
+Owner absorbed documentation drift and retained explicit nonblocking P3/proof limits in the
+[M6 register](docs/m6-review-findings.md#s3-r2--owner-acceptance-and-retained-review-limits). Executable
+source/tests, root instructions and gates remain the exact R2-reviewed candidate. Documentation-only
+closure receives the mandatory absorption sweep and wording check; no extra code review round needed.
+Historical exact reference headroom30/15/6 bytes; baseline minimum182. S5 remeasures final IDs/metadata.
+Approved three-line index.test fixture extension retained. Implementation workers/reviews are finished;
+publication verifies the exact committed tree before push and records remote equality separately.
+See `artifacts/review-evidence/tinyvault-m6-s3-publication.json` for the final local publication receipt
+and Git for the committed SHA. Session remains owned by Codex pending user direction or wrapup.
+Next separately scoped work: resolve/evidence D-CANCEL before S4 dispatch; S5 command/cohort wiring
+and every real pilot/cohort/acceptance gate remain due. No closed review cap has been reset.
+
+### Inherited closed S2 checkpoint (preserved)
+
+`2026-09-07-m6-s2` — focus: **M6 S2 complete; SDK transport and bounded helper repair accepted**;
+owner: codex; **state: closed** (2026-09-07), continuity relinquished for a fresh session.
+Checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`; main. Commits
+`289297335853275d54ebdfd92537455ac0623362` (S2) and
+`3b6bbbe795d7fc90ef840327b5dc8a074756baef` (helper repair) are pushed; local/remote main was
+reverified at3b6bbbe before wrapup. No active workers, reviewers, tests or pending publication jobs.
+
+**Verified checkpoint:** exact repair-commit ordered targeted320, typecheck, diff check, full make
+test exit0; main2490 passed/0 failed/1 inherited skip, serial timings5+10 and final execution gate
+PASS. Final R3 Claude Opus5 QA/security and fresh Codex adversarial PASS. Prior R2 SDK security
+NEEDS-ATTENTION retains its explicit nonblocking dispositions. Full findings, seven helper mutation
+kills and proof limits: [M6 register](docs/m6-review-findings.md#s2-r3--final-capped-review-and-helper-acceptance-2026-09-07).
+
+**Next session:** run tinyvault-start read-only, preserve the five uncommitted wrapup documents
+listed below, verify ownership/Git, and propose the S3-only packet from M6 plan §7. S3 is agent
+profiles/recipes and exact usable prompt/bootstrap sizing under §4.3/AM11; its root SKILL and wording
+gate belong to that separately authorized candidate. S3 implementation is not authorized by this
+wrapup. Do not repeat closed S1/S2/paper/M5.2 review ladders without new evidence. D-CANCEL remains
+OPEN before S4; S5 actual command wiring, intact pilots/cohorts and later acceptance remain due.
+All S1/S2 residuals,4194-byte synthetic headroom and helper denied-signal liveness limits carry forward.
+
+**Preservation:** only PLAN.md, PLAN-archive.md, docs/m6-review-findings.md,
+.claude/memory/gotchas.md and .claude/memory/sessions-archive.md are uncommitted wrapup edits;
+source/tests remain at the pushed checkpoint. No new commit/push, release or later-slice work in
+this wrapup. Full prior narrative is in PLAN-archive.md. Native evidence and publication receipt:
+`/private/tmp/tinyvault-m6-s2-20260907`; original and final R3 publication archives are local ignored
+files under `artifacts/review-evidence/`, with checksums/manifests in the M6 register. They were not
+pushed to GitHub. No live eval/cohort, Docker acceptance or clean-clone acceptance was run for S2.
+
+
+---

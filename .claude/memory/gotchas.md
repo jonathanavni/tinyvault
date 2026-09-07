@@ -371,3 +371,13 @@ Example:
   canonical real probes, regression/mutation proofs and coverage limits: M6 register final S2 R3.
   New top-level helper tests also require the explicit synthetic inventory pin in gate-cli.selftest
   to stay current; do not hide declarations to satisfy the old count. (2026-09-07)
+
+- **Exact prompt headroom belongs to a source/input snapshot.** AM11 counts the whole root SKILL plus
+  serialized bootstrap; safe ASCII run IDs occur in both URLs, so extra characters cost twice. Labels,
+  handles, inventory count, URL widths and JSON escaping also matter. S3's finite witness margins are
+  historical measurements, not a reserve for S5. Remeasure actual cohort identities/metadata without
+  truncation or weaker uniqueness. Canonical measurements and limits: M6 register S3 R2. (2026-09-07)
+- **Available metadata is not backend availability.** S3 reference preparation requires a fresh trusted
+  availability probe as well as list-once metadata; discovery, probe, setup mapping and filling must
+  share one backend at S5 construction. Injected callbacks cannot detect a mismatched binding. Preserve
+  the shallow-bootstrap/trusted-caller and probe-count/throw-arm proof limits in the M6 register. (2026-09-07)

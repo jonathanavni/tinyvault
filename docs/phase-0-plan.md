@@ -456,13 +456,13 @@ tinyvault/
 
 ## 8. Milestone sequence (executable; eval spine before security core — finding #6)
 
-> **Build status (updated 2026-09-06):** **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅**
+> **Build status (updated 2026-09-07):** **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅**
 > (`07996a2`, closing the Opus 5 audit) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) · **M4 ✅** (`b8a9396`) · **M5 ✅**
 > (`96e3ea3`) · **M5.1 ✅** · **M5.2 ✅** — spec LOCKED at revision 4 (`60520d9`), all six slices integrated
 > (final source `8103c47`, acceptance record `53fd94f`); whole-milestone assessment complete
 > ([assessment](project-assessment-2026-09-06.md), [closure disposition](m5-2-review-findings.md#c-m1--whole-m52-milestone-close-assessment-2026-09-06)).
 > M6 planning is complete ([plan/handoff](m6-implementation-plan.md), [paper reviews](m6-review-findings.md));
-> S1 provenance/profile contracts are complete at the implementation round3 cap with recorded evidence limits; D-BUDGET entry is resolved by user-approved AM11 (M6 plan §4.3.1); S2 SDK sizing is accepted; the approved review-helper repair is verified at final fix round3, with full default gate and three independent review channels PASS; S3 module profiles/recipes and exact sizing are complete after R2 with recorded P3 limits and full default gate PASS; S4 cancellation remains OPEN. No release authorized. M4 and M5 carry deferred
+> S1 provenance/profile contracts are complete at the implementation round3 cap with recorded evidence limits; D-BUDGET entry is resolved by user-approved AM11 (M6 plan §4.3.1); S2 SDK sizing is accepted; the approved review-helper repair is verified at final fix round3, with full default gate and three independent review channels PASS; S3 module profiles/recipes and exact sizing are complete after R2 with recorded P3 limits; checkpoint `db78a1c` is pushed after exact-commit full default gate PASS; D-CANCEL remains OPEN before S4. No release authorized. M4 and M5 carry deferred
 > audit items — see their Verify columns. Post-lock contract amendments (`'benign'` AttackClass,
 > `canaryCommitment`, per-scenario `leakRateCI95`) are recorded in the `PLAN.md` Decisions Log.
 
