@@ -3,8 +3,11 @@
 Status: PAPER LADDER CLOSED at round 3 (Claude Opus5 PASS), revision 3 with owner final sweep, 2026-09-06.
 **S1 complete at implementation round3 cap (2026-09-07), with [recorded proof limits](m6-review-findings.md#s1-r3--final-capped-review-and-owner-acceptance-2026-09-07). Entry decisions:** D-BUDGET is RESOLVED by user-approved M6-AM11 (§4.3.1), 2026-09-07;
 D-CANCEL remains OPEN before S4 dispatch (§8). S2 implementation was separately authorized in the fresh
-`2026-09-07-m6-s2` handover; S2 is complete at fix round2 with recorded residuals, actual SDK
-six-trace sizing and the full ordered gate passing. See the M6 register for exact review dispositions.
+`2026-09-07-m6-s2` handover; SDK work was accepted at round2 with recorded residuals and six-trace
+sizing/full gate PASS. The subsequently approved helper repair and one-line test-inventory update
+are accepted at final round3: full default gate and fresh Claude QA/security/Codex reviews PASS.
+The user authorized checkpoint publication; exact-commit validation remains required before push.
+See the M6 register for dispositions and retained limits.
 This document does not itself authorize implementation or publication.
 Rounds 1–3 dispositions: [M6 review register](m6-review-findings.md#r1--independent-paper-review).
 Planning owner: Codex, closed session `2026-09-06-m6-planning`; S1 owner: closed `2026-09-06-m6-s1`. Base/HEAD:

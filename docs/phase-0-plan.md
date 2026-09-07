@@ -454,7 +454,7 @@ tinyvault/
 > (final source `8103c47`, acceptance record `53fd94f`); whole-milestone assessment complete
 > ([assessment](project-assessment-2026-09-06.md), [closure disposition](m5-2-review-findings.md#c-m1--whole-m52-milestone-close-assessment-2026-09-06)).
 > M6 planning is complete ([plan/handoff](m6-implementation-plan.md), [paper reviews](m6-review-findings.md));
-> S1 provenance/profile contracts are complete at the implementation round3 cap with recorded evidence limits; D-BUDGET entry is resolved by user-approved AM11 (M6 plan §4.3.1); S2 implementation is active with early six-trace SDK sizing PASS; full gates/reviews remain pending; S4 cancellation remains OPEN. No release authorized. M4 and M5 carry deferred
+> S1 provenance/profile contracts are complete at the implementation round3 cap with recorded evidence limits; D-BUDGET entry is resolved by user-approved AM11 (M6 plan §4.3.1); S2 SDK sizing is accepted; the approved review-helper repair is verified at final fix round3, with full default gate and three independent review channels PASS; S4 cancellation remains OPEN. No release authorized. M4 and M5 carry deferred
 > audit items — see their Verify columns. Post-lock contract amendments (`'benign'` AttackClass,
 > `canaryCommitment`, per-scenario `leakRateCI95`) are recorded in the `PLAN.md` Decisions Log.
 

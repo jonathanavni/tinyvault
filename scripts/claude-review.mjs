@@ -101,12 +101,16 @@ export function runClaude({ repo, prompt, timeoutMs, onStdout = () => {}, onStde
     let stdout = '', stderr = '', pending = '', failure, killTimer;
     let bytes = 0;
     const events = [];
+    const signalFailures = [];
     function signalChild(signal) {
       if (!child.pid) return;
       try {
         if (process.platform === 'win32') child.kill(signal);
         else process.kill(-child.pid, signal);
-      } catch (error) { if (error.code !== 'ESRCH') throw error; }
+      } catch (error) {
+        // Keep the original failure and escalation; only child close settles the run.
+        if (error.code !== 'ESRCH') signalFailures.push({ signal, code: error.code ?? 'UNKNOWN' });
+      }
     }
     function stop(reason) {
       if (failure) return;
@@ -160,7 +164,7 @@ export function runClaude({ repo, prompt, timeoutMs, onStdout = () => {}, onStde
       if (killTimer) clearTimeout(killTimer);
       process.removeListener('SIGINT', interrupted);
       process.removeListener('SIGTERM', interrupted);
-      accept({ code, signal, failure, stdout, stderr, events });
+      accept({ code, signal, failure, stdout, stderr, events, signalFailures });
     });
     child.stdin.end(prompt);
   });
@@ -266,7 +270,8 @@ ${packet}`;
       sessionId: result.session_id, modelUsage: result.modelUsage, candidateDigest: before.digest };
     exitCode = status === 'PASS' ? 0 : 2;
   } catch (error) {
-    summary = { executionStatus: 'failed', error: error.message };
+    summary = { executionStatus: 'failed', error: error.message,
+      ...(run.signalFailures.length ? { signalFailures: run.signalFailures } : {}) };
     exitCode = run.failure === 'Timed out' ? 124 : run.failure === 'Interrupted' ? 130 : 1;
   }
   save('summary.json', JSON.stringify({ ...summary, completedAt: new Date().toISOString() }, null, 2));

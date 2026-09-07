@@ -34,7 +34,7 @@ function evidence(root) {
   const helperTest = 'scripts/claude-review.test.mjs';
   const names = [...fs.readFileSync(path.join(root, helperTest), 'utf8').matchAll(/^test\('([^']+)'/gm)]
     .map((match) => match[1]);
-  assert.equal(names.length, 6, 'review helper fixture must retain all six tests');
+  assert.equal(names.length, 10, 'review helper fixture must retain all ten tests');
   const report = d.bundles[0].report;
   report.testResults.push({ name: path.join(root, helperTest), status: 'passed',
     assertionResults: names.map((fullName) => ({ fullName, status: 'passed' })) });

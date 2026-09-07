@@ -812,3 +812,115 @@ This authorizes the S2 checkpoint and its preserved continuity documents on main
 and no-publication statements above are historical checkpoints, superseded only for this operation.
 The final committed SHA, verification and remote equality are recorded in the Git publication receipt
 under `/private/tmp/tinyvault-m6-s2-20260907`; no security verdict, residual or later-slice gate changes.
+
+## S2 publication blocker — scoped helper repair authorized (2026-09-07)
+
+S2 checkpoint commit `289297335853275d54ebdfd92537455ac0623362` was created but NOT pushed.
+The exact-commit ordered run passed targeted308/typecheck/diff, then main2485/1/1pending failed:
+the helper stderr-after-malformed test lost `summary.json` after `process.kill(-child.pid)` threw
+EPERM. Timing suites did not run. This supersedes readiness to push; the earlier full PASS is
+preserved as a distinct attempt, not erased or reused to dismiss the recurrence.
+
+Owner real macOS/Node24.19.0 probes:60 synchronous signal-on-data cases produced no EPERM;100 cases
+with0/1/5/20ms signal delays produced48 EPERM,50 ESRCH and2 successful signals. EPERM cases had
+unset child exitCode at signaling and later actual child close with exit0. This supports a narrow
+child-exit timing window, without claiming the kernel cause. Evidence: `helper-eperm-probe/`.
+Read-only diagnosis independently traced the escaping signal exception before injected stderr error
+delivery; copied actual-helper/fake-CLI fault injection reproduces missing summary. A proposed copy
+records signal failures separately, preserves original failure/status, retains escalation and saves
+only after real child close. A finite held child confirms no premature summary. Evidence/patch:
+`helper-eperm-diagnosis/`. No real provider call was used for diagnosis.
+
+The user explicitly approved **“the bounded helper repair and push”**, extending source ownership
+only to `scripts/claude-review.mjs` and `scripts/claude-review.test.mjs`, with regressions/mutations,
+independent review, full gate, repair commit and push of both commits. One worker owns those files;
+owner retains docs/Git/integration. This is final S2 implementation fix round3, not a reset of any
+completed S1/M6-paper/M5.2 cap. Final P1 criteria remain a layers1–2 leak, an undeclared layer4 blind
+spot or red make test. No bounded termination claim is added for an indefinitely living child when
+both signals are denied; that requires privileges the helper does not control. The repair must not
+hide that failure, claim successful termination or accept before child close.
+
+### S2 R3 helper candidate and proof
+
+Only the two approved helper source/test files changed. Non-ESRCH signal exceptions are recorded as
+`{signal, code}` separately from the original failure; failed summaries include those records, while
+the existing child-close callback remains the sole completion point. Original failure reason and
+exit1/124/130 mapping, SIGTERM/2s-SIGKILL escalation and ESRCH handling remain. No provider/tool/model,
+argv, capability policy, subprocess target, candidate guard or successful review status changes.
+
+Tests first produced three actual assertion failures (missing summary or lost timeout/interruption
+codes) and one passing ESRCH control. The repaired helper suite passes12/12. Four named copied-helper
+CLI tests fault-inject both signal operations; a finite fake remains alive until the real escalation
+timer attempts SIGKILL, then exits naturally. The actual close-handler entry observes no summary yet.
+Interruption uses the installed handler via process.emit, not an OS signal-delivery claim. The10s fake
+watchdog bounds mutant cleanup, not the helper's real denied-signal lifecycle.
+
+Six source-copy mutants are killed with a passing four-case copied control: remove containment,
+remove recording, remove summary serialization, overwrite primary failure, accept before child close,
+and incorrectly record ESRCH. Premature acceptance fails specifically because summaryAlreadyExists
+is true at actual close. Native statuses/patches/reports are under `helper-fix-r3/verification.json`
+and `mutation-results.json`; worker handoff `helper-fix-r3/handoff.md`. Invocation CLI, typecheck and
+diff check pass. Full ordered integration and fresh three-channel final R3 reviews remain pending.
+
+### S2 R3 inventory dependency approved and full integration PASS
+
+The first repaired-candidate ordered run passed targeted320/typecheck/diff but stopped before main
+at gate-cli.selftest.mjs:37: the existing assertion expected six top-level helper tests; the four
+new tests make ten. Main/timings did not run in that attempt. Evidence: r3-verification-commands.json
+and r3-make-test.log. This is a stale fixture inventory dependency, not a reason to hide new tests.
+
+The user explicitly approved updating that single assertion and its message in
+`scripts/gate-cli.selftest.mjs`, in addition to the two previously approved helper files, then
+reviewing, verifying, committing and pushing. The owner applied exactly6-to10 and six-to-ten.
+External copied-selftest proof: original rejects10!=6; updated pin passes67 real CLI observations.
+Removing one copied new test rejects9!=10; deleting only the pin allows the same incomplete
+fixture to pass67 observations. This is expected-rejection/deletion evidence, not normal acceptance
+for the incomplete fixture. Exact transforms/results: helper-gate-pin/verification-summary.json.
+
+The new ordered integration run passes targeted320/320, typecheck, diff check, full make test exit0;
+main2490 passed/0 failed/1 inherited skip; decoder timing5/5, browser timing10/10; final execution
+gate PASS. Native reports and command statuses: r3-integration-verification.json and companions.
+All260 executable/package files were compared against2892973: only the three approved scripts
+differ. S2 SDK source is unchanged. Fresh final R3 reviews are now pending on this frozen candidate.
+
+## S2 R3 — final capped review and helper acceptance (2026-09-07)
+
+All339 frozen candidate files remained unchanged through the three independent reviews; digest
+`a15c1b0065fc2a90a4476d054b532b185b180f0365d43c8a5484382608c7fbbb`, base/HEAD2892973.
+Fresh Claude Opus5 QA PASS, session`c88cc03c-11a7-498a-a819-aeeb8ca0f4ae`; separate Claude Opus5
+security PASS, session`54951648-365c-46cf-97cb-7334da129db9`; fresh Codex adversarial PASS. Native
+reports/summaries/events: claude-r3-qa/, claude-r3-security/, codex-r3-report.md. Claude runtime
+assistant events validate Opus5; auxiliary Haiku usage remains separately recorded, not a reviewer
+fallback. Reviewers executed no tests. Owner verified full reports and candidate preservation.
+
+No new blocking defect. At the final S2 round3 cap the owner accepts this bounded repair with the
+following explicit dispositions; prior S1/paper/M5.2 caps and R2 SDK residuals are not reopened.
+
+| Concern | Owner disposition / evidence limit |
+| --- | --- |
+| Security: missing executed escalation-deletion mutant | CLOSED BY ADDITIONAL EXECUTED EVIDENCE, no source edit. External copied control passes4/4; deleting only the real SIGKILL timer causes4 executed child-close assertions to fail: actual code8 from finite fake watchdog versus required0. No collection error or test timeout. Native reports/transform: helper-escalation-r3/mutation-results.json, run-helper-escalation-r3.py. Seven helper mutants now killed; exact2s timing and signal-swap mutants are not claimed. |
+| QA/security/Codex: mixed signal outcomes, UNKNOWN fallback and Windows gaps | ACCEPTED BOUNDED COVERAGE LIMIT. Both-denied and ESRCH controls are directly tested; mixed success/failure and code-less errors rest on structure. The Windows branch and false-return/error-event behavior remain outside this macOS exception repair. No broad OS termination claim. |
+| Security: falsy empty-message failure sentinel | ACCEPTED PRE-EXISTING LOW RESIDUAL. Existing stop idempotence and main failure check use truthiness; a hypothetical empty stream-error message can evade those checks and the two-record bound. No reaching native/model-controlled input was established. At-most-two and fail-closed claims apply to the specified nonempty malformed/timeout/interruption/native-error paths, not arbitrary injected empty messages. |
+| QA/security: unkillable-child wait and skill wording | ACCEPTED DECLARED AVAILABILITY LIMIT. Both denied signals can leave an indefinitely live child/pipe-holding descendant pending with no summary. No successful review is claimed, no target/privilege expansion or pipe abandonment added. Skill's bounded-run wording and omission of optional signalFailures remain a future documentation item outside approved source scope; current PLAN/register carry the precise limit. |
+| QA: historical two-file wording and pending pin evidence | HISTORICAL CHECKPOINTS RETAINED. Later appended explicit user approval covers the third one-line edit. External proof summary predates approval; current candidate/source inventory shows the applied pin. PLAN cosmetic capitalization corrected in final owner prose. |
+| Security: inventory pin deletion characterization | NARROWED. A normal clean selftest is not asserted to detect arbitrary deletion of itself. The preserved expected-rejection experiment holds the incomplete fixture constant: pin present rejects9!=10; pin deleted passes. That is deletion sensitivity under the missing-test challenge, not proof of exhaustive per-file test names in production reports. The pre-existing synthetic inventory contract is unchanged. |
+| Security: independent gate freshness not established by read-only reviewer | Owner command ordering/native fresh reports and unchanged source hashes establish the candidate run; publication additionally requires a new ordered run on the exact repair commit before pushing. Earlier failures are preserved, never counted as passes. |
+
+Two reviewer phrasings are not adopted as stronger evidence: the real EPERM probe shows each child
+closed0 later, not that it was already exited at signal time; QA's inferred escalation-deletion result
+was not an executed proof until the additional owner experiment above. Review reports are preserved
+verbatim, including their approximate/offset line references; the owner dispositions govern closure.
+
+Acceptance evidence remains targeted320/320, typecheck, diff check, main2490/0/1 inherited skip,
+serial timings5/5 and10/10, final execution gate and make test exit0. Full source snapshots/hashes
+are frozen in candidate-r3-files/ and candidate-r3-hashes.json; only owner closure prose changes
+after review. Prior publication and inventory failures remain in their distinct original reports.
+
+**Deviations From Handoff:** only explicit user-approved source exceptions: two S2 wiring-test inputs
+previously committed, bounded two-file helper repair, and one-line inventory assertion/message.
+The user separately authorized the repair commit and push of both commits on main. No release,
+S3–S5 source, live provider eval/cohort, Docker acceptance, clean clone or root prompt work occurred.
+D-CANCEL OPEN,4194-byte synthetic headroom, S1/S2 diagnostic/source/provenance/capture limits and
+all later real-run gates remain. Exact Git publication result is in the external publication receipt;
+the immutable original evidence archive is preserved and R3/publication evidence is a separate
+ignored supplement. This closes the bounded S2 repair at round3, not the M6 milestone or release.

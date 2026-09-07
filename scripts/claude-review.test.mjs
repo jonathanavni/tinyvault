@@ -216,3 +216,81 @@ for (const stream of ['stdout', 'stderr']) {
     }
   }, 30_000);
 }
+
+async function checkSignalFailure(t, reason, errorCode) {
+  const f = fixture(t);
+  const output = resolve(f.root, 'signal-failure');
+  const signalLog = resolve(f.root, 'signals.log');
+  const closeLog = resolve(f.root, 'actual-close.json');
+  writeFileSync(signalLog, '');
+  // Keep the fake alive until the real escalation timer fires. A finite watchdog
+  // prevents an orphan if a mutant removes escalation; no provider is invoked.
+  const fakePath = resolve(f.bin, 'claude');
+  const fake = readFileSync(fakePath, 'utf8');
+  const fakeAnchor = 'const es=';
+  assert.equal(fake.split(fakeAnchor).length, 2);
+  writeFileSync(fakePath, fake.replace(fakeAnchor, `
+if(mode==='signal-failure'){
+process.stderr.write('signal-probe-ready\\n');
+${reason === 'malformed' ? "process.stdout.write('bad json\\n');" : ''}
+const poll=setInterval(()=>{
+  if(readFileSync(${JSON.stringify(signalLog)},'utf8').includes('SIGKILL')){
+    clearInterval(poll);clearTimeout(watchdog);
+    process.stderr.write('controlled natural exit\\n');
+  }
+},10);
+const watchdog=setTimeout(()=>{clearInterval(poll);process.exitCode=8;},10000);
+return;
+}
+${fakeAnchor}`));
+
+  let source = readFileSync(helper, 'utf8');
+  const signalAnchor = "if (process.platform === 'win32') child.kill(signal);\n        else process.kill(-child.pid, signal);";
+  assert.equal(source.split(signalAnchor).length, 2);
+  source = source.replace(signalAnchor,
+    `appendFileSync(${JSON.stringify(signalLog)}, signal + '\\n');\n` +
+    `        throw Object.assign(new Error('probe signal denied'), { code: ${JSON.stringify(errorCode)} });`);
+  const closeAnchor = "    child.on('close', (code, signal) => {";
+  assert.equal(source.split(closeAnchor).length, 2);
+  source = source.replace(closeAnchor, closeAnchor +
+    `\n      writeFileSync(${JSON.stringify(closeLog)}, JSON.stringify({ code, signal, summaryAlreadyExists: existsSync(${JSON.stringify(resolve(output, 'summary.json'))}) }));`);
+  if (reason === 'interrupted') {
+    const readyAnchor = "    child.stdout.setEncoding('utf8');";
+    assert.equal(source.split(readyAnchor).length, 2);
+    source = source.replace(readyAnchor, "    child.stderr.once('data', () => process.emit('SIGINT'));\n" + readyAnchor);
+  }
+  const entry = resolve(realpathSync(f.root), 'helper-signal-failure.mjs');
+  writeFileSync(entry, source);
+  const run = await invoke(f, 'signal-failure', output, entry);
+  assert.equal(run.code, reason === 'timeout' ? 124 : reason === 'interrupted' ? 130 : 1, run.stderr);
+  assert.ok(existsSync(resolve(output, 'summary.json')), `missing failed summary: ${run.stderr}`);
+  const summary = JSON.parse(readFileSync(resolve(output, 'summary.json')));
+  assert.equal(summary.executionStatus, 'failed');
+  if (reason === 'malformed') {
+    assert.match(summary.error, /^Invalid Claude event:/);
+    assert.doesNotMatch(summary.error, /EPERM|ESRCH|probe signal denied/);
+  } else assert.equal(summary.error, reason === 'timeout' ? 'Timed out' : 'Interrupted');
+  assert.deepEqual(JSON.parse(readFileSync(closeLog)), { code: 0, signal: null, summaryAlreadyExists: false });
+  assert.deepEqual(summary.signalFailures, errorCode === 'ESRCH' ? undefined : [
+    { signal: 'SIGTERM', code: errorCode }, { signal: 'SIGKILL', code: errorCode },
+  ]);
+  assert.equal(readFileSync(signalLog, 'utf8'), 'SIGTERM\nSIGKILL\n');
+  assert.match(readFileSync(resolve(output, 'stderr.log'), 'utf8'), /controlled natural exit/);
+  assert.equal(existsSync(resolve(output, 'report.md')), false);
+}
+
+test('real helper preserves malformed failure and records denied signals only after child close', async (t) => {
+  await checkSignalFailure(t, 'malformed', 'EPERM');
+}, 30_000);
+
+test('real helper preserves timeout exit 124 when both signals fail', async (t) => {
+  await checkSignalFailure(t, 'timeout', 'EPERM');
+}, 30_000);
+
+test('real helper preserves interrupted exit 130 when both signals fail', async (t) => {
+  await checkSignalFailure(t, 'interrupted', 'EPERM');
+}, 30_000);
+
+test('real helper ignores ESRCH while waiting for actual child close', async (t) => {
+  await checkSignalFailure(t, 'malformed', 'ESRCH');
+}, 30_000);
