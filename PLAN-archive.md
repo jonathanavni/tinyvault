@@ -672,3 +672,65 @@ identity checks only. Runtime suites, mutants, Docker gates, real-agent API eval
 planning/documentation-only authorization. Prior scripted numbers remain harness evidence, not LLM results.
 All accepted measurement/deployment residuals carry forward, including exact capture agreement and both
 agents' per-cell positive control. Failed runs/cells are to retain diagnostics without qualifying a headline.
+
+
+## 2026-09-07-m6-d-budget — approved entry decision (archived 2026-09-07)
+
+Verbatim pre-wrapup Current State, including the inherited closed S1 checkpoint. The later wrapup
+entry in PLAN.md records closure and the user's authorization to start S2 in a fresh session.
+
+`2026-09-07-m6-d-budget` — focus: **D-BUDGET entry RESOLVED; AM11 approved and adopted**;
+owner: codex; **state: paused**, entry task complete, awaiting explicit S2 implementation scope.
+State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`; main; entry HEAD
+`105e75fa58a3548662646884669aec3efd49e978`; entry working tree clean. User explicitly handed over
+from the closed S1 checkpoint and approved AM11 on 2026-09-07. No workers/reviewers/tests running;
+no S2 source work, commit/push or release authorized.
+
+[Plan §4.3.1](docs/m6-implementation-plan.md#431-d-budget-entry-investigation--2026-09-07) now governs:
+1024-byte combined system/bootstrap reserve, exact pinned declaration bytes, fixed five/seven-turn
+six-trace deterministic witnesses. The approval explicitly narrows deterministic feasibility; serial
+overflows remain rejection/diagnostic evidence, and all real-pilot/cohort failure gates remain intact.
+Frozen caps/full observations unchanged. 2048 remains unproven and failed both batched lookalike probes.
+Twelve finite browser runs completed; 36 full projections were checked. Entry data is projected wire,
+not actual SDK proof. S2 exit, exact S3 prompt sizing and S5 final-path reruns remain mandatory; approval
+accepts deferring ordinary serial-trajectory risk to a later real pilot, not a guarantee it will pass.
+Scoped Opus5 review remains NEEDS-ATTENTION with recorded owner dispositions; no independent PASS or
+new review claimed. Evidence/hashes and approval are in the append-only [M6 register](docs/m6-review-findings.md).
+Six owner documentation/status/register files remain uncommitted. All 225 source/contracts/package
+inputs match entry HEAD. S1 accepted residuals/review caps retained; D-CANCEL remains OPEN for S4.
+
+Previous closed checkpoint (retained):
+
+`2026-09-06-m6-s1` — focus: **M6 S1 provenance/profile contracts complete**;
+owner: codex; **state: closed** (2026-09-07), relinquished for the next explicitly authorized scope.
+Checkout `/Users/jonathanavni/Documents/Coding/tinyvault`; main;
+S1 source/contracts committed and pushed as `330e7f6b91985124d7fca647172cdbef233f1532`; inherited
+historical docs are `3367a6b`. GitHub main was verified at the exact S1 commit. Implementation/review
+base was `53fd94f7831d2fb913d887a4a40c2ef3913f30b1`; source identity remains in the M6 register.
+This wrapup adds documentation only. No active workers, reviewers or tests; no release.
+
+**Outcome:** S1 source and AM02/AM08 source-factory/AM09/AM10 owner contracts implemented. Provenance
+hashing/admission, explicit profiles, exact run-bound sources and independent failed-run diagnostics.
+Existing strict stub behavior, claim spans/rows, capture/signing/fixture contracts and gates preserved.
+Nine source/test files changed; owner contracts/status/register updated. All inherited uncommitted
+work preserved; prior closed planning checkpoint archived verbatim in PLAN-archive.md.
+
+**Verification:** final targeted329/329, typecheck and diff check PASS; full make test exit0
+(main2402 passed/one pending, timing15/15). Final47 mutants:45 killed,2 redundant single-guard survivors.
+Three implementation rounds complete: final Claude security PASS, Codex adversarial PASS, Claude QA
+NEEDS-ATTENTION with accepted coverage residuals and no P1. Owner accepted S1 at the mandatory round3
+cap. Canonical details: [M6 register](docs/m6-review-findings.md#s1-r3--final-capped-review-and-owner-acceptance-2026-09-07).
+No fourth implementation review; completed paper and M5.2 reviews were not repeated.
+
+**Limits/next:** S1 is module-contract evidence, not whole-M6 acceptance. S5 still owns complete Git
+input enumeration, actual producer/command wiring, two-agent/three-scenario cardinality and prompt-map
+proof, qualification and later clean-clone/Docker/live-cohort gates. Current diagnostics cannot qualify
+a publication. R3 coverage/individual-guard limits remain in the M6 register; no hidden passing claim.
+D-BUDGET remains OPEN before S2 source work; D-CANCEL remains OPEN before S4 dispatch. S2 has not started
+and awaits its entry decision and explicit implementation scope. Recommended fresh-session task: resolve
+D-BUDGET under plan §4.3 with measured full byte accounting; retain every frozen cap/observation, treat
+2048 bytes as an unproven stress candidate, and record a feasible allowance or a concrete amendment need
+before S2 source implementation. Do not reopen S1/paper/M5.2 reviews. No live-agent pilot/N10 or recording ran.
+Raw native/review evidence is preserved in local ignored `artifacts/review-evidence/tinyvault-m6-s1-20260906.tar.gz`
+with a verified manifest and checksum recorded in the M6 register. This local archive is not pushed to
+GitHub. Durable commands, outcomes and residual dispositions are in the register; failed attempts remain.

@@ -117,7 +117,7 @@ describe('Acceptance J runtime rejection', () => {
     const executedNames: string[] = [];
     for (const name of CANDIDATE_TOOL_NAMES) {
       const run = runAgentLoop({
-        client: new StubClient([{ toolCalls: [{ id: `candidate-${name}`, name, input: {} }] }]),
+        client: new StubClient([{ toolCalls: [{ id: `candidate-${name}`, name, input: validInput(name) }] }]),
         messages: [],
         executeTool: (call) => {
           executedNames.push(call.name);
@@ -146,7 +146,7 @@ describe('Acceptance J canonical model-turn snapshot', () => {
         nameReads += 1;
         return nameReads === 1 ? 'browser_snapshot' : 'run_shell';
       },
-      input: {},
+      input: { sessionId: 's' },
     };
     let executedCall: ToolCall | undefined;
 
@@ -163,7 +163,7 @@ describe('Acceptance J canonical model-turn snapshot', () => {
 
     // Accessors model defensive robustness only; model output cannot execute JavaScript here.
     expect(nameReads).toBe(1);
-    expect(executedCall).toEqual({ id: 'stable-name-1', name: 'browser_snapshot', input: {} });
+    expect(executedCall).toEqual({ id: 'stable-name-1', name: 'browser_snapshot', input: { sessionId: 's' } });
     expect(Object.isFrozen(executedCall)).toBe(true);
   });
 
@@ -185,7 +185,7 @@ describe('Acceptance J canonical model-turn snapshot', () => {
       maxTurns: 1,
     });
 
-    const expectedCall = { id: 'coherent-1', name: 'browser_type', input: { text: canary } };
+    const expectedCall = { id: 'coherent-1', name: 'browser_type', input: { sessionId: 's', selector: '#p', text: canary } };
     expect(executedCall).toEqual(expectedCall);
     const toolArg = result.events.find(({ channel }) => channel === 'tool-arg')!;
     expect(JSON.parse(toolArg.bytes)).toEqual(expectedCall);
@@ -200,7 +200,7 @@ describe('Acceptance J canonical model-turn snapshot', () => {
     expect(result.messages).toEqual([
       { role: 'assistant', content: { extra: { preserved: true }, toolCalls: [expectedCall] } },
       { role: 'tool', content: {
-        toolCallId: 'coherent-1', name: 'browser_type', result: { accepted: { text: canary } },
+        toolCallId: 'coherent-1', name: 'browser_type', result: { accepted: { sessionId: 's', selector: '#p', text: canary } },
       } },
     ]);
 
@@ -227,7 +227,7 @@ describe('Acceptance J canonical model-turn snapshot', () => {
     })).rejects.toThrow(DUPLICATE_TOOL_CALL_ID_MESSAGE);
 
     expect(idReads).toEqual([1, 1]);
-    expect(executeTool).toHaveBeenCalledTimes(1);
+    expect(executeTool).not.toHaveBeenCalled();
   });
 });
 
@@ -263,7 +263,8 @@ function isDeeplyFrozenDefinition(definition: ToolDefinition): boolean {
   return Object.isFrozen(definition)
     && Object.isFrozen(definition.inputSchema)
     && Array.isArray(definition.inputSchema.required)
-    && Object.isFrozen(definition.inputSchema.required);
+    && Object.isFrozen(definition.inputSchema.required)
+    && deeplyFrozen(definition.inputSchema);
 }
 
 function fakeToolDefinition(): ToolDefinition {
@@ -279,7 +280,7 @@ function changingCall(canary: string): ToolCall {
     get name() { nameReads += 1; return nameReads === 1 ? 'browser_type' : 'browser_click'; },
     get input() {
       inputReads += 1;
-      return inputReads === 1 ? { text: canary } : { text: 'canary-was-lost' };
+      return inputReads === 1 ? { sessionId: 's', selector: '#p', text: canary } : { text: 'canary-was-lost' };
     },
   };
 }
@@ -291,7 +292,7 @@ function changingIdCall(reads: number[], index: number): ToolCall {
       return reads[index] === 1 ? 'duplicate-id' : `later-unique-${index}`;
     },
     name: 'browser_snapshot',
-    input: {},
+    input: { sessionId: 's' },
   };
 }
 
@@ -306,4 +307,20 @@ function coherentEvents(
 async function transcriptRecords(path: string): Promise<TranscriptRecord[]> {
   return (await readFile(path, 'utf8')).trim().split('\n')
     .map((line) => JSON.parse(line) as TranscriptRecord);
+}
+
+function validInput(name: string): unknown {
+  switch (name) {
+    case 'browser_open_session': return {};
+    case 'browser_navigate': return { sessionId: 's', url: 'https://fixture.test' };
+    case 'browser_type': return { sessionId: 's', selector: '#p', text: 'public' };
+    case 'fill_from_vault': return { sessionId: 's', handle: 'h', fields: [{ role: 'password', selector: '#p' }] };
+    case 'browser_click': return { sessionId: 's', selector: '#submit' };
+    default: return { sessionId: 's' };
+  }
+}
+
+function deeplyFrozen(value: unknown): boolean {
+  return value === null || typeof value !== 'object'
+    || (Object.isFrozen(value) && Object.values(value).every(deeplyFrozen));
 }

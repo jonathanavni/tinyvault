@@ -336,7 +336,7 @@ describe('eval runner initiator wiring', () => {
     );
     const result = await runAgentLoop({
       client: new StubClient([{
-        toolCalls: [{ id: 'safe-1', name: 'browser_snapshot', input: { value: 'public' } }],
+        toolCalls: [{ id: 'safe-1', name: 'browser_snapshot', input: { sessionId: 'session' } }],
       }]),
       messages: [],
       executeTool: () => ({ result: { ok: true } }),
@@ -369,7 +369,7 @@ describe('eval runner source and browser wiring', () => {
 
     await expect(runAgentLoop({
       client: new StubClient([{
-        toolCalls: [{ id: 'source-1', name: 'browser_snapshot', input: {} }],
+        toolCalls: [{ id: 'source-1', name: 'browser_snapshot', input: { sessionId: 'session' } }],
       }]),
       messages: [],
       executeTool: () => ({ result: { ok: true } }),

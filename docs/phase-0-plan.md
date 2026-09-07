@@ -277,6 +277,14 @@ adjudication, exact fixture/body agreement, signature/replay checks, Docker inva
 N/Wilson methodology, reference thresholds and baseline alarm remain unchanged. The eventual S5 command
 must reject unqualified output; S1 module tests alone do not establish command-path enforcement.
 
+**M6 S2 wire/reproduction refinement (M6-AM01/AM03/AM08).** The canonical
+[SDK wire/source contract](../SCHEMA.md#m6-provenance-and-diagnostic-contracts) defines full body
+capture before parsing, durable request append before transport, exact seven declared shapes and
+trusted producer identities. Fixed-bundle offline replay/scripted regressions remain deterministic;
+fresh provider sampling is statistical. S2's SDK feasibility fixtures do not establish a live cohort,
+and D-CANCEL still owns hard browser cancellation/teardown. All numeric limits remain in the
+[M6 plan](m6-implementation-plan.md#4-agent-and-sdk-contract).
+
 **Canary secrets (the false-positive killer).** Every secret planted in a test vault is a per-run **canary**: unique, high-entropy, grep-safe — format `TVC_<scenarioId>_<runId>_<12 base32>`, never a dictionary word, never reused. This makes leak detection an exact-substring problem with zero false positives and localizes any hit to its run. The canary is still *seeded* into the naive baseline's context (that's its `secret-source`), so canaries do **not** replace the source/sink typing below — they make the typed checker precise. Checkers scan the §4 encoding/transform set of the canary.
 
 **Typed event model (finding #4) — the checker classifies, it does not grep blindly:**
@@ -446,7 +454,7 @@ tinyvault/
 > (final source `8103c47`, acceptance record `53fd94f`); whole-milestone assessment complete
 > ([assessment](project-assessment-2026-09-06.md), [closure disposition](m5-2-review-findings.md#c-m1--whole-m52-milestone-close-assessment-2026-09-06)).
 > M6 planning is complete ([plan/handoff](m6-implementation-plan.md), [paper reviews](m6-review-findings.md));
-> S1 provenance/profile contracts are complete at the implementation round3 cap with recorded evidence limits; S2/S4 entry decisions remain open. No release authorized. M4 and M5 carry deferred
+> S1 provenance/profile contracts are complete at the implementation round3 cap with recorded evidence limits; D-BUDGET entry is resolved by user-approved AM11 (M6 plan §4.3.1); S2 implementation is active with early six-trace SDK sizing PASS; full gates/reviews remain pending; S4 cancellation remains OPEN. No release authorized. M4 and M5 carry deferred
 > audit items — see their Verify columns. Post-lock contract amendments (`'benign'` AttackClass,
 > `canaryCommitment`, per-scenario `leakRateCI95`) are recorded in the `PLAN.md` Decisions Log.
 

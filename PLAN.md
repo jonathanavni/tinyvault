@@ -11,39 +11,40 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-06-m6-s1` — focus: **M6 S1 provenance/profile contracts complete**;
-owner: codex; **state: closed** (2026-09-07), relinquished for the next explicitly authorized scope.
-Checkout `/Users/jonathanavni/Documents/Coding/tinyvault`; main;
-S1 source/contracts committed and pushed as `330e7f6b91985124d7fca647172cdbef233f1532`; inherited
-historical docs are `3367a6b`. GitHub main was verified at the exact S1 commit. Implementation/review
-base was `53fd94f7831d2fb913d887a4a40c2ef3913f30b1`; source identity remains in the M6 register.
-This wrapup adds documentation only. No active workers, reviewers or tests; no release.
+`2026-09-07-m6-s2` — focus: **M6 S2 only: actual SDK transport and AM11 feasibility**;
+owner: codex; **state: active** (2026-09-07), accepted from CLOSED `2026-09-07-m6-d-budget`.
+State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`; main; entry/tested base
+`105e75fa58a3548662646884669aec3efd49e978`. **S2 complete with recorded residuals; awaiting separately
+authorized next scope.** The user subsequently authorized committing and pushing this S2 checkpoint,
+including the preserved continuity documents. Release and later-slice work remain unauthorized.
 
-**Outcome:** S1 source and AM02/AM08 source-factory/AM09/AM10 owner contracts implemented. Provenance
-hashing/admission, explicit profiles, exact run-bound sources and independent failed-run diagnostics.
-Existing strict stub behavior, claim spans/rows, capture/signing/fixture contracts and gates preserved.
-Nine source/test files changed; owner contracts/status/register updated. All inherited uncommitted
-work preserved; prior closed planning checkpoint archived verbatim in PLAN-archive.md.
+**Outcome:** actual Anthropic SDK0.124.0 transport, durable request fence, full received wire capture,
+exact seven declarations/whole-response validation, native message ordering, trusted source identities
+and bounded admission are implemented. All six fixed1024 AM11 witnesses fit intact; largest126878 raw
+bytes,4194 headroom. Serial/stress/16-turn overflow diagnostics remain unsigned and complete.
+This is finite SDK feasibility with verified historical fixture observations, not live LLM completion.
 
-**Verification:** final targeted329/329, typecheck and diff check PASS; full make test exit0
-(main2402 passed/one pending, timing15/15). Final47 mutants:45 killed,2 redundant single-guard survivors.
-Three implementation rounds complete: final Claude security PASS, Codex adversarial PASS, Claude QA
-NEEDS-ATTENTION with accepted coverage residuals and no P1. Owner accepted S1 at the mandatory round3
-cap. Canonical details: [M6 register](docs/m6-review-findings.md#s1-r3--final-capped-review-and-owner-acceptance-2026-09-07).
-No fourth implementation review; completed paper and M5.2 reviews were not repeated.
+**Verification:** ordered targeted308/308 → typecheck → diff check → make test exit0. Main2486 passed,
+zero failed, one inherited skip; serial timings5+10 passed; final execution gate PASS. R2 Claude Opus5
+QA and fresh Codex adversarial PASS; Claude security NEEDS-ATTENTION retained with explicit owner
+residual dispositions and its stated no-security-blocker condition satisfied. No R3 source repair was
+needed. Canonical acceptance: M6 register's S2 R2 entry. Evidence:
+`/private/tmp/tinyvault-m6-s2-20260907` and ignored `artifacts/review-evidence/tinyvault-m6-s2-20260907.tar.gz`.
+Earlier sandbox/capability/helper failures remain preserved; no cause inferred from later passes.
 
-**Limits/next:** S1 is module-contract evidence, not whole-M6 acceptance. S5 still owns complete Git
-input enumeration, actual producer/command wiring, two-agent/three-scenario cardinality and prompt-map
-proof, qualification and later clean-clone/Docker/live-cohort gates. Current diagnostics cannot qualify
-a publication. R3 coverage/individual-guard limits remain in the M6 register; no hidden passing claim.
-D-BUDGET remains OPEN before S2 source work; D-CANCEL remains OPEN before S4 dispatch. S2 has not started
-and awaits its entry decision and explicit implementation scope. Recommended fresh-session task: resolve
-D-BUDGET under plan §4.3 with measured full byte accounting; retain every frozen cap/observation, treat
-2048 bytes as an unproven stress candidate, and record a feasible allowance or a concrete amendment need
-before S2 source implementation. Do not reopen S1/paper/M5.2 reviews. No live-agent pilot/N10 or recording ran.
-Raw native/review evidence is preserved in local ignored `artifacts/review-evidence/tinyvault-m6-s1-20260906.tar.gz`
-with a verified manifest and checksum recorded in the M6 register. This local archive is not pushed to
-GitHub. Durable commands, outcomes and residual dispositions are in the register; failed attempts remain.
+**Approved exception:** user approved exactly two browser_snapshot input corrections in
+`testbed/runner.wiring.test.ts:339` and `:372`; assertions unchanged. No other S4/S5 file was edited.
+
+**Remaining scope/limits:** S3 exact usable prompt/bootstrap sizing, S5 final command wiring and intact
+real pilots/cohorts remain mandatory. Thin4194-byte synthetic-envelope headroom is not a real-provider
+margin. D-CANCEL remains OPEN before S4. Preserve all S1 residuals/caps, diagnostic write-failure limits
+and the currently unreachable drain-source guard asymmetry. No later-slice source, root SKILL prompt,
+live cohort, cap waiver, trimming or release occurred. Commit/push authorization changes only the
+publication status of this accepted S2 checkpoint.
+
+**Ownership/preservation:** Codex retains this active session checkpoint pending next direction;
+completion of S2 does not authorize S3. Eight inherited dirty owner documents and old register/log
+entries remain preserved. The two bounded workers have finished; no source writer remains active.
 
 
 ## Decisions Log
@@ -623,3 +624,40 @@ GitHub. Durable commands, outcomes and residual dispositions are in the register
 - **2026-09-07** — User authorized the accepted S1 checkpoint commit/push. Preserve raw evidence in a verified local ignored archive, separate the six unchanged inherited historical documents from the S1 code/planning/contracts commit, and retain all accepted residuals and D-BUDGET/D-CANCEL holds. No new implementation or release scope.
 
 - **2026-09-07** — Final tinyvault-wrapup: verified pushed source330e7f6 and historical docs3367a6b, retained source hashes/evidence and closed ownership for a fresh D-BUDGET entry-decision session. Current State remains load-bearing for the next scope; prior planning narrative is already archived. No source changes or review/gate reruns.
+
+- **2026-09-07 — D-BUDGET entry: keep S2 blocked; no allowance selected.** New full-accounting projections
+  establish ordinary serial lookalike/DOM overflow even without system instructions. Batched1024 fits
+  six finite candidates, but adopting it alone would narrow §4.3's normal-success STOP. Proposed AM11
+  states that narrower deterministic witness policy explicitly, pins declaration bytes, forbids undeclared
+  batching-prompt tuning and retains all caps/observations/real-run gates. It remains unadopted pending
+  explicit contract-owner disposition. Scoped Opus5 review NEEDS-ATTENTION, findings disposed in the M6
+  register; no completed review reopened. D-CANCEL stays OPEN S4 and S1 residuals stay accepted.
+
+- **2026-09-07 — User approved AM11; D-BUDGET entry resolved.** Explicit “I approve” accepts the
+  proposed narrower deterministic gate:1024 combined reserve, pinned declarations and fixed witnesses;
+  known serial overflow stays rejection evidence, and every real-pilot/cohort failure gate remains.
+  All caps, full accounting, S1 residuals and D-CANCEL OPEN preserved. Applied the approval to current
+  §4.3 prose and status pointers; prior blocker/review entries remain historical. Actual SDK proof and
+  S2 implementation scope remain pending. No source, commit/push/release or new review authorized.
+
+- **2026-09-07 — tinyvault-wrapup and fresh S2 authorization.** User requested closure followed by
+  implementation in a fresh session, accepting the preceding S2-only scope. Archived pre-wrapup Current
+  State verbatim, closed `2026-09-07-m6-d-budget`, and handed the same checkout plus dirty approved docs
+  to a fresh Codex S2 continuity owner. AM11 entry resolved; actual SDK/gates remain implementation work.
+  S1 residuals/review caps and D-CANCEL OPEN preserved. No commit/push/release or later-slice scope.
+
+
+- **2026-09-07 — M6 S2 implementation accepted at fix round2, uncommitted.** Actual pinned SDK wire
+  capture/validation and AM11 six-witness sizing pass the ordered full gate. Claude QA and fresh Codex
+  adversarial PASS; security NEEDS-ATTENTION retained with explicit bounded residual dispositions,
+  not relabelled PASS. R1 durable-sequence/source-location proof fixes and approved two-input caller
+  fixture correction are absorbed. Same-length native/normalized declaration mutants now independently
+  fail their hashes. Retain thin4194-byte headroom, ordinary append/torn-write diagnostic limits,
+  currently unreachable afterLoop source-guard asymmetry, redundant-control proof limits, all S1
+  residuals and D-CANCEL OPEN. No source repair was needed after R2, so no third implementation round
+  was consumed. S3/S5/real-pilot gates and separate authorization remain; no commit/push/release.
+
+- **2026-09-07 — S2 checkpoint commit/push authorized.** After reviewing readiness and the explicitly
+  retained residuals, the user instructed “let's go ahead and commit and push”. Publish the reviewed
+  S2 source and preserved continuity documents on main; verify the committed candidate and remote
+  equality. This does not authorize S3, a release, residual removal or any acceptance-gate change.

@@ -1,8 +1,11 @@
 # M6 — real reference agent and credentials-in-context baseline
 
 Status: PAPER LADDER CLOSED at round 3 (Claude Opus5 PASS), revision 3 with owner final sweep, 2026-09-06.
-**S1 complete at implementation round3 cap (2026-09-07), with [recorded proof limits](m6-review-findings.md#s1-r3--final-capped-review-and-owner-acceptance-2026-09-07). Later entry decisions remain open:** D-BUDGET before S2 implementation and
-D-CANCEL before S4 dispatch (§8). No implementation or publication authorized by this document.
+**S1 complete at implementation round3 cap (2026-09-07), with [recorded proof limits](m6-review-findings.md#s1-r3--final-capped-review-and-owner-acceptance-2026-09-07). Entry decisions:** D-BUDGET is RESOLVED by user-approved M6-AM11 (§4.3.1), 2026-09-07;
+D-CANCEL remains OPEN before S4 dispatch (§8). S2 implementation was separately authorized in the fresh
+`2026-09-07-m6-s2` handover; S2 is complete at fix round2 with recorded residuals, actual SDK
+six-trace sizing and the full ordered gate passing. See the M6 register for exact review dispositions.
+This document does not itself authorize implementation or publication.
 Rounds 1–3 dispositions: [M6 review register](m6-review-findings.md#r1--independent-paper-review).
 Planning owner: Codex, closed session `2026-09-06-m6-planning`; S1 owner: closed `2026-09-06-m6-s1`. Base/HEAD:
 `53fd94f7831d2fb913d887a4a40c2ef3913f30b1` on main; accepted executable source `8103c47`.
@@ -82,8 +85,11 @@ navigation-related load before cancellation. Those are M6 design inputs, not rea
 
 No locked contract is silently edited by this plan. The implementing continuity owner must apply the following
 explicit amendments with their source/schema changes in the same candidate; source workers cannot improvise
-them. The completed M6 paper ladder covers these proposals; the owner accepts their specified direction within planning scope, with D-BUDGET/D-CANCEL held open. No amendment changes model, N, CI, success threshold,
-seven names, core result bytes, signature bounds or accepted limits.
+them. The completed M6 paper ladder covers AM01–AM10; their specified direction was accepted with
+D-BUDGET/D-CANCEL held open. AM11 was separately investigated/reviewed and explicitly approved by the
+user on 2026-09-07; it resolves D-BUDGET by narrowing the deterministic feasibility gate as stated in
+§4.3.1. No amendment changes model, N, CI, success threshold, seven names, core result bytes, signature
+bounds or previously accepted S1/M5 limits. D-CANCEL remains OPEN.
 
 | ID | Proposed exact contract delta and canonical home | Disposition / verification |
 | --- | --- | --- |
@@ -97,6 +103,7 @@ seven names, core result bytes, signature bounds or accepted limits.
 | M6-AM08 | Define SDK context-view evidence in phase §5 and SCHEMA: `model-text/internal/sdk-request-context` records the exact application request body as a context view; paired wire metadata explicitly records transportDirection `outbound`. Only trusted baseline context views and its bootstrap are source-exempt. Actual outbound events remain ineligible for source exemption; reference context views have no exemption. | Adopt source factory in S1 and capture in S2/S3, with reference-context and outbound-event rejection tests. This explicitly extends the seeded-context convention to later SDK context views. |
 | M6-AM09 | Add diagnostic per-cell qualification in phase §5/SCHEMA and offline API: after all cryptographic, identity, capture and outcome validations pass, report missing authorized-login positive controls by cell with verified run outcomes, instead of losing all results to a late generic throw. Keep the same positive-control predicate for BOTH agents; any missing cell still fails headline/`make eval`. No qualified scorecard is produced. | Adopt in S1/S5; no control substitution, numeric denominator change, or success-threshold relaxation. Preserve original strict adjudicator default for stub/regression callers. |
 | M6-AM10 | Add run-level failure retention to the M6 diagnostic API in phase §5/SCHEMA, without altering s120/s122 capture equality: verify each run independently; a signature/identity/capture mismatch yields `capture-failed` with no accepted outcome for that run. Preserve independently verified other runs, but the whole cohort remains unqualified/nonzero. Never reinterpret the mismatch as a harmless 401 or waive the exact agreement predicate. | Adopt in S1/S5 alongside AM09. Existing strict adjudicator default and all dropped/reordered/inserted-capture mutants remain unchanged. This changes diagnostic reporting, not capture authorization or claim spans. |
+| M6-AM11 | Adopt the exact §4.3.1 finite deterministic witness policy: 1024-byte combined reserve, pinned declaration bytes, fixed five/seven-turn witnesses, serial overflow rejection evidence, and unchanged full accounting/caps/real-run gates. | User APPROVED 2026-09-07 after scoped review and owner dispositions. D-BUDGET entry RESOLVED; actual SDK exit proof and S3/S5 reruns remain pending. This adopts a gate amendment, not S2 implementation or runtime feasibility certification. |
 
 Do not edit an existing `TV-CLAIM-SPAN` to absorb these additions. If a necessary change affects its meaning,
 update the canonical claim row and purpose-built proof through a separately identified owner packet;
@@ -222,22 +229,24 @@ limit. **This is an S2 exit gate before S3–S5 implementation, not just a pre-N
 Slice4 scan (`m5-2-slice-4-plan.md:51`) observed a 59,361-byte maximum stub events file; that is a dated sample,
 not a current measurement or a guarantee. A simple duplicated-event estimate is 118,722 bytes, leaving only
 12,350 bytes for added SDK/tool-schema/response overhead. Repeated context grows with the conversation, so
-this estimate is explicitly optimistic and feasibility is unresolved. The 2048-byte reserve below is
+this estimate is explicitly optimistic; actual SDK feasibility remains unproved. The 2048-byte reserve below is
 multiplied by two context views per turn: 45,056 bytes at 11 turns and 65,536 at 16, before event JSON
 escaping. This exceeds the optimistic 12,350-byte headroom. The historical maximum came from a different
 trace, so this is not an impossibility proof; it is evidence that 2048 cannot be assumed viable.
-**D-BUDGET is due at S2 ENTRY, before the SDK slice is implemented.** Retain 2048 only as a stress/reserve
-candidate expected to trip STOP; the owner must select a measured feasible prompt/bootstrap allowance or
-propose a separate evidence-design amendment, with full byte accounting, before authorizing S2 source work.
-Do not silently lower an allowance or change frozen caps. The mandatory S2 exit proof below remains and
-must use the entry decision's recorded allowance; no entry decision is recorded as resolved in this plan.
+**D-BUDGET entry is RESOLVED by user-approved M6-AM11 (2026-09-07).** Use the explicit 1024-byte
+combined reserve, exact pinned declaration bytes and fixed deterministic witnesses in §4.3.1.
+Retain 2048 only as an unproven working budget/stress candidate; its measured lookalike failures remain
+in the evidence. This is an explicit gate amendment and allowance selection, not a silent cap change.
+The mandatory S2 actual-SDK exit proof below remains; entry projections do not establish that proof.
+S2 source implementation still requires its explicit implementation scope.
 
 In new `src/agents/anthropicClient.test.ts` and `testbed/agentEvidenceBudget.test.ts`, use the actual SDK
 transport boundary and transcript sink with independent finite fake replies plus real existing fixture
 snapshots. Produce six complete traces (two custody profiles × three scenarios), including normal login,
 lookalike refusal/recovery and initial hostile snapshot. These are deterministic feasibility fixtures,
-not LLM behavior evidence. The initial S2 sizing candidate reserves **2048 UTF-8 bytes per custody profile for the combined
-system-prompt and bootstrap JSON content** (including actual task facts/run IDs, handle or baseline canary).
+not LLM behavior evidence. Under AM11, use the fixed five/seven-turn schedules in §4.3.1 and reserve
+**1024 UTF-8 bytes per custody profile for `system` plus `JSON.stringify(bootstrapTask)`**, including
+actual task facts/run IDs, handle or baseline canary. Also retain the 2048-byte stress cases.
 Fill the allowance with independent non-secret padding for the fake traces; tool schemas and accumulating
 conversation/evidence overhead are also included in the full file measurement, not charged out of scope.
 This bound is not a claim about prompts S3 has not written. S3 must reject over-budget actual content,
@@ -257,11 +266,137 @@ traces prove a viable path; they do not promise all real trajectories fit. A del
 size check must fail the actual signing/runner-path test, not merely a byte-count helper assertion.
 
 Before N10, require a separate composed real-agent pilot per agent/scenario to fit intact and reach its
-expected task end. Pilots are labelled and never pooled into the headline cohort. A failing real pilot or
-normal successful trace exceeding a frozen cap stops progression. Any proposed bounded-artifact protocol
+expected task end. Pilots are labelled and never pooled into the headline cohort. Under approved AM11,
+all six fixed deterministic successful witnesses must fit intact. Additional ordinary serial deterministic
+trajectories remain mandatory rejection/diagnostic tests when oversized; they are not passing traces.
+Every real pilot must fit intact and reach its expected end. A failing real pilot or any oversized real
+pilot/cohort run stops progression, remains unqualified/nonzero, and cannot be dropped, replaced,
+resampled or counted as completed. Any proposed bounded-artifact protocol
 amendment needs separate owner review; no silent cap increase, transcript trimming, history summarization,
 partial attestation or budget tuning to obtain a green cohort. S2 budget tests may use stub host/fixture
 plumbing already present; S5 repeats them through the final real-profile command path.
+
+
+### 4.3.1 D-BUDGET entry investigation — 2026-09-07
+
+**Current disposition: D-BUDGET entry RESOLVED; M6-AM11 APPROVED and ADOPTED by the user on
+2026-09-07.** The initial investigation blocked the old deterministic gate; explicit approval adopts the
+narrower policy below and selects its 1024-byte reserve. At that entry checkpoint SDK feasibility was
+unproved and S2 source work was not yet authorized. The subsequent fresh S2 handover separately
+authorized implementation; current evidence is in the M6 register. The entry owner measured
+ordinary successful serial paths and permitted multi-call variants at entry HEAD
+`105e75fa58a3548662646884669aec3efd49e978`. Twelve fresh finite fake-client runs used the existing
+real Chromium/fixture/host/loop/transcript path; all twelve obtained verified completion receipts.
+This is new sizing evidence, not a repeated S1/paper/M5.2 review or an LLM behavior experiment.
+
+The external probe adds a candidate full typed seven-tool schema, native application request/response
+bodies, paired transport metadata and exact run/turn identities to the captured normalized observations.
+**Those SDK records are projections, not actual SDK fetch bytes.** Descriptions are the existing generic
+`TinyVault supervised <name> operation.` strings, not newly authored semantic instructions. Response
+envelopes use minimal usage fields and short synthetic message/request IDs; real provider fields or
+longer IDs can increase these costs. All original non-context events
+are preserved field-for-field and in order (only evidence indices are renumbered); both complete growing
+context views, bootstrap, response envelopes, tool arguments/results and host observations are counted.
+The normalized request view is reconstructed with the full typed schemas and reserved system content.
+The reserve is `UTF8(system) + UTF8(JSON.stringify(bootstrapTask))`; exact public task facts, run URLs,
+metadata or synthetic baseline canary are included. ASCII `P` fills only the remaining system allowance.
+This measures those concrete byte strings, not arbitrary same-length strings' escape cost or usable S3
+instructions. Actual S3 content and escaped files must be measured afresh.
+
+Each table entry is full UTF-8 pretty-printed events JSON with final newline, **not compact JSON**.
+The serial variants use 9/13 turns; batched variants use 5/7 turns. Both retain the same ordered eight
+or twelve tool operations, including the initial snapshot, lookalike reference refusal and recovery,
+final snapshot, submit and close. A response batches at most three calls, within the existing eight-call
+maximum. Neither variant predicts that the pinned model will follow these trajectories.
+
+| Scenario / custody | Serial, 1024 | Batched, 1024 | Batched, 2048 | Batched 1024 raw headroom |
+| --- | ---: | ---: | ---: | ---: |
+| Benign / reference | 126895 | 74598 | 84838 | 56474 |
+| Lookalike / reference | 212543 | 119691 | 134027 | 11381 |
+| DOM-hidden / reference | 159655 | 94166 | 104406 | 36906 |
+| Benign / baseline | 125245 | 73370 | 83610 | 57702 |
+| Lookalike / baseline | 209976 | 117903 | 132239 | 13169 |
+| DOM-hidden / baseline | 157965 | 92914 | 103154 | 38158 |
+
+All six serial 2048 projections overflow (143677–239167 bytes). With only required bootstrap facts and
+**no system prompt**, serial lookalike still measures 198659/194558 and DOM-hidden 150205/147273
+(reference/baseline). Even removing every prompt/bootstrap contribution counterfactually leaves those
+four above 131072; removing JSON whitespace also does not suffice. Thus a smaller allowance alone does
+not repair these ordinary serial witnesses. These are concrete projections, not an impossibility proof
+for every possible future transport design.
+
+The largest batched 1024 candidate's 119691 bytes partition exactly into bootstrap 774,
+normalized-request 43160, SDK-request 46887, SDK-response 5534, SDK-metadata 3254, tool-arg 4047,
+normalized-response 3084, tool-result 3945, host-observation 9002, array wrapper 4. Prompt/bootstrap
+contributes 15120 bytes inside event bodies and 16132 after event-string escaping (1012 additional).
+The SDK-request term includes its native user task-string escaping; repeated schemas and histories are
+fully charged. The artifact records this partition separately for every turn and event kind in all 36
+projections (serial/batched × six paths × bootstrap-only/1024/2048).
+
+For batched 1024, signed digest envelopes are 293–303 bytes and fixture completion receipts 552–573;
+the digest envelope contains a hash, not the events. Bridge attest request payloads are 98091–159862,
+response payloads 407–417; each frame adds its separate four-byte prefix. Base64url events, scope fields,
+a 43-character capability and maximum safe-integer frame ID are included. These are measured canonical
+frame candidates, not a live Docker exchange. Current production signer/verifier and frame encoder
+accepted or rejected all 36 projections consistently with their independent caps; raw boundary 131071/
+131072/131073 behaved as specified. No oversized projection was truncated or labelled qualified.
+Production SDK/runner deletion mutants, 16-turn maximum-output retention and later composed gates remain
+S2/S5 work; direct entry-probe checks do not substitute for them.
+
+**Why explicit amendment was required:** the pre-AM11 §4.3 normal-successful-trace STOP applied to the
+serial counterexamples. They are ordinary task operations within 16 turns, not the separate deliberately
+maximum-output stress case. Selecting only green batched examples without approval would have silently narrowed that gate.
+2048 remains unproven as a working budget and failed this probe's two batched lookalike paths. 1024 with
+batching is now the explicitly approved deterministic entry allowance; it is not actual SDK or live-run certification.
+
+**M6-AM11 — explicit deterministic witness policy (APPROVED AND ADOPTED, 2026-09-07).** The user
+replied “I approve” to the explicit request to adopt this narrower gate while retaining caps, observations
+and real-pilot/cohort failure gates. This is an evaluation-gate amendment, not an evidence representation
+change. Its adopted requirements are:
+
+1. Select 1024 bytes per custody profile using the explicit reserve definition above for the S2 six-trace
+   deterministic feasibility witnesses. Require the actual SDK and sink to reproduce all six at S2 exit,
+   with no observation removal. Freeze the exact declaration bytes as part of this approved selection:
+   external `schemas.json` SHA256 `f319fd47cd1a4840ef7d274ee5881dfc3ec52a80dd65fa575f7b569ffab968c5`;
+   compact normalized declaration array 1972 bytes, SHA256
+   `567545650168480703cd5e7a0e6991ae8300806851355a142e873d0770691597`; compact native array 1979 bytes,
+   SHA256 `6c179698185ae12f71c6334036f3f446bc920f0a505fa5207cefba50a4bcee50`. S2 must have a gate
+   comparing its actual declaration serialization with these independent literals; altering descriptions,
+   schemas or serialization requires renewed entry accounting before source work depends on the change.
+   No presumed description-growth headroom is approved. Exact S3 instruction/bootstrap sizing remains
+   mandatory; an unusable or over-budget actual prompt blocks S3 rather than being silently shortened.
+2. Fix the finite witness schedules before implementation: benign/DOM-hidden response call counts
+   `1,2,3,2,0`; lookalike `1,2,2,2,3,2,0`, where zero is the terminal assistant response. Calls retain the
+   original operation order stated above. The model may choose multi-call responses; trusted code must
+   neither batch separate provider turns retrospectively nor fabricate/rewrite calls, snapshots or recovery.
+   This amendment does **not** authorize adding prompt instructions to encourage batching: that can change
+   the model's exposure to intermediate page feedback and therefore the measured leak rate. Any later
+   batching guidance needs its own explicit evaluation-design disposition, pre-sampling prompt/config
+   provenance binding and disclosure with results. No adjustment after a pilot/cohort failure.
+3. Replace the ambiguous universal reading of the last paragraph's normal-success STOP with this exact
+   distinction: **all six fixed deterministic successful witnesses must fit intact; every real-agent pilot
+   must fit intact and reach its expected end. Additional serial deterministic trajectories remain required
+   rejection/diagnostic tests when oversized. Any oversized real pilot or cohort run still stops progression,
+   remains unqualified/nonzero, and cannot be dropped, replaced, resampled or counted as completed.** The
+   known serial witnesses remain part of the evidence and the S2 rejection tests; they are not erased or
+   called maximum-output tests. This explicitly narrows deterministic feasibility coverage and does not
+   prove arbitrary ordinary trajectories fit. Publish that limitation with any later result, including that these witness schedules were chosen
+   after the serial measurements overflowed; they are not an independent sample.
+4. Keep raw events 131072, each signed artifact 262144 and bridge payload 262144 (+4 framing), 16 turns,
+   eight calls/response, 1024 output tokens, model/temperature, N/Wilson/completion/leak gates, all source
+   identities and all S1/M5 residuals unchanged. No compression, chunking, unsigned sidecar, summarization,
+   partial attestation, source exemption expansion, runtime retry or cohort budget tuning.
+
+Approval accepts the narrower deterministic guarantee and defers ordinary serial-trajectory risk to the
+real pilot after S2–S4 work. Neither usable 1024-byte instructions nor real-model batching behavior is
+established. Approval resolves this entry decision only; it does not authorize S2 implementation, certify
+actual SDK feasibility, or convert the recorded scoped review's NEEDS-ATTENTION verdict into PASS.
+Owner dispositions addressing that review are preserved in the register; no completed review is repeated.
+Merely compressing storage or applying the old numeric limit per chunk would change the raw per-run cap's
+meaning and is not an approved solution.
+
+Evidence and review identity are recorded append-only in the [M6 register](m6-review-findings.md).
+D-CANCEL remains OPEN for S4. S1's accepted residuals and capped reviews remain unchanged.
 
 ## 5. Scenario capture requirements and residual disposition
 
@@ -513,7 +648,7 @@ fresh Claude QA, separate Claude security for custody/lifecycle/gating surfaces,
 required fix reviews and three-round caps remain. Full milestone-close assessment is after M6 implementation,
 not a repetition of the completed M5.2 assessment.
 
-Implementation kickoff packet (copy with current refs):
+Historical S1 implementation kickoff packet (preserved for scope history; do not reuse for S2):
 
 > Owner: receiving Codex session after explicit takeover. Worktree: this named checkout unless the user later
 > authorizes isolation; never switch/reset/stage inherited docs. Read CLAUDE, PLAN Current State, this plan and
@@ -525,11 +660,11 @@ Implementation kickoff packet (copy with current refs):
 > or release. Run S1 verification order and produce Summary, Files Changed, Verification, Risks/Follow-ups,
 > and Deviations From Handoff. Stop and cite both contracts if the scope cannot be implemented as written.
 
-Unresolved decisions (canonical entry holds, not implementation-worker discretion):
+Entry decisions (canonical dispositions, not implementation-worker discretion):
 
 | Decision | Owner action before work proceeds | Current state |
 | --- | --- | --- |
-| D-BUDGET — S2 entry | Resolve repeated-wire/context size using explicit prompt/bootstrap allowance and measured event cost. 2048 is a stress candidate, not a certified working budget. Keep every frozen cap and full observation unless a separate amendment is reviewed. | OPEN; S1 can proceed, S2 source work waits. |
+| D-BUDGET — S2 entry | Resolve repeated-wire/context size using explicit prompt/bootstrap allowance and measured event cost. 2048 is a stress candidate, not a certified working budget. Keep every frozen cap and full observation unless a separate amendment is reviewed. | RESOLVED (2026-09-07); user-approved AM11 §4.3.1 selects 1024 with pinned declarations/fixed witnesses and retains serial rejection evidence. Actual SDK S2 exit proof subsequently passed at fix round2 with recorded residuals; later-slice scope remains separate. |
 | D-CANCEL — S4 entry | Select and prove reachable cancellation before waiting on a stuck mutex/context; cover active navigation and the existing post-timeout black-hole close. Preserve capture/mutex/result contracts. | OPEN; no S4 dispatch until mechanism is concrete. |
 
 Other operational prerequisites: exact SDK version is pinned at S2 installation; provider model
@@ -548,4 +683,19 @@ The subprocess capability map does not authorize a new Git caller in S1's file a
 proves this explicit module input contract; S5 owns actual trusted Git enumeration and its completeness
 proof at the command boundary, in addition to provenance/execution wiring already assigned there.
 Never derive the snapshot from an offline manifest or describe S1 as proving Git index/ignore discovery.
-This implementation choice keeps the capability gate unchanged. D-BUDGET and D-CANCEL remain OPEN.
+This implementation choice keeps the capability gate unchanged. The later user-approved AM11 (§4.3.1)
+resolved D-BUDGET entry only; actual SDK proof was pending at S1 closure and subsequently passed
+in S2 as recorded below. D-CANCEL remains OPEN.
+
+
+## S2 implementation boundary note — 2026-09-07
+
+The separate authorized S2 handover applies E2/AM01 declaration validation, AM03 wire/reproduction
+clarification, AM08 producer stamping and user-adopted AM11. Native real responses retain ordered
+content blocks; legacy stub turns retain their prior representation. Both full normalized context
+(including system) and exact SDK wire views are charged. A trusted client-factory runId may supply
+the existing host adapter's absent loop option; explicit option/factory disagreement rejects.
+Six fixed1024 SDK witnesses and the full ordered gate pass. S2 is accepted at fix round2 with
+explicit residuals and exact review dispositions in the M6 register; security NEEDS-ATTENTION is
+retained, not relabelled PASS. S3/S5 prompt/command proof and all real pilot gates remain due;
+D-CANCEL stays OPEN. The approved two-input runner fixture exception does not authorize other S4/S5 work.

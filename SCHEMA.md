@@ -129,6 +129,26 @@ that it supplies every tracked/nonignored untracked path are S5 command-wiring o
 tests establish hashing and admission under that explicit trusted-input precondition. No subprocess
 capability or inventory-discovery guarantee is added by the S1 module.
 
+**M6 S2 wire/reproduction refinement (M6-AM01/AM03/AM08).** The real client uses the pinned
+Messages SDK with a trusted custom-fetch capture boundary. Wire bytes mean application request and
+response BODY bytes; they exclude TLS/HTTP framing and credential-bearing headers. The request record
+is durably appended before transport, and received response bytes are retained before parsing, including
+unknown fields and failed/partial responses. Transport metadata is separately labelled; the internal
+SDK request-context view does not make the actual provider request internal. Normalized loop context,
+responses and tool envelopes remain additional observations. Each real-client context producer stamps
+the trusted run ID and bounded turn identity defined below. The loop takes that ID from its explicit
+options or the trusted client factory; conflicting IDs reject. Model data cannot supply that identity.
+
+The evaluated declarations retain exactly seven names with full deeply frozen property/type schemas
+and matching pre-dispatch shape validation. Model/temperature, retries, turn/call/output limits and
+AM11's exact declaration bytes remain locked by the M6 plan. Offline replay of a fixed captured bundle
+and the scripted regression profile remain deterministic. Fresh M6 model sampling requires the provider
+API and is statistical; repeated live calls do not promise byte-identical trajectories. S2 fake-HTTP
+traces establish the actual SDK serialization path, not provider access, real decisions or a live cohort.
+The 300-second execution deadline stops new admissions and aborts provider work; an already-admitted
+host operation must settle under the existing mutex contract. Actual cancellation/teardown proof remains
+OPEN D-CANCEL in S4, with no early mutex release or claim of a hard wall bound for stuck browser work.
+
 **Provenance (M6-AM02).** New M6 bundles carry a versioned `EvaluationProvenance` and retain their
 canonical sorted path-to-SHA256 source inventory. `version` is `m6-v1`; `source` records `gitHead`,
 `dirty`, `filesSha256` and `packageLockSha256`. The inventory covers tracked and nonignored untracked

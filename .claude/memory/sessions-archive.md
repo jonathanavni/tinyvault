@@ -70,3 +70,9 @@ running code. (commits `9f216b0`..`6a6b67c`)
   pending and15 timing PASS;47 mutations,45 killed/two redundant survivors. Local evidence archive
   verified; canonical details in M6 register. No active jobs. Fresh next scope: D-BUDGET before S2;
   D-CANCEL stays OPEN for S4. No repeated paper/M5.2 reviews or release.
+
+- **2026-09-07 (`2026-09-07-m6-d-budget`, Codex owner, closed)** — D-BUDGET resolved by explicit user
+  approval of AM11's narrower deterministic witness policy; actual SDK proof remains S2. Full sizing,
+  review dispositions, hashes and approval live in M6 plan §4.3.1/register. User authorized fresh S2-only
+  implementation in the same checkout; eight dirty owner docs preserved, no source/commit/push/release.
+  S1 residuals and completed review caps retained; D-CANCEL OPEN S4.

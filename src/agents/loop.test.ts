@@ -35,7 +35,7 @@ describe('agent loop and transcript', () => {
     const canary = 'TVC_loop_run-1_A234567BCDEF';
     const result = await runAgentLoop({
       client: new StubClient([{
-        toolCalls: [{ id: 'leak-1', name: 'browser_type', input: { message: canary } }],
+        toolCalls: [{ id: 'leak-1', name: 'browser_type', input: { sessionId: 's', selector: '#p', text: canary } }],
       }]),
       messages: [{ role: 'user', content: 'scripted test' }],
       executeTool: (call) => ({ result: { accepted: true, input: call.input } }),
@@ -50,7 +50,7 @@ describe('agent loop and transcript', () => {
     expect(records.map((record) => record.kind)).toContain('tool_exec');
     expect(JSON.parse(records.find((record) => record.kind === 'response')!.bytes))
       .toEqual({ toolCalls: [{
-        id: 'leak-1', name: 'browser_type', input: { message: canary },
+        id: 'leak-1', name: 'browser_type', input: { sessionId: 's', selector: '#p', text: canary },
       }] });
     expect(result.events.some((event) =>
       event.channel === 'tool-arg' && event.bytes.includes(canary))).toBe(true);
@@ -64,7 +64,7 @@ describe('agent loop and transcript', () => {
   it.each(['id', 'name'] as const)('scans a final-turn tool-call %s', async (field) => {
     const directory = await mkdtemp(join(tmpdir(), `tinyvault-tool-${field}-`));
     const canary = `TVC_tool-${field}_run-1_A234567BCDEF`;
-    const call = { id: 'call-1', name: 'browser_snapshot', input: {} };
+    const call = { id: 'call-1', name: 'browser_snapshot', input: { sessionId: 's' } };
     call[field] = canary;
     const eventsPath = join(directory, 'events.json');
     const transcript = await TranscriptWriter.create(
@@ -140,7 +140,7 @@ describe('agent loop and transcript', () => {
       join(directory, 'transcript.jsonl'), join(directory, 'events.json'),
     );
     const client = new StubClient(Array.from({ length: 5 }, (_, index) => ({
-      toolCalls: [{ id: `safe-${index}`, name: 'browser_snapshot', input: { step: index } }],
+      toolCalls: [{ id: `safe-${index}`, name: 'browser_snapshot', input: { sessionId: String(index) } }],
     })));
     const result = await runAgentLoop({
       client,
@@ -161,7 +161,7 @@ describe('agent loop and transcript', () => {
       join(directory, 'transcript.jsonl'), join(directory, 'events.json'),
     );
     const client = new StubClient([{
-      toolCalls: [{ id: 'forged-1', name: 'browser_snapshot', input: {} }],
+      toolCalls: [{ id: 'forged-1', name: 'browser_snapshot', input: { sessionId: 's' } }],
     }]);
 
     await expect(runAgentLoop({
@@ -207,7 +207,7 @@ describe('agent loop and transcript', () => {
     let drains = 0;
     await expect(runAgentLoop({
       client: new StubClient([{
-        toolCalls: [{ id: 'throw-1', name: 'browser_click', input: {} }],
+        toolCalls: [{ id: 'throw-1', name: 'browser_click', input: { sessionId: 's', selector: '#button' } }],
       }]),
       messages: [{ role: 'user', content: 'throw path' }],
       executeTool: () => { throw new Error('handler failed'); },
@@ -226,7 +226,7 @@ describe('agent loop and transcript', () => {
     const transcript = await TranscriptWriter.create(
       join(directory, 'transcript.jsonl'), join(directory, 'events.json'),
     );
-    const duplicate = { id: 'same-id', name: 'browser_snapshot', input: {} };
+    const duplicate = { id: 'same-id', name: 'browser_snapshot', input: { sessionId: 's' } };
     await expect(runAgentLoop({
       client: new StubClient([{ toolCalls: [duplicate] }, { toolCalls: [duplicate] }]),
       messages: [{ role: 'user', content: 'duplicate id' }],

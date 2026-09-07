@@ -1,9 +1,9 @@
-import { appendFile, mkdir, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, writeFile, open } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import type { CapturedEvent } from '../../testbed/scorecard.schema';
 
-export type TranscriptKind = 'request' | 'response' | 'tool_exec' | 'meta';
+export type TranscriptKind = 'request' | 'response' | 'tool_exec' | 'meta' | 'sdk-request' | 'sdk-response' | 'sdk-meta';
 
 export type TranscriptRecord = {
   sequence: number;
@@ -89,6 +89,20 @@ export class TranscriptWriter {
     await appendFile(this.transcriptPath, `${JSON.stringify(record)}\n`);
     for (const event of captured) this.capture(event);
     return bytes;
+  }
+
+  /** Request-before-network fence: fsync the append, not merely the userspace write. */
+  async appendDurable(kind: TranscriptKind, bytes: string, captured: CapturedEventInput[] = []): Promise<void> {
+    this.assertOpen();
+    const record: TranscriptRecord = { sequence: this.sequence, kind, bytes };
+    const file = await open(this.transcriptPath, 'a');
+    try {
+      await file.writeFile(`${JSON.stringify(record)}\n`);
+      // The line now exists even if syncing or closing this descriptor subsequently fails.
+      this.sequence += 1;
+      await file.sync();
+    } finally { await file.close(); }
+    for (const event of captured) this.capture(event);
   }
 
   capture(event: CapturedEventInput): void {

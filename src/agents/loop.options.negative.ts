@@ -13,6 +13,7 @@ type ExpectedOptionKeys =
   | 'executeTool'
   | 'maxTurns'
   | 'messages'
+  | 'runId'
   | 'secretSources'
   | 'transcript';
 

@@ -407,3 +407,408 @@ accepted residuals. D-BUDGET remains OPEN S2 and D-CANCEL OPEN S4.
 Historical-documentation checkpoint: `3367a6b` (`docs: preserve M5.2 closeout and project assessment`),
 six files whose staged bytes matched the S1 entry snapshot. S1 source and its governing amendments
 remain together in the following checkpoint commit.
+
+
+## D-BUDGET — entry investigation and unadopted AM11 (2026-09-07)
+
+Owner session `2026-09-07-m6-d-budget`, explicitly handed over from closed S1. Entry checkout
+`/Users/jonathanavni/Documents/Coding/tinyvault`, main, HEAD/base
+`105e75fa58a3548662646884669aec3efd49e978`, clean. No S2/source implementation, cap change,
+commit, push or release. S1-R3 residuals and review cap retained; D-CANCEL remains OPEN for S4.
+
+**Owner disposition: BLOCKED; no allowance approved.** The canonical decision, full size table,
+accounting and exact unadopted AM11 proposal are in `m6-implementation-plan.md` §4.3.1. All twelve
+finite real-browser/fixture paths completed with verified receipts. Full native SDK records are
+projections, not actual fetch bytes. Ordinary serial projected lookalike/DOM paths exceed 131072
+with bootstrap only; lowering the system allowance cannot repair those witnesses. Batched 1024 has
+six fitting projections (largest 119691, margin 11381), but both batched lookalike 2048 cases fail.
+Selecting only the batched witnesses would narrow §4.3's normal-success STOP. AM11 proposes that
+narrowing explicitly, keeps serial rejection evidence and every actual pilot/cohort failure gate,
+and requires user/contract-owner disposition; it is NOT ADOPTED. The owner recommends keeping the
+hold unless the narrower guarantee and deferred pilot-stage risk are explicitly accepted.
+
+**New scoped independent paper review (not a reopened completed ladder):**
+
+- Command: `node scripts/claude-review.mjs --repo /Users/jonathanavni/Documents/Coding/tinyvault --packet /private/tmp/tinyvault-m6-d-budget-20260907/review-packet.md --channel plan --base 105e75fa58a3548662646884669aec3efd49e978 --output /private/tmp/tinyvault-m6-d-budget-20260907/claude-plan-host --timeout-seconds 900`.
+- Completed exit2, **NEEDS-ATTENTION**, actual reviewer `claude-opus-5`, session
+  `1177d934-48a9-451a-8fa7-f3e7e55a697b`; candidate digest
+  `dffe11729f08797038e1755c1cbf35b6e3740205ab7e3c84357cf2f63a98f307`.
+  Report SHA256 `79fe7dc2c0ff068eebd464fbc1aa6a0c452e1cbdcc17d4e890efb33aa5f47271`.
+- Opus confirmed all stated arithmetic and the BLOCKED disposition. Its CLI auxiliary Haiku usage
+  remains visible in raw metadata and is not labelled reviewer output or an evaluation model call.
+- Initial sandbox dispatch (`claude-plan/`) failed: CLI emitted synthetic `Not logged in`, and the
+  helper correctly rejected the unexpected assistant model. Existing-login host retry is the completed
+  review above. Failed artifacts remain; no fallback or passing label applied to the failed attempt.
+
+| New item | Owner disposition |
+| --- | --- |
+| DB-R1-P1 — unbounded tool declarations | ABSORBED IN UNADOPTED PROPOSAL. Disclose generic descriptions; pin the complete schema file and both compact declaration arrays by exact bytes/hash. AM11 now requires S2's independent serialization gate and renewed entry accounting before a declaration change. No schema-growth margin or implemented gate claimed. |
+| DB-R1-P2a — prompt-level batching can affect leakage | ABSORBED IN UNADOPTED PROPOSAL. No batching-encouraging prompt change authorized by AM11. Any later such guidance needs separate evaluation-design disposition, pre-sampling provenance and public disclosure; no post-failure adjustment. |
+| DB-R1-P2b — missing locator/register | ABSORBED HERE. Commands, script/data hashes, review identity and local archive recorded with this change. |
+| DB-R1-P3a — state vocabulary | ABSORBED. Current header/table/status pointers distinguish BLOCKED D-BUDGET from OPEN D-CANCEL; historical S1 entries remain untouched. |
+| DB-R1-P3b — bridge error reason | VERIFIED FIX IN EXTERNAL PROBE ONLY. `verify.ts` now requires `error.code === 'frame-length'` for oversized frames; all 36 primitive/equality checks and raw boundaries rerun PASS. `verify.reviewed.ts` reconstructs the exact pre-fix script by reversing that sole assertion change, for comparison. |
+| DB-R1-P3c — minimal response envelope | ABSORBED AS LIMIT. Minimal usage fields and short synthetic IDs disclosed beside table; actual SDK sizing is still required, not certified. |
+| DB-R1 residual — deferred risk / post-measurement witness choice | ACCEPTED LIMIT OF PROPOSAL. State explicitly that schedules were chosen after serial overflow, are not independent sampling, and would move ordinary-trajectory risk to a later real pilot after S2–S4 work. Usable 1024-byte instructions/model batching remain unproved. |
+
+These are owner dispositions on an unadopted proposal. No independent re-review or PASS verdict is
+claimed for the adjusted text. This does not reopen any completed S1/paper/M5.2 review.
+
+**Verification and preserved evidence:** root `/private/tmp/tinyvault-m6-d-budget-20260907`.
+
+- `node --import <root>/ts-hook.mjs <root>/capture-serial.ts` and the same command with `capture.ts`
+  (batched):12/12 local Chromium/fixture runs, stopReason complete and verified receipt taskCompleted true.
+  Actual command used absolute paths. Initial probe setup failed on helper imports/bundled relative
+  resources; corrected with in-place TypeScript loading. Chromium's sandbox MachPort failure was
+  followed by permitted host execution. These failed attempts are not code defects or passing checks.
+- `node <root>/measure.mjs` and `node <root>/measure.mjs <root>/batched`:36 full projections, each
+  partitioned by event kind and turn, prompt/bootstrap/body/escaping cost, raw file, digest/receipt
+  envelopes, base64url request and response payloads plus prefix. All original captures and oversized
+  projections remain intact; no truncation, unsigned-evidence substitution or qualification.
+- `node --import <root>/ts-hook.mjs <root>/verify.ts`: exit0;36 event-preservation/signer/verifier/frame
+  checks and 131071/131072/131073 raw boundaries PASS, including reason-pinned bridge rejection after
+  review. This is production primitive evidence, not actual SDK/runner rejection or deletion proof.
+- `source-identity.json`:225 source/testbed/schema/package/Makefile files byte-identical to entry HEAD.
+  `git diff --check`: PASS. Only owner documentation/status/register changes.
+- Not run: actual SDK installation/fetch, provider availability/live evaluation, Docker/composed bridge,
+  real-profile command path, 16-turn maximum-output retention, deletion mutants, full regression or clean
+  clone. Their later gates remain mandatory; no new runtime source change warrants repeating S1 suites.
+
+Key SHA256s (relative to evidence root; full index is `key-evidence-hashes.json`):
+
+| Artifact | SHA256 |
+| --- | --- |
+| capture-serial.ts | 60261cbdb59fde750515b9f7a156c0cdebc327c9c629b8629880d87359d48298 |
+| capture.ts | 55fa65c5de3d4b41d84b5f3ef886cff4fbd10ff14e45bc79ad3d4e0156cf6d95 |
+| measure.mjs | ef1bf7d178f725af0165df072bc9c00afd62c5ce2add2e66b12d07fd87b45e0f |
+| verify.ts (reason-pinned) | 8f2a9cbd1b5c3cd2d09a5d1c7ac658abbe5b10d364eaf709a1e5dfba4bb862fe |
+| schemas.json | f319fd47cd1a4840ef7d274ee5881dfc3ec52a80dd65fa575f7b569ffab968c5 |
+| measurements.json | 91089629d12bc575eaee6cceb71557a8795ef87de57dfe06275241bac2e3f6f1 |
+| batched/measurements.json | fa2ba2e1a601f0515e54801d6e1dc98f9b963cd4679ee7c5bca3678d61b084f5 |
+| verification.json | a2509ee1493c53b82f3d6434e2a01926c46079091bd239321f7513540e7004c0 |
+
+**Deviations From Handoff:** none. Entry work produces the concrete amendment need allowed by §4.3;
+it does not silently select 1024, certify 2048, weaken a frozen cap or begin S2. The user has not authorized
+AM11 adoption. Owner retains continuity paused at that decision; no workers/reviewers/tests running.
+
+Local ignored evidence archive: `artifacts/review-evidence/tinyvault-m6-d-budget-20260907.tar.gz`,
+SHA256 `b0ca7e94188bc60fa10447d5f51eb2147ae91f22270c0271305aca614f863158`; 217 manifest-listed files, 604279 compressed bytes.
+`archive-manifest.json` SHA256 `2766a98c1c4e1546ff1e31a1973b7f55cb683d80aa85793de12fe36fecaebd52`; every archived member verified against it.
+Contains both raw capture modes, all projections, scripts, measurement/verification hashes, failed and
+completed review artifacts, and owner diff before this archive pointer. No node_modules; synthetic fixture
+credentials only. Archive is local, not pushed. No new independent review of post-review owner text.
+
+
+## D-BUDGET — user approval and AM11 adoption (2026-09-07)
+
+**Authorization:** after the owner explicitly asked, “Do you approve AM11’s narrower deterministic
+feasibility gate?” and explained that it changes §4.3's normal-success STOP while preserving all caps,
+observations and real-pilot/cohort failure gates, the user replied **“I approve”**. This approves the
+post-review proposal and its recorded owner dispositions; it is not a request for S2 implementation.
+
+**Disposition: M6-AM11 ADOPTED; D-BUDGET entry RESOLVED.** Select 1024 combined system/bootstrap bytes,
+the exact declaration hashes and five/seven-turn deterministic schedules in plan §4.3.1. Updated §4.3's
+operative reserve/normal-success wording as well as the amendment inventory, entry table and status
+pointers, so the superseded blanket deterministic STOP is not left as a conflicting active requirement.
+Serial overflow/rejection evidence remains mandatory. Every actual pilot/cohort run must still fit
+intact; failures stay unqualified/nonzero and cannot be dropped, replaced, resampled or counted completed.
+No batching-encouraging prompt change is authorized; the amendment's separate disposition/provenance/
+disclosure requirements for any later such guidance remain. 2048 is unproven, not an approved allowance.
+
+The user accepts the explicitly narrower deterministic guarantee and deferred pilot-stage risk. Actual
+SDK wire sizing, usable S3 instructions, final S5 wiring and real-model batching remain unproved.
+All raw/signed/bridge caps, full observations, source identities, model/turn/call/token/N/Wilson/qualification
+contracts, S1 accepted residuals and D-CANCEL OPEN remain unchanged. Existing review stays
+NEEDS-ATTENTION with owner dispositions; no independent PASS or repeated completed review claimed.
+
+Approval adoption changes only the same six uncommitted owner documentation/status/register files.
+Prior register entries and the evidence archive are preserved unchanged. Verification: diff whitespace,
+append-only register/Decisions Log, exact adopted declaration hashes and unchanged 225 source/contract
+inputs checked. No runtime tests rerun for this documentation-only disposition; S2's actual-SDK,
+size-rejection/deletion, maximum-output and later gates remain pending. No implementation, commit,
+push or release performed. **Deviations From Handoff: none.**
+
+
+## D-BUDGET — wrapup and fresh S2 handoff (2026-09-07)
+
+User requested `tinyvault-wrapup` and then implementation in a fresh session after the S2-only
+recommendation. This is explicit authorization for the receiving session to implement **S2 only** in
+`/Users/jonathanavni/Documents/Coding/tinyvault`, preserving the named checkout and uncommitted approved
+contracts. Closed `2026-09-07-m6-d-budget`; receiver becomes continuity owner. No workers/reviewers/tests
+remain running in the closing session. Launch occurs only after the owner checkpoint and checks finish;
+the closing owner stops writing shared state before the receiving session starts.
+
+`PLAN-archive.md` receives the exact pre-wrapup Current State; Decisions Log and this register stay
+append-only. The project session index receives one entry; no global Codex memory modified. Eight owner
+documents remain dirty. Source HEAD stays `105e75fa58a3548662646884669aec3efd49e978`; the 225 recorded
+source/contracts remain identical. Diff whitespace and archive/prefix preservation checked; no runtime
+suite repeated. Evidence archive and prior hashes remain unchanged.
+
+Next: exact S2 file scope/E2/§4.2 plus adopted AM11; actual SDK sizing early; §8 verification order and
+full new implementation ladder. No completed S1/paper/M5.2 review is reopened. No later-slice source,
+live cohort, cap/observation waiver, commit/push or release. D-CANCEL OPEN S4; S1 residuals retained.
+**Deviations From Handoff: none.**
+
+## S2 implementation — entry, candidate and early SDK sizing (2026-09-07)
+
+Owner `2026-09-07-m6-s2` accepted the explicitly authorized handover from CLOSED D-BUDGET in the
+same checkout, main at `105e75fa58a3548662646884669aec3efd49e978`. All eight inherited dirty documents
+were snapshotted before writes. No branch/worktree/stage/commit/push/release operation. The pinned
+D-BUDGET archive and all 217 members matched its pinned manifest and existing temporary input bytes.
+S1-R3 proof limits, completed review caps and D-CANCEL OPEN are inherited unchanged.
+
+S2 adds the real `@anthropic-ai/sdk` **0.124.0** client/custom-fetch boundary, native ordered assistant
+blocks/user tool results, full exact declarations, pre-dispatch shape/call/identity validation and
+request fsync before transport. The trusted client factory may carry runId when the existing host
+adapter does not supply the new AgentLoopOptions.runId; conflicting identities reject. This requires
+no S3/S5 adapter change. Normalized context now charges system bytes, and normalized real responses
+retain ordered native blocks. Raw wire capture precedes parsing; partial/error bytes remain diagnostics.
+AM01's declaration validation and AM03/AM08's wire/source clarifications are added outside frozen spans.
+The execution deadline rejects new admissions and aborts provider work; settlement/cancellation of
+already-admitted browser work remains the explicit S4 D-CANCEL limitation.
+
+**Early mandatory exit probe:** actual SDK/sink budget suite 25/25 PASS (`budget-first.json`). Each
+finite host execution/snapshot/event input is a literal from the verified D-BUDGET fixture captures;
+all host observations are checked unchanged by an independent digest. The current production SDK
+serializes every request and receives independent finite HTTP replies. Fresh fixture transports
+register/finalize and sign the resulting complete events file. This is actual SDK feasibility with
+replayed real fixture observations; it is not a new browser completion, live model trace, composed
+bridge exchange or final S5 real-profile runner proof. Both declaration arrays match the independent
+1972/1979-byte AM11 SHA256 literals. No external generated artifacts are test prerequisites.
+
+| Fixed 1024 witness | Reference raw bytes | Baseline raw bytes |
+| --- | ---: | ---: |
+| Benign | 79554 | 78301 |
+| Lookalike | 126878 | 125055 |
+| DOM-hidden | 99122 | 97845 |
+
+All six fit raw131072, signed-artifact262144 and bridge-payload262144 plus4 framing. Minimum raw
+headroom is4194 bytes. All six serial1024 trajectories overflow (134484–226840) and reject; both
+fixed lookalike2048 traces overflow. The full16-turn maximum-output diagnostic is1409051 raw bytes,
+retained unsigned. Every actual pilot/cohort gate and S3 exact-prompt sizing rerun remains mandatory.
+Accounting artifacts partition each turn/event kind, prompt/bootstrap/repetition/escaping and outer
+signature/bridge costs. Response envelopes use finite minimal synthetic IDs/usage; no real-provider
+size margin is certified.
+
+Four separate production-module Vite-transform deletion mutants were killed: raw signer limit,
+fixture admission limit (with wired signer observation), signed-artifact limit and frame limit.
+Native reports preserve the two accepted boundaries and the failing boundary+1 per mutant; no fixture,
+signer or frame source file was edited. This proves the current signing/fixture path, with S5's final
+command-boundary repetition still due. Initial test-first missing-module failure is retained.
+Evidence root: `/private/tmp/tinyvault-m6-s2-20260907`; full logs/patches/native reports are beneath it.
+
+**Scope conflict pending:** existing `testbed/runner.wiring.test.ts:372` uses malformed
+`browser_snapshot` input `{}` in its source-forgery test. Required new shape validation rejects before
+that test's intended guard. Owner requested explicit authorization for only `{sessionId:'session'}`;
+this file is outside the S2 row and has not been edited. Independent scoped verification continues.
+Full ordered gates and fresh S2 QA/security/Codex review are pending; no S2 exit claimed here.
+
+## S2 R1 — independent reviews and owner dispositions (2026-09-07)
+
+All three fresh channels completed against candidate digest
+`e57196ca8195e9ba2d9d086b2e9f600c23c5221376c6a2ceb0ce4374b8978ef0` (339-file owner hash map agrees),
+with NEEDS-ATTENTION. QA/security used actual `claude-opus-5`, sessions
+`c03df808-c7bb-4161-8802-691887445a91` and `f4efaa3b-3a32-472e-b349-625fecafe273` respectively.
+Fresh same-family Codex report: `codex-r1-report.md`; cross-family reports: `claude-r1-qa/report.md`
+and `claude-r1-security/report.md` under `/private/tmp/tinyvault-m6-s2-20260907`. Reviewers ran no tests.
+No completed S1/paper/M5.2 review was repeated. This starts S2's own three-round implementation cap.
+
+Two automatic approval-review rejections occurred before process launch: scoped private source egress
+was not considered authorized by the repository's recorded standing consent. No bypass was attempted.
+The user then directly answered **“Approve this scoped Claude review transfer”**, explicitly approving
+S2 source/diff, guidance/contracts and verification evidence to Anthropic for read-only Opus5 QA,
+security and fix reviews. Both subsequent dispatches completed; auxiliary Haiku usage remains labelled
+as CLI metadata, not reviewer output. Exact approval/rejection record: `claude-dispatch-approval.json`.
+
+Ordered owner checks: targeted → typecheck → diff check → make test, first sandbox then host access.
+Sandbox targeted290/3; host targeted291/2. Full sandbox main2206/71/195 pending; full host main
+2468/3/1 pending. Native reports and command logs retained. Full host failures are the two malformed
+runner fixtures plus the helper stderr-read test's `kill EPERM`/missing summary. Serial timing stages
+were NOT RUN because main failed. Isolated host helper stdout/stderr read-error tests subsequently
+pass2/2; this does not erase or establish a cause for either full-run failure. The helper source is
+unchanged. Its “Claude Opus5 qa review started” text is the fake-CLI test helper's banner, not evidence
+that a live review caused the failure. A new full ordered pass remains required.
+
+| Item | Owner disposition |
+| --- | --- |
+| S2-R1-Q1/S1 — red full gate | ACCEPTED BLOCKER. No S2 exit or timing pass claimed. Two fixture corrections require explicit file-scope exception; helper permission failure preserved without causal speculation. |
+| S2-R1-Q2 — purported targeted count mismatch | DECLINED AS REPORTED. `targetedHost` correctly summarizes the separate `owner-targeted-r1-host.json` (291/2), not `owner-targeted-r1.json` (sandbox290/3). Both native files existed and are retained. Add explicit report paths to the status index to prevent ambiguity. |
+| S2-R1-Q3 — durable-write sequence reuse | ACCEPTED. A successful line write followed by fsync/close failure can leave the counter unadvanced before afterLoop writes. Move sequence advancement to after successful write and before sync/close; add real-file failure/sequence tests and deletion proof. No body/event omission. |
+| S2-R1-Q4 — one versus two pending fixtures | ACCEPTED. The initial request was one fixture; the broader targeted run identified the second and a superseding user question named both. Current State must name both; historical entry stays unchanged. Neither out-of-scope edit is authorized yet. |
+| S2-R1-C1 — missing baseline argument/result negatives | ACCEPTED. Add real SDK/host-adapter same-canary argument/result tests with finite run sources, full trace retained, plus separate observation assertions/scans so duplicate raw-response evidence cannot hide a missing tool-argument event. Also add an actual reference-client seeded-canary context case. |
+| S2-R1-C2 — fixture admission mutant first fails category | ACCEPTED PROOF LIMIT; strengthen in R1 absorption. R1 killed the mutation on category before reaching the wired signer assertion. Check actual downstream signer entry first, then category, and rerun. Shared signer remains independently rejecting; do not describe this as an accepted oversized signature. |
+| S2-R1-C3 — source-forgery mutant exhausts fake replies | ACCEPTED PROOF LIMIT; strengthen with a finite terminal second reply and explicit acceptance/rejection observation. Preserve R1's category-only failure. |
+| S2-R1-S2 — resultEvent guard regression | ACCEPTED; contingent on fixture scope approval. Restore the intended reaching input without weakening shape validation and mutation-prove omission of the synthesized resultEvent separately. |
+| S2-R1-P3 controls | Add appropriate fixed-wire parameter, endpoint/method/body, header-capture, deadline, valid-JSON non2xx and invalid-UTF8 controls/mutants. Independently redundant predicates/timers may have measured survivors; record those honestly rather than deleting another protection silently. |
+| S2-R1-P3 sizing assertions | Tighten serial1024 assertions to all six observed overflows and assert both fixed lookalike2048 failures versus four fitting stress cases. Run raw-signer deletion also against the full SDK serial diagnostic caller, not only byte boundaries. |
+| S2-R1-P3 redirect behaviour | Node/undici behaviour requires a real loopback probe; browser opaque-redirect semantics alone do not establish Node's result. Add SDK/actual-fetch redirect evidence with a no-follow observation. |
+| S2-R1-P3 stale/artifact documentation | Preserve `send-before-durable-append` as a superseded failed attempt; authoritative actual reorder mutant is `reorder-request-after-network`. Update obsolete S1 kickoff packet label/AM11 and make phase-plan text point to canonical SCHEMA details. |
+| S2-R1-P3 test-first evidence | ACCEPTED LIMIT: missing-module reports contain zero executed assertions, not mutant kills. Separately executed production mutants establish assertion sensitivity; do not relabel initial setup failures as dynamic negatives. |
+| S2-R1-P3 fixture-input digest | ACCEPTED LIMIT. Literal digests check replay equality; archive authenticity/provenance was independently verified at entry and by Codex R1. Default tests intentionally have no external archive prerequisite. `build-budget-fixtures.py` is the preserved initial fixture-extraction aid, not a current full-test regenerator or standalone gate. |
+| S2-R1-P3 source details | Remove unused capture-category member; retain sanitized SDK error wrapping with no raw provider error propagation. Schema validator is deliberately closed because every pinned shape has additionalProperties:false; keep that coupling explicit. Existing explicit loop callers retain their selected bound; no claim about future callers. |
+
+R1 reviewed limits remain: minimal synthetic response envelopes/IDs and narrow4194-byte minimum headroom;
+no certification of real provider ID/usage growth, usable S3 instructions or model batching. Actual S3/S5
+reruns and all real pilot/cohort rejection gates remain. Unbounded received-body buffering is bounded only
+by attempt time/provider output contract; the provider is trusted, and S2 does not claim an adversarial
+provider memory bound. No source cap/truncation change is adopted. S1 residuals and D-CANCEL stay intact.
+
+R1 evidence clarification after inspecting the native failure and patch: the unlisted
+`send-before-durable-append` artifact is an earlier **duplicate drop-append kill** (one assertion failure,
+38 filtered tests), not a collection/setup failure. Its promise incorrectly resolves because the append
+was removed. The canonical inventory renames that mutation `drop-durable-append`; the separate
+`reorder-request-after-network` patch actually moves the write after transport. Do not count the
+unlisted duplicate as a twenty-first distinct mutant or call it a failed tool execution. The prior
+row's “superseded failed attempt” wording refers to this superseded naming/evidence attempt; the
+underlying native test execution succeeded in detecting the deletion. Original reports remain unchanged.
+
+### S2 R1 absorption evidence — candidate for R2
+
+The durable sequence now advances after successful write, before fsync/close. Real-file tests first
+failed with duplicate sequences and now pass; failure before writing leaves the counter unconsumed.
+No evidence representation, schema, wire body, cap or deadline changed. The unused capture error-category
+member was removed without changing sanitized SDK-wrapped error behavior. Worker handoff:
+`/private/tmp/tinyvault-m6-s2-20260907/transport-r2/HANDOFF.md`.
+
+Transport host tests pass85/85; sandbox SDK/transcript tests pass59 with one loopback listenEPERM.
+The host actual Node fetch302 probe retained the body/status and observed zero redirect follows;
+its policy-deletion mutant observed two requests and one follow. Location-specific baseline argument/
+result scans and a real empty-source reference-client context scan now exercise the actual SDK adapter.
+Source-forgery removal now accepts the forged event with a finite terminal reply, replacing R1's
+fake-reply-exhaustion proof limit. Header absence is checked in events and JSONL with planted controls.
+
+New transport inventory:17 killed, three measured survivors. Removing either custom60s timer or
+SDK60s timeout leaves the other aborting; removing custom non2xx rejection leaves the SDK rejecting
+valid model JSON HTTP429. These are not isolated kills; joint-removal proof is not claimed. All native
+patches/configs/status/assertions are in `transport-r2/mutants/summary.json`. The preserved initial
+mutation-run selector mismatch is an orchestration failure, not a kill.
+
+Owner budget tests pass25/25 with all six serial1024 failures and exact fixed2048 expectations.
+Five size mutations are killed in `budget-mutants-r2/summary.json`: raw signer boundaries, full SDK
+serial trace signing, fixture admission, artifact signer and bridge frame. Fixture admission now fails
+at the wired signer-entry observation before checking the error category; the downstream signer remains
+independently rejecting. The full SDK serial signer deletion yields six missing-rejection assertions.
+All received diagnostics remain intact; none is reclassified as a successful signed trace.
+
+Fresh R2 reviews and owner full ordered checks remain pending. The two-line runner fixture exception
+is still awaiting explicit user authorization; no out-of-scope source was changed. The concrete proposed
+patch is `proposed-runner-fixture-correction.patch` under the evidence root. S2 exit is not claimed.
+
+The owner additionally validated that exact correction with an external Vite test transform, leaving
+`runner.wiring.test.ts` unchanged: three affected tests pass; separately omitting the synthesized
+resultEvent from its source guard produces one promise-resolved rejection failure (other two pass).
+Artifacts: `runner-fixture-probe/corrected-control.*` and `omit-result-event.*`. This is a proposed-fix
+control and mutation proof, not a passing checkout gate or authorization to apply the correction.
+Preservation audit confirms all129 SCHEMA claim spans match HEAD, historical register/archive bytes
+remain prefixes, Decisions Log is preserved, and HEAD/index are unchanged. The independent claims
+gate sandbox run passed152 and failed only the CORS loopback listenEPERM; host result is retained in
+`claims-r2-host.json`. Await the file-scope reply before applying the patch and freezing the final R2
+candidate for ordered integration checks and all three fresh fix-review channels.
+
+### S2 fixture exception approved and applied
+
+The user replied **“I approve”** to the concrete `proposed-runner-fixture-correction.patch` request.
+Owner applied only the two browser_snapshot inputs in `testbed/runner.wiring.test.ts:339` and `:372`,
+replacing `{value:'public'}` and `{}` with `{sessionId:'session'}`. Assertions and production files
+are unchanged by this exception. It authorizes no other S4/S5 source work. The required ordered
+targeted → typecheck → diff check → make test run and fresh R2 fix reviews follow on this candidate.
+
+The first ordered run after approval passed308/308 targeted tests, typecheck and diff check, then
+`make test` stopped at the Docker capability-import gate: the new actual Node redirect test directly
+imported node:http/node:net in an unallowlisted test file. Neither main nor timing suites ran. The
+worker is adapting that test to the existing approved fixture-server API within its current file;
+no capability policy/allowlist change is authorized or needed. This pre-R2 integration failure is
+retained in `make-test-r2-host.log` and `verification-r2.json`; copied old `.vitest` reports are explicitly
+labelled stale, not current passing evidence. Fresh R2 reviews await the corrected candidate.
+
+The redirect test now uses existing `startLoginFixture` with explicit POST302/GETfollow routes and
+`onListenPermissionError:'fail'`; the test requires HTTP reachability and forwards the SDK-selected
+fetch init unchanged. Direct capability imports were removed. Control passes; the same redirect-policy
+deletion still observes two requests/one follow. Capability gate, typecheck and diff check pass; exact
+commands/native artifacts are under `transport-r2-gate/verification.json`. No scanner or policy file
+changed. A new distinct ordered integration run follows; earlier gate failure remains preserved.
+
+### S2 R2 candidate — ordered integration PASS
+
+The corrected candidate passes targeted308/308 → typecheck → diff check → full `make test` exit0.
+Main has2486 passed, zero failed, one inherited skipped offline-eval-entry case; both serial timing
+stages and final test-execution gate pass. Exact commands/counts/native paths are in
+`verification-r2-integration.json` and `verification-r2-integration-commands.json`; full command log
+is `make-test-r2-integration-host.log`. Reports prefixed `r2-integration-` were copied only when freshly
+written during this run. Prior helper killEPERM did not recur; no cause or helper repair is asserted.
+
+The now-applied fixture's source-only resultEvent guard deletion fails the intended rejection assertion
+(two controls pass, one fails), recorded in `runner-fixture-probe/approved-omit-result-event.*`.
+Only loop.ts is transformed for this mutant; corrected fixture inputs are actual checkout bytes.
+All three fresh R2 fix reviews remain required before S2 exit. No API/cohort, Docker, clean-clone,
+S3 prompt or S5 final-command acceptance is claimed by this default local gate.
+
+## S2 R2 — owner acceptance with recorded residuals (2026-09-07)
+
+**S2 complete; all changes remain UNCOMMITTED.** Reviewed candidate digest:
+`c8b6fe049afcc182bf08f383b88c345397b49d092b0857d6e933912c4c886975`;339-file inventory independently
+matched by Codex and rechecked by the owner after both Claude processes completed. Exact executable
+source stayed frozen; subsequent changes are owner disposition/status prose only.
+
+| Independent channel | Actual reviewer/session | Verdict |
+| --- | --- | --- |
+| Claude QA | claude-opus-5; `a939560e-683b-442e-96ab-0b4e40317c11` | PASS |
+| Claude security | claude-opus-5; `0cdebc42-c2dc-479d-9c40-2f5987b9685a` | NEEDS-ATTENTION, retained |
+| Fresh Codex adversarial | `/root/s2_adversarial_r2` | PASS; no new actionable P1/P2/P3 |
+
+Reports: `claude-r2-qa/report.md`, `claude-r2-security/report.md`, `codex-r2-report.md` under
+`/private/tmp/tinyvault-m6-s2-20260907`. All reviewers were read-only and ran no tests. Actual reviewer
+model identity is in helper summaries/events; auxiliary Haiku metadata is not reviewer output.
+Security explicitly found no current security blocker if its three low-severity items are dispositioned.
+Owner assessed each item below on reachability and evidence; neither its NEEDS-ATTENTION verdict nor
+the older D-BUDGET review is rewritten as PASS. QA referred to final-round P1 criteria although this is
+R2; acceptance here rests on verified fixes and these bounded dispositions, not premature use of a cap.
+
+| R2 item | Owner disposition and practical limit |
+| --- | --- |
+| Security S-1: afterLoop drain lacks source-forgery guard | ACCEPTED RESIDUAL, currently unreachable. Production drain is trusted host evidence; current host producers do not emit model-text/internal, while real-profile sources are restricted to those finite tuples by evalAgents. No model-controlled producer can match them today. Before S3–S5 adds a host model-text producer or widens source tuples, this asymmetry needs a separate guard/invariant proof. Not described as protected by the per-tool guard. |
+| Security S-2 / QA torn-write gap | ACCEPTED DIAGNOSTIC LIMIT. Tests prove a successful whole-line write followed by sync/close failure, and a rejected write that produced no bytes. They do not prove atomic writes, torn-write recovery or crash consistency. Partial writes can corrupt JSONL; the run remains failed/unqualified. No claim that every write rejection leaves a parseable diagnostic. |
+| QA appendSerialized sequence gap | ACCEPTED PRE-EXISTING DIAGNOSTIC LIMIT. Its increment-before-append ordering can leave gaps after append failure, including a failed SDK-response append followed by drain. The run already fails; parity also requires loop-complete. No accepted evidence or leak verdict is made passing by the gap. This round fixed the newly added durable request path, not all filesystem failure recovery. |
+| Security S-3: declaration-drift mutation missing | CLOSED BY ADDITIONAL EXECUTED EVIDENCE, no source/test edit. External same-length description drift independently kills native and normalized hash assertions, with the native value preserved in the normalized-only case. Both byte-length checks still pass; the expected hashes fail at anthropicClient.test.ts:61 and:64. Clean control passes. Exact native reports/configs/patches/commands: declaration-drift-r2/summary.json. |
+| QA loopback prerequisite | ACCEPTED ENVIRONMENT REQUIREMENT for this real Node transport probe. Existing fixture API explicitly fails on unavailable listening and the test requires HTTP reachability. Sandbox EPERM remains a failure, not a substitute pass; host default gate is green. API credentials/provider network and Docker are still unnecessary for default tests. |
+| QA vetted manifest / security dependency expansion | RECORDED SUPPLY-CHAIN LIMIT. Exact SDK0.124.0 and integrity-pinned production transitives enlarge the dependency tree. The SDK supplies the required auditable Messages API transport; no vetted-manifest claim is made. That manifest applies to the supervisor boundary, which does not reach anthropicClient. No gate scope/allowlist was widened. |
+| Reference empty-source case | Correct for the reference profile's zero-source contract; tests prove actual reference bootstrap/context delivery and scanning. It is not evidence for a populated reference exemption set, which the real-profile consumer rejects. S3 actual profile construction and S5 wiring remain due. |
+| Redundant timers/HTTP status | Three measured isolated survivors remain recorded. Current positive tests prove rejection/abort, but no joint-removal mutation is claimed; no surviving predicate was removed to manufacture a kill. |
+
+R1 absorption is verified by all three channels: durable sequencing, actual same-canary target-channel
+scans, finite forged-acceptance observation, approved resultEvent reaching test, signer-entry observation,
+fixed wire fences, header controls, deadline/UTF8/real Node redirect checks and exact stress outcomes.
+The full ordered acceptance remains targeted308/308, typecheck, diff check, main2486/0/1 inherited skip,
+serial timings5/5 and10/10, final execution gate and `make test` exit0. Declaration drift was checked
+after review without modifying the reviewed source or the passing candidate; no R3 source repair or
+additional implementation review round was needed. No completed S1/paper/M5.2 cap was reopened.
+
+Minimum AM11 raw headroom remains4194 bytes with minimal synthetic envelopes; all six serial1024/2048
+overflow diagnostics and the complete1409051-byte16-turn diagnostic remain unsigned. Fixed2048 has
+two lookalike failures and four fitting traces. The witnesses were selected after serial measurements;
+they are not independent model samples. S3 exact usable prompt/bootstrap sizing, S5 actual command
+repetition and every intact real pilot/cohort gate remain mandatory, with no replacement/resampling.
+The current broader baseline context exemptions depend on non-exempt observations for every content
+class; R2 proves the named argument/result classes, not a general future-producer theorem.
+
+All inherited S1-R3 source/provenance/test-proof limits, finite capture/decoder limits, postcapture-only
+signature integrity, trusted-provider buffer limit and D-CANCEL OPEN remain. No live provider, Docker
+exchange, clean clone, cohort, recording, S3 prompt or S5 command acceptance was run. S2 completion
+does not authorize any of that work or S3 implementation.
+
+**Deviations From Handoff:** exactly the user-approved two fixture-input corrections in
+runner.wiring.test.ts; assertions unchanged. No other source-scope deviation, gate weakening,
+branch/index/commit/push/release action. Full evidence and exact reviewed source snapshots are
+preserved in ignored `artifacts/review-evidence/tinyvault-m6-s2-20260907.tar.gz` with manifest/checksum
+companions; the external evidence directory remains available. Final preservation checks are recorded
+in `final-preservation.json`.
+
+### S2 checkpoint publication authorization — 2026-09-07
+
+After the readiness assessment explicitly distinguished fixes from retained residuals, the user
+instructed **“let's go ahead and commit and push”**. The owner rechecked the exact reviewed source,
+approved two-input fixture diff, all129 unchanged claim spans, preserved historical document prefixes
+and empty index; live origin/main and local HEAD both equalled the entry/tested base105e75f.
+This authorizes the S2 checkpoint and its preserved continuity documents on main. Earlier UNCOMMITTED
+and no-publication statements above are historical checkpoints, superseded only for this operation.
+The final committed SHA, verification and remote equality are recorded in the Git publication receipt
+under `/private/tmp/tinyvault-m6-s2-20260907`; no security verdict, residual or later-slice gate changes.
