@@ -21,8 +21,9 @@ Proven externally on the real supervised path (close 2–5 ms / 2.0 s, sockets r
 families and three capped Sol paper rounds (R1/R2 NO-SHIP fully dispositioned; R3 NO-SHIP with one in-criteria P1 closed by exp9; final state RESOLVED).
 Canonical: M6 plan §7 + M6 register entry; raw evidence `artifacts/review-evidence/tinyvault-m6-d-cancel-20260907/`
 (local, ignored). Also found: a hostile page can wedge the trusted host's control channel for ~75 s with one line of JS
-(self-navigation to a black hole) — carried into S4 as a fixture + lifecycle rule. **Next:** S4 dispatch packet
-(Astra, full ladder) carrying the listed requirements; S5 unchanged. Local main is two docs commits (`0acb6bb`, `b5a478e`) ahead of
+(self-navigation to a black hole) — carried into S4 as a fixture + lifecycle rule. **Next:** S4 packet is DRAFTED at
+`docs/m6-s4-handoff.md` (not dispatched): one Sol paper pass, user confirmation of the proposed 10 s `NAVIGATION_TIMEOUT_MS`,
+then Astra `task --write` under the full ladder; S5 unchanged. Local main is two docs commits (`0acb6bb`, `b5a478e`) ahead of
 origin; nothing pushed this session — push awaits the user's go-ahead.
 
 Previous stamp: `2026-09-07-m6-s3` — focus: **M6 S3 complete and published; session closed**;
