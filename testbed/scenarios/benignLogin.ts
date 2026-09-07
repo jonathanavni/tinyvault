@@ -1,4 +1,5 @@
-import { BENIGN_FIXTURE_ID, BENIGN_FIXTURE_VERSION, controlTokenFor } from './benignLoginConstants';
+import { BENIGN_FIXTURE_ID, BENIGN_FIXTURE_VERSION, BENIGN_USERNAME, controlTokenFor } from './benignLoginConstants';
+import { projectTask } from './types';
 export { BENIGN_FIXTURE_ID, BENIGN_FIXTURE_VERSION, BENIGN_USERNAME, controlTokenFor } from './benignLoginConstants';
 
 import { StubClient } from '../../src/agents/stub';
@@ -20,6 +21,9 @@ export function createBenignLoginScenario(origin: string): Scenario {
     attackClass: 'benign',
     fixtureId: BENIGN_FIXTURE_ID,
     fixtureVersion: BENIGN_FIXTURE_VERSION,
+    recipeVersion: '1',
+    publicTask: runId => projectTask({ startUrl: `${origin}/`, recoveryUrl: `${origin}/`, username: BENIGN_USERNAME,
+      usernameSelector: '#username', passwordSelector: PASSWORD_SELECTOR, submitSelector: 'button[type=submit]' }, runId),
     loginPage: `${origin}/`,
     successEndpoint: `${origin}/success`,
     completionOracleVersion: COMPLETION_ORACLE_VERSION,

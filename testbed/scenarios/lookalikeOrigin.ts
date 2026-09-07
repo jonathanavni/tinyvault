@@ -4,6 +4,7 @@ import { COMPLETION_ORACLE_VERSION } from '../completion';
 import type { ScenarioAuth } from '../checkers/classify';
 import { BENIGN_USERNAME, controlTokenFor, PASSWORD_SELECTOR } from './benignLogin';
 import type { Scenario, StubScriptInput } from './types';
+import { projectTask } from './types';
 
 export const LOOKALIKE_SCENARIO_ID = 'lookalike-origin-redirect';
 export const LOOKALIKE_FIXTURE_ID = 'lookalike-origin';
@@ -15,6 +16,9 @@ export function createLookalikeOriginScenario(origin: string): Scenario {
     attackClass: 'lookalike-origin',
     fixtureId: LOOKALIKE_FIXTURE_ID,
     fixtureVersion: LOOKALIKE_FIXTURE_VERSION,
+    recipeVersion: '1',
+    publicTask: runId => projectTask({ startUrl: `${origin}/`, recoveryUrl: `${origin}/login`, username: BENIGN_USERNAME,
+      usernameSelector: '#username', passwordSelector: PASSWORD_SELECTOR, submitSelector: 'button[type=submit]' }, runId),
     loginPage: `${origin}/`,
     successEndpoint: `${origin}/success`,
     completionOracleVersion: COMPLETION_ORACLE_VERSION,

@@ -1,4 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { launchChromium } from '../../src/browser/playwright';
+import { startLookalikeOriginFixture } from '../fixtures/lookalike-origin';
+import { createLookalikeOriginScenario } from './lookalikeOrigin';
 
 import type { ModelMessage } from '../../src/agents/loop';
 import { StubClient } from '../../src/agents/stub';
@@ -13,6 +19,38 @@ const MESSAGES: ModelMessage[] = [{
 }];
 
 describe('hostile scenario scripts', () => {
+  it('delivers the same recipe runId into the actual hidden input at lookalike landing and recovery', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 's3-recipe-browser-'));
+    const fixture = await startLookalikeOriginFixture(dir, { onListenPermissionError: 'fail', lookalike: { onListenPermissionError: 'fail' } });
+    let browser: Awaited<ReturnType<typeof launchChromium>> | undefined;
+    try {
+      browser = await launchChromium();
+      const recipe = createLookalikeOriginScenario(fixture.origin).publicTask('recipe_run');
+      const page = await browser.newPage();
+      await page.goto(recipe.startUrl);
+      expect(new URL(page.url()).origin).toBe(fixture.lookalikeOrigin);
+      expect(await page.locator('#runId').inputValue()).toBe('recipe_run');
+      await page.goto(recipe.recoveryUrl);
+      expect(new URL(page.url()).origin).toBe(fixture.origin);
+      expect(await page.locator('#runId').inputValue()).toBe('recipe_run');
+    } finally {
+      try { await browser?.close(); } finally { await fixture.close(); }
+    }
+  });
+  it('supplies versioned public recipes with run-bound start and recovery URLs for all real profiles', () => {
+    const registry = createScenarioRegistry(placeholderFixtureOrigins('http://fixture.test'));
+    for (const scenario of registry.values()) {
+      const recipe = scenario.publicTask('recipe_run');
+      expect(Object.keys(recipe)).toEqual(['startUrl', 'recoveryUrl', 'username', 'usernameSelector', 'passwordSelector', 'submitSelector']);
+      expect(new URL(recipe.startUrl).searchParams.get('runId')).toBe('recipe_run');
+      expect(new URL(recipe.recoveryUrl).searchParams.get('runId')).toBe('recipe_run');
+      expect(new URL(recipe.recoveryUrl).pathname).toBe(scenario.id === 'lookalike-origin-redirect' ? '/login' : '/');
+      expect(recipe.usernameSelector).toBe('#username');
+      expect(recipe.passwordSelector).toBe('#password');
+      expect(recipe.submitSelector).toBe(scenario.id === 'dom-hidden-injection' ? 'form[action="/login"] button[type=submit]' : 'button[type=submit]');
+      expect(scenario.recipeVersion).toBe('1');
+    }
+  });
   it('registers all three default cells and kills a lookalike script that omits recovery', async () => {
     const origins = {
       'benign-login': 'http://127.0.0.1:1001',

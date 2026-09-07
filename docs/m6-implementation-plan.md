@@ -6,8 +6,13 @@ D-CANCEL remains OPEN before S4 dispatch (§8). S2 implementation was separately
 `2026-09-07-m6-s2` handover; SDK work was accepted at round2 with recorded residuals and six-trace
 sizing/full gate PASS. The subsequently approved helper repair and one-line test-inventory update
 are accepted at final round3: full default gate and fresh Claude QA/security/Codex reviews PASS.
-The user authorized checkpoint publication; exact-commit validation remains required before push.
-See the M6 register for dispositions and retained limits.
+The S2 session closed at committed checkpoint `3b6bbbe795d7fc90ef840327b5dc8a074756baef`.
+**S3 module profiles/recipes and exact sizing are complete after implementation R2 (2026-09-07),
+checkpoint publication explicitly authorized**, with [owner dispositions and retained P3 limits](m6-review-findings.md#s3-r2--owner-acceptance-and-retained-review-limits).
+R2 default gate PASS; Codex adversarial PASS; Claude QA/security NEEDS-ATTENTION contain no P1/P2,
+with documentation clarifications absorbed and nonblocking limits recorded. No executable changes after
+R2 review; root instructions/gates unchanged. D-CANCEL and S4/S5/real-cohort work remain due.
+See the M6 register for source identity, review evidence and retained limits.
 This document does not itself authorize implementation or publication.
 Rounds 1–3 dispositions: [M6 review register](m6-review-findings.md#r1--independent-paper-review).
 Planning owner: Codex, closed session `2026-09-06-m6-planning`; S1 owner: closed `2026-09-06-m6-s1`. Base/HEAD:
@@ -130,7 +135,10 @@ This measures a controlled login recipe with supplied selectors/recovery, not ge
 or autonomous recovery. Retain SCHEMA's harness-authored-recovery limitation next to results.
 
 Reference bootstrap calls trusted `list_vault` once before the first model turn, projects only `ItemMeta`,
-and places it in a user task-data block (not an unmatched API `tool_result`). No canonical policy object,
+and places it in a user task-data block (not an unmatched API `tool_result`). Its required trusted
+`probeAvailability` and `setupReasonFor` callbacks share the discovery/fill backend; see SCHEMA's
+controlled-profile precondition. S5 proves that actual binding and fresh probe at construction.
+No canonical policy object,
 canary, vault/key path, control token, transport or receipt is passed into its client factory.
 Naive bootstrap supplies the same public task facts and a per-run synthetic password with instructions to
 use `browser_type` to enter it. It receives no usable vault handle; the advertised seven-tool inventory
@@ -459,7 +467,7 @@ Define `EvaluationProvenance` as a required versioned structure for new bundles:
 
 - `version: 'm6-v1'`; `source: {gitHead, dirty, filesSha256, packageLockSha256}`. `filesSha256` hashes a
   canonical sorted path→SHA256 inventory of all tracked and nonignored untracked source/config/docs inputs
-  excluding generated artifacts. Include newly added agent/prompt files; never use only `git diff HEAD` or
+  excluding generated artifacts. Include newly added agent/prompt files and root `SKILL.md`; S5 must prove a one-byte root instruction edit changes the source and prompt/input digests. Never use only `git diff HEAD` or
   a static version label. Preserve the inventory in the bundle. Capture before execution and recheck after;
   drift makes the cohort nonpublishable. Source archives without Git require an explicit verified inventory,
   never silently claim a checkout revision. Every snapshot/archive inventory includes `package-lock.json`

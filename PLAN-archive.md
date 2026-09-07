@@ -734,3 +734,58 @@ before S2 source implementation. Do not reopen S1/paper/M5.2 reviews. No live-ag
 Raw native/review evidence is preserved in local ignored `artifacts/review-evidence/tinyvault-m6-s1-20260906.tar.gz`
 with a verified manifest and checksum recorded in the M6 register. This local archive is not pushed to
 GitHub. Durable commands, outcomes and residual dispositions are in the register; failed attempts remain.
+
+
+## 2026-09-07-m6-s2 — SDK transport and helper repair (archived 2026-09-07)
+
+Verbatim pre-wrapup Current State follows. Its pending-publication wording is historical: both
+2892973 and3b6bbbe were subsequently pushed, exact-commit full verification passed, and remote main
+was reverified at3b6bbbe before this wrapup. The new PLAN checkpoint relinquishes ownership.
+
+`2026-09-07-m6-s2` — focus: **M6 S2 only: actual SDK transport and AM11 feasibility**;
+owner: codex; **state: active** (2026-09-07), accepted from CLOSED `2026-09-07-m6-d-budget`.
+State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`; main; entry base
+`105e75fa58a3548662646884669aec3efd49e978`; S2 checkpoint commit
+`289297335853275d54ebdfd92537455ac0623362`. **S2 and the bounded helper repair are accepted at
+final S2 implementation round3.** The user authorized committing and pushing both changes, including
+preserved continuity documents. Exact committed verification and remote equality are recorded in
+`/private/tmp/tinyvault-m6-s2-20260907/publication-receipt.json`; publication requires that gate to pass.
+Release and later-slice work remain unauthorized.
+
+**Outcome:** actual Anthropic SDK0.124.0 transport, durable request fence, full received wire capture,
+exact seven declarations/whole-response validation, native message ordering, trusted source identities
+and bounded admission are implemented. All six fixed1024 AM11 witnesses fit intact; largest126878 raw
+bytes,4194 headroom. Serial/stress/16-turn overflow diagnostics remain unsigned and complete.
+This is finite SDK feasibility with verified historical fixture observations, not live LLM completion.
+
+**Verification/reviews:** R2 S2 acceptance passed targeted308, main2486/0/1 inherited skip, timings5+10
+and full make test. Claude QA/fresh Codex PASS; R2 Claude security NEEDS-ATTENTION remains retained
+with explicit nonblocking owner dispositions. Exact-commit publication then reproduced helper signal
+EPERM and was held. The approved repair records signal failures, preserves primary failure/status,
+and waits for actual child close. The approved inventory assertion changes6-to10 for four new tests.
+R3 passes targeted320, typecheck, diff check, main2490/0/1 inherited skip, timings5+10, final execution
+gate and make test exit0. Fresh Claude Opus5 QA/security and Codex adversarial all PASS on the same
+frozen candidate. Seven helper mutants are killed with passing controls, including post-review
+escalation deletion; the inventory pin has a separate expected-rejection/deletion proof. Native prior
+failures and all evidence are preserved. Canonical dispositions: M6 register's final S2 R3 entry.
+
+**Approved exceptions:** exactly two browser_snapshot input corrections in
+`testbed/runner.wiring.test.ts:339` and `:372`, assertions unchanged; then bounded helper repair in
+`scripts/claude-review.mjs` and `.test.mjs`, plus one inventory assertion/message in
+`scripts/gate-cli.selftest.mjs`. All260 executable/package files were compared against2892973:
+only those three scripts differ for the repair. No S2 SDK source changed in R3.
+
+**Remaining scope/limits:** S3 exact usable prompt/bootstrap sizing, S5 final command wiring and intact
+real pilots/cohorts remain mandatory. Thin4194-byte synthetic-envelope headroom is not a real-provider
+margin. D-CANCEL remains OPEN before S4. Preserve all S1 residuals/caps, diagnostic write-failure limits
+and the currently unreachable drain-source guard asymmetry. The helper can still wait indefinitely if
+a child or pipe-holding descendant stays alive and both signals fail; no privileged or bounded cleanup
+claim is made. Mixed-signal/UNKNOWN/Windows and empty-message sentinel proof limits are recorded.
+Real48/100 EPERM probes establish an exit-timing window and later child close, not a kernel cause.
+No live cohort, Docker/clean-clone acceptance, later-slice source, root SKILL prompt or release occurred.
+
+**Ownership/preservation:** Codex retains this active checkpoint pending next direction; S2 completion
+does not authorize S3. Inherited owner documents and historical register/log entries are preserved.
+Implementation and review workers are finished. Evidence root: `/private/tmp/tinyvault-m6-s2-20260907`;
+immutable prior archive `artifacts/review-evidence/tinyvault-m6-s2-20260907.tar.gz`, with the final R3
+publication supplement stored separately. Codex retains integration and Git publication ownership.

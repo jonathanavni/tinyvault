@@ -507,7 +507,7 @@ describe('Slice6 deployment wording', () => {
     });
   }
   it('O-wording scans current publishable documentation and source comments', async () => {
-    const surfaces = await Promise.all(['SCHEMA.md', 'README.md'].map(async (file) => ({ name: file,
+    const surfaces = await Promise.all(['SCHEMA.md', 'README.md', 'SKILL.md'].map(async (file) => ({ name: file,
       text: await readFile(resolve(root, file), 'utf8') })));
     for (const directory of ['src', 'testbed', 'scripts']) {
       const files = await readdir(resolve(root, directory), { recursive: true });

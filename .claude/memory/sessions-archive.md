@@ -76,3 +76,10 @@ running code. (commits `9f216b0`..`6a6b67c`)
   review dispositions, hashes and approval live in M6 plan §4.3.1/register. User authorized fresh S2-only
   implementation in the same checkout; eight dirty owner docs preserved, no source/commit/push/release.
   S1 residuals and completed review caps retained; D-CANCEL OPEN S4.
+
+- **2026-09-07 (`2026-09-07-m6-s2`, Codex owner, closed)** — S2 SDK transport/AM11 feasibility and
+  bounded helper repair accepted;2892973 and3b6bbbe pushed, remote equality verified. Exact-commit
+  full gate2490+one inherited skip and15 timing PASS; final R3 QA/security/Codex PASS. Canonical
+  findings/evidence/limits in M6 register; no active jobs. Five wrapup documents uncommitted. Fresh
+  next step: read-only kickoff and S3-only proposal; implementation awaits scope authorization,
+  D-CANCEL OPEN before S4, no repeated completed ladders or release.

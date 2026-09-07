@@ -13,6 +13,13 @@ import { baselineSecretSourcesForRun } from './evalAgents';
 import { signEventsDigest, verifyEventsDigest } from './fixtures/shared/eventsDigest';
 import { startFixtures, type FixtureSet } from './fixtures';
 import { encodeFrame } from './docker/frames';
+import { createReferenceProfile } from '../src/agents/reference';
+import { createNaiveBaselineProfile } from '../src/agents/naiveBaseline';
+import { runAgentProfile } from '../src/agents/prompt';
+import type { ItemMeta } from '../src/core/types';
+import { createBenignLoginScenario } from './scenarios/benignLogin';
+import { createLookalikeOriginScenario } from './scenarios/lookalikeOrigin';
+import { createDomHiddenInjectionScenario } from './scenarios/domHiddenInjection';
 
 vi.mock('./fixtures/shared/eventsDigest', async original => {
   const actual = await original<typeof import('./fixtures/shared/eventsDigest')>();
@@ -87,12 +94,16 @@ function accounting(events: CapturedEventInput[], task: unknown, system: string)
     allPromptBootstrapEscapedBytes:promptEscapedBytes+bootstrapEscapedBytes };
 }
 
-async function trace(witness: Witness, allowance: number, serial: boolean) {
-  const taskBytes = Buffer.byteLength(JSON.stringify(witness.task));
+type ExactProfile = Extract<Awaited<ReturnType<typeof createReferenceProfile>>, {status:'ready'}>
+  | ReturnType<typeof createNaiveBaselineProfile>;
+async function trace(witness: Witness, allowance: number, serial: boolean, profile?: ExactProfile) {
+  const task = profile?.bootstrapTask ?? witness.task;
+  const taskBytes = Buffer.byteLength(JSON.stringify(task));
   expect(taskBytes).toBeLessThanOrEqual(allowance);
-  const system = 'P'.repeat(allowance - taskBytes);
-  expect(Buffer.byteLength(system) + taskBytes).toBe(allowance);
-  const id = `${witness.runId}-${serial ? 'serial' : 'fixed'}-${allowance}`;
+  const system = profile?.system ?? 'P'.repeat(allowance - taskBytes);
+  if (profile) expect(Buffer.byteLength(system) + taskBytes).toBeLessThanOrEqual(allowance);
+  else expect(Buffer.byteLength(system) + taskBytes).toBe(allowance);
+  const id = `${witness.runId}-${profile ? 's3-exact' : serial ? 'serial' : 'fixed'}-${allowance}`;
   const path = join(evidenceRoot, id);
   const transcript = await TranscriptWriter.create(`${path}.jsonl`, `${path}.events.json`);
   const schedule = serial ? [...witness.calls.map(() => 1), 0]
@@ -119,15 +130,20 @@ async function trace(witness: Witness, allowance: number, serial: boolean) {
       return new Response(response, {status:200,headers:{'content-type':'application/json','request-id':`req_budget_${turn}`}});
     },
   });
-  const result = await runAgentLoop({ client, transcript, runId:witness.runId,
-    messages:[{role:'user',content:witness.task}], maxTurns:16,
-    secretSources:witness.profile === 'naive-baseline' ? baselineSecretSourcesForRun(witness.runId,16) : [],
-    executeTool:call => {
+  const executeTool = (call: ToolCall) => {
       const expected = witness.calls[executed++];
       expect(call).toEqual(expected.call);
       return {result:structuredClone(expected.result),events:structuredClone(expected.events)};
-    }, afterLoop:async () => [],
-  });
+  };
+  const result = profile
+    ? await runAgentProfile(profile, { createClient: args => {
+      expect(args).toEqual({system,runId:witness.runId}); return client;
+    }, transcript, executeTool, afterLoop:async () => [] })
+    : await runAgentLoop({ client, transcript, runId:witness.runId,
+      messages:[{role:'user',content:task}], maxTurns:16,
+      secretSources:witness.profile === 'naive-baseline' ? baselineSecretSourcesForRun(witness.runId,16) : [],
+      executeTool, afterLoop:async () => [],
+    });
   expect(result.stopReason).toBe('complete');
   expect(result.turns).toBe(schedule.length);
   expect(executed).toBe(witness.calls.length);
@@ -145,7 +161,7 @@ async function trace(witness: Witness, allowance: number, serial: boolean) {
   }
   const raw = await readFile(`${path}.events.json`);
   expect(raw.toString()).toBe(`${JSON.stringify(events,null,2)}\n`);
-  const counts = accounting(events,witness.task,system);
+  const counts = accounting(events,task,system);
   expect(Object.values(counts.byKind).reduce((a,b)=>a+b,0)+counts.arrayAdjustment).toBe(raw.length);
   const fixture = fixtures[witness.fixtureId as keyof FixtureSet]!;
   // Fresh registration and the real fixture transport/signing path used by runnerExecution.runOnce.
@@ -170,6 +186,8 @@ async function trace(witness: Witness, allowance: number, serial: boolean) {
   const responseFrameBytes = signed ? encodeFrame({v:1,kind:'res',id:Number.MAX_SAFE_INTEGER,op:'attest',ok:true,body:{attestation:signed}}).length : null;
   expect(Buffer.byteLength(witness.receipt)).toBeLessThanOrEqual(262144);
   const measurement = {id,rawBytes:raw.length,allowance,turns:result.turns,qualifiedDeterministicWitness:!!signed,
+    systemBytes:Buffer.byteLength(system),bootstrapBytes:taskBytes,
+    exactProfile:!!profile,systemSha256:digest(system),bootstrapSha256:digest(JSON.stringify(task)),
     signedBytes:signed ? Buffer.byteLength(signed):null,receiptBytes:Buffer.byteLength(witness.receipt),
     bridgePayloadBytes,bridgeFrameBytes:bridgePayloadBytes+4,responseFrameBytes,...counts};
   await writeFile(`${path}.measurement.json`,JSON.stringify(measurement,null,2));
@@ -191,6 +209,72 @@ describe('AM11 actual SDK finite witness sizing', () => {
       expect(fixedStress.qualifiedDeterministicWitness).toBe(witness.fixtureId !== 'lookalike-origin');
       const serialStress=await trace(witness,2048,true);
       expect(serialStress.qualifiedDeterministicWitness).toBe(false);
+    });
+  }
+});
+
+it('S3 pins the complete six custody and scenario witness identities', () => {
+  expect(witnesses.map(witness => `${witness.scenario}/${witness.profile}`).sort()).toEqual([
+    'benign-login-control/reference-agent', 'benign-login-control/naive-baseline',
+    'lookalike-origin-redirect/reference-agent', 'lookalike-origin-redirect/naive-baseline',
+    'dom-hidden-injection/reference-agent', 'dom-hidden-injection/naive-baseline',
+  ].sort());
+});
+
+it('S3 measures cohort-shaped identity sensitivity without selecting the S5 identity format', async () => {
+  const witness = witnesses.find(w => w.scenario === 'dom-hidden-injection' && w.profile === 'reference-agent')!;
+  const scenario = createDomHiddenInjectionScenario(new URL(witness.task.startUrl as string).origin);
+  const skillText = await readFile(new URL('../SKILL.md',import.meta.url),'utf8');
+  const items = (witness.task.inventory as {items:ItemMeta[]}).items;
+  const prepare = (runId:string) => createReferenceProfile({runId,task:scenario.publicTask(runId),skillText,
+    vault:{list_vault:async () => ({items}),request_vault_setup:async () => ({instruction:'Fixed setup guidance.'})},
+    probeAvailability:async () => ({available:true}), setupReasonFor:async () => 'backend_unavailable'});
+  // These are finite synthetic IDs, not a production cohort-entropy or formatting decision.
+  const fitting = await prepare(`cohort01-${scenario.id}-tinyvault-ref-0`);
+  expect(fitting.status).toBe('ready');
+  if (fitting.status !== 'ready') throw new Error('Unexpected setup blocker');
+  expect(Buffer.byteLength(fitting.system)+Buffer.byteLength(JSON.stringify(fitting.bootstrapTask))).toBeLessThanOrEqual(1024);
+  await expect(prepare(`cohort0123456789abcdef-${scenario.id}-tinyvault-ref-0`)).rejects.toThrow('1024');
+  const base = await prepare(witness.runId);
+  if (base.status !== 'ready') throw new Error('Unexpected setup blocker');
+  const headroom = 1024-Buffer.byteLength(base.system)-Buffer.byteLength(JSON.stringify(base.bootstrapTask));
+  const additional = Math.floor(headroom/2);
+  expect((await prepare(witness.runId+'x'.repeat(additional))).status).toBe('ready');
+  await expect(prepare(witness.runId+'x'.repeat(additional+1))).rejects.toThrow('1024');
+});
+
+describe('S3 exact usable profile SDK sizing', () => {
+  for (const witness of witnesses) {
+    it(`fits exact instructions and recipe ${witness.scenario} ${witness.profile}`, async () => {
+      const origin = new URL(witness.task.startUrl as string).origin;
+      const scenario = witness.fixtureId === 'benign-login' ? createBenignLoginScenario(origin)
+        : witness.fixtureId === 'lookalike-origin' ? createLookalikeOriginScenario(origin)
+        : createDomHiddenInjectionScenario(origin);
+      const task = scenario.publicTask(witness.runId);
+      const {inventory: _inventory,password: _password,...historicalTask} = witness.task;
+      expect(task).toEqual(historicalTask);
+      let profile: ExactProfile;
+      if (witness.profile === 'naive-baseline') {
+        profile = createNaiveBaselineProfile({runId:witness.runId,task,password:witness.task.password as string});
+      } else {
+        const skillText = await readFile(new URL('../SKILL.md',import.meta.url),'utf8');
+        const items = (witness.task.inventory as {items:ItemMeta[]}).items;
+        const setup = vi.fn(async () => ({instruction:'Fixed synthetic setup guidance.'}));
+        const prepared = await createReferenceProfile({runId:witness.runId,task,skillText,
+          vault:{list_vault:async () => ({items}),request_vault_setup:setup},
+          probeAvailability:async () => ({available:true}), setupReasonFor:async () => 'backend_unavailable'});
+        expect(prepared.status).toBe('ready');
+        if (prepared.status !== 'ready') throw new Error('Unexpected setup blocker');
+        expect(setup).not.toHaveBeenCalled();
+        expect(prepared.system).toBe(skillText);
+        profile = prepared;
+      }
+      expect(profile.bootstrapTask).toEqual(witness.task);
+      const measured = await trace(witness,1024,false,profile);
+      expect(measured.exactProfile).toBe(true);
+      expect(measured.rawBytes).toBeLessThanOrEqual(131072);
+      expect(measured.qualifiedDeterministicWitness).toBe(true);
+      expect(measured.bridgePayloadBytes).toBeLessThanOrEqual(262144);
     });
   }
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { StubClient } from '../../src/agents/stub';
 import type { Scenario } from './types';
+import { createBenignLoginScenario } from './benignLogin';
 import { createScenarioRegistry, scenarioFromRegistry } from '.';
 
 function poisonedScenario(secretSources: ReturnType<Scenario['authForRun']>['secretSources']): Scenario {
@@ -10,6 +11,8 @@ function poisonedScenario(secretSources: ReturnType<Scenario['authForRun']>['sec
     attackClass: 'benign',
     fixtureId: 'benign-login',
     fixtureVersion: '1',
+    recipeVersion: '1',
+    publicTask: createBenignLoginScenario('http://fixture.test').publicTask,
     stubScript: (input) => StubClient.safeLogin(input),
     loginPage: 'http://fixture.test/',
     successEndpoint: 'http://fixture.test/success',

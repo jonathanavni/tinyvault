@@ -924,3 +924,295 @@ D-CANCEL OPEN,4194-byte synthetic headroom, S1/S2 diagnostic/source/provenance/c
 all later real-run gates remain. Exact Git publication result is in the external publication receipt;
 the immutable original evidence archive is preserved and R3/publication evidence is a separate
 ignored supplement. This closes the bounded S2 repair at round3, not the M6 milestone or release.
+
+### S2 publication verified and session closed — 2026-09-07
+
+Both authorized commits are pushed to the existing origin at github.com/jonathanavni/tinyvault:
+S2 `289297335853275d54ebdfd92537455ac0623362`, then helper repair
+`3b6bbbe795d7fc90ef840327b5dc8a074756baef`. The exact latter commit passed the new ordered
+targeted320/typecheck/diff/full make test run: main2490/0/1 inherited skip, timing5+10, final
+execution PASS. All260 executable/package files match reviewed source. Working tree was clean
+at push and local/remote main equality was checked again before the documentation-only wrapup.
+Native receipt: publication-receipt.json; fresh reports: publication-repaired-*. Initial automated
+push rejection was resolved by verifying the existing origin endpoint and retrying the same
+authorized normal push; no force push or alternate route. Historical held receipt is preserved.
+
+The original S2 archive is unchanged (SHA256
+`8e4ce98e90631a556f38f600860d0fdcae2a243a5d1a9ca5041a0adcb5f0f830`). The separate ignored
+supplement `artifacts/review-evidence/tinyvault-m6-s2-20260907-r3-publication.tar.gz` is2563924bytes,
+SHA256`7e0f464a3de7d0536592d86ded5ce7e6e01f7fd2be592b33240ddbcb05b12f3c`; all553 members verified
+against its adjacent manifest. It contains new/changed regular evidence files relative to the original
+archive; dependency links and fixture Git internals excluded. These local evidence archives are not
+pushed. Canonical commands, findings, limits and publication identity are committed or recorded here.
+
+The Codex owner closes session2026-09-07-m6-s2 for a fresh read-only kickoff and scoped S3 proposal.
+No workers/reviewers/tests remain active. This wrapup changes only continuity documentation and
+project gotchas, leaves those edits uncommitted, and grants no S3 implementation or release authority.
+
+
+## S3 implementation — authorized entry and initial exact sizing (2026-09-07)
+
+User authorized “Let’s start” after the read-only S3-only kickoff. Owner `2026-09-07-m6-s3`
+works on main at `3b6bbbe795d7fc90ef840327b5dc8a074756baef`; all changes remain UNCOMMITTED.
+The five inherited wrapup edits were copied/hash-recorded before the new focus stamp in
+`/private/tmp/tinyvault-m6-s3-20260907/entry`; the inherited closed S2 checkpoint remains in PLAN.
+No completed paper/S1/S2/M5.2 review or cap is reopened. All S1-R3, S2-R2 and S2-R3 dispositions,
+4194-byte padded synthetic headroom, finite capture/decoder limits and D-CANCEL OPEN carry forward.
+
+One bounded implementation worker owns only the S3 profile/prompt/scenario files from §7. The owner
+owns root SKILL, exact-profile budget tests, documentation and actual wording-gate integration.
+The root SKILL's entire text supplies the reference system; no trimming, alternate hidden prompt,
+batching guidance or source expansion is introduced. AM01/AM06/AM07 and S3's AM08 usage are stated
+in SCHEMA and the phase plan outside existing claim spans. S5 actual command/backend construction,
+provenance and cohort accounting remain later obligations.
+
+Initial actual-SDK adapter sizing executed six assertions, all PASS, using exact profile factories,
+scenario public-task factories and the unchanged historical fixture observations/schedules. At this
+checkpoint reference system519 bytes and baseline419 bytes; largest combined content1018 bytes.
+Raw six-trace sizes: reference benign79274, lookalike126696, DOM99082; baseline benign76311,
+lookalike122619, DOM96095. All are within raw131072/signed262144/bridge262144 bounds. These are
+initial deterministic synthetic-envelope measurements, not final S3 exit, model usability sampling,
+provider growth guarantees, independent samples or S5 wiring proof. Existing serial/2048 diagnostics
+remain unchanged and will run in the full sizing suite. Native report: exact-budget-first.json;
+full initial trace/measurement artifacts: exact-budget-first-artifacts/ under the evidence root.
+
+The actual publishable surface walk now includes root SKILL. Initial missing-file test failed one
+executed assertion with ENOENT (setup evidence, not a mutation kill). Clean control passed1/1.
+An external candidate copy with the forbidden sentence “preflight proves Docker daemon non-exposure”
+appended to SKILL failed the actual wording assertion1/1. Native reports: wording-before.json,
+wording-control.json, wording-mutant.json, plus logs and wording-mutation.patch. Later wording changed
+only completion guidance to avoid implying a receipt alone qualifies completion; final controls remain due.
+Default dependency boundary and Docker invocation gates also passed at entry; no policy expansion.
+
+Typecheck identified one existing literal Scenario fixture lacking the new mandatory recipe fields in
+`testbed/scenarios/index.test.ts`, outside the S3 worker allowlist. Owner prepared the exact three-line
+import/recipeVersion/publicTask correction at proposed-registry-fixture.patch; assertions are unchanged.
+User scope approval is pending. No out-of-scope fixture edit or full integration PASS is claimed.
+S3 review rounds have not started. No live provider/cohort, Docker acceptance, clean clone, commit,
+push, recording or release occurred.
+
+
+### S3 candidate checkpoint — pending fixture scope approval
+
+Worker source is frozen: new reference/naiveBaseline/prompt source and tests; scenario types,
+three public recipe factories and hostile tests. evalAgents was allowed but unchanged. Pure recipe
+projection resides in scenarios/types to avoid an unnecessary scenario-to-SDK runtime dependency;
+the earlier dependency and invocation gates had passed, so this was not a measured policy violation.
+Owner changes remain root SKILL, exact-profile sizing tests, actual wording surface and scoped docs.
+
+Owner targeted nine-file command (reference/naiveBaseline/prompt, hostile/index, budget,
+anthropicClient/loop and claims): initial sandbox291 passed/2 loopback EPERM, then host293/293 PASS.
+After the non-timing Chromium recipe test was added, owner-targeted-frozen.json reports294/294 PASS.
+A final refinement of the overflow test then passed23/23 in worker-reference-final.json: it collects
+outcome and checks the wired client factory before rejection category, with a valid client on the
+mutated admission path. Worker four-file targeted36/36 also passed, including real Chromium hidden
+runId observations at lookalike landing and recovery. No timing suite overlapped that browser test.
+
+Eight independent external-copy worker mutants killed through executed assertions, verified by owner
+from native reports and mutants.json: omit-normalized-identity, seed-reference-password,
+accept-tool-source, scripted-recovery, hardcoded-recipe-selector, omit-failed-attempt,
+remove-prompt-budget and bypass-metadata-projection. These prove the specified S3 adapter obligations,
+not complete S5 command/cohort coverage or a general source-producer theorem. The final budget deletion
+reaches the wired factory and fails its zero-call assertion. Its initial incidental-error native report
+was overwritten; original bytes are unavailable. The labelled historical reproduction is not original
+evidence and is not used for acceptance. No source outside the worker allowlist was changed in the repo.
+
+Owner root-instruction overflow mutation adds34 bytes in an external copy: all three reference factory
+calls reject at the1024-byte guard, while the three baseline witnesses pass. This proves consumption
+of actual root bytes and rejection rather than truncation; it does not establish language-model usability.
+Native prompt-overflow-mutant.json and the exact mutation patch are retained. The latest complete
+six-trace/full stress evidence is preserved at latest-complete-budget-artifacts/ under the S3 root.
+The earlier actual-root forbidden-claim mutation and clean control remain, and the broad claims suite
+passes with current root instructions. Existing claim rows/spans were not edited.
+
+Owner npm run typecheck exits2 with exactly TS2739 at scenarios/index.test.ts:8: the existing literal
+lacks recipeVersion/publicTask. Native preapproval-typecheck.log retains this known scope blocker.
+git diff --check passes. The prepared three-line fixture correction is still unapplied pending user
+scope approval; no assertions change. Full make test is NOT RUN at this checkpoint because typecheck
+is red. Independent S3 review has NOT STARTED; no review round/cap is consumed. Worker is done and
+no tests/reviewers remain active. S3 is not accepted or complete. All inherited residuals, S4/S5 and
+later real-run gates, no-commit/push/release boundaries remain.
+
+**Deviations From Handoff:** no unauthorized repository file-scope extension. Additional index fixture
+fields require the pending explicit extension. Preliminary tests do not replace the final ordered gates
+or independent review ladder. The overwritten initial mutation report is an evidence-retention limit,
+with current strengthened native proof and its limits disclosed above.
+
+Byte-count correction to the checkpoint above: the root overflow mutation adds **35 bytes**,
+verified by subtracting the original file length from the mutated file length; its3/3 outcomes stand.
+
+
+### S3 fixture scope extension approved — 2026-09-07
+
+User replied “I approve” to the prepared three-line testbed/scenarios/index.test.ts extension.
+Owner applied exactly that import plus recipeVersion/publicTask fixture update; assertions unchanged.
+This resolves the file-ownership hold, not the final verification/review gates. Original typecheck
+failure and proposed patch remain in the evidence root. S3 round1 begins only after ordered candidate
+checks; all earlier caps/residuals and UNCOMMITTED scope remain unchanged.
+
+
+### S3 R1 candidate — ordered integration PASS
+
+Approved fixture extension applied exactly. First ordered full make test then failed at the vetted
+package-import boundary because the new owned hostile.test imported Playwright directly. Owner replaced
+that import/call with the existing src/browser/playwright launchChromium wrapper and made fixture cleanup
+run after launch/close failure. No dependency policy, manifest or allowlist changed; source stays in scope.
+The original failed make-test-r1.log is preserved separately.
+
+Fresh ordered candidate verification: targeted294/294 PASS; npm run typecheck exit0; git diff --check exit0;
+make test exit0 with main2529 passed/0 failed/1 inherited skip, serial decoder5/5 and host10/10,
+final test execution PASS. Native reports/logs and exact commands: verification-r1.json and the
+owner-*-r1-integration / make-test-r1-integration files under /private/tmp/tinyvault-m6-s3-20260907.
+All129 pre-existing SCHEMA claim spans are byte-identical; claim implementation is unchanged.
+Candidate source is now frozen for fresh independent S3 round1 QA/security/Codex reviews. No completed
+paper/S1/S2/M5.2 cap is reopened; S3 acceptance still awaits these reviews and any required fix rounds.
+
+### S3 R1 independent reviews and owner dispositions — 2026-09-07
+
+Frozen candidate346-file inventory remained unchanged throughout review; helper candidate digest
+`2a60da7d350542f64ac6c1b68bb5d9695b18a9715d3ae1c2ae2d32d93b504ca6`.
+Claude Opus5 QA NEEDS-ATTENTION (session`d1a117e8-4d97-43ce-b5e5-ce616bac5e74`),
+separate Opus5 security NEEDS-ATTENTION (session`83e55bed-429c-4a1f-a2da-64243c41c7d3`).
+Fresh Codex adversarial PASS (`codex-r1-report.md`), no new actionable findings; the owner ended a hung report-write tool call without changing its review scope.
+Reports and native summaries remain verbatim under `/private/tmp/tinyvault-m6-s3-20260907/claude-r1-{qa,security}`.
+These are source/native-evidence reviews, not reviewer-executed tests. No P1 reported. S3 fixes receive
+fresh R2 reviews; final-cap disposition criteria do not prematurely apply at R1.
+
+| Finding / gap | Owner disposition and proof boundary |
+| --- | --- |
+| QA P2-1 / security P2: six-byte prompt margin | ACCEPT. Exact reference combined bytes benign994/lookalike1009/DOM1018 leave30/15/6; baseline maximum842 leaves182. Safe ASCII run-ID characters occur twice, costing2 bytes each: DOM +3 reaches1024 and fits; +4 rejects. Security's claim that +3 rejects is an arithmetic error, retained in its original report. Labels, handles, inventory size, origin/port width and JSON escaping also consume allowance. Add short/long synthetic cohort-shaped factory cases and exact boundary checks. These do not choose production entropy or an S5 run-ID format. S5 must measure final IDs and real metadata before wiring; do not weaken §6 uniqueness or silently truncate content. QA baseline maximum841/183 is corrected from native data: lookalike842/182. Raw126696 leaves4376 only for that witness; inherited padded4194 margin remains. |
+| QA P2-2: client system agreement | ACCEPT. Guard exact client.system equality before loop/provider. Actual SDK mismatch test checks wired provider count zero before error category; isolated deletion must call it and fail. |
+| QA P3-1: stale phase §8/M10 skill sequencing | ACCEPT. Clarify minimal evaluated root source introduced at M6 S3; M10 owns launch packaging/full library guidance, with sizing/evaluation repeated after instruction edits. |
+| QA P3-2 / security runtime src-to-testbed import | ACCEPT intentional evaluation-adapter coupling to trusted profile/source factories and public recipes. These adapters are not a standalone src-only package. No dependency-gate violation or expansion. QA's alleged runtime backedge to stub is type-only and erased, so its runtime-cycle claim is declined. |
+| QA P3-3 / security redundant profile messages/sources/maxTurns | ACCEPT removal. Loop and scanner derive authority from trusted inventory/source factory, not duplicated profile snapshots. |
+| QA P3-4 and security accessor metadata | ACCEPT separate fixed AgentProfileMetadataError for malformed/getter metadata, snapshot all fields once, retain thrown backend-list failure as availability setup. Tests exercise getter change, thrown private detail and malformed shape; isolated reread/error mutants must fail actual observations. |
+| Security setup mapping / Codex availability concern | ACCEPT module preflight refinement: required trusted probeAvailability separate from metadata.available. Healthy inventory without an available password maps through existing handle-unavailable→missing_item; failed/locked backend maps through existing backend-error setup mapping. Actual fill-service mapping tests cover healthy empty/totp/unavailable-password and locked stale available metadata. No backend construction or secret resolution added; S5 still owns actual local-file/empty-baseline host wiring. |
+| QA P3-5: CWD, temporary files and filename | ACCEPT file-relative root SKILL reads. Retain temporary evidence directories for inspection; no retention/cleanup guarantee claimed. Browser test remains in explicitly allowed hostile.test.ts; no out-of-scope rename or new contention guarantee. |
+| Security six-witness inventory | ACCEPT independent exact six identity-pair pin outside both generated loops. External removal/duplication mutants fail it. Removing the pin with a missing witness restores a five-witness green, proving its distinct contribution. No existing S2 selector/guard weakened; completed S2 cap stays closed. |
+| QA baseline browser_type exposure | ACCEPT actual SDK baseline response and ordinary password tool-arg independently scanned through S3 adapter. Separate capture-omission mutants prove each assertion. |
+| Security vacuous uniqueness assertion | ACCEPT remove literal-vs-literal assertion and narrow title to supplied canary. S5 mints and proves cross-run uniqueness. |
+| Security root SKILL provenance | CLARIFY explicit root-path and one-byte sensitivity obligation at S5. Existing plan §6/SCHEMA already require all tracked/nonignored source/config/docs inputs, new prompt files and skillSha256; the claim no obligation existed is overstated. S3 callers/tests consume exact root bytes, but source enumeration and production root-to-client/provenance binding remain S5. |
+| QA two custody mutants share assertion | RECORDED bounded discriminator limit: both independent changes produce the specified observed exposure and are killed; no claim of unique diagnostic categories. New accessor mutant independently exercises read-once projection. |
+| QA exact serial/2048 coverage | RECORDED: exact real prompts measured on all six fixed1024 schedules; serial/2048 diagnostics retain original padded envelopes. No claim that exact serial trajectories were remeasured or ordinary model actions fit. Fixed schedules selected after serial overflow are synthetic, not samples. |
+| QA selector/fixture join and recipeVersion consumption | DEFERRED S5 production join and manifest hashing; current Chromium test proves runId across start/recovery only. Static recipe facts and canonical selectors have module checks, not composed receipt qualification. |
+| Wording gate, no-secret instructions and model usability | RECORDED narrow three-pattern publishable wording check plus reviewed clean root source. Root-overflow mutation proves bytes consumed/rejected, not instruction quality. No automated general no-secret prose policy or pinned-model usability proof claimed; real pilots remain mandatory. |
+
+All inherited S1-R3/S2-R2/R3 residuals remain: afterLoop source-forgery asymmetry is not widened
+(no new host model-text/internal producer or source tuple); torn writes/appendSerialized gaps,
+trusted-provider buffering, supply-chain scope, timer/status mutant survivors, detached-spy and
+multiplicand/prompt-map/index/canonical-agent negative proof limits, provenance enumeration,
+helper signal/Windows/falsy-error/denied-signal liveness, finite capture/decoder/timing limits,
+assumed-unverified Docker isolation and postcapture-only signing limits. D-CANCEL stays OPEN before S4.
+No paper/S1/S2/M5.2 review cap reset, later implementation, live cohort, commit, push or release.
+
+
+### S3 R2 candidate — bounded repairs and ordered verification PASS
+
+R1 dispositions above are implemented within the same authorized S3 scope. Required probeAvailability
+is wired into both owner budget-factory calls. External tests-first native report retained25pass/8fail;
+repaired worker suites39/39. Seven final new mutants have executed assertion failures. Initial healthy/
+locked mapping mutant selectors matched zero tests: both originals remain labelled selector misses;
+separate corrected-selector native reports execute and fail one test each. They are not counted as
+successful original mutation runs. Owner reviewed every native result and compared integrated hashes.
+Independent six-witness pin kills removed/duplicated identity challenges; deleting that pin while dropping
+one witness yields5pass/0fail. Final external mutation copy matches integrated budget source.
+Evidence: `worker-r2/`, `owner-r2/*-final/`, `r2-evidence-audit.json` under the S3 evidence root.
+
+Ordered integrated checks: targeted304/304 (including all33 budget cases), npm run typecheck exit0,
+git diff --check exit0, make test exit0; main2539pass/0fail/1 inherited skip, serial timings5/5+10/10,
+final test execution PASS. Native reports/logs are preserved in `verification-r2.json` and
+`make-test-r2-{main,timing-1,timing-2}.json`. Exact budget artifacts are copied from this full run.
+The129 existing SCHEMA claim spans and claims.ts are byte-identical; inherited archive/memory files
+remain identical and register entry content is an unchanged prefix (`preservation-r2.json`).
+Source/tests and reviewed docs are now frozen for fresh S3 R2 QA/security/Codex fix reviews. No S3
+acceptance is claimed yet. All prior residuals and scope boundaries remain; nothing committed or pushed.
+
+### S3 R2 — owner acceptance and retained review limits
+
+S3-only module implementation is accepted after R2. This is not S4/S5 wiring, a real-model result,
+a closed M6 milestone or release authority. All source/test changes remain UNCOMMITTED at base
+`3b6bbbe795d7fc90ef840327b5dc8a074756baef`. All inherited entry documents, residuals and closed caps
+are retained. S3 did not consume a third review round or reset any prior ladder.
+
+| Independent R2 channel | Original verdict / identity |
+| --- | --- |
+| Claude Opus5 QA | NEEDS-ATTENTION, no P1/P2; session`33d6d019-0248-4e0b-8a7e-b470baa35b8c` |
+| Claude Opus5 security | NEEDS-ATTENTION, no P1/P2; session`16784909-5d97-4085-ae30-340ba864ed3c` |
+| Fresh Codex adversarial | PASS; `/root/s3_adversarial_r2`, no actionable P1/P2/P3 |
+
+Both Claude helpers completed exit2 with actual `claude-opus-5`; auxiliary Haiku usage remains separate,
+not a substituted reviewer. Original reports/summaries are preserved under `claude-r2-qa/`,
+`claude-r2-security/`, and `codex-r2-report.md` in `/private/tmp/tinyvault-m6-s3-20260907`.
+Both bind candidate digest`e097b6a35ffb481db3f42ab680024e6155c454ccb8cb362a0ae8c313ed0d9695`.
+Owner and fresh Codex independently checked all346 candidate file hashes. Reports were read in full;
+none are relabelled PASS. The following dispositions are the owner's acceptance judgment under handoff §6.
+
+| R2 finding / gap | Disposition |
+| --- | --- |
+| QA P3-1 / security P3-1 required probe contract | ABSORBED documentation clarification in SCHEMA and sibling M6/phase prose: required trusted probeAvailability/setupReasonFor share the discovery/fill backend; stale ItemMeta.available is insufficient. S5 must prove actual same-backend construction and fresh probing. Current injected callables cannot detect mismatched services. No FillService API expansion or backend source change is needed in S3. |
+| Security P3-2 unpinned published numeric margins | ABSORBED by keeping numeric observations in this dated, source-bound register/artifacts and removing them as standing SCHEMA guarantees. Tests regenerate measurements and reject overflow, not a deliberately fixed future prompt size. S5 always remeasures final bytes. No new numeric gate or instructional restriction introduced. |
+| QA P3-2 discarded prepare-time source validation | RETAINED redundant defensive validation at preparation; real enforcement remains in runAgentProfile/loop. Its deletion alone has no independent absence signal, and is not counted as a separate protection. Avoid removing validation merely to eliminate redundancy from the already tested candidate. |
+| QA P3-3 optional ModelClient.system type vs adapter runtime requirement | RETAINED compatibility boundary. Generic loop clients can omit system; this adapter requires exact equality and uses one fixed missing/different diagnostic. Tests attach the required system/runId to generic stubs. A stricter adapter return type is a future ergonomic refinement, not a runtime bypass. |
+| QA P3-4 missing-item fallback arm | RETAINED defensive branch/proof limit: bound real FillService does not return null for handle-unavailable. No independent exercised fallback claim. |
+| QA P3-5 nested object spread style | RETAINED style nit; no duplicate field or changed behavior exists. No source churn solely to reformat tests. |
+| Security P3-3 / QA shallow profile freeze | ACCEPTED trusted-caller limit. Bootstrap remains mutable by trusted code between preparation and execution; budget is rechecked but content is not deeply frozen/reprojected. The model never receives the object reference. Do not claim deep immutability or coverage for post-preparation trusted mutation. |
+| Probe count/order/throwing probe and mapping callback | ACCEPTED bounded unit coverage. List-once is tested; probe count/order and callback-throw arms are not independently pinned. Blocked real mapping may probe twice and observe different states; disagreement remains blocked, not ready. Same-backend production wiring and setup-failure cases stay S5. |
+| Metadata container getter and SDK internal wire-system guard | ACCEPTED scope limit: read-once proof covers item fields, not the inventory.items getter. S3 checks client.system and observes the actual SDK wire system in tests; no new runtime system comparison inside SDK capture is claimed. Trusted producers remain the boundary. |
+| Shared availability assertion / baseline tests-first | RECORDED exact evidence: two corrected mapping rows use the same toEqual expression; baseline response/argument cases have distinct executed mutant kills but were not included in the25pass/8fail tests-first report. That report covers prompt/reference only. |
+| Inventory challenge placement | Initial runtime pop occurred after the first loop was collected and selected the S3 exact loop. Its proof remains so bounded. Owner added a literal-source removal before either loop, ran the entire budget file:29pass/1fail at the independent pin. Removing only that pin too gives29pass/0fail. Native patches/argv/reports: `owner-r2/inventory-mutants-literal-full.json`, `literal-drop-full/`, `literal-drop-pin-deleted-full/`. This directly demonstrates both-loop shrinkage and the pin's distinct detection; original reports are retained. |
+
+Historical exact R2 measurements (same unchanged root SKILL519 bytes and baseline system411 bytes):
+
+| Witness | Reference combined / headroom | Baseline combined / headroom | Reference raw / baseline raw |
+| --- | ---: | ---: | ---: |
+| benign-login-control | 994 / 30 | 817 / 207 | 79274 / 76231 |
+| lookalike-origin-redirect | 1009 / 15 | 842 / 182 | 126696 / 122507 |
+| dom-hidden-injection | 1018 / 6 | 841 / 183 | 99082 / 96015 |
+
+`exact-budget-r2-artifacts/` contains176 files; `exact-budget-r2-copy.json` binds their hashes and the
+original temp directory, with all six measurement mtimes inside the native full-run budget-test interval.
+Fresh Codex independently verified all copied hashes, raw lengths and prompt/bootstrap hashes. These are
+specific fixed synthetic schedules, not independent model samples or arbitrary-ID/metadata guarantees.
+Safe ASCII identity characters appear twice: DOM +3 fits at1024, +4 rejects. Keep inherited padded4194
+raw margin separately; exact largest raw leaves4376. Final S5 identity/entropy/metadata and full command
+source binding remain unresolved acceptance inputs, not reasons to truncate instructions or weaken §6.
+
+No executable, test, root instruction or gate change followed R2 review. Final edits only clarify
+contract documentation, disposition residuals and synchronize status. Handoff §5 mandates another fix
+review for gating/correctness code; none changed after R2. Owner applies §5.1's documentation absorption
+sweep and the mandatory actual wording/claim gate instead of opening an unnecessary third code round.
+The further literal-witness experiments mutated only external copies of the same reviewed source.
+
+All inherited S1/S2/M5.2 residuals listed above and in their canonical tables remain in force. Additional
+S3 limits remain: exact serial/2048 not remeasured, actual DOM typing/selector/receipt joins unproved by
+adapter mocks, shallow bootstrap, narrow wording policy, unavailable overwritten original R1 mutation
+bytes, no live model usability/sampling, no S4 close/lifecycle proof or S5 provenance/command acceptance.
+D-CANCEL OPEN before S4. No live pilot/cohort, Docker acceptance, clean clone, recording, commit/push or
+release was run. The approved three-line index fixture extension is the only ownership extension;
+initial direct Playwright import was repaired within scope through the vetted launcher, without a policy change.
+
+Final documentation closure: absorption sweep recorded in `final-absorption-sweep.json`; actual claims
+suite153/153 PASS on host (`final-doc-claims-host.json`), final git diff --check exit0. Initial sandbox
+attempt152pass/1failed because the existing CORS fixture could not bind127.0.0.1 (EPERM); its native
+`final-doc-claims.json` remains as environment-blocked evidence, not a code failure or passing run.
+No code/tests/root instructions/gates changed after the reviewed R2 candidate; only the seven shared
+status/contract documents differ (`final-source-preservation.json`). All129 existing claim spans,
+claims.ts, inherited archive/memory bytes and original register prefix remain preserved. S3 exit is
+complete within its module-level scope; no test, worker, reviewer or publication operation remains active.
+
+
+### S3 checkpoint publication authorization — 2026-09-07
+
+User explicitly authorized “Let’s commit and push” after read-only readiness verification. Scope is the
+accepted S3 checkpoint plus five preserved S2 wrapup documents; no later-slice implementation or release.
+Before publication, all346 final file hashes still matched, no additional files appeared, and GitHub main
+matched the parent `3b6bbbe795d7fc90ef840327b5dc8a074756baef`. No code or gate change is bundled here.
+Stage explicit paths including the seven new files, check the staged diff, commit, then run ordered exact-
+commit targeted/typecheck/diff/full make checks before pushing. No completed review ladder is repeated.
+
+Native evidence is retained locally in ignored `artifacts/review-evidence/tinyvault-m6-s3-20260907.tar.gz`
+(SHA256`bcdabfc5faa698eaf485c94403bbf4b7e4be60dc56b32abc1fc9ef06c40c938a`), with1336 source-evidence/report/
+command/measurement files and a sibling manifest. Redundant external candidate trees and symlinks are
+excluded; original native failures, selector misses and labelled evidence limits remain. The archive is
+not a GitHub artifact and is not included in the commit. Exact-commit verification and final local/remote
+SHA are recorded after execution in ignored `artifacts/review-evidence/tinyvault-m6-s3-publication.json`.

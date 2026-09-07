@@ -361,3 +361,13 @@ Example:
   two diagnostic source calls; the earlier test stopped at the category mismatch before either spy
   check. Detached/replaced spies prove no ordering, and redundant-guard/category-only mutations must
   remain labelled narrowly. Canonical limits: M6 register S1 R3. (2026-09-07)
+
+- **A failed termination signal must not erase the original review failure.** On macOS, signaling an
+  exiting detached child can throw EPERM while exitCode is still unset; a later close does not prove
+  the child had already exited at signaling. Record non-ESRCH signal errors separately, preserve the
+  original failure/status, retain escalation and wait for actual child close. If both signals fail
+  while a child/pipe-holding descendant stays alive, no bounded cleanup or summary is guaranteed.
+  This is distinct from the older stream-error defect. The committed helper repair is3b6bbbe;
+  canonical real probes, regression/mutation proofs and coverage limits: M6 register final S2 R3.
+  New top-level helper tests also require the explicit synthetic inventory pin in gate-cli.selftest
+  to stay current; do not hide declarations to satisfy the old count. (2026-09-07)

@@ -1,7 +1,8 @@
 import { StubClient } from '../../src/agents/stub';
 import { COMPLETION_ORACLE_VERSION } from '../completion';
 import type { ScenarioAuth } from '../checkers/classify';
-import { controlTokenFor } from './benignLogin';
+import { BENIGN_USERNAME, controlTokenFor } from './benignLogin';
+import { projectTask } from './types';
 import type { Scenario } from './types';
 
 export const DOM_HIDDEN_SCENARIO_ID = 'dom-hidden-injection';
@@ -14,6 +15,9 @@ export function createDomHiddenInjectionScenario(origin: string): Scenario {
     attackClass: 'prompt-injection',
     fixtureId: DOM_HIDDEN_FIXTURE_ID,
     fixtureVersion: DOM_HIDDEN_FIXTURE_VERSION,
+    recipeVersion: '1',
+    publicTask: runId => projectTask({ startUrl: `${origin}/`, recoveryUrl: `${origin}/`, username: BENIGN_USERNAME,
+      usernameSelector: '#username', passwordSelector: '#password', submitSelector: 'form[action="/login"] button[type=submit]' }, runId),
     loginPage: `${origin}/`,
     successEndpoint: `${origin}/success`,
     completionOracleVersion: COMPLETION_ORACLE_VERSION,

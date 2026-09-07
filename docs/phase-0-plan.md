@@ -80,6 +80,14 @@ Round 3 (the capped final pass) returned four findings — **implementation-leve
 
 ## 2. The three-tool interface + field split (contract)
 
+M6-AM01/AM06 (S3): the evaluated seven-tool profile performs metadata discovery and fixed setup
+guidance out of band; `list_vault` and `request_vault_setup` remain library tools, not model-callable
+additions. The reference prompt is the exact minimal root `SKILL.md` text introduced for M6;
+M10 retains launch packaging and must rerun sizing/evaluation after instruction changes. See
+[SCHEMA's M6 controlled-profile contract](../SCHEMA.md#m6-provenance-and-diagnostic-contracts)
+for the identical public recipes, run-bound recovery URLs, same-backend discovery/availability/setup binding,
+custody distinction and S3/S5 proof boundary.
+
 Model-visible surface = the three vault tools **plus** a minimal browser-control group. **Origin authorization is bound to the credential on the trusted side; the caller can neither choose where a handle fills nor authorize a fill by asserting an origin** (round-1 finding #1).
 
 ```ts
@@ -191,7 +199,7 @@ The MCP adapter exposes, alongside the 3 vault tools, a minimal **non-secret** b
 - `browser_navigate(sessionId, url)`
 - `browser_click(sessionId, selector)`
 - `browser_snapshot(sessionId)` → accessibility tree with password/locked fields **masked**
-- `browser_type(sessionId, selector, text)` → **non-secret text only**. NOTE (findings #2, round-2 #2): nothing about this call's handling depends on whether `text` equals a secret — no scan of caller input, and `browser_snapshot` masks by provenance (§4 layer 2), so typing a *guess* and snapshotting it back reveals nothing (the region is masked because TinyVault filled/locked it, not because of its content). Caller-authored bytes are model-known anyway.
+- `browser_type(sessionId, selector, text)` → **non-secret text for reference-agent usage**. M6-AM07: the deliberately unsafe baseline enters its seeded password through this same operation; the model response/tool argument is measured exposure even on the benign login. No classifier exception or secret-typing backdoor. NOTE (findings #2, round-2 #2): nothing about this call's handling depends on whether `text` equals a secret — no scan of caller input, and `browser_snapshot` masks by provenance (§4 layer 2), so typing a *guess* and snapshotting it back reveals nothing (the region is masked because TinyVault filled/locked it, not because of its content). Caller-authored bytes are model-known anyway.
 
 **Browser-ownership decision (was flagged; Codex did not reject the choice, only the enforcement gaps):** keep **(A) host-owned browser context**. It is what makes origin authorization + lockdown + serialization enforceable and matches the spec's host-side fill service / KuchiClaw IPC model. Alternative (B) caller-owned CDP handoff is rejected: it would move the page out of the trust boundary, making the finding-#3 guarantees unenforceable.
 
@@ -436,7 +444,7 @@ tinyvault/
     scenarios/  *.ts (+ completion oracle per scenario)
     checkers/   classify.ts  leakScan.ts  wrongOrigin.ts   # leakScan CONSUMES src/shared/secretTransforms.ts
     runner.ts   scorecard.schema.ts    public-target/    # saucedemo config
-  docs/  guides/  templates/  .claude/  Makefile  package.json  tsconfig.json  SKILL.md  # agent-facing usage skill (M10; doubles as the reference agent's system-prompt source)
+  docs/  guides/  templates/  .claude/  Makefile  package.json  tsconfig.json  SKILL.md  # evaluated instruction source introduced in M6 S3; M10 owns launch packaging
 ```
 
 - `make test` — unit primitives (originGuard/authorization, `Secret` masking, noninterference, tripwire-instrumentation, mutex, taint registry, backend contract, checker meta-gate) **plus** the M4 Playwright integration security gates (real-fill redaction, verified-destination refusal, atomic TOCTOU abort, reflection-oracle differential, short-vs-long timing/mutex-occupancy differential, concurrent-snapshot masking, setup-blocker guidance).
@@ -454,7 +462,7 @@ tinyvault/
 > (final source `8103c47`, acceptance record `53fd94f`); whole-milestone assessment complete
 > ([assessment](project-assessment-2026-09-06.md), [closure disposition](m5-2-review-findings.md#c-m1--whole-m52-milestone-close-assessment-2026-09-06)).
 > M6 planning is complete ([plan/handoff](m6-implementation-plan.md), [paper reviews](m6-review-findings.md));
-> S1 provenance/profile contracts are complete at the implementation round3 cap with recorded evidence limits; D-BUDGET entry is resolved by user-approved AM11 (M6 plan §4.3.1); S2 SDK sizing is accepted; the approved review-helper repair is verified at final fix round3, with full default gate and three independent review channels PASS; S4 cancellation remains OPEN. No release authorized. M4 and M5 carry deferred
+> S1 provenance/profile contracts are complete at the implementation round3 cap with recorded evidence limits; D-BUDGET entry is resolved by user-approved AM11 (M6 plan §4.3.1); S2 SDK sizing is accepted; the approved review-helper repair is verified at final fix round3, with full default gate and three independent review channels PASS; S3 module profiles/recipes and exact sizing are complete after R2 with recorded P3 limits and full default gate PASS; S4 cancellation remains OPEN. No release authorized. M4 and M5 carry deferred
 > audit items — see their Verify columns. Post-lock contract amendments (`'benign'` AttackClass,
 > `canaryCommitment`, per-scenario `leakRateCI95`) are recorded in the `PLAN.md` Decisions Log.
 
@@ -472,7 +480,7 @@ tinyvault/
 | M7 | Hostile fixtures #3–#4 (`secret-echo`, `fake-reauth`) → **≥3 shipped (spec §6)** | `testbed/fixtures/{secret-echo,fake-reauth}` | scored; reference passes both clauses; ≥3 fixtures in `make eval` | 🟡 |
 | M8 | MCP stdio adapter (mutex-guarded) | `adapters/mcp/server.ts` | MCP client lists tools; fill via MCP goes through the same gate + choke-point; no secret in any MCP result; **[pre-impl review #1] MCP results traverse the same capture/tripwire seam as direct calls** — proved by test, not assumed by construction | 🔴 |
 | M9 | 1Password backend | `backends/onepassword.ts` | `listItems` metadata-only; `canonicalOrigin` from item URL; resolve via service-account token; probe distinguishes states | 🔴 |
-| M10 | README leak-rate table (+CIs) + WebMCP positioning line + **`make eval` reproduce command in README** (spec §6) + **`SKILL.md`** (agent-facing usage skill: the three-tool flow, refusal semantics, the never-ask-for-the-password norm) + 60s demo | `README.md`, `SKILL.md`, demo recording | table shows naive vs vaulted with CIs; typed-sink checker confirms zero unauthorized-sink hits on vaulted; README's reproduce command reproduces the table from a clean checkout; **the reference agent's testbed system prompt is derived from `SKILL.md`**, so the scorecard measures the published usage instructions, not a bespoke prompt; SKILL.md contains no example secrets or credential-echo patterns | 🟢 |
+| M10 | README leak-rate table (+CIs) + WebMCP positioning line + **`make eval` reproduce command in README** (spec §6) + **`SKILL.md` launch packaging/full library guidance** (minimal evaluated seven-tool instruction source introduced at M6 S3 under AM06; library three-tool flow, refusal semantics and never-ask-for-the-password norm) + 60s demo | `README.md`, `SKILL.md`, demo recording | table shows naive vs vaulted with CIs; typed-sink checker confirms zero unauthorized-sink hits on vaulted; README's reproduce command reproduces the table from a clean checkout; **the reference agent's testbed system prompt is derived from `SKILL.md`**, so the scorecard measures the published usage instructions, not a bespoke prompt; SKILL.md contains no example secrets or credential-echo patterns; rerun sizing/evaluation after any instruction change | 🟢 |
 
 Spec §9 first-week target maps to **M0–M6** (spine + core + first two fixtures + the leaking baseline on camera). M7–M10 complete the v0.1 launch checklist (spec §6), which requires **≥3 fixtures** and the MCP adapter — so v0.1 is **not** complete before M8–M9 (correcting the round-1 M6-M8 claim).
 
