@@ -1,4 +1,4 @@
-# M6 S4 implementation handoff — quiescence and coverage qualification (DRAFT, not dispatched)
+# M6 S4 implementation handoff — quiescence and coverage qualification (approved for the Sol paper pass; Astra dispatch pending its findings)
 
 Status: drafted 2026-09-07 by the continuity owner after D-CANCEL resolved (`2bcfbbd`). Dispatch target:
 Codex `task --write --model gpt-6-astra` (security-core lifecycle code; full ladder). Before dispatch: one
@@ -83,9 +83,8 @@ sandbox: report tests you could not run as NOT RUN, never as passed or failed.
    it resolves `false`/throws per the existing contract and the supervisor records failure.
 6. In `navigatePage`'s catch (goto failed or timed out): send `Page.stopLoading` before the `framenavigated`
    wait, so a failed navigation leaves a usable session (F1). Add an explicit `NAVIGATION_TIMEOUT_MS` constant
-   passed to `page.goto` (proposed value 10 000 ms — an owner decision still pending user confirmation before
-   dispatch; it is a caller-visible change, so state it in the report and return the plan's timing note as a
-   proposed doc diff, not by editing the plan).
+   passed to `page.goto` (value 10 000 ms, user-approved 2026-09-07; it is a caller-visible change, so state it
+   in the report and return the plan's timing note as a proposed doc diff, not by editing the plan).
 7. Keep `NAVIGATION_SETTLE_TIMEOUT_MS`, `CLICK_TIMEOUT_MS`, the lifecycle/taint reset rules and every result
    shape unchanged.
 
