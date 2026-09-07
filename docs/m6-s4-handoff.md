@@ -13,8 +13,8 @@ qualification (E5), exactly as scoped in the plan, using the D-CANCEL mechanism 
 
 ## Branch / worktree
 
-Work in this checkout on `main` at base commit `2bcfbbd` (`docs: resolve D-CANCEL with evidence packet and S4
-requirements`). Leave every change UNCOMMITTED; the owner commits with explicit paths after verification. Do
+Work in this checkout on `main`. Base commit is pinned AT DISPATCH by the owner in the dispatch message (the
+packet text alone is not the pin); require `git rev-parse HEAD` to equal that pin and a clean tree before writing. Leave every change UNCOMMITTED; the owner commits with explicit paths after verification. Do
 not stage, reset, switch branches, or touch inherited documents. `.git` and `mkdtemp` are EPERM in the Codex
 sandbox: report tests you could not run as NOT RUN, never as passed or failed.
 
@@ -67,9 +67,12 @@ sandbox: report tests you could not run as NOT RUN, never as passed or failed.
 ### A. Session close path (`src/browser/session.ts`)
 
 1. In `closeSession`, after setting `closing`: send `Page.stopLoading` on the session's own CDP session and
-   await it. An immediate rejection marks the session close as failed (visible to the caller as `{ok:false}` via
-   the existing controls mapping; no new reason enum — use the existing failure shape) and proceeds to disposal.
-   No `Promise.race` that abandons the stop.
+   await it. An immediate rejection is an infrastructure failure, not an ordinary `{ok:false}`: report it through a
+   new trusted, non-model-visible callback on `BrowserSessionHostOptions` (e.g. `onSessionFailure(sessionId,
+   kind)`), which the supervisor wires to `lease.markCaptureFailed()` + the abort path (the existing control
+   boundary collapses infrastructure failure into `closed`/`{ok:false}` — `capturedControl` in host.ts — and must
+   not be relied on). Unknown-session closure stays an ordinary `false`. Then proceed to disposal. No
+   `Promise.race` that abandons the stop.
 2. Wait for the mutex holder exactly as today (`mutex.close`). Do not release early. Do not add a goto timeout
    inside the close path.
 3. Dispose the context BEFORE the session's own page-channel cleanup: call `context.close()` first; then
@@ -78,9 +81,10 @@ sandbox: report tests you could not run as NOT RUN, never as passed or failed.
    before disposal.
 4. Suppress the page `close` listener's fire-and-forget `releasePinnedObjects()` during owner-initiated disposal
    (a `disposing` flag on the state or equivalent); the listener still runs for page-initiated closes.
-5. `closeSession` resolves `true` only after the context is observed gone: `browser.contexts()` no longer contains
-   it (obtain the browser from `context.browser()`; if unavailable, from the context's `close` event). Otherwise
-   it resolves `false`/throws per the existing contract and the supervisor records failure.
+5. `closeSession` resolves `true` only after the context is observed gone from `browser.contexts()`. Capture
+   `context.browser()` at `openSession` time into the session state; if it is null, the close cannot be qualified
+   and is reported through the A.1 failure callback. A missing context after disposal is the success condition;
+   anything else is a failure through the same callback, never a swallowed `true`.
 6. In `navigatePage`'s catch (goto failed or timed out): send `Page.stopLoading` before the `framenavigated`
    wait, so a failed navigation leaves a usable session (F1). Add an explicit `NAVIGATION_TIMEOUT_MS` constant
    passed to `page.goto` (value 10 000 ms, user-approved 2026-09-07; it is a caller-visible change, so state it
@@ -92,8 +96,12 @@ sandbox: report tests you could not run as NOT RUN, never as passed or failed.
 
 1. Add the trusted `quiesceEvidenceProducers()` (M6-AM04) with ONE shared 5 s deadline covering: reject new
    controls → stop (via A.1 per session) → let admitted mutex work settle → attach → deferred fixed-point loop
-   while targets live (repeat `settleAttach()`/`settle()` until both collections are empty; today
-   `settleAttach` snapshots its map once — make it a loop) → close sessions (A.3–A.5) → final settle/drain.
+   while targets live → close sessions (A.3–A.5) → final settle/drain. The loop needs a quiesce-specific STRICT
+   attach drain: today's `settleAttach()` races each attach against 2 s, deletes the entry and leaves the
+   underlying promise running, so repeating it can report an empty map while attach work is live (a timer-only
+   success). The strict drain retains the underlying promises until they settle or the shared 5 s expiry; on
+   expiry, dispose/abort and then await their settlement. Keep the existing 2 s interactive barrier for the
+   per-control path unchanged.
 2. Deadline expiry: mark capture failure, abort the owned browser/run (`browser.close()` on an owned browser;
    for a caller-supplied browser, close every owned context and mark the lease failed), await holder settlement,
    and make the cohort/run fail. Never return a successful close while work lives.
@@ -109,10 +117,16 @@ sandbox: report tests you could not run as NOT RUN, never as passed or failed.
 
 ### C. Runner wiring (`testbed/runnerExecution.ts`, `testbed/runner.wiring.test.ts`)
 
-1. Call quiesce in the E6 order before `finish()`; keep `closeAll()` as the teardown after the verdict; keep the
-   `missingEndMarker`/`CAPTURE_FAILED_MESSAGE` semantics.
-2. A run whose quiesce expires is a failed run with its diagnostics retained (AM09/AM10 types from S1); it
-   must never be credited as complete or leak-free.
+1. Quiesce must run BEFORE the transcript is sealed: `runAgentLoop` appends the post-loop drain from `afterLoop`
+   and then calls `transcript.close()` (`src/agents/loop.ts`), so a quiesce after `runHostAdapter()` returns is
+   too late. Place it inside `runHostAdapter`'s `afterLoop`: existing controlled settle-until → quiesce → final
+   settle/drain → return the accumulated events. `finish()` then sees no live sessions/pending work; keep
+   `closeAll()` as teardown after the verdict and keep the `missingEndMarker`/`CAPTURE_FAILED_MESSAGE` semantics.
+   Add an omit/reorder mutant that runs through `runEval` (the actual caller path), not a helper test.
+2. A run whose quiesce expires is a failed run: it surfaces through the existing `CAPTURE_FAILED_MESSAGE` /
+   `missingEndMarker` throw path in `runOnce` and is never credited as complete or leak-free. Diagnostic
+   retention and failed-run/cohort publication (AM09/AM10 wiring, `runner.ts`, aggregation, entrypoint) are S5
+   scope and are NOT implemented here — do not add a success-shaped return for a failed run.
 
 ### D. E5 capture qualification (`testbed/scenarioCoverage.ts` + `.test.ts`, new)
 
@@ -122,28 +136,38 @@ sandbox: report tests you could not run as NOT RUN, never as passed or failed.
 2. Exposure pinning per §5: independent expected full strings at fixture-version level, exact 200-character
    delivered prefix for the clamped name, original/delivered lengths and truncation recorded; the browser
    clamp and fixture version stay unchanged.
+3. Record the initial-snapshot observation for every real run (§5): a model that never encountered the payload
+   cannot be sold as resisting it. Tests: missing, late-only, truncated, and dropped-between-snapshot-and-SDK
+   cases each leave the outcome intact but withhold the hostile-comparison qualification.
 
 ### E. Tests (write first, then implement)
 
 Real-browser regressions (serial, `*.browser.test.ts`, no Docker, no API key), each with a clean control:
 
-- `black-hole then close`: navigate to an unroutable IPv4 address (use 10.255.255.1; if the host has no route,
-  mark the test skipped with the reason printed — never silently green), assert `browser_close_session` resolves
-  within 5 s, `browser.contexts()` excludes the session's context, and the cancelled request produced
-  `Network.loadingFailed` with `ERR_ABORTED` (correlate on requestId).
+- `black-hole then close`: navigate to an unroutable IPv4 address (10.255.255.1). Do NOT skip: `make test` permits
+  exactly one named skip (`scripts/test-execution.mjs`, skip-identity/skip-count) and no gate edit is in scope.
+  The test first proves the address is a black hole (a raw `net.connect` still connecting after 2 s); if it is
+  not, the test FAILS with that reason and S4 acceptance is BLOCKED on that host — never green, never skipped.
+  Then assert `browser_close_session` resolves within 5 s, `browser.contexts()` excludes the session's context,
+  and the cancelled request produced `Network.loadingFailed` with `ERR_ABORTED` (correlate on requestId).
 - `active goto then close`: close requested during the goto; holder settles with `navigation-failed`; close within 5 s.
 - `hostile self-navigation` (new fixture page under `testbed/fixtures/` with `location.href = <black hole>`):
   `browser_snapshot` after the page wedges itself returns within the op bound (via A.6/stop-on-timeout or the
   quiesce rule), and close within 5 s.
-- `deadline expiry`: a holder that cannot settle (a hidden element click on a wedged page, with the stop
-  deliberately disabled through a test seam) → quiesce expires at 5 s → run fails, holder result is not `ok`,
-  `finish()` does not return `pass`, no unhandled rejection, no live context.
+- `deadline expiry`: a holder that cannot settle (a hidden element click on a wedged page; the stop is defeated
+  by a TEST-LOCAL `BrowserContext`/`CDPSession` decorator installed through `newContext`, exactly as
+  `session.transport.browser.test.ts` already does — never a production flag or option) → quiesce expires at 5 s
+  → run fails, holder result is not `ok`, `finish()` does not return `pass`, no unhandled rejection, no live
+  context. The test must prove the holder owns the mutex before close is requested (an explicit barrier), so the
+  close cannot win a race against an un-admitted holder.
 - `delayed body under quiesce` (E6's controlled case): a body released after quiesce begins but before the bound
   must be captured as a body, not a marker; the pre-close marker limit in §7 stays.
 - `pending attach under quiesce`: a popup/second target confirmed alive (assert `context.pages().length === 2`)
   with pending attach work; quiesce settles it or fails visibly — never a silently successful attach.
-- `POST to black hole`: body captured (form path) AND, through a seam that forces the CDP deferred path, the
-  marker path with `settle()` completing.
+- `POST to black hole`: body captured (form path) AND the CDP deferred-body path forced by a test-local decorator
+  on the real context/request/CDP listener path (a request whose Playwright `postData()` is null and whose CDP
+  `requestWillBeSent` has `hasPostData` with no inline body) — not by calling `EvidenceLease` helpers directly —
+  ending in the marker path with `settle()` completing.
 - `per-holder concurrent close`: for click, type, snapshot and fill (fill via the existing lab fixture), the
   result observed with a concurrent close equals the result without one for the same page state, and the
   lockdown lifecycle clears exactly once.
@@ -168,7 +192,8 @@ rejected `getRequestPostData`; each of the E5/E6 rows in plan §8.
 
 ## File ownership
 
-Codex owns (exact allowlist from plan §7 S4): `src/browser/session.ts`, `src/browser/session.test.ts`,
+Allowlist decision pending the user's answer (see "Open owner decisions" below). Codex owns (exact allowlist from
+plan §7 S4): `src/browser/session.ts`, `src/browser/session.test.ts`,
 `src/browser/session.transport.browser.test.ts`, `src/supervisor/host.ts`, `src/supervisor/host.test.ts`,
 `src/supervisor/host.evidence.test.ts`, `src/supervisor/host.browser.test.ts`, `testbed/runnerExecution.ts`,
 `testbed/runner.wiring.test.ts`, `testbed/scenarioCoverage.ts` (new), `testbed/scenarioCoverage.test.ts` (new),
@@ -185,8 +210,10 @@ checkout (owner runs it — report what you ran); `npx vitest run testbed/parity
 Tests: the mutant inventory above, each killed by a named production-path test. Docs: proposed diffs only
 (returned in the report) for SCHEMA qualification output, phase §3/§4 finalization preconditions (AM04),
 qualification policy (AM05) and the `NAVIGATION_TIMEOUT_MS` note. Safety: post-abort results are failures;
-deadline expiry fails the run; no live context or cleanup promise after close; sockets released (assert via
-`Network.loadingFailed` and, where the host permits, the SYN_SENT check used in the evidence scripts).
+deadline expiry fails the run; no live context or cleanup promise after close. Three separate claims, three
+separate assertions: correlated `Network.loadingFailed` with `ERR_ABORTED` proves navigation cancellation;
+`browser.contexts()` proves context removal; socket release is proven ONLY by the SYN_SENT observation
+(netstat) and is reported as unverified where that observation is unavailable.
 
 ## Verification order
 
@@ -199,6 +226,24 @@ is a valid status in the sandbox.
 Summary; Files Changed; Verification (commands, statuses, native report paths, mutant patches + killing tests);
 Risks / Follow-ups; **Deviations From Handoff** (mandatory section, even if empty; a code comment is not a
 deviation record). Stop and cite both contracts if anything here cannot be implemented as written.
+
+## Open owner decisions (must be resolved before dispatch; Sol pass 2026-09-07 findings 2, 7, 8)
+
+1. Wedged non-navigation ops (Sol #2). `browser_snapshot`/click/type/fill have no trusted bound today, and the agent
+   loop awaits a tool indefinitely, so a hostile self-navigation stalls the run for ~75 s before quiesce is even
+   reachable. A.6 covers navigate only. DECISION NEEDED: adopt a trusted per-op bound in the supervisor (proposal:
+   10 s, same as navigation) after which the host issues `Page.stopLoading` and the op returns its EXISTING failure
+   reason (`no-such-element` for click/type, the existing snapshot/fill failure shapes); no new enum; deletion
+   mutant on the trigger via the hostile self-navigation test. Alternative: leave ops unbounded and accept the
+   ~75 s stall as a documented residual (the run still ends at the 300 s deadline).
+2. Failed-run retention (Sol #7). Applied as "S5 scope" above (an expired quiesce is a thrown failed run; no
+   publication wiring in S4). Confirm, or amend the plan/allowlist to include the runner and its tests.
+3. Fallout files (Sol #8). State-based `finish()` refusal and any new required method on `SupervisedHost` break
+   `testbed/coverage.browser.test.ts`, `testbed/runner.browser.test.ts`, `src/supervisor/host.timing.browser.test.ts`
+   and the fake host in `testbed/runner.testkit.ts`. DECISION NEEDED: (a) make the new quiesce method OPTIONAL on
+   the interface (`quiesceEvidenceProducers?()`, invoked from `afterLoop` when present) and pre-authorize those four
+   files for test-only adjustments under a "no assertion weakened, no test deleted" rule; or (b) keep the strict
+   allowlist and require the worker to STOP with proposed diffs. Recommendation: (a).
 
 ## Owner dispatch sequence (not for the worker)
 
