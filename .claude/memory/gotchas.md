@@ -354,3 +354,10 @@ Example:
   source-comment reader pulled TypeScript into production-reachable claims.ts; moving the unchanged
   helper/import to its sole test consumer preserved the dependency gate without a new exception.
   Keep compiler tooling in test-only consumers. Slice6 register Entry22. (2026-09-06)
+
+- **A rejection-category assertion can hide the ordering observation a mutant is meant to prove.**
+  Collect strict and diagnostic results plus independent source-factory counts before asserting the
+  expected error category. M6 S1's completion-binding deletion then natively exposed one strict and
+  two diagnostic source calls; the earlier test stopped at the category mismatch before either spy
+  check. Detached/replaced spies prove no ordering, and redundant-guard/category-only mutations must
+  remain labelled narrowly. Canonical limits: M6 register S1 R3. (2026-09-07)

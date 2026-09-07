@@ -14,9 +14,10 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 `2026-09-06-m6-s1` — focus: **M6 S1 provenance/profile contracts complete**;
 owner: codex; **state: closed** (2026-09-07), relinquished for the next explicitly authorized scope.
 Checkout `/Users/jonathanavni/Documents/Coding/tinyvault`; main;
-Implementation/review base `53fd94f7831d2fb913d887a4a40c2ef3913f30b1`; accepted source identity is
-recorded in the M6 register. User authorized this checkpoint commit/push on2026-09-07; commit IDs are
-resolved from Git history. No active workers, reviewers or tests. No release authorized.
+S1 source/contracts committed and pushed as `330e7f6b91985124d7fca647172cdbef233f1532`; inherited
+historical docs are `3367a6b`. GitHub main was verified at the exact S1 commit. Implementation/review
+base was `53fd94f7831d2fb913d887a4a40c2ef3913f30b1`; source identity remains in the M6 register.
+This wrapup adds documentation only. No active workers, reviewers or tests; no release.
 
 **Outcome:** S1 source and AM02/AM08 source-factory/AM09/AM10 owner contracts implemented. Provenance
 hashing/admission, explicit profiles, exact run-bound sources and independent failed-run diagnostics.
@@ -36,7 +37,10 @@ input enumeration, actual producer/command wiring, two-agent/three-scenario card
 proof, qualification and later clean-clone/Docker/live-cohort gates. Current diagnostics cannot qualify
 a publication. R3 coverage/individual-guard limits remain in the M6 register; no hidden passing claim.
 D-BUDGET remains OPEN before S2 source work; D-CANCEL remains OPEN before S4 dispatch. S2 has not started
-and awaits separate authorization plus its entry decision. No live-agent pilot/N10 or recording ran.
+and awaits its entry decision and explicit implementation scope. Recommended fresh-session task: resolve
+D-BUDGET under plan §4.3 with measured full byte accounting; retain every frozen cap/observation, treat
+2048 bytes as an unproven stress candidate, and record a feasible allowance or a concrete amendment need
+before S2 source implementation. Do not reopen S1/paper/M5.2 reviews. No live-agent pilot/N10 or recording ran.
 Raw native/review evidence is preserved in local ignored `artifacts/review-evidence/tinyvault-m6-s1-20260906.tar.gz`
 with a verified manifest and checksum recorded in the M6 register. This local archive is not pushed to
 GitHub. Durable commands, outcomes and residual dispositions are in the register; failed attempts remain.
@@ -617,3 +621,5 @@ GitHub. Durable commands, outcomes and residual dispositions are in the register
 - **2026-09-07** — M6 S1 accepted at final implementation round3 cap: security/Codex PASS, QA NEEDS-ATTENTION limited to documented test coverage; no P1 and final full gate PASS. Preserve multidimensional cardinality/prompt-map, canonical-agent and individual-guard proof limits for the appropriate later command evidence. Archive prior planning state, close ownership, leave all changes uncommitted. D-BUDGET/D-CANCEL remain OPEN; no S2 authorization or M6 acceptance inferred.
 
 - **2026-09-07** — User authorized the accepted S1 checkpoint commit/push. Preserve raw evidence in a verified local ignored archive, separate the six unchanged inherited historical documents from the S1 code/planning/contracts commit, and retain all accepted residuals and D-BUDGET/D-CANCEL holds. No new implementation or release scope.
+
+- **2026-09-07** — Final tinyvault-wrapup: verified pushed source330e7f6 and historical docs3367a6b, retained source hashes/evidence and closed ownership for a fresh D-BUDGET entry-decision session. Current State remains load-bearing for the next scope; prior planning narrative is already archived. No source changes or review/gate reruns.

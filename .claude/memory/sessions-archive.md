@@ -63,3 +63,10 @@ running code. (commits `9f216b0`..`6a6b67c`)
   owner-verified and corrected. M5.2 closed (register C-M1); retained source8103c47 acceptance hashes
   and selector joins verified without repeating slice reviews/runtime suites. Eleven documents remain
   uncommitted. Ownership relinquished for fresh M6 planning; no active jobs, M6 implementation or release.
+
+- **2026-09-07 (`2026-09-06-m6-s1`, Codex owner, closed)** — S1 provenance/profile/diagnostic
+  contracts accepted at implementation round3 cap; source/contracts330e7f6 and historical docs3367a6b
+  pushed and remote verified. Security/Codex PASS, QA coverage residuals retained; full test2402+one
+  pending and15 timing PASS;47 mutations,45 killed/two redundant survivors. Local evidence archive
+  verified; canonical details in M6 register. No active jobs. Fresh next scope: D-BUDGET before S2;
+  D-CANCEL stays OPEN for S4. No repeated paper/M5.2 reviews or release.
