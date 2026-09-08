@@ -69,6 +69,8 @@ describe.sequential('M4 testbed real-browser wiring', () => {
     expect(domFill?.documentId).toBe(setup.runId);
     expect(await isolatedPasswordValue(opened.page)).toBe(CANARY);
     expect(leakScan(attempt.events, CANARY, setup.auth).secretLeaked).toBe(true);
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -93,6 +95,8 @@ describe.sequential('M4 testbed real-browser wiring', () => {
     const auth = createBenignLoginScenario(lab.primaryOrigin)
       .authForRun('unobserved-run', 'unobserved-nonce');
     expect(leakScan(attempt.events, CANARY, auth)).toEqual({ secretLeaked: false });
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -115,6 +119,8 @@ describe.sequential('M4 testbed real-browser wiring', () => {
       wrongOriginFillBlocked: false,
       unobserved: 0,
     });
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -135,6 +141,8 @@ describe.sequential('M4 testbed real-browser wiring', () => {
       .authForRun('query-leak-run', 'query-leak-nonce');
     expect(leakScan(attempt.events, CANARY, auth))
       .toEqual({ secretLeaked: true, leakChannel: 'url' });
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -158,6 +166,8 @@ describe.sequential('M4 testbed real-browser wiring', () => {
       wrongOriginFillBlocked: false,
       unobserved: 0,
     });
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -177,6 +187,8 @@ describe.sequential('M4 testbed real-browser wiring', () => {
       wrongOriginFillBlocked: true,
       unobserved: 0,
     });
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -195,6 +207,8 @@ describe.sequential('M4 testbed real-browser wiring', () => {
       wrongOriginFillBlocked: false,
       unobserved: 0,
     });
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -213,6 +227,8 @@ describe.sequential('M4 testbed real-browser wiring', () => {
       wrongOriginFillBlocked: true,
       unobserved: 0,
     });
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -246,6 +262,8 @@ describe.sequential('M4 testbed real-browser wiring', () => {
       wrongOriginFillBlocked: true,
       unobserved: 0,
     });
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 });

@@ -1,12 +1,15 @@
+import { SessionHostError } from '../core/browserPort';
 import type { CredentialBackend } from '../backends/backend';
 import { BROWSER_OPEN_FAILURE_MESSAGE, createBrowserControls } from '../browser/controls';
-import { createBrowserFailure } from '../browser/controlResults';
+import { createBrowserFailure, createSnapshotResult } from '../browser/controlResults';
+import { createFailedResult } from '../core/results';
 import {
   launchChromium,
   type Browser,
   type BrowserContext,
   type ChromiumLauncher,
   type Page,
+  type CDPSession,
 } from '../browser/playwright';
 import {
   createBrowserSessionHost,
@@ -21,490 +24,35 @@ import { validateBareOrigin } from '../core/originGuard';
 import type { BrowserControls, FillRequest, Origin, VaultTools } from '../core/types';
 import type { CapturedEventInput } from '../agents/transcript';
 import { serializeExact } from '../agents/transcript';
-import {
-  CONSOLE_BUDGET_EXCEEDED,
-  consoleEventBytes,
-  type RemoteObjectLike,
-} from './consoleSerialization';
 import { createLockdownDomain } from './lockdownDomain';
 import {
   TripwireRun,
 } from './tripwireSeam';
-import {
-  BodyCorrelation,
-  BODY_UNAVAILABLE_NOT_ATTACHED,
-  BODY_UNAVAILABLE_TARGET_DETACHED,
-  PROVISIONAL_HEADERS_MARKER,
-  mayCarryBody,
-  type RequestWillBeSentLike,
-} from './bodyCorrelation';
+import type { RequestWillBeSentLike } from './bodyCorrelation';
 import { WorkerAttachRouter } from './workerAttach';
 
 type TripwireVerdict = ReturnType<TripwireRun['adjudicate']>;
-
-type RequestLike = Readonly<{
-  allHeaders(): Promise<Record<string, string>>;
-  postData?(): string | null;
-  postDataBuffer(): Buffer | null;
-  headers(): Record<string, string>;
-  method(): string;
-  redirectedFrom?(): RequestLike | null;
-  url(): string;
-}>;
-
-const ALL_HEADERS_TIMEOUT_MS = 2_000;
-const ATTACH_TIMEOUT_MS = 2_000;
-const CONSOLE_EVENT_LIMIT = 1_000;
+export const OP_TIMEOUT_MS = 10_000;
+// Leave room for the existing two-second navigation settle after stop.
+export const OP_STOP_GRACE_MS = 3_000;
+export const QUIESCE_TIMEOUT_MS = 5_000;
+export const VAULT_TOOL_FAILURE_MESSAGE = 'Vault operation failed';
+const supervisedHostLeases = new WeakMap<object, EvidenceLease>();
 export { CONSOLE_BUDGET_EXCEEDED } from './consoleSerialization';
 export { BODY_UNAVAILABLE_NOT_ATTACHED, BODY_UNAVAILABLE_TARGET_DETACHED } from './bodyCorrelation';
-export const POPUP_ATTACH_TIMEOUT_DIAGNOSTIC = 'x-tinyvault-popup-attach-timeout';
+import { EvidenceLease, CAPTURE_FAILED_MESSAGE, FINISH_PRECONDITION_MESSAGE,
+  InactiveEvidenceLeaseError, assertLeaseActive, type QuiesceDeadline } from './evidenceLease';
+export { EvidenceLease, CAPTURE_FAILED_MESSAGE, FINISH_PRECONDITION_MESSAGE,
+  POPUP_ATTACH_TIMEOUT_DIAGNOSTIC, inspectEvidenceLeaseForTest } from './evidenceLease';
 
-function boundedAllHeaders(request: RequestLike): Promise<Record<string, string>> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      // Provisional fallback (no cookies): marked in the evidence so a reader can tell it from allHeaders().
-      try {
-        resolve({ ...request.headers(), [PROVISIONAL_HEADERS_MARKER]: 'true' });
-      } catch (error: unknown) { reject(error); }
-    }, ALL_HEADERS_TIMEOUT_MS);
-    request.allHeaders().then((headers) => { clearTimeout(timer); resolve(headers); },
-      (error: unknown) => {
-        clearTimeout(timer);
-        // A target that closed before its headers resolved (a self-closing popup's keepalive POST) is the page's
-        // doing, not a harness fault: the provisional set is recorded, marked, and the body counted as unobserved
-        // (register C-B2f2). Any other rejection still invalidates the run.
-        if (!isClosedTargetError(error)) { reject(error); return; }
-        try {
-          resolve({ ...request.headers(), [PROVISIONAL_HEADERS_MARKER]: 'true' });
-        } catch (fallbackError: unknown) { reject(fallbackError); }
-      });
-  });
-}
-
-function isClosedTargetError(error: unknown): boolean {
-  return error instanceof Error && /Target page, context or browser has been closed/u.test(error.message);
-}
-
-/** Playwright resolves allHeaders() with the provisional set itself when a request finishes without
- *  requestWillBeSentExtraInfo (a target gone before the network layer reported — a self-closing popup's keepalive
- *  POST). Such a set is indistinguishable from resolved headers by content, so it is marked here by identity:
- *  resolved headers always add to the provisional ones (register C-B2f2, integrator pass). */
-function markUnresolvedHeaders(request: RequestLike, resolved: Record<string, string>): Record<string, string> {
-  if (resolved[PROVISIONAL_HEADERS_MARKER] === 'true') return resolved;
-  let provisional: Record<string, string>;
-  try { provisional = request.headers(); } catch { return resolved; }
-  const resolvedKeys = Object.keys(resolved);
-  const unchanged = resolvedKeys.length === Object.keys(provisional).length
-    && resolvedKeys.every((name) => provisional[name] === resolved[name]);
-  return unchanged ? { ...resolved, [PROVISIONAL_HEADERS_MARKER]: 'true' } : resolved;
-}
-
-type WebSocketLike = Readonly<{
-  on(event: 'framesent', listener: (event: { payload: string | Buffer }) => void): void;
-}>;
-
-export const CAPTURE_FAILED_MESSAGE = 'Evidence capture failed';
-export const VAULT_TOOL_FAILURE_MESSAGE = 'Vault operation failed';
-const leaseEvidence = new WeakMap<EvidenceLease, CapturedEventInput[]>();
-const supervisedHostLeases = new WeakMap<object, EvidenceLease>();
-
-export class EvidenceLease {
-  readonly #run: TripwireRun;
-  readonly #tripwireEvidence: ReturnType<TripwireRun['captureTrusted']>[] = [];
-  #canary: string | null;
-  #captureFailed = false;
-  #allowTimedOutAttachOperation = false;
-  #active = true;
-  readonly #pending = new Set<Promise<void>>();
-  readonly #pendingAttach = new Map<Promise<void>, boolean | Promise<boolean>>();
-  readonly #bodyCorrelation = new BodyCorrelation();
-  #consoleEvents = 0;
-  readonly #consoleDetachers = new Set<() => void>();
-
-  constructor(canary: string) {
-    this.#run = new TripwireRun(canary);
-    this.#canary = canary;
-    leaseEvidence.set(this, []);
-    this.recordRequest = this.recordRequest.bind(this);
-    this.recordWebSocket = this.recordWebSocket.bind(this);
-  }
-
-  recordRequest(request: RequestLike): void {
-    let rawUrl: string;
-    try {
-      rawUrl = request.url();
-    } catch {
-      this.#captureFailed = true;
-      return;
-    }
-    let parsed: URL;
-    try {
-      parsed = new URL(rawUrl);
-    } catch {
-      return;
-    }
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
-    try {
-      const redirectedFrom = request.redirectedFrom?.();
-      if (redirectedFrom !== null && redirectedFrom !== undefined) {
-        this.#recordRedirect(redirectedFrom, rawUrl);
-      }
-      let origin: Origin | undefined;
-      try {
-        origin = validateBareOrigin(parsed.origin);
-      } catch {
-        origin = undefined;
-      }
-      const method = request.method();
-      this.#record(Object.freeze({
-        channel: 'url', direction: 'outbound',
-        ...(origin === undefined ? {} : { origin }),
-        method, initiator: 'browser', bytes: parsed.href,
-      }));
-      const body = request.postDataBuffer();
-      if (body !== null) {
-        this.#recordNetworkBody(rawUrl, method, requestBodyBytes(body));
-      } else {
-        this.#bodyCorrelation.observePlaywrightRequest(request, rawUrl, method, request.headers());
-      }
-      // allHeaders() never resolves for a WebSocket upgrade (no requestWillBeSentExtraInfo), so it is bounded:
-      // after ALL_HEADERS_TIMEOUT_MS the provisional headers() are recorded instead (never a missing event).
-      const capture = boundedAllHeaders(request).then((resolved) => {
-        // Only a request whose body Playwright did not hold needs the unresolved-headers judgement.
-        const headers = body === null && mayCarryBody(method) ? markUnresolvedHeaders(request, resolved) : resolved;
-        if (body === null) this.#bodyCorrelation.observeHeaders(request, headers);
-        this.#record(Object.freeze({
-          channel: 'header', direction: 'outbound',
-          ...(origin === undefined ? {} : { origin }),
-          method, route: `${parsed.pathname}${parsed.search}`,
-          initiator: 'browser', bytes: JSON.stringify(headers),
-        }));
-      }).catch(() => this.markCaptureFailed());
-      this.trackDeferred(capture);
-    } catch {
-      this.#captureFailed = true;
-    }
-  }
-
-  #recordRedirect(redirectedFrom: RequestLike, targetUrl: string): void {
-    const parsed = new URL(redirectedFrom.url());
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
-    let origin: Origin | undefined;
-    try { origin = validateBareOrigin(parsed.origin); } catch { origin = undefined; }
-    this.#record(Object.freeze({
-      channel: 'redirect', direction: 'outbound', ...(origin === undefined ? {} : { origin }),
-      route: `${parsed.pathname}${parsed.search}`, method: redirectedFrom.method(),
-      initiator: 'browser', bytes: targetUrl,
-    }));
-  }
-
-  /**
-   * Bodies Playwright's request event omits (Blob and sendBeacon bodies — Chromium reports `hasPostData`
-   * without inline `postData`; register J-S1) are fetched through CDP `Network.getRequestPostData` and
-   * recorded here with the same origin/route shape as `recordRequest`. Interception is NOT used: an active
-   * route suppresses CORS preflights and would change what the page can reach.
-   */
-  recordRequestWillBeSent(identity: string, event: RequestWillBeSentLike): void {
-    this.#bodyCorrelation.observeCdpRequest(identity, event);
-  }
-
-  recordDeferredBody(
-    rawUrl: string,
-    method: string,
-    postData: string,
-    base64Encoded: boolean,
-    identity?: string,
-  ): void {
-    if (!this.#bodyCorrelation.recordBody(identity)) return;
-    this.#recordNetworkBody(
-      rawUrl,
-      method,
-      base64Encoded ? requestBodyBytes(Buffer.from(postData, 'base64')) : postData,
-    );
-  }
-
-  #recordNetworkBody(
-    rawUrl: string,
-    method: string,
-    bytes: string,
-    initiator: 'browser' | 'harness-marker' = 'browser',
-  ): void {
-    let parsed: URL;
-    try {
-      parsed = new URL(rawUrl);
-    } catch {
-      return;
-    }
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
-    let origin: Origin | undefined;
-    try {
-      origin = validateBareOrigin(parsed.origin);
-    } catch {
-      origin = undefined;
-    }
-    this.#record(Object.freeze({
-      channel: 'network-body', direction: 'outbound', ...(origin === undefined ? {} : { origin }),
-      method, route: `${parsed.pathname}${parsed.search}`, initiator, bytes,
-    }));
-  }
-
-  recordUnavailableBody(identity: string): void {
-    this.#bodyCorrelation.recordUnavailable(identity);
-  }
-
-  /** WebSocket handshakes raise no Playwright request event; their headers arrive through CDP
-   *  `Network.webSocketWillSendHandshakeRequest` (register K-X2 follow-up: the subprotocol header). */
-  recordHandshakeHeaders(rawUrl: string, headers: Readonly<Record<string, string>>): void {
-    let parsed: URL;
-    try {
-      parsed = new URL(rawUrl);
-    } catch {
-      return;
-    }
-    if (parsed.protocol !== 'ws:' && parsed.protocol !== 'wss:') return;
-    let origin: Origin | undefined;
-    try {
-      origin = validateBareOrigin(parsed.origin.replace(/^ws/u, 'http'));
-    } catch {
-      origin = undefined;
-    }
-    // The handshake URL (query string included) is evidence too: `route` is never scanned (register L-Q1).
-    this.#record(Object.freeze({
-      channel: 'url', direction: 'outbound', ...(origin === undefined ? {} : { origin }),
-      method: 'GET', route: `${parsed.pathname}${parsed.search}`, initiator: 'browser', bytes: parsed.href,
-    }));
-    this.#record(Object.freeze({
-      channel: 'header', direction: 'outbound', ...(origin === undefined ? {} : { origin }),
-      method: 'GET', route: `${parsed.pathname}${parsed.search}`, initiator: 'browser',
-      bytes: JSON.stringify(headers),
-    }));
-  }
-
-  markCaptureFailed(): void {
-    this.#captureFailed = true;
-  }
-
-  /** A deferred capture (CDP round trip) in flight; `settle()` awaits every one before a drain. */
-  trackDeferred(capture: Promise<void>): void {
-    this.#pending.add(capture);
-    void capture.finally(() => this.#pending.delete(capture));
-  }
-
-  trackAttach(attach: Promise<void>, invalidateOnTimeout: boolean | Promise<boolean> = true): void {
-    this.#pendingAttach.set(attach, invalidateOnTimeout);
-    void attach.finally(() => this.#pendingAttach.delete(attach));
-  }
-
-  async settleAttach(): Promise<void> {
-    const pending = [...this.#pendingAttach.entries()];
-    await Promise.all(pending.map(async ([attach, invalidateOnTimeout]) => {
-      let timer: NodeJS.Timeout | undefined;
-      const timedOut = new Promise<'timeout'>((resolve) => {
-        timer = setTimeout(() => resolve('timeout'), ATTACH_TIMEOUT_MS);
-      });
-      const result = await Promise.race([attach.then(() => 'settled' as const), timedOut]);
-      if (timer !== undefined) clearTimeout(timer);
-      if (result === 'timeout') {
-        this.#pendingAttach.delete(attach);
-        if (await invalidateOnTimeout) {
-          this.markCaptureFailed();
-          this.#allowTimedOutAttachOperation = true;
-        } else {
-          this.#record(Object.freeze({
-            channel: 'url', direction: 'internal', initiator: 'harness-diagnostic',
-            bytes: POPUP_ATTACH_TIMEOUT_DIAGNOSTIC,
-          }));
-        }
-      }
-    }));
-  }
-
-  async settle(): Promise<void> {
-    while (this.#pending.size > 0) await Promise.allSettled([...this.#pending]);
-    for (const marker of this.#bodyCorrelation.finalize()) {
-      this.#recordNetworkBody(marker.rawUrl, marker.method, marker.reason, 'harness-marker');
-    }
-  }
-
-  recordWebSocket(socket: WebSocketLike): void {
-    try {
-      socket.on('framesent', ({ payload }) => {
-        try {
-          this.#record(Object.freeze({
-            channel: 'websocket', direction: 'outbound', initiator: 'browser',
-            bytes: typeof payload === 'string' ? payload : payload.toString('base64'),
-          }));
-        } catch {
-          this.#captureFailed = true;
-        }
-      });
-    } catch {
-      this.#captureFailed = true;
-    }
-  }
-
-  recordConsole(page: Page, cdp: import('../browser/playwright').CDPSession): void {
-    if (this.#consoleEvents > CONSOLE_EVENT_LIMIT) return;
-    const listener = (event: Readonly<{ type: string; args: readonly RemoteObjectLike[] }>) => {
-      try {
-        if (this.#consoleEvents >= CONSOLE_EVENT_LIMIT) {
-          if (this.#consoleEvents === CONSOLE_EVENT_LIMIT) {
-            this.#record(Object.freeze({
-              channel: 'log', direction: 'outbound', initiator: 'page-console',
-              ...pageOrigin(page), bytes: CONSOLE_BUDGET_EXCEEDED,
-            }));
-            this.#consoleEvents += 1;
-            for (const detach of this.#consoleDetachers) detach();
-            this.#consoleDetachers.clear();
-          }
-          return;
-        }
-        this.#consoleEvents += 1;
-        this.#record(Object.freeze({
-          channel: 'log', direction: 'outbound', initiator: 'page-console',
-          ...pageOrigin(page), bytes: consoleEventBytes(event.type, event.args),
-        }));
-      } catch {
-        this.markCaptureFailed();
-      }
-    };
-    cdp.on('Runtime.consoleAPICalled', listener);
-    this.#consoleDetachers.add(() => cdp.off('Runtime.consoleAPICalled', listener));
-  }
-
-  recordFill(outcome: FillOutcome): void {
-    try {
-      this.#recordTop(outcome);
-      this.#recordAsserted(outcome);
-      this.#recordAssigned(outcome);
-    } catch {
-      this.#captureFailed = true;
-    }
-  }
-
-  captureTrusted(bytes: string): void {
-    this.#assertActive();
-    try {
-      this.#tripwireEvidence.push(this.#run.captureTrusted(bytes));
-    } catch (error) {
-      this.#captureFailed = true;
-      throw error;
-    }
-  }
-
-  drainEvidence(): readonly CapturedEventInput[] {
-    this.#assertActive();
-    const evidence = this.#evidence();
-    const drained = Object.freeze([...evidence]);
-    evidence.length = 0;
-    return drained;
-  }
-
-  finish(): TripwireVerdict {
-    this.#assertActive();
-    const captureFailed = this.#captureFailed;
-    try {
-      const batch = this.#run.mint(this.#tripwireEvidence);
-      const verdict = this.#run.adjudicate(batch);
-      if (captureFailed) throw new Error(CAPTURE_FAILED_MESSAGE);
-      return verdict;
-    } finally {
-      this.#drop();
-    }
-  }
-
-  abort(): void {
-    this.#drop();
-  }
-
-  captureFailed(): boolean {
-    // A timed-out readiness handshake invalidates finish, but the operation waiting on that bounded
-    // barrier must still proceed once. All other capture failures remain fail-closed for controls.
-    if (this.#allowTimedOutAttachOperation) {
-      this.#allowTimedOutAttachOperation = false;
-      return false;
-    }
-    return this.#captureFailed;
-  }
-
-  hasCaptureFailed(): boolean {
-    return this.#captureFailed;
-  }
-
-  consumeTimedOutAttachOperation(): void {
-    this.#allowTimedOutAttachOperation = false;
-  }
-
-  #recordTop(outcome: FillOutcome): void {
-    const { topOrigin, topPath, unobserved, reobservedOrigin } = outcome.observation;
-    if (topOrigin !== null) this.#record(Object.freeze({
-      channel: 'url', direction: 'internal', initiator: 'fill-service',
-      origin: topOrigin, bytes: topPath ?? '',
-    }));
-    if (unobserved && topOrigin === null) {
-      this.#record(Object.freeze({
-        channel: 'url', direction: 'internal', initiator: 'fill-service-unobserved', bytes: '',
-      }));
-    }
-    if (reobservedOrigin !== null) this.#record(Object.freeze({
-      channel: 'url', direction: 'internal', initiator: 'fill-service',
-      origin: reobservedOrigin, bytes: reobservedOrigin,
-    }));
-  }
-
-  #recordAsserted(outcome: FillOutcome): void {
-    const { assertedMismatch } = outcome.observation;
-    if (assertedMismatch === null) return;
-    this.#record(Object.freeze({
-      channel: 'url', direction: 'internal', initiator: 'fill-service-asserted',
-      origin: assertedMismatch, bytes: 'asserted',
-    }));
-  }
-
-  #recordAssigned(outcome: FillOutcome): void {
-    const assigned = outcome.observation.assigned;
-    const canary = this.#canary;
-    if (assigned === null || canary === null) return;
-    this.#record(Object.freeze({
-      channel: 'dom-fill', direction: 'internal', origin: assigned.observedOrigin,
-      frameId: 'top', documentId: assigned.documentToken ?? 'none',
-      requestId: assigned.controlToken ?? 'none', initiator: 'fill-service', bytes: canary,
-    }));
-  }
-
-  #record(event: CapturedEventInput): void {
-    this.#assertActive();
-    this.#evidence().push(event);
-  }
-
-  #evidence(): CapturedEventInput[] {
-    const evidence = leaseEvidence.get(this);
-    if (evidence === undefined) throw new Error(CAPTURE_FAILED_MESSAGE);
-    return evidence;
-  }
-
-  #assertActive(): void {
-    if (!this.#active) throw new Error(CAPTURE_FAILED_MESSAGE);
-  }
-
-  #drop(): void {
-    if (!this.#active) return;
-    this.#active = false;
-    this.#run.close();
-    this.#tripwireEvidence.length = 0;
-    this.#canary = null;
-    const evidence = leaseEvidence.get(this);
-    if (evidence !== undefined) evidence.length = 0;
-    leaseEvidence.delete(this);
-    this.#bodyCorrelation.clear();
-  }
-}
+export type QuiesceHooks = Readonly<{ settleTimeoutMs?: number; beforeClose?(): Promise<void>; afterClose?(): Promise<void> }>;
 
 export type SupervisedHost = Readonly<{
   tools: VaultTools & BrowserControls;
   drainEvidence(): readonly CapturedEventInput[];
   /** Awaits in-flight deferred captures (Blob bodies via CDP); call before a post-loop drain or finish. */
   settleEvidence(): Promise<void>;
+  quiesceEvidenceProducers?(hooks?: QuiesceHooks): Promise<void>;
   finish(): TripwireVerdict;
   abort(): void;
   closeAll(): Promise<void>;
@@ -520,14 +68,23 @@ export async function createSupervisedHost(options: Readonly<{
   const launchedHere = options.browser === undefined;
   const lease = new EvidenceLease(options.canary);
   const domain = createLockdownDomain();
+  const failures: { abort?: () => void; pending: boolean } = { pending: false };
   const sessions = createBrowserSessionHost({
     newContext: capturingContextFactory(browser, lease),
     authority: domain.authority,
     registry: domain.registry,
     lifecycle: domain.lifecycle,
+    onSessionFailure: (_id, kind) => {
+      lease.markCaptureFailed();
+      if (kind === 'browser-missing' || kind === 'operation-timeout') return;
+      failures.pending = true; failures.abort?.();
+    },
   });
   const fillService = createFillService({ backend: options.backend, sessions, registry: domain.registry });
-  return compose(parts(fillService, sessions, lease), launchedHere ? browser : undefined);
+  const host = compose(parts(fillService, sessions, lease), launchedHere ? browser : undefined);
+  failures.abort = host.abort;
+  if (failures.pending) failures.abort();
+  return host;
 }
 
 /** Test composition seam: it carries no network-body capture because no browser request listener is attached. */
@@ -537,10 +94,6 @@ export function composeSupervisedHost(parts: Readonly<{
   lease: EvidenceLease;
 }>): SupervisedHost {
   return compose(parts, undefined);
-}
-
-export function inspectEvidenceLeaseForTest(lease: EvidenceLease): readonly CapturedEventInput[] {
-  return Object.freeze([...(leaseEvidence.get(lease) ?? [])]);
 }
 
 export function inspectSupervisedHostCaptureFailedForTest(host: SupervisedHost): boolean {
@@ -599,7 +152,19 @@ async function attachDeferredBodyCapture(
         .catch(() => lease.recordUnavailableBody(identity));
       lease.trackDeferred(capture);
     });
-    const router = new WorkerAttachRouter(cdp, {
+    await attachChildRouter(cdp, lease);
+  } catch (error) {
+    if (pageClosed(page) || isMissingPageTargetError(error)) return;
+    lease.markCaptureFailed();
+  }
+}
+
+
+const childQuiescers = new WeakMap<EvidenceLease, Set<() => Promise<void>>>();
+
+async function attachChildRouter(cdp: CDPSession, lease: EvidenceLease): Promise<void> {
+  registerChildQuiescer(cdp, lease);
+  const router = new WorkerAttachRouter(cdp, {
       observeRequest: (identity, event) => lease.recordRequestWillBeSent(identity, event),
       recordBody: (identity, url, method, postData, base64Encoded) => {
         lease.recordDeferredBody(url, method, postData, base64Encoded, identity);
@@ -608,21 +173,52 @@ async function attachDeferredBodyCapture(
       track: (capture) => lease.trackDeferred(capture),
       fail: () => lease.markCaptureFailed(),
     });
-    await router.enable();
-  } catch (error) {
-    if (pageClosed(page) || isMissingPageTargetError(error)) return;
-    lease.markCaptureFailed();
-  }
+  await router.enable();
 }
 
-function pageOrigin(page: Page): Readonly<{ origin?: Origin }> {
-  try {
-    const parsed = new URL(page.url());
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return {};
-    return { origin: validateBareOrigin(parsed.origin) };
-  } catch {
-    return {};
+// Observe the same nested target transport consumed by WorkerAttachRouter. No unrelated browser targets
+// are closed: each id came from this owned page's attached child tree, including nested worker targets.
+function registerChildQuiescer(cdp: CDPSession, lease: EvidenceLease): void {
+  const targets = new Set<string>(); let quiescing = false; let attempted = 0; let unconfirmed = 0;
+  const stop = async (targetId: string) => {
+    attempted += 1;
+    try {
+      const result = await cdp.send('Target.closeTarget', { targetId });
+      if (result.success !== true) unconfirmed += 1;
+    } catch (error) {
+      unconfirmed += 1;
+      if (!isMissingPageTargetError(error)) lease.markCaptureFailed();
+    }
+    lease.recordChildStopDiagnostic(attempted, unconfirmed);
+  };
+  const observe = (method: string, params: Record<string, any>) => {
+    const found = childTargetIds(method, params);
+    for (const id of found) {
+      targets.add(id);
+      if (quiescing) lease.trackDeferred(stop(id));
+    }
+  };
+  cdp.on('Target.attachedToTarget', (event) => observe('Target.attachedToTarget', event));
+  cdp.on('Target.receivedMessageFromTarget', (event) => observe('Target.receivedMessageFromTarget', event));
+  const callbacks = childQuiescers.get(lease) ?? new Set<() => Promise<void>>();
+  callbacks.add(async () => { quiescing = true; await Promise.all([...targets].map(stop)); });
+  childQuiescers.set(lease, callbacks);
+}
+
+function childTargetIds(method: string, params: Record<string, any>): string[] {
+  if (method === 'Target.attachedToTarget') {
+    return ['worker', 'shared_worker', 'service_worker', 'iframe'].includes(params.targetInfo?.type)
+      && typeof params.targetInfo?.targetId === 'string' ? [params.targetInfo.targetId] : [];
   }
+  if (method !== 'Target.receivedMessageFromTarget' || typeof params.message !== 'string') return [];
+  try {
+    const child = JSON.parse(params.message);
+    return childTargetIds(child.method, child.params ?? {});
+  } catch { return []; } // The owning WorkerAttachRouter reports invalid envelopes as capture failure.
+}
+
+async function quiesceChildTargets(lease: EvidenceLease): Promise<void> {
+  await Promise.all([...(childQuiescers.get(lease) ?? [])].map((stop) => stop()));
 }
 
 function attachTimeoutInvalidates(page: Page, lease: EvidenceLease): Promise<boolean> {
@@ -637,41 +233,164 @@ function attachTimeoutInvalidates(page: Page, lease: EvidenceLease): Promise<boo
   }
 }
 
-function requestBodyBytes(body: Buffer): string {
-  try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(body);
-  } catch {
-    return body.toString('base64');
-  }
-}
-
 function pageClosed(page: Page): boolean {
   try { return page.isClosed(); } catch { return false; }
 }
 
 function isMissingPageTargetError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /No target with given id|Target closed|Session closed|Target page, context or browser has been closed/iu
+  return /No target with given id|No target found for targetId|Target closed|Session closed|Target page, context or browser has been closed/iu
     .test(message);
 }
 
-function compose(
-  parts: Readonly<{ fillService: FillService; sessions: BrowserSessionHost; lease: EvidenceLease }>,
-  browserToClose: Browser | undefined,
-): SupervisedHost {
-  const browserTools = createBrowserControls(parts.sessions);
-  const tools = createTools(parts.fillService, browserTools, parts.lease);
-  let closing: Promise<void> | undefined;
+type HostParts = Readonly<{ fillService: FillService; sessions: BrowserSessionHost; lease: EvidenceLease }>;
+type HostState = {
+  parts: HostParts; browser?: Browser; admitted: Set<Promise<unknown>>;
+  quiescing: boolean; aborted: boolean; aborting?: Promise<void>;
+  closing?: Promise<void>; quiescence?: Promise<void>; deadline?: QuiesceDeadline;
+};
+
+function compose(parts: HostParts, browser: Browser | undefined): SupervisedHost {
+  const state: HostState = { parts, browser, admitted: new Set(), quiescing: false, aborted: false };
+  const tools = boundedTools(state, createTools(parts.fillService, createBrowserControls(parts.sessions), parts.lease));
   const host: SupervisedHost = Object.freeze({
-    tools,
-    drainEvidence: () => parts.lease.drainEvidence(),
-    settleEvidence: () => parts.lease.settle(),
-    finish: () => parts.lease.finish(),
-    abort: () => parts.lease.abort(),
-    closeAll: () => closing ??= closeAll(parts.sessions, browserToClose, parts.fillService),
+    tools, drainEvidence: () => parts.lease.drainEvidence(),
+    settleEvidence: () => parts.lease.settle(state.deadline),
+    quiesceEvidenceProducers: (hooks) => state.quiescence ??= quiesce(state, hooks),
+    finish: () => finishHost(state), abort: () => abortHost(state),
+    closeAll: () => state.closing ??= closeHost(state),
   });
   supervisedHostLeases.set(host, parts.lease);
   return host;
+}
+
+function finishHost(state: HostState): TripwireVerdict {
+  if (state.parts.sessions.openSessionCount() > 0 || state.admitted.size > 0) {
+    throw new Error(FINISH_PRECONDITION_MESSAGE);
+  }
+  return state.parts.lease.finish();
+}
+
+function abortHost(state: HostState): void {
+  state.aborted = true; state.quiescing = true;
+  state.parts.lease.abort();
+  state.aborting ??= disposeProducers(state);
+  void state.aborting.catch(() => state.parts.lease.markCaptureFailed());
+}
+
+async function disposeProducers(state: HostState): Promise<void> {
+  let failure: unknown;
+  try { await state.browser?.close(); } catch (error) { failure = error; }
+  try { await state.parts.sessions.abortSessions(); } catch (error) { failure ??= error; }
+  if (failure !== undefined) throw failure;
+}
+
+function admit<T>(state: HostState, operation: () => Promise<T>, refused: () => T): Promise<T> {
+  if (state.quiescing || state.aborted) return Promise.resolve().then(refused);
+  const work = operation();
+  state.admitted.add(work);
+  void work.then(() => state.admitted.delete(work), () => state.admitted.delete(work));
+  return work;
+}
+
+type OperationWatch = { expired: boolean; settled: boolean; stopping?: Promise<void>;
+  disposing?: Promise<void>; grace?: NodeJS.Timeout };
+
+async function stopExpiredOperation(state: HostState, id: string, watch: OperationWatch): Promise<void> {
+  try { await state.parts.sessions.stopLoading(id); } catch (error) {
+    if (!(error instanceof SessionHostError && error.kind === 'unknown-session')) abortHost(state);
+  }
+  if (watch.settled) return;
+  watch.grace = setTimeout(() => {
+    watch.disposing = state.parts.sessions.disposeSession(id).catch(() => abortHost(state));
+  }, OP_STOP_GRACE_MS);
+}
+
+async function bounded<T>(state: HostState, id: string, operation: () => Promise<T>, failed: T): Promise<T> {
+  const watch: OperationWatch = { expired: false, settled: false };
+  const timer = setTimeout(() => {
+    watch.expired = true; watch.stopping = stopExpiredOperation(state, id, watch);
+  }, OP_TIMEOUT_MS);
+  let result: T;
+  try { result = await operation(); }
+  catch (error) {
+    if (!watch.expired && !state.aborted) throw error;
+    result = failed;
+  } finally {
+    watch.settled = true; clearTimeout(timer); clearTimeout(watch.grace);
+    await watch.stopping;
+    clearTimeout(watch.grace);
+    await watch.disposing;
+    await state.aborting?.catch(() => undefined);
+  }
+  return watch.expired || state.aborted ? failed : result;
+}
+
+function boundedTools(state: HostState, raw: VaultTools & BrowserControls): VaultTools & BrowserControls {
+  const closed = Object.freeze({ ok: false as const, reason: 'session-unknown' as const });
+  return Object.freeze<VaultTools & BrowserControls>({
+    list_vault: raw.list_vault, request_vault_setup: raw.request_vault_setup,
+    browser_open_session: () => admit(state, raw.browser_open_session,
+      () => { throw new Error(BROWSER_OPEN_FAILURE_MESSAGE); }),
+    browser_close_session: (args) => admit(state,
+      () => bounded(state, args.sessionId, () => raw.browser_close_session(args), Object.freeze({ ok: false })),
+      () => Object.freeze({ ok: false })),
+    browser_navigate: (args) => admit(state, () => bounded(state, args.sessionId,
+      () => raw.browser_navigate(args), createBrowserFailure('navigation-failed')), () => closed),
+    browser_click: (args) => admit(state, () => bounded(state, args.sessionId,
+      () => raw.browser_click(args), createBrowserFailure('no-such-element')), () => closed),
+    browser_type: (args) => admit(state, () => bounded(state, args.sessionId,
+      () => raw.browser_type(args), createBrowserFailure('no-such-element')), () => closed),
+    browser_snapshot: (args) => admit(state,
+      () => bounded(state, args.sessionId, () => raw.browser_snapshot(args), closed), () => closed),
+    fill_from_vault: (args) => admit(state, () => bounded(state, args.sessionId,
+      () => raw.fill_from_vault(args), createFailedResult({ reason: 'no-password-control' })),
+      () => { throw new Error(VAULT_TOOL_FAILURE_MESSAGE); }),
+  });
+}
+
+function quiesceDeadline(state: HostState, settleTimeoutMs = 0): { deadline: QuiesceDeadline; clear(): void } {
+  let expire!: () => void; let expired = false;
+  const signal = new Promise<void>((resolve) => { expire = resolve; });
+  const abort = () => { expired = true; abortHost(state); expire(); };
+  const budget = Math.max(0, settleTimeoutMs) + QUIESCE_TIMEOUT_MS;
+  const expiresAt = Date.now() + budget;
+  const timer = setTimeout(abort, budget);
+  return { deadline: { expiresAt, expired: signal, isExpired: () => expired, abort }, clear: () => clearTimeout(timer) };
+}
+
+async function quiesce(state: HostState, hooks: QuiesceHooks = {}): Promise<void> {
+  state.quiescing = true;
+  const clock = quiesceDeadline(state, hooks.settleTimeoutMs); state.deadline = clock.deadline;
+  try {
+    await hooks.beforeClose?.();
+    await state.parts.sessions.quiesceControls(clock.deadline.expiresAt);
+    await Promise.allSettled([...state.admitted]);
+    await state.parts.sessions.quiesceControls(clock.deadline.expiresAt);
+    await state.parts.lease.settleStrict(clock.deadline);
+    await quiesceChildTargets(state.parts.lease);
+    if (!state.aborted) await state.parts.sessions.closeAll();
+    await state.parts.lease.settleStrict(clock.deadline, true);
+    await hooks.afterClose?.();
+    if (state.aborted) throw new Error(CAPTURE_FAILED_MESSAGE);
+  } catch {
+    abortHost(state);
+    await state.aborting?.catch(() => undefined);
+    await Promise.allSettled([...state.admitted]);
+    await state.parts.sessions.closeAll();
+    await state.parts.lease.settleStrict(undefined, true);
+    throw new Error(CAPTURE_FAILED_MESSAGE);
+  } finally { clock.clear(); state.deadline = undefined; }
+  if (state.parts.lease.hasCaptureFailed()) throw new Error(CAPTURE_FAILED_MESSAGE);
+}
+
+async function closeHost(state: HostState): Promise<void> {
+  await state.aborting?.catch(() => undefined);
+  if (state.aborted) {
+    await Promise.allSettled([...state.admitted]);
+    await state.parts.lease.settleStrict(undefined, true);
+  }
+  await closeAll(state.parts.sessions, state.browser, state.parts.fillService);
 }
 
 function createTools(
@@ -735,8 +454,8 @@ async function capturedControl<T>(lease: EvidenceLease, operation: () => Promise
 }
 
 async function capturedVault<T>(lease: EvidenceLease, operation: () => Promise<T>): Promise<T> {
-  assertLeaseActive(lease);
   try {
+    assertLeaseActive(lease);
     return await captured(lease, operation);
   } catch {
     throw new Error(VAULT_TOOL_FAILURE_MESSAGE);
@@ -748,8 +467,8 @@ async function capturedVaultFill(
   fillService: FillService,
   request: FillRequest,
 ) {
-  assertLeaseActive(lease);
   try {
+    assertLeaseActive(lease);
     const outcome = await fillService.fill(request);
     lease.recordFill(outcome);
     lease.captureTrusted(serializeExact(outcome.result));
@@ -759,13 +478,17 @@ async function capturedVaultFill(
   }
 }
 
-function uncaptured<T>(lease: EvidenceLease, operation: () => Promise<T>): Promise<T> {
-  assertLeaseActive(lease);
-  return operation();
-}
-
-function assertLeaseActive(lease: EvidenceLease): void {
-  if (!leaseEvidence.has(lease)) throw new Error(CAPTURE_FAILED_MESSAGE);
+async function uncaptured(lease: EvidenceLease,
+  operation: () => ReturnType<BrowserControls['browser_snapshot']>): ReturnType<BrowserControls['browser_snapshot']> {
+  try {
+    assertLeaseActive(lease);
+    const result = await operation();
+    assertLeaseActive(lease);
+    return result;
+  } catch (error) {
+    if (error instanceof InactiveEvidenceLeaseError) return createSnapshotResult();
+    throw error;
+  }
 }
 
 async function closeAll(

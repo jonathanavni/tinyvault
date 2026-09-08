@@ -72,7 +72,8 @@ class FakePage extends EventEmitter {
 
   url(): string { return this.currentUrl; }
   async waitForLoadState(_state: string, options: { timeout: number }): Promise<void> {
-    expect(options.timeout).toBe(2_000);
+    expect(options.timeout).toBeGreaterThan(0);
+    expect(options.timeout).toBeLessThanOrEqual(2_000);
     this.waitCalls += 1;
   }
   async waitForEvent(event: string, options: { timeout: number; predicate?: unknown }): Promise<void> {
@@ -105,6 +106,8 @@ class FakeContext extends EventEmitter {
   newPageCalls = 0;
   cdpCalls = 0;
   closeCalls = 0;
+  readonly owner = { contexts: () => this.closeCalls === 0 ? [this] : [] };
+  browser() { return this.owner; }
 
   constructor(readonly order: string[] = []) {
     super();
@@ -122,6 +125,7 @@ class FakeContext extends EventEmitter {
     this.closeCalls += 1;
     this.order.push('context.close');
     this.page.emit('close');
+    this.emit('close');
   }
 }
 
@@ -150,6 +154,192 @@ function setup() {
 }
 
 describe('browser session lifecycle over the CDP seam', () => {
+  it('navigation timeout preserves its original failure when cancellation finds a missing target', async () => {
+    const { host, context } = setup(); const { sessionId } = await host.openSession();
+    const timeout = new Error('original goto timeout'); timeout.name = 'TimeoutError';
+    vi.spyOn(context.page, 'goto').mockRejectedValue(timeout);
+    const send = context.cdp.send.bind(context.cdp);
+    vi.spyOn(context.cdp, 'send').mockImplementation(async (method, params) => {
+      if (method === 'Page.stopLoading') throw new Error('Target closed');
+      return send(method, params);
+    });
+    await expect(host.runControl(sessionId, (page) => page.navigate('https://example.test'))).rejects.toBe(timeout);
+    await host.closeAll();
+  });
+  it('quiesced sessions never repeat stop or suspension and idle sessions never request courtesy', async () => {
+    const { host, context } = setup();
+    await host.openSession();
+    await host.quiesceControls(); await host.quiesceControls(); await host.closeAll();
+    expect(context.page.waitCalls).toBe(0);
+    expect(context.cdp.calls.filter(({ method }) => method === 'Page.stopLoading')).toHaveLength(1);
+    expect(context.cdp.calls.filter(({ method }) => method === 'Emulation.setScriptExecutionDisabled')).toHaveLength(1);
+  });
+  it('emergency disposal retries a retired context and never re-walks settled failed entries', async () => {
+    const { host, context } = setup(); const session = await host.openSession();
+    const close = vi.spyOn(context, 'close').mockRejectedValueOnce(new Error('first close rejected'));
+    expect(await host.closeSession(session.sessionId)).toBe(false);
+    expect(context.owner.contexts()).toContain(context);
+    await host.abortSessions();
+    expect(context.owner.contexts()).toEqual([]);
+    const count = close.mock.calls.length;
+    await host.abortSessions(); await host.closeAll();
+    expect(close).toHaveBeenCalledTimes(count);
+  });
+  it('a rejected emergency close still rejects queued work and settles the mutex', async () => {
+    const { host, context } = setup(); const { sessionId } = await host.openSession();
+    let release!: () => void;
+    const holder = host.runControl(sessionId, () => new Promise<void>((resolve) => { release = resolve; }));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const queued = host.runControl(sessionId, async () => 'must not run');
+    const rejected = expect(queued).rejects.toMatchObject({ kind: 'closing' });
+    vi.spyOn(context, 'close').mockImplementationOnce(async () => { release(); throw new Error('close rejected'); });
+    await host.abortSessions(); await holder; await rejected;
+    expect(context.owner.contexts()).toEqual([]);
+    expect(host.openSessionCount()).toBe(0);
+  });
+  it('abort disposes an owned context whose session is still initializing', async () => {
+    const { context, host } = setup();
+    let entered!: () => void;
+    const admitted = new Promise<void>((resolve) => { entered = resolve; });
+    vi.spyOn(context, 'newPage').mockImplementation(() => new Promise((_resolve, reject) => {
+      entered(); context.page.once('close', () => reject(new Error('context disposed')));
+    }));
+    const opening = host.openSession();
+    void opening.catch(() => undefined);
+    await admitted;
+    await host.abortSessions();
+    expect(context.owner.contexts()).toEqual([]);
+    await expect(opening).rejects.toThrow('context disposed');
+    expect(host.openSessionCount()).toBe(0);
+  });
+  it('suppresses page-close release promises during owner disposal but retains page-initiated cleanup', async () => {
+    for (const ownerDisposal of [false, true]) {
+      const { host, context } = setup();
+      const session = await host.openSession();
+      await host.runExclusive(session.sessionId, (port) => port.pinPasswordDestination('#password'));
+      let inCloseListener = false;
+      let cleanupPromises = 0;
+      const emit = context.page.emit.bind(context.page);
+      vi.spyOn(context.page, 'emit').mockImplementation((event, ...args) => {
+        if (event !== 'close') return emit(event, ...args);
+        inCloseListener = true;
+        try { return emit(event, ...args); } finally { inCloseListener = false; }
+      });
+      const all = Promise.all.bind(Promise);
+      vi.spyOn(Promise, 'all').mockImplementation(((values: any) => {
+        if (inCloseListener) cleanupPromises += 1;
+        return all(values);
+      }) as typeof Promise.all);
+      if (ownerDisposal) expect(await host.closeSession(session.sessionId)).toBe(true);
+      else context.page.emit('close');
+      expect(cleanupPromises).toBe(ownerDisposal ? 0 : 1);
+      vi.restoreAllMocks();
+      await host.closeAll();
+    }
+  });
+  it('stops an admitted holder before waiting for close and observes context removal', async () => {
+    const { host, context } = setup();
+    const session = await host.openSession();
+    let release!: () => void;
+    const holder = host.runControl(session.sessionId, () => new Promise<void>((resolve) => { release = resolve; }));
+    const send = context.cdp.send.bind(context.cdp);
+    vi.spyOn(context.cdp, 'send').mockImplementation(async (method, params) => {
+      if (method === 'Page.stopLoading') release();
+      return send(method, params);
+    });
+    expect(await host.closeSession(session.sessionId)).toBe(true);
+    await holder;
+    expect(context.owner.contexts()).not.toContain(context);
+    expect(context.cdp.calls.some(({ method }) => method === 'Page.stopLoading')).toBe(true);
+  });
+
+  it.each(['stop-rejected', 'context-retained', 'browser-missing'] as const)(
+    'reports %s exactly and removes failed sessions from the live cohort', async (mode) => {
+      const context = new FakeContext();
+      const failure = vi.fn();
+      if (mode === 'browser-missing') vi.spyOn(context, 'browser').mockReturnValue(null as never);
+      if (mode === 'context-retained') vi.spyOn(context.owner, 'contexts').mockReturnValue([context]);
+      const host = createBrowserSessionHost({ newContext: async () => context as never,
+        ...createLockdownDomain(), onSessionFailure: failure });
+      const { sessionId } = await host.openSession();
+      if (mode === 'stop-rejected') context.cdp.fail = true;
+      expect(await host.closeSession(sessionId)).toBe(mode === 'browser-missing');
+      expect(failure).toHaveBeenCalledExactlyOnceWith(sessionId,
+        mode === 'stop-rejected' ? 'stop-failed' : mode === 'browser-missing' ? 'browser-missing' : 'context-not-removed');
+      expect(host.openSessionCount()).toBe(0);
+      const stops = context.cdp.calls.filter(({ method }) => method === 'Page.stopLoading').length;
+      await host.quiesceControls();
+      await host.closeAll();
+      expect(context.cdp.calls.filter(({ method }) => method === 'Page.stopLoading')).toHaveLength(stops);
+      expect(await host.closeSession('unknown')).toBe(false);
+    },
+  );
+  it('keeps the courtesy load wait before cancellation and suspends scripts only after the holder', async () => {
+    const { host, context } = setup();
+    const { sessionId } = await host.openSession();
+    const sequence: string[] = [];
+    let release!: () => void;
+    const holder = host.runControl(sessionId, () => new Promise<void>((resolve) => { release = resolve; }));
+    vi.spyOn(context.page, 'waitForLoadState').mockImplementation(async () => {
+      sequence.push('courtesy'); release(); await holder; sequence.push('holder');
+    });
+    const send = context.cdp.send.bind(context.cdp);
+    vi.spyOn(context.cdp, 'send').mockImplementation(async (method, params) => {
+      if (method === 'Page.stopLoading' || method === 'Emulation.setScriptExecutionDisabled') sequence.push(method);
+      return send(method, params);
+    });
+    await host.quiesceControls();
+    expect(sequence).toEqual(['courtesy', 'holder', 'Page.stopLoading', 'Emulation.setScriptExecutionDisabled']);
+    expect(context.cdp.calls.at(-1)?.params).toEqual({ value: true });
+    await host.closeAll();
+  });
+
+  it('closes a gone target without reporting infrastructure failure', async () => {
+    const context = new FakeContext();
+    const failure = vi.fn();
+    const host = createBrowserSessionHost({ newContext: async () => context as never,
+      ...createLockdownDomain(), onSessionFailure: failure });
+    const { sessionId } = await host.openSession();
+    context.page.emit('close');
+    vi.spyOn(context.cdp, 'send').mockRejectedValue(new Error('Protocol error: Target closed'));
+    expect(await host.closeSession(sessionId)).toBe(true);
+    expect(failure).not.toHaveBeenCalled();
+    expect(host.openSessionCount()).toBe(0);
+  });
+
+  it('trusted disposal reports the timeout once and waits for the holder after context removal', async () => {
+    const context = new FakeContext();
+    const failure = vi.fn();
+    const host = createBrowserSessionHost({ newContext: async () => context as never,
+      ...createLockdownDomain(), onSessionFailure: failure });
+    const { sessionId } = await host.openSession();
+    let release!: () => void;
+    const holder = host.runControl(sessionId, () => new Promise<void>((resolve) => { release = resolve; }));
+    let settled = false;
+    const disposal = host.disposeSession(sessionId).then(() => { settled = true; });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(context.owner.contexts()).toEqual([]);
+    expect(host.openSessionCount()).toBe(0);
+    expect(settled).toBe(false);
+    release(); await holder; await disposal;
+    expect(failure).toHaveBeenCalledExactlyOnceWith(sessionId, 'operation-timeout');
+    await host.abortSessions(); await host.closeAll();
+    expect(failure).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires a close event to qualify a null-browser context', async () => {
+    const context = new FakeContext();
+    vi.spyOn(context, 'browser').mockReturnValue(null as never);
+    vi.spyOn(context, 'close').mockResolvedValue(undefined);
+    const failure = vi.fn();
+    const host = createBrowserSessionHost({ newContext: async () => context as never,
+      ...createLockdownDomain(), onSessionFailure: failure });
+    const { sessionId } = await host.openSession();
+    expect(await host.closeSession(sessionId)).toBe(false);
+    expect(failure.mock.calls).toEqual([[sessionId, 'browser-missing'], [sessionId, 'context-not-removed']]);
+    expect(host.openSessionCount()).toBe(0);
+  });
+
   it('kills multiple-CDP-session and per-pin-world mutations with a legitimate pin control', async () => {
     const { context, host } = setup();
     const { sessionId } = await host.openSession();
@@ -290,7 +480,7 @@ describe('browser session lifecycle over the CDP seam', () => {
     const { context, lifecycleCalls, host } = setup();
     const { sessionId } = await host.openSession();
     expect(await host.closeSession(sessionId)).toBe(true);
-    expect(context.page.waitCalls).toBe(1);
+    expect(context.page.waitCalls).toBe(0);
     expect(context.closeCalls).toBe(1);
     expect(lifecycleCalls.filter((call) => call === `close:${sessionId}`)).toHaveLength(1);
     expect(await host.closeSession(sessionId)).toBe(false);
@@ -319,9 +509,9 @@ describe('browser session lifecycle over the CDP seam', () => {
     expect(order).toEqual([
       'mutex.close',
       'lifecycle.clearOnSessionClose',
+      'context.close',
       'taint/cdp-drop',
       'cdp.detach',
-      'context.close',
     ]);
     vi.restoreAllMocks();
   });
@@ -354,8 +544,21 @@ describe('browser session lifecycle over the CDP seam', () => {
     expect(context.page.gotoCalls).toEqual([
       'http://127.0.0.1:1/unsafe', 'https://example.test/one', 'https://example.test/two',
     ]);
+    expect(context.cdp.calls.filter(({ method }) => method === 'Page.stopLoading')).toHaveLength(0);
     expect(context.page.settleWaits).toBe(1);   // the error page commit is awaited via framenavigated, not load state
     expect(context.page.waitCalls).toBe(0);
+    await host.closeAll();
+  });
+
+  it('cancels a goto TimeoutError before the navigation settle barrier', async () => {
+    const { context, host } = setup();
+    const { sessionId } = await host.openSession();
+    vi.spyOn(context.page, 'goto').mockRejectedValue(Object.assign(new Error('navigation timed out'), { name: 'TimeoutError' }));
+    const frameWait = vi.spyOn(context.page, 'waitForEvent');
+    await expect(host.runControl(sessionId, (page) => page.navigate('http://10.255.255.1/')))
+      .rejects.toThrow('navigation timed out');
+    expect(context.cdp.calls.at(-1)?.method).toBe('Page.stopLoading');
+    expect(frameWait).toHaveBeenCalledOnce();
     await host.closeAll();
   });
 

@@ -138,7 +138,7 @@ function createHostFactory(
     return {
       tools: createHarnessTools(state, behavior, backend, canary),
       drainEvidence: createEvidenceDrain(state, behavior),
-      settleEvidence: async () => {},
+      settleEvidence: async () => { await state.captureFailedLease?.settle(); },
       finish: finishHost,
       abort: abortHost,
       closeAll: async () => {
@@ -211,6 +211,7 @@ function createEvidenceDrain(state: HarnessState, behavior: HarnessBehavior) {
   return () => {
     state.drainCount += 1;
     const batch = state.pending.splice(0);
+    if (state.captureFailedLease) batch.push(...state.captureFailedLease.drainEvidence());
     if ((!behavior.delayNetworkUntilAfterLoop || state.drainCount > 7)
       && state.pendingNetwork !== undefined) {
       batch.push(state.pendingNetwork);

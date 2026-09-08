@@ -32,6 +32,7 @@ export const DOCKER_CAPABILITY_ALLOWLIST = Object.freeze({
   'src/browser/controls.browser.test.ts': ['node:http'],
   'testbed/parity/observe.browser.test.ts': ['node:http'],
   'testbed/parity/claims.browser.test.ts': ['node:http'],
+  'testbed/runner.finalization.browser.test.ts': ['node:http', 'node:net'],
   'testbed/fixtures/controls-lab/index.test.ts': ['node:http'],
   'testbed/fixtures/controls-lab/index.ts': ['node:http'],
   'testbed/fixtures/shared/bindServer.test.ts': ['node:net'],

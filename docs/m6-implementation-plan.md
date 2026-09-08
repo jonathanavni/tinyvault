@@ -101,7 +101,7 @@ bounds or previously accepted S1/M5 limits. D-CANCEL remains OPEN.
 
 The delta instructions below retain the approved implementation obligations; imperative wording does
 not mark completed slices unfinished. Current S1–S3 completion is in the header and M6 register;
-S4/S5 implementation and full command/cohort verification remain due.
+S4 is implemented and accepted at the round-3 cap (2026-09-07; M6 register entry "S4 implementation — accepted at the round-3 cap", with declared residuals). S5 implementation and full command/cohort verification remain due.
 
 | ID | Proposed exact contract delta and canonical home | Disposition / verification |
 | --- | --- | --- |
@@ -564,7 +564,7 @@ All paths below are relative to this checkout; new files are explicitly marked `
 | S1 Provenance and profile contracts | `testbed/evaluationProvenance.ts` / `.test.ts` (new), `testbed/evalAgents.ts`, `testbed/scorecard.schema.ts`, `testbed/scorecardAggregate.ts`, `testbed/evaluationValidity.ts`, `testbed/evaluationValidity.test.ts`, `testbed/checkers/offline.ts`, `testbed/checkers/offline.test.ts` (new), `testbed/runner.artifacts.test.ts`; implement E1 plus run-bound source factories and AM09/AM10 diagnostic types/APIs, typed explicit profile inventories, preserve stub defaults for existing regression callers until S5. | First; high risk, full ladder. AM09/AM10 affect diagnostic reporting only; strict validators remain. |
 | S2 Real SDK transport | `src/agents/anthropicClient.ts` / `.test.ts` (new), `testbed/agentEvidenceBudget.test.ts` (new), `src/agents/loop.ts`, `src/agents/loop.test.ts`, `src/agents/transcript.ts`, `src/agents/transcript.test.ts`, `src/agents/loop.acceptance-j.test.ts`, `src/agents/loop.options.negative.ts`, `package.json`, `package-lock.json`; E2, native message mapping, schemas, deadlines and wire accounting; mandatory §4.3 numeric feasibility exit before S3. | S1; high risk, full ladder. |
 | S3 Agent profiles and recipes | `src/agents/reference.ts` / `.test.ts`, `src/agents/naiveBaseline.ts` / `.test.ts`, `src/agents/prompt.ts` / `.test.ts` (new), `testbed/evalAgents.ts`, `testbed/scenarios/types.ts`, `testbed/scenarios/benignLogin.ts`, `testbed/scenarios/lookalikeOrigin.ts`, `testbed/scenarios/domHiddenInjection.ts`, `testbed/scenarios/hostile.test.ts`, `testbed/agentEvidenceBudget.test.ts`; E3/E4 source identities, fixed public recipes, setup/refusal tests. Owner authors root `SKILL.md` in same candidate under M6-AM06 and extends its wording gate. S3 exit reruns the §4.3 numeric budget suite with actual prompt bytes; other E3/E4 evidence is unit-level; complete E3/E4 production runner wiring is S5, explicitly not already proved here. | S2; full ladder for custody/config. |
-| S4 Quiescence and coverage qualification | `src/browser/session.ts`, `src/browser/session.test.ts`, `src/browser/session.transport.browser.test.ts`, `src/supervisor/host.ts`, `src/supervisor/host.test.ts`, `src/supervisor/host.evidence.test.ts`, `src/supervisor/host.browser.test.ts`, `testbed/runnerExecution.ts`, `testbed/runner.wiring.test.ts`, `testbed/scenarioCoverage.ts` / `.test.ts` (new), `testbed/runner.finalization.browser.test.ts` (new). E5/E6; bounded connection cleanup and finish preconditions. | S3; high risk, full ladder. |
+| S4 Quiescence and coverage qualification | `src/browser/session.ts`, `src/browser/session.test.ts`, `src/browser/session.transport.browser.test.ts`, `src/supervisor/host.ts`, `src/supervisor/host.test.ts`, `src/supervisor/host.evidence.test.ts`, `src/supervisor/host.browser.test.ts`, `testbed/runnerExecution.ts`, `testbed/runner.wiring.test.ts`, `testbed/scenarioCoverage.ts` / `.test.ts` (new), `testbed/runner.finalization.browser.test.ts` (new). E5/E6; bounded connection cleanup and finish preconditions. Also `src/supervisor/evidenceLease.ts` (host split), `src/supervisor/host.settle.browser.test.ts`, `testbed/fixtures/hostile-self-navigation.html`, additions-only `scripts/retention/allowlists.ts` sync, and owner integration of the Docker capability row and structural pins. | S3; high risk, full ladder. ACCEPTED 2026-09-07 at the round-3 cap (E5 qualification module + initial-snapshot observation delivered; publication wiring is S5). |
 | S5 Composed real-agent command path | `testbed/runner.ts`, `testbed/runnerExecution.ts`, `testbed/evalEntry.ts`, `testbed/evalEntry.test.ts`, `testbed/evalAgents.ts`, `testbed/scorecardAggregate.ts`, `testbed/runner.test.ts`, `testbed/runner.testkit.ts`, `testbed/runner.inProcess.test.ts`, `testbed/runner.browser.test.ts`, `testbed/runner.artifacts.test.ts`, `testbed/runner.wiring.test.ts`, `testbed/runner.eval.test.ts`, `testbed/runner.realAgent.test.ts` (new), `testbed/runner.realAgent.eval.test.ts` (new), `package.json`, `Makefile`, `vitest.eval.config.ts`. E7/E8, agent/cohort-scoped run identity, runId-bound start/recovery URL and recipe wiring, AM09/AM10 diagnostic retention and failed-cohort/per-cell qualification reporting. Re-prove E1–E4 at the actual command boundary. | S4; high risk gating, full ladder. |
 | S6 Acceptance and early recording | Owner runs E9/E10 and records evidence in M6 register; documentation/result artifacts only. No source repair bundled into acceptance: defects return to the owning slice with its round count. | S5; milestone closure/assessment ladder, no release. |
 
@@ -601,6 +601,20 @@ If a native abort sacrifices deferred evidence, fail that run rather than call i
 release, new result enum, correlation rewrite or timer-only success. If the selected mechanism needs files
 outside S4, explicitly extend the owner packet before dispatch. This decision remains OPEN here.
 
+**S4 timing refinement (owner-approved 2026-09-07; round-2 implementation).** Explicit
+NAVIGATION_TIMEOUT_MS = 10_000 is passed to page.goto. A TimeoutError stops the still-pending
+navigation; fast failures preserve the existing framenavigated settle before rethrow so an error-page
+commit cannot interrupt the next navigation. The existing two-second frame settle remains
+after cancellation, and no running operation is abandoned. The supervisor's
+OP_TIMEOUT_MS = 10_000 bounds the navigation wedge for navigate, click, type, snapshot and fill,
+and also bounds close. After stop, OP_STOP_GRACE_MS = 3_000 escalates a non-answering renderer to
+that session's context disposal, failing capture for the run while awaiting the actual holder's settlement
+and preserving other sessions and existing evidence (no host-wide abort for operation-timeout).
+Thus 10 seconds bounds the navigation wedge; a non-answering renderer is bounded by 10 seconds
+plus grace and disposal settlement. CLICK_TIMEOUT_MS = 5_000 and
+NAVIGATION_SETTLE_TIMEOUT_MS = 2_000 remain unchanged. F9 restores the close courtesy wait; D3 requests it only for an active holder, at most once per
+session within the same two-second budget and shared deadline, before stop, mutex close and disposal.
+
 S4 lifecycle target, contingent on D-CANCEL: add trusted `quiesceEvidenceProducers()` to the host. Order is: reject new controls;
 let already-admitted mutex work settle; await currently pending and newly registered deferred captures to a
 bounded fixed point while their targets remain alive; close owned contexts with capture listeners still live;
@@ -610,7 +624,9 @@ observed body fetch merely to satisfy its timer. A controlled delayed-body test 
 body is pending, releases the response before the bound, and requires the actual body rather than a
 `target-detached` marker. Mutating the order to close before this pre-close settle must kill that test.
 
-Bound this quiesce phase to 5 seconds. On expiry mark capture failure, abort the owned browser/run and fail
+Bound this quiesce phase to 5 seconds (owner decision D3, 2026-09-07: the runner's controlled settle-until has its own
+declared budget `settleTimeoutMs` which is ADDED to this deadline, not consumed from it; its inner settle is generation-bounded;
+the hard shared deadline is therefore `settleTimeoutMs + 5 s` from finalization entry). On expiry mark capture failure, abort the owned browser/run and fail
 the cohort; never return successful close while work lives. Wait for the active mutex holder under the
 existing contract; browser navigation cancellation must make the holder settle, not release its mutex early.
 Prove owned contexts gone and no pending callbacks resurrect state. Shared-browser collateral cancellation

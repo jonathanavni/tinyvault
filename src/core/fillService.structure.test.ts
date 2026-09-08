@@ -118,6 +118,10 @@ describe('A/K fill-service structural confinement', () => {
     for (const file of [
       'src/core/fillService.ts',
       'src/supervisor/host.ts',
+      'src/supervisor/evidenceLease.ts',
+      'src/browser/session.ts',
+      'src/supervisor/host.evidence.test.ts',
+      'testbed/runner.finalization.browser.test.ts',
       'src/core/fillService.test.ts',
       'src/core/fillService.browser.test.ts',
       'src/supervisor/host.test.ts',

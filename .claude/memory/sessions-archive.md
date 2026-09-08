@@ -94,3 +94,8 @@ running code. (commits `9f216b0`..`6a6b67c`)
   merged codex branches, resolved D-CANCEL with a reproduction + cause isolation + externally-proven mechanism on the
   real supervised path and three capped Sol paper rounds; no source change, S4 not dispatched. Found the hostile
   self-navigation channel wedge. Docs uncommitted at session end pending wrapup.
+
+- **2026-09-07 (`2026-09-07-d-cancel`, continued: S4)** — S4 packet Sol-reviewed, approved, dispatched to Astra;
+  candidate + two fix rounds under a three-channel ladder (Codex adversarial, Claude QA, Claude security ×3), owner gate
+  green each round after fixes, six owner mutant spot-checks, one Sol test-only witness; accepted at the cap with nine
+  declared residuals; committed. S5 next.

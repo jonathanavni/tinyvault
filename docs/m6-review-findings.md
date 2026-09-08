@@ -1332,3 +1332,63 @@ R1-6 a confirmed second target with pending evidence or a fail-closed residual; 
 fixed-point loop and the listener suppression. Evidence limits: single macOS host, one Chromium build, IPv4
 only, SYN_SENT via `netstat` as the socket signal (no packet capture), mechanism emulated from a test-owned
 second CDP session rather than in-path.
+
+## S4 implementation — accepted at the round-3 cap (2026-09-07, owner claude)
+
+Scope: M6 slice S4 (trusted quiescence with real navigation cancellation, per-op bounds, E5 capture qualification
+module) implemented by Codex Astra in write mode across an initial candidate and two fix rounds, reviewed by three
+channels per round (Codex adversarial, fresh Claude QA, fresh Claude security), with the owner running the full gate and
+sampling mutants independently each round. Evidence archive (local, ignored):
+`artifacts/review-evidence/tinyvault-m6-s4-packet-20260907/` — packet, dispatch prompts, worker reports, per-round
+reviews (`codex-adversarial-review-r{1,2,3}.md`, `claude-qa-review-r{1,2,3}.md`, `claude-security-review-r{1,2,3}.md`),
+fix-round packets (`fix-round-1.md`, `fix-round-2.md`), worker evidence (`worker-round{1,2}/`, 48 mutant patches with
+result records and native reports), owner gate reports (`make-test-r{1,2,3}-*.json`) and `owner-round1-verification.md`.
+
+**Mechanism as landed.** `closeSession`: courtesy wait only while a holder is active and at most once per session
+(≤ 2 s, deadline-capped) → `Page.stopLoading` → mutex close → context disposal before session-CDP cleanup (listener
+release suppressed while disposing; pinned objects cleared locally) → close qualified by observed context removal
+(`browser-missing` reported once with a close latch; failed sessions retired, not re-walked). `navigatePage` passes
+`NAVIGATION_TIMEOUT_MS` = 10 s and stops only on `TimeoutError` (fast failures keep the error-page settle). Supervisor:
+admission barrier; every browser tool except `browser_open_session` and the fill run under `OP_TIMEOUT_MS` = 10 s,
+stop on expiry, `OP_STOP_GRACE_MS` = 3 s then that session's context disposal with capture marked failed (no host-wide
+abort); `quiesceEvidenceProducers()` (optional on the interface) arms one deadline = `settleTimeoutMs + 5 s`, runs the
+runner's controlled settle, stops sessions, suspends page scripts with a ≤ 1 s advisory cutoff (promise retained and
+awaited at disposal), drains deferred/attach work to a three-generation fixed point while targets live, stops child
+targets with attempted/unconfirmed diagnostics, closes contexts, final settle/drain; expiry aborts the run; `finish()`
+refuses on live sessions / pending work / undrained evidence with a trusted precondition message; post-abort results
+are failures and the model-visible string set is unchanged. `EvidenceLease` moved to `src/supervisor/evidenceLease.ts`
+(host split); `settle()` generation-bounded unconditionally. Runner: quiesce inside `afterLoop` before the transcript
+seals; initial-snapshot observation sidecar; `scenarioCoverage.ts` qualification module (not production-wired; S5).
+
+**Owner verification (each round, this host).** Round-1 candidate: `make test` exit 2 (controls matrix ×2, host.ts
+920 > 800, wall-clock meta-gate). Round 1: exit 0 — 2613/0/1, timing 5/5, 17/17. Round 2: exit 0 — 2627/0/1, timing
+5/5, 20/20, execution gate PASS. Final (with the G12 witness and the owner integration edits): make test exit 0 — main 2629 pass / 0 fail / 1 inherited skip; timing families 5/5 and 20/20; execution gate PASS (make-test-final-*.json). Real-path reproduction (no external stop) after rounds 1 and 2: close 3 ms after a
+failed navigation, 4.0 s during an active goto, SYN_SENT 0. Owner mutant spot-checks with restored-source controls:
+01/09/28 (round 1) and 37/39/40 (round 2) all killed, controls green. Owner integration edits: Docker capability row for
+the finalization test; structural size gate pins `evidenceLease.ts`, `session.ts`, `host.evidence.test.ts`,
+`runner.finalization.browser.test.ts`; the worker's proposed contract-doc patch (phase plan, M6 plan §7 timing
+refinement, SCHEMA) applied with the D3 budget sentence; finalization test scratch moved out of the archive.
+
+**Review rounds.** R1 (candidate): Codex NO-SHIP 2 P1; QA NEEDS-ATTENTION 3 P1; security NEEDS-ATTENTION 2 P1;
+24 findings F1–F24 dispositioned in `fix-round-1.md` (F5 trusted-backend stall = declared residual; F7 clarified per the
+worker's STOP; F11 E5 publication wiring narrowed to S5). R2: Codex NEEDS-ATTENTION 1 P1 / 1 P2 / 1 deviation; QA 0 P1 /
+3 P2; security 1 P1 / 4 P2; 18 findings G1–G18 with owner decisions D1–D4 and the adopted G2/G6 clarifications
+(`fix-round-2.md`). R3 (capped, P1 criteria fixed up front): QA PASS, security PASS, Codex NEEDS-ATTENTION with one
+in-criteria P1 (G12's ordinary-settle generation bound witnessed only at the lease helper): closed by a test-only Sol witness (`src/supervisor/host.settle.browser.test.ts`: real `createSupervisedHost`, four
+deferred-body generations, `settleEvidence()` returns while the fourth is held, then release and preservation; control
+included) which the owner ran clean (2/2) and against mutant 40 (assertion kill: `expected 'timeout' to be 'settled'`),
+source restored byte-exact. No fourth review round; R3's P3s and the QA/security residuals are recorded below.
+
+**Declared residuals (carried, not silently absorbed).** (1) A stalled TRUSTED backend or a non-cancellable trusted
+capture holds the mutex/quiesce past the abort trigger; only the trigger is bounded; regressions show release → failed
+settlement with no abandoned work; bounded backend contract filed for the 1Password/Bitwarden adapter step. (2) `abort()`
+discards ALL lease evidence including pre-abort captures; the verdict is capture-failed, never clean; S5 snapshots the
+array before `#drop`. (3) Page-scoped producers are suspended; nested/service-worker targets are bounded by the
+three-generation cap plus disposal and only counted (attempted/unconfirmed), never-attached producers uncounted;
+generation 4+ degrades to markers by design. (4) Socket release is proven only by the owner's SYN_SENT observation
+(exp series and this session's re-runs), not by a test assertion. (5) E5 publication rejection is not production-wired
+(S5). (6) G16: no round-1 timing distribution retained for the tripwire real-click family; A/B symmetry kept.
+(7) `browser_open_session` is the one tool outside the per-op bound (not page-reachable). (8) Unmutated arms: the
+courtesy deadline term and the suspension reserve; the G3 regression's fixed 14 s sync; `abortSessions`' recovery loop
+per-entry guard — S5 test items. (9) M5-C7 unload/keepalive limits unchanged. Rounds are capped at three; no fourth
+paper or fix round was opened.

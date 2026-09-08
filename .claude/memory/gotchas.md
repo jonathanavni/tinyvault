@@ -396,3 +396,20 @@ Example:
   re-dispatch ran 8 min and completed, but a monitor that looked for it in a `completed` bucket reported "absent" for that
   one too. Monitor on `running` only; on leaving `running`, call `result <id>`: a report means done, "No job found"
   means lost → re-dispatch once. (2026-09-07)
+
+- **`Page.stopLoading` after a FAST navigation failure cancels the committing error page and breaks the next goto.**
+  Stop is right only while a navigation is still pending (Playwright `TimeoutError`); after `ERR_CONNECTION_REFUSED` /
+  unsafe-port failures Chromium is already committing its error page, and stopping it leaves the frame in a state that
+  interrupts the following navigation (`controls.browser.test.ts` closed-exception matrix went red). Detect: the next
+  `browser_navigate` after a fast failure returns `navigation-failed`. Fix: gate the stop on `error.name === 'TimeoutError'`
+  and keep the `framenavigated` settle for fast failures. (2026-09-07)
+- **A worker's targeted vitest run is not the gate.** The S4 candidate's 422-test targeted suite was green while `make test`
+  was red on three files it never ran (controls matrix, the 800-line structural pin, the wall-clock meta-gate). Always run
+  the full `make test` yourself before starting a review round, and copy `.vitest/*.json` into the evidence archive.
+  The retention allowlist and the Docker capability map are also gates a worker cannot edit: expect a STOP on the first
+  new function in `session.ts` or the first `node:http`/`node:net` import in a new test, and pre-authorize additions-only.
+  (2026-09-07)
+- **Three-round review ladders find different things each round; budget for it.** S4: R1 7 P1 across channels (drain
+  convergence, deadline armed too late, stop-failure semantics), R2 3 P1 (child targets destroyed before the drain,
+  quiesce budget over-subscribed), R3 one evidence-gap P1. Each round's fixes created the next round's findings; the
+  cap with stated P1 criteria is what ended it. (2026-09-07)

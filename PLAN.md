@@ -11,7 +11,7 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-07-d-cancel` — focus: **S3 wrapup docs committed (`0acb6bb`), merged codex branches pruned, D-CANCEL resolved with evidence (`b5a478e`; S4 not dispatched)**;
+`2026-09-07-d-cancel` — focus: **S3 wrapup committed, branches pruned, D-CANCEL resolved (`2bcfbbd`), S4 IMPLEMENTED AND ACCEPTED at the round-3 cap (Astra candidate + two fix rounds, three review channels per round, owner gate green; committed this session)**;
 owner: claude; state: active; state checkout: `/Users/jonathanavni/Documents/Coding/tinyvault`; worktree: same (main).
 
 **D-CANCEL (S4 entry gate): RESOLVED 2026-09-07.** Mechanism = `Page.stopLoading` before the mutex wait, E6 order, context
@@ -21,9 +21,29 @@ Proven externally on the real supervised path (close 2–5 ms / 2.0 s, sockets r
 families and three capped Sol paper rounds (R1/R2 NO-SHIP fully dispositioned; R3 NO-SHIP with one in-criteria P1 closed by exp9; final state RESOLVED).
 Canonical: M6 plan §7 + M6 register entry; raw evidence `artifacts/review-evidence/tinyvault-m6-d-cancel-20260907/`
 (local, ignored). Also found: a hostile page can wedge the trusted host's control channel for ~75 s with one line of JS
-(self-navigation to a black hole) — carried into S4 as a fixture + lifecycle rule. **Next:** S4 packet is DRAFTED at
-`docs/m6-s4-handoff.md` (not dispatched): user approved the 10 s `NAVIGATION_TIMEOUT_MS` and the sequence Sol paper pass → findings
-back to the user → Astra `task --write` under the full ladder; S5 unchanged. Local main is two docs commits (`0acb6bb`, `b5a478e`) ahead of
+(self-navigation to a black hole) — carried into S4 as a fixture + lifecycle rule. **S4 in flight:** packet `docs/m6-s4-handoff.md` (Sol paper pass absorbed; three user-approved decisions: 10 s per-op bound,
+failed-run retention stays S5, optional quiesce method + four pre-authorized test files). Astra job `task-mtrqkb95-81pxry` stopped at the retention gate (correct STOP); owner extended ownership to additions-only
+`scripts/retention/allowlists.ts` sync (`1bcec40`), resumed as `task-mtrqs30i-51hamj`, which delivered the S4 candidate
+(uncommitted) and stopped at the Docker capability gate; owner applied that one row (gate + self-test PASS). Owner
+`make test`: exit 2 — controls matrix ×2 (unconditional stop cancels a committing error page), host.ts 920 > 800 lines,
+wall-clock bounds outside the timing families. Owner verification: the original black-hole reproduction now closes in
+3–5 ms / 2.0 s on the real path with sockets released. Post-impl ladder R1: Codex adversarial NO-SHIP (2 P1), Claude QA
+NEEDS-ATTENTION (3 P1), Claude security NEEDS-ATTENTION (2 P1); all 24 findings dispositioned in
+`artifacts/review-evidence/tinyvault-m6-s4-packet-20260907/fix-round-1.md` (one declared residual: trusted-backend stall;
+one claim narrowing: E5 publication wiring is S5). **S4 accepted.** Fix round 1 (`task-mtrtgs35-9eae5b`, after an adopted F7 clarification) delivered: owner `make test` exit 0
+(2613/0/1, timing 5/5, 17/17), real-path repro 3 ms / 4.0 s, owner mutant spot-check 01/09/28 killed with controls.
+Round-2 reviews (Codex NEEDS-ATTENTION 1 P1; QA 0 P1 / 3 P2; security 1 P1 / 4 P2) → fix round 2 of 3 dispatched as
+`task-mtrw1kff-uwxlce` with owner decisions D1–D4 (drain before child-target destruction; per-session disposal instead of
+host-wide abort on op timeout; settle-until budget added to the 5 s deadline; abort-discards-all-evidence residual wording).
+Owner also pinned evidenceLease.ts and session.ts in the structural size gate; fix round 2 (`task-mtrwfcjl-14bwqc`, after
+adopted G2/G6 clarifications) delivered; owner `make test` exit 0 (2627/0/1, timing 5/5, 20/20); round-3 reviews
+(capped, P1 criteria fixed): QA PASS, security PASS, Codex one in-criteria P1 (G12 caller-path witness) closed by a
+Sol test-only witness the owner ran against mutant 40. Final owner gate: make test exit 0 — main 2629 pass / 0 fail / 1 inherited skip; timing families 5/5 and 20/20; execution gate PASS (make-test-final-*.json). Canonical: M6 register entry
+"S4 implementation — accepted at the round-3 cap" (nine declared residuals). **Next:** S5 packet (composed real-agent
+command path; carries the S4 residuals: E5 publication wiring, abort-evidence snapshot, trusted-stall contract,
+unmutated arms). owner holds commits while it runs, then runs `make test` + the mutant inventory
+itself and the post-impl ladder (Claude QA → Claude security → Codex adversarial; three-round cap). Local main is
+`0c377bb`..`61c3fa4` ahead of origin (`2bcfbbd`): four packet commits unpushed. Local main is two docs commits (`0acb6bb`, `b5a478e`) ahead of
 origin; nothing pushed this session — push awaits the user's go-ahead.
 
 Previous stamp: `2026-09-07-m6-s3` — focus: **M6 S3 complete and published; session closed**;
@@ -681,3 +701,4 @@ No active workers, reviewers, tests or pending publication jobs.
 - **2026-09-07 — S3 checkpoint commit/push explicitly authorized.** User said “Let’s commit and push” after readiness verification. Publish only the accepted S3 candidate plus preserved S2 wrapup documentation, verify the committed tree and remote equality, and retain native evidence locally. This does not authorize S4/S5 implementation, cohorts or release. Historical review statuses and residual dispositions remain unchanged.
 - **2026-09-07** — **D-CANCEL resolved: cancel the navigation with `Page.stopLoading` before waiting on the mutex, dispose the context before the session's own CDP cleanup, and let the plan's 5 s expiry-abort settle any holder — over (a) amending the bound to "5 s after holder settlement" and (b) shrinking op timeouts**, because (a) was mis-added (17 s) and caller-visible and (b) left < 0.5 s for teardown, while the expiry-abort rule already exists in §7 and a close that races a still-running holder at the 300 s deadline is a failed run anyway. Chosen over abort-only context disposal as the first step because stop is the least destructive primitive that un-wedges the page channel (≤ 9 ms) and lets deferred evidence settle while targets live; disposal remains the hard step. Evidence: seven experiment families on the real supervised path (no code changed), Sol research corroborating from Chromium/Playwright source, three capped Sol paper rounds whose findings are all dispositioned in the M6 register. Recorded S4 requirements rather than silently absorbed: stop-on-timeout + explicit navigation timeout, hostile self-navigation fixture, delayed-body/pending-attach quiesce cases, per-holder concurrent-close differential, confirmed second target, loadingFailed correlation, four deletion mutants.
 - **2026-09-07** — **S4 adds an explicit `NAVIGATION_TIMEOUT_MS` of 10 s over keeping Playwright's 30 s default**, because a single black-hole iframe or unreachable host otherwise costs each `browser_navigate` the full 30 s inside a 300 s run, and the navigation is cancelled (stop-on-timeout) rather than left pending. Caller-visible: slow-but-legitimate pages beyond 10 s now report `navigation-failed`. User-approved with the S4 packet; recorded as a timing note, not a locked-invariant change.
+- **2026-09-07** — **S4 accepted at the round-3 cap with nine declared residuals, over a fourth round or a narrowed claim**, because every in-criteria P1 of the final round was closed by evidence on the real caller path (the last one by a test-only Sol witness the owner re-ran against its mutant), the full gate is green on the owner host, and the remaining items are trusted-side stalls, S5 wiring, and unmutated arms that do not touch the invariant. Four owner decisions taken during the ladder and recorded in the register: drain pending captures before child-target destruction; per-session disposal instead of host-wide abort on an op timeout (abort discards all evidence); the runner's settle budget is added to the 5 s quiesce deadline; the abort residual states that all lease evidence is discarded. Two worker STOPs (retention allowlist; F7/G2/G6 wording) were each correct and resolved by adopting the worker's own clarification.

@@ -135,6 +135,8 @@ describe.sequential('M5 harness coverage gate', () => {
       channel: 'network-body', route: '/terminate-workers-live-receive', bytes: CANARY,
     }));
     expect(inspectSupervisedHostCaptureFailedForTest(setup.host)).toBe(false);
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
     hosts.splice(hosts.indexOf(setup.host), 1);
     await setup.host.closeAll();
@@ -147,6 +149,8 @@ describe.sequential('M5 harness coverage gate', () => {
     expect(events.filter((event) => isUnavailableBodyMarker(event))
       .every((event) => event.channel === 'network-body')).toBe(true);
     expect(inspectSupervisedHostCaptureFailedForTest(setup.host)).toBe(false);
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
     hosts.splice(hosts.indexOf(setup.host), 1);
     await setup.host.closeAll();
@@ -168,6 +172,8 @@ describe.sequential('M5 harness coverage gate', () => {
     expect(events.some((event) => event.channel === 'log'
       && event.bytes === 'x-tinyvault-popup-attach-timeout')).toBe(false);
     expect(inspectSupervisedHostCaptureFailedForTest(setup.host)).toBe(false);
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
     hosts.splice(hosts.indexOf(setup.host), 1);
     await setup.host.closeAll();
@@ -221,6 +227,8 @@ describe.sequential('M5 harness coverage gate', () => {
     process.stderr.write(`page-close after delivery: body=${body} markers=${markers}\n`);
     expect(body).toBe(true);
     expect(markers).toBe(0);
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
     hosts.splice(hosts.indexOf(setup.host), 1);
     await setup.host.closeAll();
@@ -240,6 +248,8 @@ describe.sequential('M5 harness coverage gate', () => {
     const marker = events.some((event) => event.route === '/popup-worker-receive'
       && isUnavailableBodyMarker(event));
     expect(observed || marker).toBe(true);
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
     hosts.splice(hosts.indexOf(setup.host), 1);
     await setup.host.closeAll();

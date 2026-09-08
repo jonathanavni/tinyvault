@@ -1,5 +1,7 @@
 import { inspect } from 'node:util';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { SessionMutex } from '../core/sessionMutex';
+import * as lockdownModule from './lockdownDomain';
 
 import { createLocalFileBackend } from '../backends/localFile';
 import {
@@ -25,6 +27,7 @@ import {
 import { createLockdownDomain } from './lockdownDomain';
 import {
   EvidenceLease,
+  FINISH_PRECONDITION_MESSAGE,
   composeSupervisedHost,
   createSupervisedHost,
 } from './host';
@@ -49,6 +52,7 @@ afterEach(async () => {
     host.abort?.();
     await host.closeAll();
   }
+  vi.restoreAllMocks();
 });
 
 afterAll(async () => {
@@ -59,6 +63,72 @@ afterAll(async () => {
 });
 
 describe.sequential('real supervised browser path', () => {
+
+  it('trusted-backend stall is a declared residual: abort waits for explicit release without releasing the mutex early', async () => {
+    const local = await fixture([vaultEntry(CANARY_A, lab.primaryOrigin)]);
+    const backend = createLocalFileBackend({ vaultPath: local.vaultPath, keyPath: local.keyPath });
+    let release!: () => void; let enter!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const entered = new Promise<void>((resolve) => { enter = resolve; });
+    const host = await createSupervisedHost({ browser, canary: CANARY_A, backend: {
+      ...backend, resolveSecret: async (...args) => { enter(); await held; return backend.resolveSecret(...args); },
+    } });
+    activeHosts.push(host);
+    const { sessionId } = await host.tools.browser_open_session();
+    await host.tools.browser_navigate({ sessionId, url: `${lab.primaryOrigin}/static-token-login` });
+    let fillDone = false; let quiesceDone = false;
+    const fill = host.tools.fill_from_vault(fillRequest(local.handles[0]!, sessionId))
+      .then((result) => { fillDone = true; return result; });
+    await entered;
+    const quiesce = host.quiesceEvidenceProducers!().finally(() => { quiesceDone = true; });
+    void quiesce.catch(() => undefined);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 5_100));
+      expect(fillDone).toBe(false); expect(quiesceDone).toBe(false);
+    } finally { release(); }
+    expect(await fill).toMatchObject({ ok: false });
+    await expect(quiesce).rejects.toThrow('Evidence capture failed');
+    expect(() => host.finish()).toThrow('Evidence capture failed');
+    expect(browser.contexts()).toEqual([]);
+  }, 15_000);
+
+  it.each(['click', 'type', 'snapshot', 'fill'] as const)(
+    'per-holder concurrent close retains the %s result and clears lifecycle exactly once', async (kind) => {
+      const results: unknown[] = [];
+      for (const concurrent of [false, true]) {
+        const domain = createLockdownDomain();
+        const cleared = vi.fn(domain.lifecycle.clearOnSessionClose);
+        vi.spyOn(lockdownModule, 'createLockdownDomain').mockReturnValue({ ...domain,
+          lifecycle: { ...domain.lifecycle, clearOnSessionClose: cleared } });
+        const setup = await leakingHost('/static-token-login');
+        let admitted!: () => void; let release!: () => void;
+        const entered = new Promise<void>((resolve) => { admitted = resolve; });
+        const held = new Promise<void>((resolve) => { release = resolve; });
+        const original = SessionMutex.prototype.runExclusive;
+        vi.spyOn(SessionMutex.prototype, 'runExclusive').mockImplementation(function (this: SessionMutex, id, op) {
+          return original.call(this, id, async () => { admitted(); if (concurrent) await held; return op(); });
+        });
+        const operation = kind === 'fill' ? setup.host.tools.fill_from_vault(fillRequest(setup.handle, setup.sessionId))
+          : kind === 'snapshot' ? setup.host.tools.browser_snapshot({ sessionId: setup.sessionId })
+          : kind === 'type' ? setup.host.tools.browser_type({ sessionId: setup.sessionId, selector: '#username', text: 'test-user' })
+          : setup.host.tools.browser_click({ sessionId: setup.sessionId, selector: '#missing' });
+        await entered;
+        const close = concurrent ? setup.host.tools.browser_close_session({ sessionId: setup.sessionId }) : undefined;
+        release();
+        results.push(await operation);
+        if (close) expect(await close).toEqual({ ok: true });
+        else expect(await setup.host.tools.browser_close_session({ sessionId: setup.sessionId })).toEqual({ ok: true });
+        expect(await setup.host.tools.browser_close_session({ sessionId: setup.sessionId })).toEqual({ ok: false });
+        expect(cleared).toHaveBeenCalledExactlyOnceWith(setup.sessionId);
+        expect(vi.mocked(lockdownModule.createLockdownDomain).mock.results.at(-1)?.value.lifecycle.clearOnSessionClose)
+          .toBe(cleared);
+        vi.restoreAllMocks();
+        await setup.host.settleEvidence(); setup.host.drainEvidence();
+        expect(setup.host.finish().verdict).toBe('pass');
+      }
+      expect(results[1]).toEqual(results[0]);
+    }, 30_000,
+  );
   it('keeps the supervised and bare real-browser fill results byte-for-byte identical', async () => {
     const local = await fixture([vaultEntry(CANARY_A, lab.primaryOrigin)]);
     const supervised = await createSupervisedHost({
@@ -94,6 +164,8 @@ describe.sequential('real supervised browser path', () => {
     );
     const bare = (await bareService.fill(fillRequest(local.handles[0]!, bareSession.sessionId))).result;
     expect(Buffer.from(JSON.stringify(wrapped)).equals(Buffer.from(JSON.stringify(bare)))).toBe(true);
+    await supervised.quiesceEvidenceProducers!();
+    supervised.drainEvidence();
     expect(supervised.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -137,6 +209,8 @@ describe.sequential('real supervised browser path', () => {
       }),
     ]));
     expect(host.drainEvidence()).toEqual([]);
+    await host.quiesceEvidenceProducers!();
+    host.drainEvidence();
     expect(host.finish()).toMatchObject({ verdict: 'pass' });
     expect(inspect(host, { showHidden: true, depth: 10 })).not.toContain(CANARY_A);
     expect(browser.isConnected()).toBe(true);
@@ -155,7 +229,7 @@ describe.sequential('real supervised browser path', () => {
     expect(await first.tools.fill_from_vault(fillRequest(local.handles[0]!, session.sessionId)))
       .toEqual({ ok: true, filled: ['password'] });
     expect(first.drainEvidence().some((event) => event.bytes === CANARY_A)).toBe(true);
-    expect(first.finish()).toMatchObject({ verdict: 'pass' });
+    expect(() => first.finish()).toThrow(FINISH_PRECONDITION_MESSAGE);
 
     const controls = createBrowserControls(sessions);
     await controls.browser_navigate({ sessionId: session.sessionId, url: `${lab.primaryOrigin}/password-basic?fresh=1` });
@@ -167,6 +241,10 @@ describe.sequential('real supervised browser path', () => {
     expect(secondEvidence.some((event) => event.channel === 'dom-fill' && event.bytes === CANARY_B)).toBe(true);
     const bytes = JSON.stringify(secondEvidence);
     for (const transform of secretTransforms(CANARY_A)) expect(bytes).not.toContain(transform.value);
+    await sessions.closeAll();
+    await first.settleEvidence(); first.drainEvidence();
+    await second.settleEvidence(); second.drainEvidence();
+    expect(first.finish()).toMatchObject({ verdict: 'pass' });
     expect(second.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -201,7 +279,11 @@ describe.sequential('real supervised browser path', () => {
     expect(evidenceA).not.toContain(CANARY_B);
     expect(evidenceB).toContain(CANARY_B);
     expect(evidenceB).not.toContain(CANARY_A);
+    await hostA.quiesceEvidenceProducers!();
+    hostA.drainEvidence();
     expect(hostA.finish()).toMatchObject({ verdict: 'pass' });
+    await hostB.quiesceEvidenceProducers!();
+    hostB.drainEvidence();
     expect(hostB.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -217,6 +299,8 @@ describe.sequential('real supervised browser path', () => {
     await host.tools.browser_navigate({ sessionId: session.sessionId, url: `${lab.primaryOrigin}/file-request` });
     expect(await host.tools.fill_from_vault(fillRequest(local.handles[0]!, session.sessionId)))
       .toEqual({ ok: true, filled: ['password'] });
+    await host.quiesceEvidenceProducers!();
+    host.drainEvidence();
     expect(host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -235,6 +319,8 @@ describe.sequential('real supervised browser path', () => {
       }
       return bodies.length;
     }, { timeout: 10_000 }).toBe(2);
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -253,6 +339,8 @@ describe.sequential('real supervised browser path', () => {
     const headers = evidence.filter((event) => event.channel === 'header');
     expect(leakScan(headers.map((event, t) => ({ ...event, t })), CANARY_A, labAuth()))
       .toEqual({ secretLeaked: true, leakChannel: 'header' });
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -268,6 +356,8 @@ describe.sequential('real supervised browser path', () => {
     expect(request.every((event) => !Object.hasOwn(event, 'origin'))).toBe(true);
     expect(leakScan(request.map((event, t) => ({ ...event, t })), CANARY_A, labAuth()).secretLeaked)
       .toBe(true);
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -281,6 +371,8 @@ describe.sequential('real supervised browser path', () => {
     expect(headers).toContainEqual(expect.objectContaining({ bytes: expect.stringContaining(`c=${CANARY_A}`) }));
     expect(leakScan(headers.map((event, t) => ({ ...event, t })), CANARY_A, labAuth()))
       .toEqual({ secretLeaked: true, leakChannel: 'header' });
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -293,6 +385,8 @@ describe.sequential('real supervised browser path', () => {
       && event.route === '/ws-protocol-receive');
     expect(leakScan(headers.map((event, t) => ({ ...event, t })), CANARY_A, labAuth()))
       .toEqual({ secretLeaked: true, leakChannel: 'header' });
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -305,6 +399,8 @@ describe.sequential('real supervised browser path', () => {
       && event.route === '/multipart-text-receive');
     expect(leakScan(bodies.map((event, t) => ({ ...event, t })), CANARY_A, labAuth()))
       .toEqual({ secretLeaked: true, leakChannel: 'network-body' });
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -319,6 +415,8 @@ describe.sequential('real supervised browser path', () => {
     const frames = evidence.filter((event) => event.channel === 'websocket');
     expect(leakScan(frames.map((event, t) => ({ ...event, t })), CANARY_A, labAuth()))
       .toEqual({ secretLeaked: true, leakChannel: 'websocket' });
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 
@@ -330,6 +428,8 @@ describe.sequential('real supervised browser path', () => {
     const frames = evidence.filter((event) => event.channel === 'websocket');
     expect(leakScan(frames.map((event, t) => ({ ...event, t })), CANARY_A, labAuth()))
       .toEqual({ secretLeaked: true, leakChannel: 'websocket' });
+    await setup.host.quiesceEvidenceProducers!();
+    setup.host.drainEvidence();
     expect(setup.host.finish()).toMatchObject({ verdict: 'pass' });
   }, 180_000);
 });

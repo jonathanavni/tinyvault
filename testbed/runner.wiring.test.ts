@@ -49,6 +49,51 @@ import {
 } from './runner';
 
 describe('eval runner stub wiring', () => {
+  it('runEval quiesces before sealing, persists the final drain and refuses expired quiesce', async () => {
+    for (const expires of [false, true]) {
+      const directory = await mkdtemp(join(tmpdir(), 'tinyvault-s4-quiesce-wiring-'));
+      const harness = nodeEvalHarness(directory, vi.fn);
+      const create = harness.options.createHost!;
+      let quiesced = false;
+      let finalPending = false;
+      let finalReady = false;
+      harness.options.createHost = async (input) => {
+        const host = await create(input);
+        return { ...host,
+          quiesceEvidenceProducers: async (hooks) => {
+            await hooks?.beforeClose?.();
+            if (expires) throw new Error('Evidence capture failed');
+            quiesced = true; finalPending = true;
+            await hooks?.afterClose?.();
+          },
+          settleEvidence: async () => {
+            await host.settleEvidence();
+            if (finalPending) finalReady = true;
+          },
+          drainEvidence: () => {
+            const events = [...host.drainEvidence()];
+            if (finalPending && finalReady) { finalPending = false; events.push({ channel: 'url', direction: 'internal',
+              initiator: 'harness-diagnostic', bytes: 's4-final-drain-witness' }); }
+            return events;
+          },
+          finish: () => {
+            expect(quiesced).toBe(true); expect(finalPending).toBe(false);
+            return host.finish();
+          },
+        };
+      };
+      if (expires) {
+        await expect(runEval(harness.options)).rejects.toThrow('Evidence capture failed');
+        expect(await readdir(directory)).not.toContain('scorecard.json');
+        expect(harness.finishHost).not.toHaveBeenCalled();
+      } else {
+        const result = await runEval(harness.options);
+        const events = await readJson<CapturedEvent[]>(result.runs[0]!.eventsPath);
+        expect(events).toContainEqual(expect.objectContaining({ bytes: 's4-final-drain-witness' }));
+        expect(await readFile(result.runs[0]!.transcriptPath, 'utf8')).toContain('post-loop-drain');
+      }
+    }
+  });
   it('kills hard-coded session and handle values in the scripted login stub', async () => {
     const client = StubClient.safeLogin({
       loginPage: 'http://fixture.test/?runId=run-1',
@@ -234,7 +279,7 @@ describe('M5 harness gate ordering', () => {
     expect(result.events).toContainEqual(expect.objectContaining({ bytes: 'first', requestId: 'open-1' }));
     expect(result.events).toContainEqual(expect.objectContaining({ bytes: 'late' }));
     expect(result.events.find((event) => event.bytes === 'late')).not.toHaveProperty('requestId');
-    expect(settleEvidence).toHaveBeenCalledOnce();
+    expect(settleEvidence).toHaveBeenCalledTimes(2);
   });
 
   it('turns a manifest path aimed at another run into the exact gate failure', async () => {
@@ -470,7 +515,7 @@ describe('eval runner failure and drain wiring', () => {
     };
 
     await expect(runEval(harness.options)).resolves.toBeDefined();
-    expect(settleEvidence).toHaveBeenCalledOnce();
+    expect(settleEvidence).toHaveBeenCalledTimes(2);
   });
 
   it('wires captureFailed lease failure through runEval with its run-scoped diagnostic', async () => {
@@ -550,7 +595,8 @@ describe('eval runner failure and drain wiring', () => {
     const harness = nodeEvalHarness(directory, vi.fn, { delayNetworkUntilAfterLoop: true });
 
     const result = await runEval(harness.options);
-    expect(harness.drainBatches).toHaveLength(8);
+    expect(harness.drainBatches).toHaveLength(9);
+    expect(harness.drainBatches[8]).toEqual([]);
     expect(harness.drainBatches.slice(0, 7).every((batch) => batch.length === 0)).toBe(true);
     expect(harness.drainBatches[7]).toEqual([expect.objectContaining({
       channel: 'network-body', direction: 'outbound', initiator: 'browser',

@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Navigation cancellation regression</title>
+<body>
+<input id="text"><input id="password" type="password">
+<button id="hidden" hidden>Hidden control</button>
+<button id="wedge" onclick="location.href = 'http://10.255.255.1/'">Navigate</button>
+<button id="beacons" onclick="window.beaconTimer ??= setInterval(() => fetch('/beacon', {method: 'POST', body: 'x'}), 100)">Start beacons</button>
+<button id="busy" onclick="console.log('s4-busy-loop-entered'); while (true) {}">Busy renderer</button>
+</body></html>

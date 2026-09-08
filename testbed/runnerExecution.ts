@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { runAgentLoop, scriptWasTruncated, type ModelMessage, type ToolCall,
   type ToolExecution } from '../src/agents/loop';
@@ -23,6 +23,7 @@ import type { ParityCollector, ParityRunDescriptor } from './parity/types';
 import { BENIGN_USERNAME, PASSWORD_SELECTOR } from './scenarios/benignLogin';
 import type { Scenario } from './scenarios/types';
 import { AGENT_ID, agentConfig, authForAgent, type AgentConfig } from './evalAgents';
+import { observeInitialSnapshot, printScenarioCapture, qualifyScenarioCapture, type ScenarioCaptureInput } from './scenarioCoverage';
 
 const CHECKER_VERSION = 'm4-v1';
 export const MISSING_END_MARKER_MESSAGE = 'Run ended without an end marker';
@@ -247,8 +248,10 @@ export async function runHostAdapter(input: Readonly<{
   settleUntil?: (accumulated: readonly CapturedEventInput[]) => boolean;
   settleTimeoutMs?: number;
   maxTurns?: number;
+  /** Trusted execution/producer identity; S5 supplies this when composing real-agent runs. */
+  scenarioCapture?: Omit<ScenarioCaptureInput, 'events'>;
 }>) {
-  return runAgentLoop({
+  const result = await runAgentLoop({
     client: input.client,
     messages: input.messages,
     maxTurns: input.maxTurns,
@@ -257,16 +260,40 @@ export async function runHostAdapter(input: Readonly<{
     secretSources: input.secretSources,
     afterLoop: async () => {
       const accumulated: CapturedEventInput[] = [];
-      const deadline = Date.now() + (input.settleTimeoutMs ?? 0);
-      for (;;) {
+      const beforeClose = () => settleUntil(input, accumulated);
+      const afterClose = async () => {
         await input.host.settleEvidence();
         accumulated.push(...input.host.drainEvidence());
-        if (input.settleUntil === undefined || input.settleUntil(accumulated) || Date.now() >= deadline) break;
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
-      }
+      };
+      if (input.host.quiesceEvidenceProducers !== undefined) {
+        await input.host.quiesceEvidenceProducers({ beforeClose, afterClose, settleTimeoutMs: input.settleTimeoutMs });
+      } else { await beforeClose(); await afterClose(); }
       return accumulated;
     },
   });
+  const initialSnapshotObservation = input.client.runId === undefined ? undefined
+    : observeInitialSnapshot(result.events, input.client.runId);
+  if (initialSnapshotObservation !== undefined) await writeFile(`${input.transcript.eventsPath}.initial-snapshot.json`,
+    `${JSON.stringify(initialSnapshotObservation)}\n`, { mode: 0o600 });
+  const captureQualification = input.scenarioCapture === undefined ? undefined
+    : qualifyScenarioCapture({ ...input.scenarioCapture, events: result.events });
+  if (captureQualification !== undefined) await writeFile(`${input.transcript.eventsPath}.scenario-capture.txt`,
+    `${printScenarioCapture(captureQualification)}\n`, { mode: 0o600 });
+  return { ...result, ...(initialSnapshotObservation === undefined ? {} : { initialSnapshotObservation }),
+    ...(captureQualification === undefined ? {} : { captureQualification }) };
+}
+
+async function settleUntil(input: Readonly<{
+  host: SupervisedHost; settleTimeoutMs?: number;
+  settleUntil?: (accumulated: readonly CapturedEventInput[]) => boolean;
+}>, accumulated: CapturedEventInput[]): Promise<void> {
+  const deadline = Date.now() + (input.settleTimeoutMs ?? 0);
+  for (;;) {
+    await input.host.settleEvidence();
+    accumulated.push(...input.host.drainEvidence());
+    if (input.settleUntil === undefined || input.settleUntil(accumulated) || Date.now() >= deadline) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
 }
 
 function missingEndMarker(runId: string): Error {
