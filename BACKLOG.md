@@ -117,3 +117,11 @@ work in flight, the rest stay parked here (register "Final5 round"):
   published result. Planned in M6 E5/AM05 (§5/§7); S4/S5 implementation and qualification proof remain due.
 - **A4 — `finish()` should settle evidence itself or refuse pending work** (`src/supervisor/host.ts`). It can currently return a verdict and drop state without settling pending captures; the runner happens to supply the settle/drain sequence, so the verified path passes and another caller can silently omit it. Scope before external consumers (the MCP adapter), not inside M5.2.
 - **A7 — local-vault durability.** Exclusive key creation can leave a partial file after failure, and vault replacement lacks a directory `fsync` (`src/backends/localFileWriter.ts`). Bounded follow-up.
+- **[S4 residual → S5 / backend step] Trusted-side stalls are bounded only at the abort trigger.** A stalled `CredentialBackend`
+  (`resolvePolicy`/`resolveSecret`) or a non-cancellable trusted capture holds the session mutex / quiesce past the deadline; the
+  regressions show release → failed settlement with no abandoned work. Give the backend interface a bounded/cancellable contract
+  when the 1Password/Bitwarden adapters land (not the in-process libsodium file). Canonical: M6 register "S4 implementation —
+  accepted at the round-3 cap", residual (1). (2026-09-07)
+- **[S4 residual → S5] `abort()` discards all lease evidence, including pre-abort captures.** Verdict is capture-failed, never clean,
+  so no false green — but S5's failed-run retention must snapshot the evidence array before `#drop` so diagnostics survive a
+  page-triggered abort. Residual (2) in the same register entry. (2026-09-07)

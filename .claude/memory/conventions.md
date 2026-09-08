@@ -202,3 +202,15 @@ Example:
   default (an evidence-free WebSocket error counted as a verdict) is a silent-green; classification must be pinned
   Docker-free with the exact failure shapes the environment produces.
 
+- **A worker STOP on a contract conflict is answered by adopting or rewriting the clause, never by "just proceed".** S4's Astra
+  session stopped three times (retention allowlist; F7 bounded-return vs no-abandoned-work; G2/G6 mutant vs guard,
+  advisory cutoff vs hard deadline) and each time its proposed clarification was correct and was adopted verbatim into the
+  round packet, marked ADOPTED with the date. Rule: read the proposal, check it against the locked text, adopt or rewrite,
+  re-dispatch with `--resume-last` and the new pin. (2026-09-07)
+- **At the review cap, close an evidence-gap P1 with a test-only Sol dispatch; close a design P1 by narrowing the claim.** The
+  last S4 round's only in-criteria P1 was a missing caller-path witness; a Sol write-limited-to-one-new-test-file job produced
+  it in one pass and the owner re-ran the mutant through it. No production code moves after the cap. (2026-09-07)
+- **Owner integration edits are named, small and gate-adjacent only:** capability-map rows for new test imports, structural
+  pins for new/split security-core files, the worker's proposed contract-doc patch applied in the same commit as the code,
+  archive hygiene. Anything else goes back to the worker. (2026-09-07)
+

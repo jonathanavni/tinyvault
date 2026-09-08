@@ -11,75 +11,31 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-07-d-cancel` — focus: **S3 wrapup committed, branches pruned, D-CANCEL resolved (`2bcfbbd`), S4 IMPLEMENTED AND ACCEPTED at the round-3 cap (Astra candidate + two fix rounds, three review channels per round, owner gate green; committed this session)**;
-owner: claude; state: active; state checkout: `/Users/jonathanavni/Documents/Coding/tinyvault`; worktree: same (main).
+`2026-09-07-d-cancel` — focus: **D-CANCEL resolved; S4 implemented, reviewed and accepted; pushed**;
+owner: claude; **state: closed** (2026-09-07); continuity relinquished for a fresh session.
+State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`; branch main; local == origin at `b0461f0`.
 
-**D-CANCEL (S4 entry gate): RESOLVED 2026-09-07.** Mechanism = `Page.stopLoading` before the mutex wait, E6 order, context
-disposal before session-CDP cleanup, context-removal check, shared 5 s expiry-abort; no contract amendment. Cause: a pending
-main-frame navigation wedges the page-level CDP session and a goto timeout does not end it; stall site `cdp.detach()`.
-Proven externally on the real supervised path (close 2–5 ms / 2.0 s, sockets released, lease clean) with seven experiment
-families and three capped Sol paper rounds (R1/R2 NO-SHIP fully dispositioned; R3 NO-SHIP with one in-criteria P1 closed by exp9; final state RESOLVED).
-Canonical: M6 plan §7 + M6 register entry; raw evidence `artifacts/review-evidence/tinyvault-m6-d-cancel-20260907/`
-(local, ignored). Also found: a hostile page can wedge the trusted host's control channel for ~75 s with one line of JS
-(self-navigation to a black hole) — carried into S4 as a fixture + lifecycle rule. **S4 in flight:** packet `docs/m6-s4-handoff.md` (Sol paper pass absorbed; three user-approved decisions: 10 s per-op bound,
-failed-run retention stays S5, optional quiesce method + four pre-authorized test files). Astra job `task-mtrqkb95-81pxry` stopped at the retention gate (correct STOP); owner extended ownership to additions-only
-`scripts/retention/allowlists.ts` sync (`1bcec40`), resumed as `task-mtrqs30i-51hamj`, which delivered the S4 candidate
-(uncommitted) and stopped at the Docker capability gate; owner applied that one row (gate + self-test PASS). Owner
-`make test`: exit 2 — controls matrix ×2 (unconditional stop cancels a committing error page), host.ts 920 > 800 lines,
-wall-clock bounds outside the timing families. Owner verification: the original black-hole reproduction now closes in
-3–5 ms / 2.0 s on the real path with sockets released. Post-impl ladder R1: Codex adversarial NO-SHIP (2 P1), Claude QA
-NEEDS-ATTENTION (3 P1), Claude security NEEDS-ATTENTION (2 P1); all 24 findings dispositioned in
-`artifacts/review-evidence/tinyvault-m6-s4-packet-20260907/fix-round-1.md` (one declared residual: trusted-backend stall;
-one claim narrowing: E5 publication wiring is S5). **S4 accepted.** Fix round 1 (`task-mtrtgs35-9eae5b`, after an adopted F7 clarification) delivered: owner `make test` exit 0
-(2613/0/1, timing 5/5, 17/17), real-path repro 3 ms / 4.0 s, owner mutant spot-check 01/09/28 killed with controls.
-Round-2 reviews (Codex NEEDS-ATTENTION 1 P1; QA 0 P1 / 3 P2; security 1 P1 / 4 P2) → fix round 2 of 3 dispatched as
-`task-mtrw1kff-uwxlce` with owner decisions D1–D4 (drain before child-target destruction; per-session disposal instead of
-host-wide abort on op timeout; settle-until budget added to the 5 s deadline; abort-discards-all-evidence residual wording).
-Owner also pinned evidenceLease.ts and session.ts in the structural size gate; fix round 2 (`task-mtrwfcjl-14bwqc`, after
-adopted G2/G6 clarifications) delivered; owner `make test` exit 0 (2627/0/1, timing 5/5, 20/20); round-3 reviews
-(capped, P1 criteria fixed): QA PASS, security PASS, Codex one in-criteria P1 (G12 caller-path witness) closed by a
-Sol test-only witness the owner ran against mutant 40. Final owner gate: make test exit 0 — main 2629 pass / 0 fail / 1 inherited skip; timing families 5/5 and 20/20; execution gate PASS (make-test-final-*.json). Canonical: M6 register entry
-"S4 implementation — accepted at the round-3 cap" (nine declared residuals). **Next:** S5 packet (composed real-agent
-command path; carries the S4 residuals: E5 publication wiring, abort-evidence snapshot, trusted-stall contract,
-unmutated arms). owner holds commits while it runs, then runs `make test` + the mutant inventory
-itself and the post-impl ladder (Claude QA → Claude security → Codex adversarial; three-round cap). Local main is
-`0c377bb`..`61c3fa4` ahead of origin (`2bcfbbd`): four packet commits unpushed. Local main is two docs commits (`0acb6bb`, `b5a478e`) ahead of
-origin; nothing pushed this session — push awaits the user's go-ahead.
+**This session (all pushed):** S3 wrapup committed (`0acb6bb`); three merged codex branches pruned; D-CANCEL resolved with
+a nine-experiment evidence packet and three capped Sol paper rounds (`2bcfbbd`; M6 plan §7 + register entry "D-CANCEL —
+resolution and evidence packet"); S4 packet drafted, Sol-reviewed, user-approved (10 s navigation/per-op bounds; failed-run
+retention stays S5; optional quiesce method + four pre-authorized test files) and dispatched to Codex Astra; candidate + two
+fix rounds under a three-channel ladder (Codex adversarial, fresh Claude QA, fresh Claude security ×3), owner `make test`
+green each round after fixes, six owner mutant spot-checks, one Sol test-only witness at the round-3 cap; **S4 accepted**
+(`b0461f0`; register entry "S4 implementation — accepted at the round-3 cap", nine declared residuals). Final gate: main
+2629/0/1 inherited skip, timing 5/5 and 20/20, execution gate PASS. Evidence archives (local, ignored):
+`artifacts/review-evidence/tinyvault-m6-d-cancel-20260907/` and `tinyvault-m6-s4-packet-20260907/` (+ manifests/tarballs).
 
-Previous stamp: `2026-09-07-m6-s3` — focus: **M6 S3 complete and published; session closed**;
-owner: codex; **state: closed** (2026-09-07); continuity relinquished for a fresh session.
-State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`; branch main.
-Published commit `db78a1c914052d7424f9cf65e3caae654e3b85f4`; local/GitHub main equality
-reverified2026-09-07. S3 implementation, bounded review fixes and preserved S2 wrapup documents are committed.
+**Retained boundaries:** S4 proves lifecycle bounds on this host with page-scoped producers; trusted-side stalls (backend,
+non-cancellable captures) are bounded only at the abort trigger; `abort()` discards all lease evidence (verdict capture-failed,
+never clean); E5 qualification is a module + initial-snapshot observation, not production-wired; socket release rests on the
+owner's SYN_SENT observations; nested/service-worker targets are counted, not defeated. Full list: register entry.
 
-**Verified checkpoint:** exact-commit ordered targeted304/304, typecheck/diff, full make test exit0:
-main2539pass/0fail/1 inherited skip, serial timing5/5+10/10, final execution gate PASS.
-R2 Codex adversarial PASS; Claude Opus5 QA/security NEEDS-ATTENTION with no P1/P2. Documentation
-clarifications and nonblocking P3/proof limits are retained in the [M6 register](docs/m6-review-findings.md#s3-r2--owner-acceptance-and-retained-review-limits).
-All paper/S1/S2/M5.2 completed caps remain closed; S3 was accepted after R2 without consuming R3.
-
-**Retained boundaries:** S3 proves module adapters and six fixed synthetic SDK witnesses. It does not
-prove live model usability or composed command/cohort behavior. Historical reference prompt headroom
-is30/15/6 bytes (baseline minimum182); S5 must remeasure final cohort IDs and actual metadata, bind
-same-backend discovery/probing/setup/fill, and bind root instructions/provenance to actual execution.
-All recorded S1/S2/S3/M5.2 residuals remain in their canonical registers; no cap or claim is reset.
-
-**Next session:** run tinyvault-start read-only, preserve these uncommitted wrapup documents, verify
-ownership/Git, and propose a D-CANCEL-only resolution/evidence packet before any S4 dispatch. The
-locked active-goto and navigation-failed→close resource-cleanup proofs remain due. S4/S5 implementation,
-real pilots/cohorts, Docker/clean-clone acceptance and release need their separately scoped steps.
-This wrapup authorizes none of them and does not repeat completed reviews.
-
-**Continuity/evidence:** completed details and the inherited S2 checkpoint moved verbatim to
-PLAN-archive.md; Decisions Log stays below. Canonical findings: M6 register. Publication receipt and
-native evidence archives are local ignored files in `artifacts/review-evidence/`, not GitHub artifacts.
-Wrapup changes are documentation only and remain UNCOMMITTED; source/tests stay at the pushed SHA.
-Dirty wrapup files: PLAN.md, PLAN-archive.md, README.md, BACKLOG.md, docs/README.md,
-docs/m6-implementation-plan.md, docs/m6-review-findings.md, docs/phase-0-plan.md,
-.claude/memory/gotchas.md and .claude/memory/sessions-archive.md.
-Documentation drift/wording checks passed (153/153); all ten wrapup edits remain uncommitted.
-No active workers, reviewers, tests or pending publication jobs.
-
+**Next session:** `/start` read-only; propose the **S5 packet** (composed real-agent command path, E7/E8) carrying the S4
+residuals by name — E5 publication wiring, evidence snapshot before `#drop`, bounded trusted-backend/capture contract (or
+explicit residual), the unmutated arms (courtesy deadline term, suspension reserve, `abortSessions` recovery loop, 14 s sync)
+— plus S5's own obligations from S3 (remeasure prompt headroom with real cohort IDs; same-backend discovery/probe/setup/fill;
+root instructions/provenance bound to execution). Sol paper pass on the packet, then Astra under the full ladder. No live
+cohorts, Docker/clean-clone acceptance or release are authorized by this wrapup. No workers, reviewers or jobs are running.
 
 ## Decisions Log
 

@@ -1,4 +1,4 @@
-# M6 S4 implementation handoff — quiescence and coverage qualification (approved for Astra dispatch 2026-09-07)
+# M6 S4 implementation handoff — quiescence and coverage qualification (DISPATCHED and ACCEPTED 2026-09-07 — `b0461f0`; fix-round packets and reviews in the local evidence archive named in the M6 register)
 
 Status: drafted 2026-09-07 by the continuity owner after D-CANCEL resolved (`2bcfbbd`). Dispatch target:
 Codex `task --write --model gpt-6-astra` (security-core lifecycle code; full ladder). Before dispatch: one
