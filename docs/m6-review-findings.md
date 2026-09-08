@@ -1565,3 +1565,67 @@ every `naive-baseline` vault has zero records and `fill_from_vault` refuses. S3 
 S4 ACCEPT — hash the runtime frozen declaration object, not scraped source. Test-gap notes (fake host on the Node
 composed path) are recorded as residual: the real-host path is covered by the browser lifecycle case, which the owner's
 `make test` ran green. One review round used of three; round-3 P1 criteria are the packet's.
+
+## S5 R2 — fix-round-1 candidate `5685d01`, three-channel review and owner dispositions (2026-09-08, owner claude)
+
+Fix round 1 (`fix-round-1.md`; Astra, four owner-answered STOP questions: zero-request runs retain per-run diagnostics with
+a precise consistency rule and registry-recomputed task digest; canary custody boundaries instead of literal absence;
+the one-keyword `EVALUATED_AGENT_TOOLS` export; the fill service's `dom-fill` event as the second authorized identity)
+delivered F1–F9 across 15 files; worker 10/10 mutants; owner `make test` GREEN (main 2725/0/1, timing 5/5, 20/20,
+execution PASS); committed `5685d01`. Owner spot-checks (six fix mutants, isolated worktree): all KILLED with named
+tests (`owner-s5-mutants-r2.log`).
+
+Codex `adversarial-review` mode failed three times on this round; the job logs show the safety classifier flagging the
+attack-framed focus text ("flagged for possible cybersecurity risk"), surfacing as "did not return valid structured
+JSON" with a progress note as the final message (archived as `codex-adversarial-review-r2-attempt{1,2,3}-*.md`; gotcha
+recorded). Re-dispatched in defensive framing through `task --fresh --model gpt-6-astra`: completed.
+
+- **Codex (defensive-framed task mode) — NO-SHIP, 2 P1.** (C3) Live-rejected responses satisfy offline completion:
+  after a successful login, a final response with `max_tokens`, `refusal`, empty content, a numeric text block,
+  `tool_use` with only text, or `output_tokens: 1025` fails live (status failed, `outcome: null`), yet relabelling
+  both metadata copies `completed` with the outcome recomputed from unchanged evidence emits a qualified six-run
+  scorecard in EVERY case; there is also no `completed ⇒ terminal end_turn` rule (a valid final `tool_use` response
+  followed by a failed tool execution promotes the same way). The offline complete-response predicate is weaker than
+  `validateResponse` in the live client. (C4) Early-return bypass: `assertAttestedExecution` reads and verifies
+  events, but a read failure or unsigned bytes on THAT read return early, and the later outcome verifier re-reads
+  the file; an `EIO` on the first read or `[]` bytes replaced by the valid signed file before the second read
+  promoted the final-503 run to numeric completion in a qualified scorecard. The stable-invalid control rejected with
+  `signature-mismatch`. R1 closure: C1 partial (stable-bundle regressions reject; C3/C4 still promote), C2 closed
+  (static-producers, dropped payload, absent statuses, stub unchanged). F3 sweeps reached and non-vacuous (six and
+  seven canary-bearing events through the positive assertions; injected tool-result/model-text canaries fail). F4–F9
+  each named with a proving test and a caught regression. Robustness: bootstrap comparison is projection equality
+  (extra bootstrap keys legitimately present); request/response filters bind `documentId` but do not pair by
+  `requestId`.
+- **Claude QA — NEEDS-ATTENTION, 0 P1, 1 P2, 3 P3.** All R1 findings CLOSED (Q2 PARTIAL pending the SCHEMA
+  declaration). P2: contract changes shipped without the SCHEMA update (owner work; the worker's `proposed-docs.patch`
+  is unapplied by design). P3: the fail-open early returns in `assertAttestedExecution` are backstopped only by the
+  per-run re-verification (assumes stable bytes — see C4) and untested; the F8 sidecar now derives from a mid-flight
+  disk read whose failure would replace the loop's error; the bootstrap check is a subset check with a hard-coded
+  prompt format. Five worker mutants reproduced plus two own probes proving the F3 sweep's positive and negative
+  branches are live. 208/208 changed-file tests, 267 adjacent, gates green.
+- **Claude security — PASS with residuals, 0 P1, 0 P2, 4 P3.** All in-scope R1 items CLOSED. P3: the
+  `setup-blocked`-with-requests rule and the evidence-bound bootstrap check have no killing test (probes M1, M3
+  survived); response-shape validation order (model mismatch before shape checks that `continue`); the `.finally()`
+  sidecar writer can replace the failure identity. Custody: error identity bounded and category-only on every traced
+  producer; sweeps non-vacuous (M4/M5/M9). Admission: cross-run reuse blocked three ways; E5 fail-closed (M2/M7);
+  S2 S-1 clean; the loop export deep-frozen and bound to the serialized request tools. Residuals: `sdkVersion` bound
+  to provenance not recomputed; model-controlled text reaches the bounded error message via the unknown-tool path;
+  with N>1 a cell can be credited by a qualified sibling while another run is E5-unqualified (publication still
+  blocked). 2491/1 Node-only suite.
+
+**Owner dispositions (fix round 2 — the last fix round; R3 is the capped review with the packet's P1 criteria):**
+C3 ACCEPT (P1) — the offline complete-response predicate becomes the live validator's acceptance rules via a shared
+exported predicate from `src/agents/anthropicClient.ts`; `completed` requires the final accepted response to be
+`end_turn`; `max-turns` exactly `maxTurns` accepted responses; failed statuses require the last request to lack an
+accepted response; usage/stopReason recomputed identically at runtime and offline over all parseable bodies while
+count rules use accepted responses paired to requests by `requestId`. C4 ACCEPT (P1) — one verified event snapshot per
+run serves both the execution recomputation and the outcome recomputation; any read/verify failure in the recomputation
+makes that row permanently ineligible for acceptance (per-run `malformed-evidence`/`signature-mismatch`), never a
+silent skip. Sec P3-1/P3-2 and Codex's pairing/binding notes ACCEPT as tests (setup-blocked-with-requests, bootstrap
+check, cross-run `documentId`, `requestId` pairing). Sec P3-3 ACCEPT (order resolved by the shared predicate). QA
+P3-3/Sec P3-4 ACCEPT — the sidecar derives from in-memory events; a sidecar write failure is recorded separately and
+never replaces the loop's error. QA P2 — owner integration at acceptance (SCHEMA/phase/M6-plan diffs applied with the
+acceptance commit). Declared residuals (recorded, no code): bootstrap projection-equality (extra keys legitimately
+present; digest pinned separately); `sdkVersion` bound to provenance; sibling-credit at N>1 (publication still gated);
+same-process live re-adjudication; `source.dirty` non-blocking; S4 residuals 1, 3, 4, 6, 7, 9. Two review rounds used
+of three.

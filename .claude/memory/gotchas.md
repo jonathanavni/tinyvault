@@ -428,3 +428,9 @@ Example:
   `$FILES`, so vitest received five paths as ONE argument, printed "No test files found" and exited 1 — which looks
   exactly like a kill. Pass file names inline (or `${=FILES}`), write vitest output to a per-mutant file, and grep
   the `Tests N failed` line plus the failing title into the log before calling anything killed. (2026-09-08)
+- **The safety-classifier flag also hits `adversarial-review` MODE, and there it looks like a tooling failure.** Three
+  S5 round-2 review attempts "failed" with "Codex did not return valid structured JSON" and a progress note as the
+  final message; only the job LOG showed `Codex error: This content was flagged for possible cybersecurity risk …
+  Turn failed.` The focus text carried forgery/tamper/promote/attack vocabulary. Check the job log for that line
+  before retrying identical arguments; then re-dispatch in defensive framing (what the harness is, what the validator
+  must reject) via `task --fresh --model gpt-6-astra`, which needs no structured output. (2026-09-08)

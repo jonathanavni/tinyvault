@@ -36,8 +36,11 @@ E5-unqualified runs credit control cells), QA 0 P1/3 P2/4 P3, security 0 P1/1 P2
 entry "S5 R1 — candidate fb8816b". Fix round 1 packet `fix-round-1.md` dispatched to Astra (write, main checkout; job id in
 the evidence breadcrumb). Fix round 1 DELIVERED after four owner-answered STOP questions (zero-request runs; canary custody
 boundaries; loop.ts export; authorized dom-fill control) — 15 files, F1–F9, 152 targeted tests, 10/10 mutants; owner `make test`
-GREEN (main 2725/0/1, timing 5/5, 20/20, execution PASS); committed on main. R2 reviews next (three channels, fresh worktrees);
-R3 is the cap with the packet's P1 criteria.
+GREEN (main 2725/0/1, timing 5/5, 20/20, execution PASS); committed `5685d01`. R2 DONE 2026-09-08: Codex (defensive-framed task
+mode after three classifier-flagged `adversarial-review` failures) NO-SHIP 2 P1 (live-rejected responses satisfy offline completion;
+early-return/TOCTOU bypass of the recomputation); QA 0 P1/1 P2/3 P3; security PASS 0 P1/0 P2/4 P3; owner 6/6 spot-check kills;
+register entry "S5 R2". Fix round 2 (`fix-round-2.md`, the LAST fix round) dispatched to Astra; then R3 = capped review with the
+packet's P1 criteria; then acceptance + owner docs integration (SCHEMA/phase/M6 plan diffs).
 
 `2026-09-07-d-cancel` — focus: **D-CANCEL resolved; S4 implemented, reviewed and accepted; pushed**;
 owner: claude; **state: closed** (2026-09-07); continuity relinquished for a fresh session.
