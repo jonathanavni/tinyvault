@@ -147,7 +147,9 @@ terminal via `isEvidenceOversized` (the runner guard). The retained reason is th
   `administrative` does) terminates with reasons
   `['execution-failed: ComposedConstructionError: bridge-protocol', 'cohort-incomplete: 1 of 6 runs attempted']` and one
   registration; the run's sidecar stays `unclassified`. **W3b:** the same error **unmarked** (e.g. a `capture-write`) is not
-  terminal — the loop continues and today's behaviour holds. **W3c — teardown precedence:** the synthetic `close` rejects on the
+  terminal — the loop continues (six registrations, one close per fixture), the sidecar is `unclassified`, and the **offline
+  diagnostic is today's**: `{status: 'capture-failed', reason: 'signature-mismatch'}` for the missing attestation
+  (`offline.ts:154-155`) — do not assert `execution-failed/unclassified` there (Astra STOP 3, 2026-09-08). **W3c — teardown precedence:** the synthetic `close` rejects on the
   terminal path; the qualification still carries the initiating reason first and `teardown-failed: <code>`; no second close.
 - **W4 — raw control refusal** (`slice5.attestation.test.ts:224-241`): untouched, run green.
 - **W5 — sidecar-write precedence** (`realAgentRun.test.ts`): spy `writeFile` to fail only for the `.fixture-failure.json` path;
@@ -155,15 +157,20 @@ terminal via `isEvidenceOversized` (the runner guard). The retained reason is th
 - **W6 — forged annotation, no credit** (`testbed/checkers/offline.test.ts` or `runner.realAgent.test.ts`): insert
   `failureReason: 'evidence-oversized'` into an otherwise valid/promotable persisted row and into a failed row; strict adjudication
   and diagnostics produce no `verifiedRuns`, no positive-control credit, no scorecard, no aggregation for the failed row, and
-  the valid row's outcome is unaffected by the annotation (it is ignored on non-failed shapes).
+  the valid row's outcome is unaffected by the annotation (it is ignored on non-failed shapes). The failed row's offline
+  diagnostic is whatever today's validators say (typically `capture-failed / signature-mismatch`); the annotation never changes it.
 - **W7 — adversarial message negatives** (`offline.test.ts` / `realAgentRun.test.ts`): an unmarked `Error('evidence-oversized')`
-  thrown from `attestEvents` yields sidecar/diagnostic `unclassified` and terminal `project-closed` only if it is a
-  `ComposedConstructionError` (it is not → today's non-terminal behaviour); a marked `EvidenceOversizedError` whose message is
-  `'bridge-protocol'` yields `evidence-oversized`.
+  thrown from `attestEvents` is non-terminal (loop continues), its sidecar is `unclassified`, no `failureReason` annotation, and
+  its offline diagnostic is today's `capture-failed / signature-mismatch` (missing attestation) — never `evidence-oversized`
+  anywhere; a marked `EvidenceOversizedError` whose message is `'bridge-protocol'` yields `evidence-oversized` on every surface.
 
-**Mutants (each an exact edit, red assertion named, restore byte-for-byte, green):**
-M1 delete the runner guard (`runOnce` calls `attestEvents` regardless) → W1a red (the synthetic transport attests the oversized
-file, the run is admitted, a scorecard appears / `registerRun` reaches 6) and W2 red (`attestEvents` called at cap+1);
+**Mutants (each an exact edit, red assertion named, restore byte-for-byte, green).** Restore proof: snapshot the uncommitted
+implementation file before mutating (`cp` + sha256) and prove restoration with `cmp` / sha256 against that snapshot, not against
+HEAD (the implementation itself is uncommitted).
+M1 delete the runner guard (`runOnce` calls `attestEvents` regardless) → W1a red on the registration count (the synthetic
+transport's `signEventsDigest` itself rejects > 131,072 with an unmarked `control-limit`, so the run becomes a non-terminal
+`unclassified` failure and the loop continues to 6 registrations — Astra STOP 3 corrected the earlier "admitted / scorecard"
+premise) and W2 red (`attestEvents` called at cap+1);
 M1d delete the `markClosedProject` call in `administrative` → **W3d** red (W3 cannot see it: W3 mints its own mark — Astra STOP
 2026-09-08). **W3d — production-administrative marking witness** (additive `it` in `testbed/docker/composedFixtures.test.ts`,
 using its existing `realClient()` harness; no existing test in that file changes): after any administrative refusal (e.g. the
