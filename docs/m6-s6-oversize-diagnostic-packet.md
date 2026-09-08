@@ -1,4 +1,4 @@
-# S6 companion packet — explicit `evidence-oversized` diagnostic at trusted run finalization (v4 — post-cap narrowing; Astra handoff)
+# S6 companion packet — explicit `evidence-oversized` diagnostic at trusted run finalization (v4.3 — as implemented through fix round 2)
 
 Status: **v4 implementation handoff (owner, 2026-09-08, session `2026-09-08-s6`) — pre-implementation paper ladder CLOSED at the
 three-round cap.** v1: Sol R1 NO-SHIP (5 P1 / 4 P2); v2: Sol R2 NO-SHIP (4 P1 / 3 P2 / 1 P3); v3: Sol R3 (cap) NO-SHIP on one P1
@@ -228,6 +228,16 @@ STOP conditions hit.
   initiating reason lives in the trusted diagnostic written at termination and in the retained sidecar/record.
 - `project-closed` terminal for non-oversize composed failures reports the initiating code, which for transport faults may
   itself be non-unique (`bridge-protocol` covers several `BridgeError`s); finer transport classification is out of scope.
+- (post-impl R1, recorded) `capturePersistedRuns` (`runner.ts:233-255`) propagates a raw `EvaluationTerminatedError` to external
+  callers with `realInvocation` set — fail-closed, no trusted diagnostic written there (QA P3-02).
+- (post-impl R1, recorded) A hostile page/model that inflates a run's evidence past the cap now halts the cohort at that run
+  instead of failing one run and continuing; bounded — the cohort was unqualified either way, no credit/scorecard/N change —
+  but later scenarios go unmeasured and the operator sees `cohort-incomplete: k of N` (security P3-02).
+- (post-impl R1, recorded) Partial-bundle persistence is guaranteed only for the two terminal kinds; any other throw out of
+  `runOnce` still leaves earlier rows unpersisted as before this slice (security P3-03).
+- (post-impl R2, recorded) The two non-terminal `rejectComparison` callers (`runner.ts:205,213`) keep today's write-first ordering
+  (diagnostic/qualification files before stderr emission); only the terminal path emits first and records a write failure as a
+  secondary reason (fix round 2, F9). Pre-existing behaviour, out of this packet's scope.
 
 ## 10. Sol pre-implementation R1 dispositions (owner, 2026-09-08)
 
@@ -268,3 +278,22 @@ STOP conditions hit.
 | P2-01 D4 `iff` vs D2 ordering | Accepted. | ABSORBED — D4 wording. |
 | P2-02 partial-bundle persistence failure precedence | Accepted. | ABSORBED — D2 `persistFailed`, `persist-failed: <name>` reason. |
 | P3-01 `teardown-failed: <code>` for non-coded rejections | Accepted. | ABSORBED — `<code-or-name>`. |
+
+## 13. Post-implementation ladder — what shipped beyond §3–§5 (owner, 2026-09-08)
+
+- **Fix round 1** (Codex R1 P1; QA/security R1 P3s): `RunTerminal` / `EvaluationTerminatedError` gained `scenarioCaptureWriteFailed?`
+  and `causeName?`; the `.scenario-capture.txt` write is secondary only under a terminal result (best-effort
+  `${eventsPath}.scenario-capture-error.json`, reason `scenario-capture-write-failed: <runId>`); the `.fixture-failure.json` write
+  failure is swallowed only under a terminal result (non-terminal rethrows as at base); `code`/`teardownCode` are read only from a
+  genuine `ComposedConstructionError`, and the `project-closed` reason is `execution-failed: <causeName>: <code | 'project-closed'>`;
+  the guard `stat()`s before `readFile` (an oversized file is refused with zero event-path reads; the read buffer is re-checked
+  and remains the single measured-and-signed buffer). Witnesses W8 (terminal + non-terminal scenario-capture write), W9 (generic
+  sidecar failure loud), W10 (forged code on a marked plain Error), six W2 cases; mutants M5, M6 (retargeted at the F2 guard in
+  round 2), M7.
+- **Fix round 2** (Codex R2 P1; QA R2 P3s): terminal-path `rejectComparison` emits the stderr diagnostic first, then attempts both
+  artifact writes independently, appends `diagnostic-write-failed: <file>: <name>` on rejection and re-emits, and always throws
+  `UnqualifiedComparisonError`; non-terminal callers unchanged. Witnesses W11 (three write-rejection cases) and W11b (non-terminal
+  path still loud); mutants M8, M9; W8-terminal pins the exact ordered reason list.
+- Reason list order on the terminal path: initiating reason, `cohort-incomplete: k of N runs attempted`, then in order
+  `scenario-capture-write-failed`, `sidecar-write-failed`, `teardown-failed: <code-or-name>`, `persist-failed: <name>`,
+  `diagnostic-write-failed: <file>: <name>`.
