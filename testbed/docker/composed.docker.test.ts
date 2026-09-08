@@ -1,3 +1,4 @@
+import { MAX_EVENTS_BYTES } from './protocol';
 // Integrator-run only. The deployment requirement is assumed; these tests do not verify daemon
 // non-exposure or containment after fixture-process compromise. make test excludes this exact file.
 import { spawn } from 'node:child_process';
@@ -423,3 +424,46 @@ async function directCompose(e: IntegrationEvidence, description: DockerSpawn): 
     new ComposedConstructionError('command-timeout'), handle.kill);
   expect(code, 'direct override must reach running Compose services').toBe(0);
 }
+
+// Owner-run on real Docker; the complete public call includes the host-side copies and queue.
+it('AM12 exact-cap attest completes three finalized runs within the unchanged operation timer', async () => {
+  expect(await readFile(new URL('./bridge.ts', import.meta.url), 'utf8'))
+    .toContain('this.#timeoutMs = options.timeoutMs ?? 5000;');
+  expect(MAX_EVENTS_BYTES).toBe(1048576);
+  const pin = await localPin();
+  const root = await mkdtemp(join(tmpdir(), 'tinyvault-am12-docker-'));
+  const e = new IntegrationEvidence();
+  const fixtures = await startComposedFixtureSet({ pin, artifactRoot: root, runner: e.runner, probeOrigin: probeHttpOrigin });
+  const fixture = fixtures['benign-login']!;
+  const elapsedMs: number[] = [];
+  const calls = vi.spyOn(BridgeSession.prototype, 'request');
+  try {
+    for (let trial = 0; trial < 3; trial++) {
+      const runId = `am12-exact-${trial}`;
+      await fixture.registerRun({ runId, scenarioId: 'benign-login-control', nonce: `nonce-${trial}`,
+        canaryId: `canary-${trial}`, canary: `synthetic-${trial}` });
+      await fixture.finalizeRun(runId);
+      const bytes = Buffer.alloc(MAX_EVENTS_BYTES, 0x61);
+      const start = performance.now();
+      const attestation = await fixture.attestEvents(runId, bytes);
+      elapsedMs.push(performance.now() - start);
+      expect(verifyEventsDigest(attestation, 'benign-login', runId, bytes, fixture.verificationPublicKey)).toBe(true);
+    }
+    const measurement = { elapsedMs, maximumMs: Math.max(...elapsedMs),
+      minimumHeadroomMs: 5000 - Math.max(...elapsedMs), maximumHeadroomMs: 5000 - Math.min(...elapsedMs), cap: MAX_EVENTS_BYTES };
+    await mkdir(join(process.cwd(), '.vitest'), { recursive: true });
+    await writeFile(join(process.cwd(), '.vitest', 'am12-docker.measurement.json'), JSON.stringify(measurement, null, 2));
+    for (const elapsed of elapsedMs) expect(elapsed).toBeLessThan(5000);
+    await fixture.registerRun({ runId: 'am12-over', scenarioId: 'benign-login-control', nonce: 'over', canaryId: 'over', canary: 'synthetic' });
+    await fixture.finalizeRun('am12-over');
+    calls.mockClear();
+    await expect(fixture.attestEvents('am12-over', Buffer.alloc(MAX_EVENTS_BYTES + 1)))
+      .rejects.toMatchObject({ code: 'bridge-protocol' });
+    expect(calls.mock.calls.filter(([op]) => op === 'attest')).toEqual([]);
+  } finally {
+    calls.mockRestore();
+    await Promise.all(Object.values(fixtures).map(fixture => fixture.close()));
+    await noProjectLeft(e, pin);
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -654,7 +654,7 @@ Slice1–6 review or milestone-close assessment repeated.
 
 **Next scope:** S1 provenance/profile contracts only, with its owner contract edits, when implementation
 is explicitly authorized. Read the plan §8 packet. D-BUDGET remains OPEN at S2 entry: repeated exact wire
-and context evidence may not fit the frozen131072-byte cap; 2048 prompt/bootstrap bytes is a stress
+and context evidence may not fit the frozen131072-byte cap; 2048 prompt/bootstrap bytes is a stress [values amended by M6-AM12, 2026-09-08]
 candidate, not a proven working allowance. D-CANCEL remains OPEN before S4: choose and prove reachable
 cancellation for active navigation and post-timeout black-hole close without early mutex release or
 silent evidence loss. Model/SDK access and actual live-cohort outcomes remain unverified runtime gates.

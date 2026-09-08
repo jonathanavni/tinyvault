@@ -42,13 +42,13 @@ These measurements establish the starting candidate only, not Slice 4 acceptance
 | Typecheck passes | `npm run typecheck`, exit 0, `typecheck.log`. |
 | Docker-free core passes | `npx vitest run testbed/docker`, exit 0, 547 tests / 22 files, `docker-unit-baseline.log`. |
 | Live existing Docker acceptance passes | `make test-docker`, exit 0, 4/4, about 80 s, entry and execution proofs PASS, `docker-live-baseline.log`; serialized on this machine. |
-| Wire currently supports only bootstrap/hello | `testbed/docker/protocol.ts`; `container/control.ts` accepts only ids 1/2. Frame payload maximum is 262144 bytes. |
+| Wire currently supports only bootstrap/hello | `testbed/docker/protocol.ts`; `container/control.ts` accepts only ids 1/2. Frame payload maximum is 262144 bytes. [values amended by M6-AM12, 2026-09-08] |
 | Client operations are placeholders | `composedFixtures.ts:18-40`; fixture transport interface has no capability parameters. |
 | Receipt read deletes | `fixtures/shared/loginFixture.ts:167-171`; a dropped response loses the receipt. |
 | Captures currently bypass the runner | `runnerExecution.ts:42-76` never calls `captureRequests`; `runner.ts:162-188` supplies the host capture directory to in-process fixtures. |
 | Offline needs exact capture bytes/path | `checkers/offline.ts:244-267`, `fixture-captures/<runId>.requests`; no container path is an acceptable substitute. |
-| One valid request can exceed a frame | `loginFixture.ts:338` permits a 1 MiB request body; base64 expansion exceeds the 256 KiB frame ceiling. |
-| Existing local event files fit the 128 KiB bound | Metadata scan of 46 `artifacts/**/events.json` files: maximum 59361 bytes, none above 131072. This is a sample, not a guarantee for future runs. |
+| One valid request can exceed a frame | `loginFixture.ts:338` permits a 1 MiB request body; base64 expansion exceeds the 256 KiB frame ceiling. [values amended by M6-AM12, 2026-09-08] |
+| Existing local event files fit the 128 KiB bound [values amended by M6-AM12, 2026-09-08] | Metadata scan of 46 `artifacts/**/events.json` files: maximum 59361 bytes, none above 131072. This is a sample, not a guarantee for future runs. |
 | Existing exposure scanners know bootstrap only | `compose.ts:336-356` registers bootstrap patterns; subsequent operation secrets require the same lifecycle. |
 
 **Subsequent baseline check: `make test` FAILED**, exit 2 at the Docker invocation gate: tracked
@@ -80,7 +80,7 @@ new defects or repair them incidentally.
 
 ## 3. Administrative vocabulary and wire shape
 
-Keep protocol version 1, 4-byte framing, the 262144-byte ceiling, canonical UTF-8/JSON, exact ordered keys,
+Keep protocol version 1, 4-byte framing, the 262144-byte ceiling, canonical UTF-8/JSON, exact ordered keys, [values amended by M6-AM12, 2026-09-08]
 monotonic request ids, one outstanding request, one stdout writer, and close on any malformed/unauthorized
 request. No resynchronization or automatic retry/reconnect after EOF/timeout. Closed codes carry no input,
 run id, token, private key, arbitrary error text, or serialized body.
@@ -115,7 +115,7 @@ grammar and a 128-character maximum, enforced by the shared in-process validator
 bounded to 4096 UTF-8 bytes each; `scenarioId`/`canaryId` to 128 bytes; setup is copied, never retained caller-owned.
 `offset`, `total`, `next` are canonical nonnegative decimal integers without leading zeros, bounded before
 conversion. Binary fields are canonical unpadded base64url. Token decoding requires
-exactly 32 bytes. Receipt/key/attestation lengths must fit the unchanged frame limit. `events` is capped at 128 KiB
+exactly 32 bytes. Receipt/key/attestation lengths must fit the unchanged frame limit. `events` is capped at 128 KiB [values amended by M6-AM12, 2026-09-08]
 decoded for Slice 4's existing signer; an oversized attestation is a closed failure, never truncated evidence.
 The measured local sample fits this bound; exceeding it fails explicitly. Slice 5 can introduce bounded upload
 chunks if required, without raising frame size.

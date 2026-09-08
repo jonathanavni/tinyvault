@@ -1,4 +1,4 @@
-import { BridgeError, MAX_CAPTURE_BYTES, type CaptureKind } from '../../docker/protocol';
+import { BridgeError, MAX_EVENTS_BYTES, MAX_CAPTURE_BYTES, type CaptureKind } from '../../docker/protocol';
 import { bindServer, type FixtureListenOptions } from './bindServer';
 import { signEventsDigest } from './eventsDigest';
 export { verifyEventsDigest } from './eventsDigest';
@@ -217,7 +217,7 @@ function attestFixtureEvents(state: RequestState, runId: string, eventsBytes: Ui
   const run = finalizedRun(state, runId);
   if (run.attested) throw new BridgeError('run-state');
   run.attested = true;
-  if (eventsBytes.byteLength > 128 * 1024) throw new BridgeError('control-limit');
+  if (eventsBytes.byteLength > MAX_EVENTS_BYTES) throw new BridgeError('control-limit');
   return signEventsDigest(state.fixtureId, runId, eventsBytes, state.signingKey);
 }
 

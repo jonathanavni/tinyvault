@@ -340,7 +340,7 @@ Rerun the §4.3/AM11 six-trace budget suite through the production composition (
 actual `SKILL.md` bytes, the actual run-ID format at its maximum length: longest scenario ID × longest agent ID ×
 index 09, a real cohortId) and record the bytes-by-turn artifact (prompt/bootstrap contribution and its
 repeated-context/JSON-escaping cost, total raw signed event bytes, outer serialized signed/bridge bytes). All six
-must fit ≤ 131072 raw bytes, ≤ 262144 signed-artifact bytes and the unchanged bridge bound, and system +
+must fit ≤ 131072 raw bytes, ≤ 262144 signed-artifact bytes and the unchanged bridge bound, and system + [values amended by M6-AM12, 2026-09-08]
 bootstrap must stay ≤ 1024 bytes for both profiles. If any does not fit: STOP and report the numbers; do not
 truncate, shorten IDs, or trim instructions (the run-ID format is an owner decision).
 

@@ -240,8 +240,8 @@ this estimates behavior with ordinary human passwords.
 
 ### 4.3 Evidence-size feasibility gate
 
-Keep the exact raw signed-events limit 131072 bytes, signed-artifact limit 262144 bytes and bridge frame
-limit. **This is an S2 exit gate before S3–S5 implementation, not just a pre-N10 check.** The historical
+Keep the exact raw signed-events limit 1048576 bytes, signed-artifact limit 262144 bytes and bridge frame
+limit 2097152 payload bytes (+4 framing), amended by M6-AM12 (2026-09-08). **This is an S2 exit gate before S3–S5 implementation, not just a pre-N10 check.** The historical
 Slice4 scan (`m5-2-slice-4-plan.md:51`) observed a 59,361-byte maximum stub events file; that is a dated sample,
 not a current measurement or a guarantee. A simple duplicated-event estimate is 118,722 bytes, leaving only
 12,350 bytes for added SDK/tool-schema/response overhead. Repeated context grows with the conversation, so
@@ -270,8 +270,8 @@ and passed the same six-trace budget suite with exact SKILL/prompt/bootstrap byt
 mandatory for changed instruction/input bytes.
 S5 repeats after final wiring; M10 instruction changes rerun sizing and evaluation. No truncation to fit.
 Record an artifact with bytes by turn and by event kind, separately breaking out prompt/bootstrap contribution and its repeated-context/JSON-escaping cost, total raw signed event
-bytes and outer serialized signed/bridge bytes. **All six intact successful traces must fit ≤131072 raw
-bytes, ≤262144 signed-artifact bytes and the unchanged bridge envelope bound before S2 can pass.** No SDK
+bytes and outer serialized signed/bridge bytes. **All six intact successful traces must fit ≤1048576 raw
+bytes, ≤262144 signed-artifact bytes and ≤2097152 bridge payload bytes (+4 framing) before S2 can pass**, amended by M6-AM12 (2026-09-08). No SDK
 wire body or normalized observation is omitted. If any does not fit, S2 is BLOCKED and later slices wait for
 a concrete design/contract decision; do not spend S3–S5 implementation effort on assumed headroom.
 
@@ -340,7 +340,7 @@ All six serial 2048 projections overflow (143677–239167 bytes). With only requ
 (reference/baseline). Even removing every prompt/bootstrap contribution counterfactually leaves those
 four above 131072; removing JSON whitespace also does not suffice. Thus a smaller allowance alone does
 not repair these ordinary serial witnesses. These are concrete projections, not an impossibility proof
-for every possible future transport design.
+for every possible future transport design. [historical AM11-era measurement against the 131072 cap; values amended by M6-AM12, 2026-09-08 — these serial witnesses now fit and attest]
 
 The largest batched 1024 candidate's 119691 bytes partition exactly into bootstrap 774,
 normalized-request 43160, SDK-request 46887, SDK-response 5534, SDK-metadata 3254, tool-arg 4047,
@@ -356,7 +356,7 @@ response payloads 407–417; each frame adds its separate four-byte prefix. Base
 a 43-character capability and maximum safe-integer frame ID are included. These are measured canonical
 frame candidates, not a live Docker exchange. Current production signer/verifier and frame encoder
 accepted or rejected all 36 projections consistently with their independent caps; raw boundary 131071/
-131072/131073 behaved as specified. No oversized projection was truncated or labelled qualified.
+131072/131073 behaved as specified. No oversized projection was truncated or labelled qualified. [AM11-era boundary values; amended by M6-AM12, 2026-09-08]
 Production SDK/runner deletion mutants, 16-turn maximum-output retention and later composed gates remain
 S2/S5 work; direct entry-probe checks do not substitute for them.
 
@@ -395,11 +395,12 @@ change. Its adopted requirements are:
    must fit intact and reach its expected end. Additional serial deterministic trajectories remain required
    rejection/diagnostic tests when oversized. Any oversized real pilot or cohort run still stops progression,
    remains unqualified/nonzero, and cannot be dropped, replaced, resampled or counted as completed.** The
-   known serial witnesses remain part of the evidence and the S2 rejection tests; they are not erased or
-   called maximum-output tests. This explicitly narrows deterministic feasibility coverage and does not
+   known serial-1024/2048 witnesses are fit/attested cases after AM12; their pre-AM12 rejection artifacts
+   are retained as history, and the 16-turn maximum-output trace remains the current rejection witness
+   (amended by [M6-AM12 (2026-09-08)](m6-am12-events-cap-amendment.md)). This explicitly narrows deterministic feasibility coverage and does not
    prove arbitrary ordinary trajectories fit. Publish that limitation with any later result, including that these witness schedules were chosen
    after the serial measurements overflowed; they are not an independent sample.
-4. Keep raw events 131072, each signed artifact 262144 and bridge payload 262144 (+4 framing), 16 turns,
+4. Keep raw events 1048576, each signed artifact 262144 and bridge payload 2097152 (+4 framing), amended by M6-AM12 (2026-09-08); keep 16 turns,
    eight calls/response, 1024 output tokens, model/temperature, N/Wilson/completion/leak gates, all source
    identities and all S1/M5 residuals unchanged. No compression, chunking, unsigned sidecar, summarization,
    partial attestation, source exemption expansion, runtime retry or cohort budget tuning.

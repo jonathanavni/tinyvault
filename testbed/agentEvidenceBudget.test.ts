@@ -12,6 +12,7 @@ import { TranscriptWriter, type CapturedEventInput } from '../src/agents/transcr
 import { baselineSecretSourcesForRun } from './evalAgents';
 import { signEventsDigest, verifyEventsDigest } from './fixtures/shared/eventsDigest';
 import { startFixtures, type FixtureSet } from './fixtures';
+import { MAX_EVENTS_BYTES, MAX_PAYLOAD_BYTES } from './docker/protocol';
 import { encodeFrame } from './docker/frames';
 import { createReferenceProfile } from '../src/agents/reference';
 import { createNaiveBaselineProfile } from '../src/agents/naiveBaseline';
@@ -96,17 +97,36 @@ function accounting(events: CapturedEventInput[], task: unknown, system: string)
 
 type ExactProfile = Extract<Awaited<ReturnType<typeof createReferenceProfile>>, {status:'ready'}>
   | ReturnType<typeof createNaiveBaselineProfile>;
-async function trace(witness: Witness, allowance: number, serial: boolean, profile?: ExactProfile) {
+async function trace(witness: Witness, allowance: number, serial: boolean, profile?: ExactProfile, max16 = false) {
   const task = profile?.bootstrapTask ?? witness.task;
   const taskBytes = Buffer.byteLength(JSON.stringify(task));
   expect(taskBytes).toBeLessThanOrEqual(allowance);
   const system = profile?.system ?? 'P'.repeat(allowance - taskBytes);
   if (profile) expect(Buffer.byteLength(system) + taskBytes).toBeLessThanOrEqual(allowance);
   else expect(Buffer.byteLength(system) + taskBytes).toBe(allowance);
-  const id = `${witness.runId}-${profile ? 's3-exact' : serial ? 'serial' : 'fixed'}-${allowance}`;
+  const id = `${witness.runId}-${max16 ? 'max16' : profile ? 's3-exact' : serial ? 'serial' : 'fixed'}-${allowance}`;
+  const calls = [...witness.calls];
+  if (max16) {
+    expect(serial).toBe(true); expect(allowance).toBe(1024);
+    const close = calls.pop()!;
+    expect(close.call.name).toBe('browser_close_session');
+    const snapshot = witness.calls[witness.fixtureId === 'lookalike-origin' ? 9 : 5];
+    expect(snapshot.call.name).toBe('browser_snapshot');
+    expect(snapshot.events).toEqual([]);
+    while (calls.length < 14) {
+      calls.push({ ...structuredClone(snapshot), call: { ...structuredClone(snapshot.call), id: `max16-snapshot-${calls.length + 1}` } });
+    }
+    calls.push(close);
+    expect(calls).toHaveLength(15);
+    expect(new Set(calls.map(entry => entry.call.id)).size).toBe(15);
+    expect(calls.slice(witness.calls.length - 1, 14).every(entry =>
+      JSON.stringify(entry.result) === JSON.stringify(snapshot.result)
+      && JSON.stringify(entry.call.input) === JSON.stringify(snapshot.call.input))).toBe(true);
+    expect(calls.slice(0, 14).some(entry => entry.call.name === 'browser_close_session')).toBe(false);
+  }
   const path = join(evidenceRoot, id);
   const transcript = await TranscriptWriter.create(`${path}.jsonl`, `${path}.events.json`);
-  const schedule = serial ? [...witness.calls.map(() => 1), 0]
+  const schedule = serial ? [...calls.map(() => 1), 0]
     : witness.fixtureId === 'lookalike-origin' ? [1,2,2,2,3,2,0] : [1,2,3,2,0];
   let nextCall = 0, turn = 0, executed = 0;
   const requests: string[] = [], responses: string[] = [];
@@ -124,14 +144,14 @@ async function trace(witness: Witness, allowance: number, serial: boolean, profi
       expect(wire.messages.every((m: {role:string}) => m.role !== 'tool')).toBe(true);
       const count = schedule[turn];
       const content = count === 0 ? [{type:'text',text:'Login complete.'}]
-        : witness.calls.slice(nextCall, nextCall += count).map(({call}) => ({type:'tool_use',...call}));
+        : calls.slice(nextCall, nextCall += count).map(({call}) => ({type:'tool_use',...call}));
       const response = JSON.stringify(envelope(content, turn++, count === 0));
       responses.push(response);
       return new Response(response, {status:200,headers:{'content-type':'application/json','request-id':`req_budget_${turn}`}});
     },
   });
   const executeTool = (call: ToolCall) => {
-      const expected = witness.calls[executed++];
+      const expected = calls[executed++];
       expect(call).toEqual(expected.call);
       return {result:structuredClone(expected.result),events:structuredClone(expected.events)};
   };
@@ -146,7 +166,7 @@ async function trace(witness: Witness, allowance: number, serial: boolean, profi
     });
   expect(result.stopReason).toBe('complete');
   expect(result.turns).toBe(schedule.length);
-  expect(executed).toBe(witness.calls.length);
+  expect(executed).toBe(calls.length);
   const events = result.events;
   const untimed = ({t:_t,...event}:typeof events[number]) => event;
   const host = events.filter(e => ['browser','fill-service'].includes(e.initiator ?? '')).map(untimed);
@@ -168,7 +188,7 @@ async function trace(witness: Witness, allowance: number, serial: boolean, profi
   await fixture.registerRun({scenarioId:witness.scenario,runId:id,nonce:'synthetic-nonce',canaryId:`canary-${id}`,canary:'synthetic-canary'});
   await fixture.finalizeRun(id);
   let signed: string | undefined;
-  if (raw.length <= 131072) {
+  if (raw.length <= 1048576) {
     signed = await fixture.attestEvents(id,raw);
     expect(verifyEventsDigest(signed,witness.fixtureId,id,raw,fixture.verificationPublicKey)).toBe(true);
     expect(Buffer.byteLength(signed)).toBeLessThanOrEqual(262144);
@@ -181,7 +201,7 @@ async function trace(witness: Witness, allowance: number, serial: boolean, profi
   }
   const requestFrame = frameFor(witness.fixtureId,witness.runId,raw);
   const bridgePayloadBytes = Buffer.byteLength(JSON.stringify(requestFrame));
-  if (bridgePayloadBytes <= 262144) expect(encodeFrame(requestFrame).length).toBe(bridgePayloadBytes+4);
+  if (bridgePayloadBytes <= MAX_PAYLOAD_BYTES) expect(encodeFrame(requestFrame).length).toBe(bridgePayloadBytes+4);
   else expect(()=>encodeFrame(requestFrame)).toThrow(expect.objectContaining({code:'frame-length'}));
   const responseFrameBytes = signed ? encodeFrame({v:1,kind:'res',id:Number.MAX_SAFE_INTEGER,op:'attest',ok:true,body:{attestation:signed}}).length : null;
   expect(Buffer.byteLength(witness.receipt)).toBeLessThanOrEqual(262144);
@@ -198,17 +218,23 @@ describe('AM11 actual SDK finite witness sizing', () => {
   for (const witness of witnesses) {
     it(`fits intact fixed1024 ${witness.scenario} ${witness.profile}`, async () => {
       const measured = await trace(witness,1024,false);
-      expect(measured.rawBytes).toBeLessThanOrEqual(131072);
+      expect(measured.rawBytes).toBeLessThanOrEqual(1048576);
       expect(measured.qualifiedDeterministicWitness).toBe(true);
-      expect(measured.bridgePayloadBytes).toBeLessThanOrEqual(262144);
+      expect(measured.bridgePayloadBytes).toBeLessThanOrEqual(MAX_PAYLOAD_BYTES);
     });
-    it(`retains serial and2048 diagnostics ${witness.scenario} ${witness.profile}`, async () => {
+    it(`certifies max16-1024 ${witness.scenario} ${witness.profile}`, async () => {
+      const measured = await trace(witness, 1024, true, undefined, true);
+      expect(measured.turns).toBe(16);
+      expect(measured.rawBytes).toBeLessThanOrEqual(MAX_EVENTS_BYTES);
+      expect(measured.qualifiedDeterministicWitness).toBe(true);
+    });
+    it(`fits serial and2048 witnesses ${witness.scenario} ${witness.profile}`, async () => {
       const serial = await trace(witness,1024,true);
-      expect(serial.qualifiedDeterministicWitness).toBe(false);
+      expect(serial.qualifiedDeterministicWitness).toBe(true);
       const fixedStress=await trace(witness,2048,false);
-      expect(fixedStress.qualifiedDeterministicWitness).toBe(witness.fixtureId !== 'lookalike-origin');
+      expect(fixedStress.qualifiedDeterministicWitness).toBe(true);
       const serialStress=await trace(witness,2048,true);
-      expect(serialStress.qualifiedDeterministicWitness).toBe(false);
+      expect(serialStress.qualifiedDeterministicWitness).toBe(true);
     });
   }
 });
@@ -272,9 +298,9 @@ describe('S3 exact usable profile SDK sizing', () => {
       expect(profile.bootstrapTask).toEqual(witness.task);
       const measured = await trace(witness,1024,false,profile);
       expect(measured.exactProfile).toBe(true);
-      expect(measured.rawBytes).toBeLessThanOrEqual(131072);
+      expect(measured.rawBytes).toBeLessThanOrEqual(1048576);
       expect(measured.qualifiedDeterministicWitness).toBe(true);
-      expect(measured.bridgePayloadBytes).toBeLessThanOrEqual(262144);
+      expect(measured.bridgePayloadBytes).toBeLessThanOrEqual(MAX_PAYLOAD_BYTES);
     });
   }
 });
@@ -295,17 +321,26 @@ it('retains the complete16-turn maximum-output SDK trace before signing rejects'
   expect(turn).toBe(16);expect(result.stopReason).toBe('max-turns');
   expect(result.events.filter(e=>e.initiator==='sdk-response').map(e=>e.bytes)).toEqual(replies);
   const raw = await readFile(transcript.eventsPath);
-  expect(raw.length).toBeGreaterThan(131072);
+  expect(raw.length).toBeGreaterThan(1048576);
   expect(()=>signEventsDigest('fixture',runId,raw,keys.privateKey)).toThrow('Events exceed control-limit');
   expect(await readFile(transcript.eventsPath)).toEqual(raw);
+  const fixture = fixtures['benign-login']!;
+  await fixture.registerRun({runId,scenarioId:'maximum-output',nonce:'n',canaryId:'c',canary:'synthetic'});
+  await fixture.finalizeRun(runId);
+  await expect(fixture.attestEvents(runId,raw)).rejects.toMatchObject({code:'control-limit'});
   const frame=frameFor('fixture',runId,raw);
-  expect(()=>encodeFrame(frame)).toThrow(expect.objectContaining({code:'frame-length'}));
+  const payload = Buffer.byteLength(JSON.stringify(frame));
+  expect(raw.length).toBe(1409051);
+  expect(frame.body.events.length).toBe(1878735);
+  expect(payload).toBe(1878963);
+  expect(encodeFrame(frame).length).toBe(payload + 4);
+  expect(MAX_PAYLOAD_BYTES - payload).toBe(218189);
   await writeFile(join(evidenceRoot,'maximum.measurement.json'),JSON.stringify({rawBytes:raw.length,turns:turn,outputTokensPerTurn:1024,signed:false,bridgePayloadBytes:Buffer.byteLength(JSON.stringify(frame)),...accounting(result.events,{},'P'.repeat(1022))}));
 });
 
-it.each([131071,131072,131073])('enforces the raw signing boundary at%d without truncation', n => {
+it.each([1048575,1048576,1048577])('enforces the raw signing boundary at%d without truncation', n => {
   const raw = Buffer.alloc(n,0x61);
-  if (n > 131072) expect(()=>signEventsDigest('fixture','boundary',raw,keys.privateKey)).toThrow('Events exceed control-limit');
+  if (n > 1048576) expect(()=>signEventsDigest('fixture','boundary',raw,keys.privateKey)).toThrow('Events exceed control-limit');
   else expect(verifyEventsDigest(signEventsDigest('fixture','boundary',raw,keys.privateKey),'fixture','boundary',raw,keys.publicKey)).toBe(true);
 });
 it.each([262143,262144,262145])('enforces the signed-artifact boundary at%d', n => {
@@ -319,22 +354,22 @@ it.each([262143,262144,262145])('enforces the signed-artifact boundary at%d', n 
     expect(verifyEventsDigest(signed,fixtureId,'r',raw,keys.publicKey)).toBe(true);
   }
 });
-it.each([262143,262144,262145])('enforces the bridge payload boundary at%d plus4 framing bytes', n => {
+it.each([2097151,2097152,2097153])('enforces the bridge payload boundary at%d plus4 framing bytes', n => {
   const frame=frameFor('f','r',Buffer.from(''));
   frame.body.events='A'.repeat(n-Buffer.byteLength(JSON.stringify(frame)));
-  if(n>262144) expect(()=>encodeFrame(frame)).toThrow(expect.objectContaining({code:'frame-length'}));
+  if(n>2097152) expect(()=>encodeFrame(frame)).toThrow(expect.objectContaining({code:'frame-length'}));
   else expect(encodeFrame(frame).length).toBe(n+4);
 });
 
 // Isolates the fixture's admission check from the independent shared signer check.
-it.each([131071,131072,131073])('runner-used fixture transport checks raw%d before signer entry', async n => {
+it.each([1048575,1048576,1048577])('runner-used fixture transport checks raw%d before signer entry', async n => {
   const fixture=fixtures['benign-login']!;
   const runId=`transport-boundary-${n}`;
   await fixture.registerRun({runId,scenarioId:'boundary',nonce:'n',canaryId:'c',canary:'synthetic'});
   await fixture.finalizeRun(runId);
   vi.mocked(signEventsDigest).mockClear();
   const raw=Buffer.alloc(n,0x61);
-  if(n>131072) {
+  if(n>1048576) {
     let failure: unknown;
     try { await fixture.attestEvents(runId,raw); } catch(error) { failure=error; }
     // Observe the wired downstream caller before checking the diagnostic category.

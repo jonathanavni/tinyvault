@@ -155,7 +155,7 @@ it('partial EOF closes with frame-partial before generic bridge death', async ()
 });
 it.each([
   ['zero length', Buffer.alloc(4), 'frame-length'],
-  ['oversize', Buffer.from([0, 4, 0, 1]), 'frame-length'],
+  ['oversize', Buffer.from([0, 0x20, 0, 1]), 'frame-length'],
   ['stdout diagnostic', Buffer.from('diagnostic\n'), 'frame-length'],
   ['invalid utf8', Buffer.from([0, 0, 0, 1, 255]), 'frame-utf8'],
   ['malformed then valid', Buffer.concat([Buffer.from([0, 0, 0, 1, 123]), success()]), 'frame-canonical'],

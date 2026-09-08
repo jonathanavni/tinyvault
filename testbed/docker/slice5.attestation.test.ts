@@ -204,15 +204,15 @@ it('direct shared fixture consumes its single successful attestation independent
   } finally { await p.close(); }
 });
 
-it('direct shared fixture accepts 131072 bytes and consumes a separate 131073 refusal before signer entry', async () => {
+it('direct shared fixture accepts 1048576 bytes and consumes a separate 1048577 refusal before signer entry', async () => {
   const p = await paired();
   try {
     for (const runId of ['A', 'B']) { await p.fixture.registerRun(p.setup(runId)); await p.fixture.finalizeRun(runId); }
-    const exact = Buffer.alloc(131072, 0x61); resetSigning();
+    const exact = Buffer.alloc(1048576, 0x61); resetSigning();
     const raw = await p.fixture.attestEvents('A', exact);
     expect(verifyEventsDigest(raw, 'benign-login', 'A', exact, p.key)).toBe(true);
     expect(cryptoSign).toHaveBeenCalledOnce(); resetSigning();
-    const failure = await p.fixture.attestEvents('B', Buffer.alloc(131073, 0x61)).catch((error: unknown) => error);
+    const failure = await p.fixture.attestEvents('B', Buffer.alloc(1048577, 0x61)).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(BridgeError); expect(failure).toMatchObject({ code: 'control-limit' });
     // The direct signer has its own size cap: zero crypto.sign calls alone would be masked.
     expect(signEventsDigest).not.toHaveBeenCalled(); expect(cryptoSign).not.toHaveBeenCalled();
@@ -232,7 +232,7 @@ it('raw server oversized attestation is terminal before primitive entry with ind
     p.output.on('data', (bytes) => decoder.feed(bytes)); p.entries.length = 0; resetSigning();
     // Deliberately bypass BridgeSession's local body validator, while retaining a valid outer frame.
     p.input.write(encodeFrame({ v: 1, kind: 'req', id: 5, op: 'attest', body: {
-      ...p.scope('A'), capability: caps.attest, events: Buffer.alloc(131073, 0x61).toString('base64url'),
+      ...p.scope('A'), capability: caps.attest, events: Buffer.alloc(1048577, 0x61).toString('base64url'),
     } }));
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(frames).toEqual([{ v: 1, kind: 'res', id: 5, op: 'attest', ok: false, code: 'control-limit' }]);
@@ -240,6 +240,6 @@ it('raw server oversized attestation is terminal before primitive entry with ind
     expect(signEventsDigest).not.toHaveBeenCalled(); expect(cryptoSign).not.toHaveBeenCalled();
   } finally { await p.close(); }
   const valid = await paired();
-  try { await positive(valid, await valid.finalized(), 'A', Buffer.alloc(131072, 0x61)); }
+  try { await positive(valid, await valid.finalized(), 'A', Buffer.alloc(1048576, 0x61)); }
   finally { await valid.close(); }
 });

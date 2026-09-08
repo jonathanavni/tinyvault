@@ -922,10 +922,10 @@ administrative receipt retrieval.
 <!-- TV-CLAIM-SPAN:s103 END -->
 
 <!-- TV-CLAIM-SPAN:s104 BEGIN TV-CLAIM:P-v2 -->
-Raw events are bounded to 131072 bytes and each serialized signed artifact to 262144 UTF-8 bytes;
-producers check artifact size before signing, consumers before parsing the envelope. The unchanged
-bridge frame limit also includes its outer envelope, so a near-limit artifact can fail closed over the
-bridge. Exact preimage and separate prefix-removal proof requirements are in
+Raw events are bounded to 1048576 bytes and each serialized signed artifact to 262144 UTF-8 bytes;
+producers check artifact size before signing, consumers before parsing the envelope. The bridge frame
+limit (2097152 payload bytes plus framing) includes its outer envelope, and artifact strings carried on
+the bridge are separately bounded to 262144 bytes (M6-AM12). Exact preimage and separate prefix-removal proof requirements are in
 [`docs/m5-2-slice-5-plan.md` §3–§5](docs/m5-2-slice-5-plan.md#3-exact-version-2-transcript-and-envelope).
 <!-- TV-CLAIM-SPAN:s104 END -->
 

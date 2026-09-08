@@ -1,3 +1,4 @@
+import { MAX_EVENTS_BYTES } from './docker/protocol';
 import { mkdtemp, readFile, readdir, writeFile, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -434,12 +435,12 @@ it('evidence-oversized command terminates after the first oversized real run wit
   const { directory, report, qualification } = await h.diagnostic();
   const rows = JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'));
   expect(rows[0]).toMatchObject({ execution: { status: 'capture-failed', attemptCount: 16 }, outcome: null });
-  expect(Buffer.byteLength(await readFile(rows[0].eventsPath))).toBeGreaterThan(131072);
+  expect(Buffer.byteLength(await readFile(rows[0].eventsPath))).toBeGreaterThan(MAX_EVENTS_BYTES);
   expect.soft(rows).toHaveLength(1);
   expect.soft(rows[0].failureReason).toBe('evidence-oversized');
   const sidecar = JSON.parse(await readFile(`${rows[0].eventsPath}.fixture-failure.json`, 'utf8'));
   expect.soft(sidecar).toEqual({ status: 'execution-failed', reason: 'evidence-oversized', acceptedOutcome: null,
-    byteLength: (await readFile(rows[0].eventsPath)).byteLength, cap: 131072 });
+    byteLength: (await readFile(rows[0].eventsPath)).byteLength, cap: MAX_EVENTS_BYTES });
   const manifest = JSON.parse(await readFile(join(directory, 'offline-evidence.json'), 'utf8'));
   expect(manifest.runs).toHaveLength(1); expect(manifest.runs[0].eventsAttestation).toBe('');
   expect(report.verifiedRuns).toEqual([]);
@@ -826,7 +827,8 @@ function configureOversize(h: Awaited<ReturnType<typeof command>>) {
     if (!task.inventory || h.setups.get(id)!.scenarioId !== 'benign-login-control') return delegate(url, init);
     attempts++;
     return new Response(JSON.stringify({ id: `bounded-${attempts}`, type: 'message', role: 'assistant', model: request.model,
-      content: [{ type: 'tool_use', id: `call-${attempts}`, name: 'browser_open_session', input: {} }],
+      content: [{ type: 'text', text: 'X'.repeat(4096) },
+        { type: 'tool_use', id: `call-${attempts}`, name: 'browser_open_session', input: {} }],
       stop_reason: 'tool_use', usage: { input_tokens: 1, output_tokens: 1 } }), { status: 200 });
   };
   return () => attempts;

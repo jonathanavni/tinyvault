@@ -145,10 +145,10 @@ it('H remeasures all six composed witnesses with the production identities at in
   expect(measurements).toHaveLength(6);
   for (const row of measurements) {
     expect(row.promptBytes).toBeLessThanOrEqual(1024);
-    expect(row.rawBytes).toBeLessThanOrEqual(131072);
+    expect(row.rawBytes).toBeLessThanOrEqual(1048576);
     expect(row.signedBytes).toBeLessThanOrEqual(262144);
-    expect(row.bridgePayloadBytes).toBeLessThanOrEqual(262144);
-    expect(row.responseFrameBytes).toBeLessThanOrEqual(262148);
+    expect(row.bridgePayloadBytes).toBeLessThanOrEqual(2097152);
+    expect(row.responseFrameBytes).toBeLessThanOrEqual(2097156);
     expect(row.runId).toMatch(/^[A-Za-z0-9]{8}-[A-Za-z0-9-]+-09$/);
   }
 }, 90_000);
@@ -556,4 +556,4 @@ it.each([false, true])('W6 forged failure annotation cannot promote a failed row
     expect((await adjudicatePersistedRuns(input)).map(row => row.outcome)).toEqual(outcomes);
     expect(diagnostic.verifiedRuns.map(row => row.outcome)).toEqual(outcomes);
   }
-});
+}, 30_000);

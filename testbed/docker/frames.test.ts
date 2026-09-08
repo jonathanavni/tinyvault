@@ -29,7 +29,7 @@ it('arbitrary fragmentation and coalescing yield each canonical frame once', () 
 });
 it.each([
   ['zero length', Buffer.alloc(4), 'frame-length'],
-  ['oversized length', Buffer.from([0, 4, 0, 1]), 'frame-length'],
+  ['oversized length', Buffer.from([0, 32, 0, 1]), 'frame-length'],
   ['stdout diagnostic shares oversized branch', Buffer.from('diagnostic\n'), 'frame-length'],
   ['invalid UTF-8', raw(Buffer.from([0xff])), 'frame-utf8'],
   ['invalid JSON', raw('{'), 'frame-canonical'],
@@ -86,4 +86,17 @@ it('encoder rebuilds top and body schema order and enforces maximum payload', ()
   const p = probe();
   p.decoder.feed(raw(JSON.stringify(hello)));
   expect(p.error).toHaveBeenCalledWith('frame-canonical');
+});
+
+it.each([2097151, 2097152, 2097153])('AM12 frame decoder enforces payload boundary %d', size => {
+  const base = { v: 1, kind: 'res', id: 1, op: 'receipt', ok: true, body: { receipt: '' } };
+  base.body.receipt = 'x'.repeat(size - Buffer.byteLength(JSON.stringify(base)));
+  const bytes = raw(JSON.stringify(base)); expect(bytes.length).toBe(size + 4);
+  const p = probe(); p.decoder.feed(bytes);
+  if (size > 2097152) {
+    expect(p.error).toHaveBeenCalledExactlyOnceWith('frame-length');
+    expect(p.frame).not.toHaveBeenCalled();
+  } else {
+    expect(p.error).not.toHaveBeenCalled(); expect(p.frame).toHaveBeenCalledExactlyOnceWith(base);
+  }
 });

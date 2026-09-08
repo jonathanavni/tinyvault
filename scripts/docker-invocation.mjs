@@ -11,6 +11,7 @@ import ts from 'typescript';
 // Exact repo-relative path -> exact capability specifiers, never a directory exemption.
 export const DOCKER_CAPABILITY_ALLOWLIST = Object.freeze({
   'testbed/evalEntry.test.ts': ['node:child_process'],
+  'testbed/checkers/offline.retention.test.ts': ['node:child_process'],
   'testbed/docker/exec.ts': ['node:child_process'],
   'testbed/docker/no-docker.setup.ts': ['node:child_process', 'node:net'],
   'testbed/docker/exec.test.ts': ['node:child_process', 'node:http', 'node:net'],

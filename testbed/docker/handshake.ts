@@ -4,7 +4,7 @@
 import { createHmac, createPublicKey, timingSafeEqual, type KeyObject } from 'node:crypto';
 import {
   BODY_SCHEMAS, BridgeError, CONTAINER_ID_PATTERN, EPOCH_PATTERN, FIXTURE_IDS, HELLO_PREFIX, OPS,
-  CAPABILITY_OPS, MAX_CAPTURE_BYTES, MAX_CHUNK_BYTES, MAX_EVENTS_BYTES, MAX_PAYLOAD_BYTES, RUN_ID_PATTERN,
+  CAPABILITY_OPS, MAX_CAPTURE_BYTES, MAX_CHUNK_BYTES, MAX_EVENTS_BYTES, MAX_ARTIFACT_STRING_BYTES, RUN_ID_PATTERN,
   exactKeys, isBody, type Body, type BridgeCode, type BridgeOp, type FixtureId,
 } from './protocol';
 
@@ -35,6 +35,7 @@ export function verifyHelloMac(secret: Buffer, fields: HelloFields, mac: Buffer)
   if (!timingSafeEqual(computeHelloMac(secret, fields), mac)) throw new BridgeError('mac-invalid');
 }
 export function decodeBase64url(value: string, size: number | undefined, code: BridgeCode): Buffer {
+  if (size !== undefined && value.length !== Math.ceil(size * 4 / 3)) throw new BridgeError(code);
   const bytes = Buffer.from(value, 'base64url');
   if (bytes.toString('base64url') !== value || (size !== undefined && bytes.length !== size)) {
     throw new BridgeError(code);
@@ -89,6 +90,11 @@ function validateOperation(op: BridgeOp, kind: 'req' | 'res', body: Body): void 
       if (body.kind !== 'requests' && body.kind !== 'unauthorized') throw new BridgeError('body-shape');
       canonicalInteger(body.offset as string);
     }
+    if (op === 'attest' && (body.events as string).length > Math.ceil(MAX_EVENTS_BYTES * 4 / 3)) {
+      throw new BridgeError('control-limit');
+    }
+    // Redundant with the encoded bound; no independent killing vector: ceil(4*1048577/3)
+    // is 1398103 > 1398102. Retain the decoded check as defence in depth.
     if (op === 'attest'
       && decodeBase64url(body.events as string, undefined, 'body-shape').length > MAX_EVENTS_BYTES) {
       throw new BridgeError('control-limit');
@@ -98,25 +104,31 @@ function validateOperation(op: BridgeOp, kind: 'req' | 'res', body: Body): void 
       for (const field of CAPABILITY_OPS) decodeBase64url(body[field] as string, 32, 'capability-refused');
       if (new Set(CAPABILITY_OPS.map((field) => body[field])).size !== 6) throw new BridgeError('capability-refused');
     }
-    if (op === 'key') importAnnouncedKey(decodeBase64url(body.publicKey as string, undefined, 'key-shape'));
-    if (op === 'receipt') scalar(body.receipt as string, MAX_PAYLOAD_BYTES, true);
-    if (op === 'attest') scalar(body.attestation as string, MAX_PAYLOAD_BYTES);
+    if (op === 'key') {
+      importAnnouncedKey(decodeBase64url(body.publicKey as string, 44, 'key-shape'));
+    }
+    if (op === 'receipt') scalar(body.receipt as string, MAX_ARTIFACT_STRING_BYTES, true);
+    if (op === 'attest') scalar(body.attestation as string, MAX_ARTIFACT_STRING_BYTES);
     if (op === 'capture') {
+      if ((body.bytes as string).length > Math.ceil(MAX_CHUNK_BYTES * 4 / 3)) throw new BridgeError('body-shape');
       const bytes = decodeBase64url(body.bytes as string, undefined, 'body-shape');
       const total = canonicalInteger(body.total as string);
       const next = canonicalInteger(body.next as string);
+      // Redundant with the encoded bound; no independent killing vector: ceil(4*65537/3)
+      // is 87383 > 87382. Retain the decoded check as defence in depth.
       if (bytes.length > MAX_CHUNK_BYTES || next > total || bytes.length > next
         || (bytes.length === 0 && next !== total)) throw new BridgeError('body-shape');
     }
   }
 }
 function validateHelloRequest(body: Body): void {
+  if (Buffer.byteLength(body.epoch as string) > 4096) throw new BridgeError('body-shape');
   if (!CONTAINER_ID_PATTERN.test(body.containerId as string) || !EPOCH_PATTERN.test(body.epoch as string)
     || !(FIXTURE_IDS as readonly string[]).includes(body.fixtureId as string)) throw new BridgeError('body-shape');
   decodeBase64url(body.challenge as string, 32, 'challenge-shape');
 }
 function validateHelloResponse(body: Body): void {
   // Closed schema first; key import/re-export precedes MAC decoding and verification.
-  importAnnouncedKey(decodeBase64url(body.publicKey as string, undefined, 'key-shape'));
+  importAnnouncedKey(decodeBase64url(body.publicKey as string, 44, 'key-shape'));
   decodeBase64url(body.mac as string, 32, 'mac-shape');
 }
