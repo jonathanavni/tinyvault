@@ -1,4 +1,7 @@
-import { executeRealAgentRun, type CreateModelClient } from './realAgentRun';
+import { EvidenceOversizedError, isEvidenceOversized, isClosedProjectError, type RunTerminal } from './evidenceOversize';
+import { MAX_EVENTS_BYTES } from './docker/protocol';
+import type { ConstructionCode } from './docker/exec';
+import { executeRealAgentRun, executionErrorDetails, type CreateModelClient } from './realAgentRun';
 import type { EvaluationProvenance, RunExecutionMetadata } from './evaluationProvenance';
 import { runAgentProfile, type AgentProfile } from '../src/agents/prompt';
 import { randomBytes } from 'node:crypto';
@@ -47,8 +50,8 @@ type RunOnceInput = {
   parityObserver?: ParityCollector;
 };
 
-export type FailedRunRecord = Omit<RunRecord, 'outcome'> & { outcome: null; runId: string; provenanceId: string; execution: RunExecutionMetadata };
-type RunOnceResult = { record: RunRecord | FailedRunRecord; evidence: OfflineRunEvidence; captureQualification?: ReturnType<typeof qualifyScenarioCapture> };
+export type FailedRunRecord = Omit<RunRecord, 'outcome'> & { outcome: null; runId: string; provenanceId: string; execution: RunExecutionMetadata; failureReason?: 'evidence-oversized' };
+type RunOnceResult = { terminal?: RunTerminal; record: RunRecord | FailedRunRecord; evidence: OfflineRunEvidence; captureQualification?: ReturnType<typeof qualifyScenarioCapture> };
 
 export async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
   // Register residual (S4-2/X4-1): a same-process runner can still fabricate
@@ -85,6 +88,7 @@ export async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
   let completionReceipt: string | undefined;
   let eventsAttestation = '';
   let taskCompleted = false;
+  let terminal: RunTerminal | undefined;
   const completionBinding = createCompletionBinding(input.scenario, prepared);
   try {
     await input.fixture.finalizeRun(prepared.runId);
@@ -95,18 +99,42 @@ export async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
     // Snapshot before replacement: the in-process fixture uses this same destination.
     const capture = await input.fixture.captureRequests(prepared.runId);
     await persistFixtureCapture(input.artifactDirectory, prepared.runId, capture);
-    if (!realResult) eventsAttestation = await input.fixture.attestEvents(prepared.runId, await readFile(prepared.eventsPath));
+    const attest = async () => {
+      const bytes = await readFile(prepared.eventsPath);
+      if (bytes.byteLength > MAX_EVENTS_BYTES) throw new EvidenceOversizedError({
+        runId: prepared.runId, byteLength: bytes.byteLength, cap: MAX_EVENTS_BYTES });
+      return input.fixture.attestEvents(prepared.runId, bytes);
+    };
+    if (!realResult) eventsAttestation = await attest();
     taskCompleted = input.fixture.verifyCompletion(completionReceipt, completionBinding).taskCompleted;
     // A real run's attestation is its trusted finalization disposition, minted last.
     if (realResult?.intact === true) {
-      eventsAttestation = await input.fixture.attestEvents(prepared.runId, await readFile(prepared.eventsPath));
+      eventsAttestation = await attest();
     }
   } catch (error) {
     if (!realResult) throw error;
     eventsAttestation = '';
     realResult.intact = false; realResult.execution.status = 'capture-failed';
-    await writeFile(`${prepared.eventsPath}.fixture-failure.json`,
-      `${JSON.stringify({ status: 'execution-failed', reason: 'unclassified', acceptedOutcome: null })}\n`, { mode: 0o600 });
+    const oversized = isEvidenceOversized(error);
+    const reason = oversized ? 'evidence-oversized' : 'unclassified';
+    if (oversized || isClosedProjectError(error)) {
+      const codes = error as { code?: ConstructionCode; teardownCode?: ConstructionCode };
+      terminal = { kind: oversized ? 'evidence-oversized' : 'project-closed', runId: prepared.runId,
+        code: codes.code, teardownCode: codes.teardownCode, sidecarWriteFailed: false,
+        row: { scenario: input.scenario.id, agent: config.id, runIndex: input.runIndex, runId: prepared.runId,
+          artifacts: { eventsPath: prepared.eventsPath, transcriptPath: prepared.transcriptPath,
+            fixtureCapturePath: resolve(input.artifactDirectory, 'fixture-captures', `${prepared.runId}.requests`) },
+          status: 'execution-failed', reason, acceptedOutcome: null } };
+    }
+    try {
+      await writeFile(`${prepared.eventsPath}.fixture-failure.json`,
+        `${JSON.stringify({ status: 'execution-failed', reason, acceptedOutcome: null,
+          ...(oversized ? { byteLength: error.byteLength, cap: error.cap } : {}) })}\n`, { mode: 0o600 });
+    } catch (sidecarError) {
+      if (terminal) terminal.sidecarWriteFailed = true;
+      await writeFile(`${prepared.eventsPath}.fixture-failure-error.json`,
+        `${JSON.stringify({ sidecarError: executionErrorDetails(sidecarError) })}\n`, { mode: 0o600 }).catch(() => undefined);
+    }
   }
   const runEndedAt = new Date().toISOString();
   const leak = leakScan(loopResult.events, prepared.canary, auth);
@@ -122,8 +150,10 @@ export async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
   if (captureQualification) await writeFile(`${prepared.eventsPath}.scenario-capture.txt`,
     `${printScenarioCapture(captureQualification)}\n`, { mode: 0o600 });
   return {
+    ...(terminal ? { terminal } : {}),
     record: realResult && !realResult.intact
-      ? { ...record, ...binding, outcome: null } as FailedRunRecord : { ...record, ...binding },
+      ? { ...record, ...binding, outcome: null, ...(terminal?.kind === 'evidence-oversized'
+        ? { failureReason: 'evidence-oversized' } : {}) } as FailedRunRecord : { ...record, ...binding },
     evidence: { scenario: input.scenario.id, agent: config.id, runIndex: input.runIndex, ...binding,
       canary: prepared.canary, completionBinding: persistedCompletionBinding(completionBinding),
       eventsAttestation, runStartedAt: prepared.runStartedAt, runEndedAt,

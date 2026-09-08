@@ -500,3 +500,60 @@ it.each(['duplicate-zero-usage', 'ordinal'])( 'H3 command isolates request guard
   await expect(h.execute()).rejects.toThrow('Real evaluation is unqualified');
   expect(await h.diagnostic()).toMatchObject({ cohortFailure: 'provenance-mismatch', verifiedRuns: [] });
 }, 30_000);
+
+it.each([false, true])('W6 forged failure annotation cannot promote a failed row or change a valid outcome; failed=%s', async failed => {
+  const { UnqualifiedComparisonError } = await import('./runner');
+  const { adjudicatePersistedRuns, diagnosePersistedRuns } = await import('./checkers/offline');
+  const { createAgentInventory } = await import('./evalAgents');
+  const aggregate = await import('./scorecardAggregate');
+  const aggregation = vi.spyOn(aggregate, 'aggregateScorecard');
+  const root = await mkdtemp(join(tmpdir(), 's6-forgery-'));
+  const h = await s5ComposedHarness(root);
+  const registers = Object.values(h.fixtures).map(fixture => vi.spyOn(fixture, 'registerRun'));
+  const closes = Object.values(h.fixtures).map(fixture => vi.spyOn(fixture, 'close'));
+  vi.mocked(composed.startComposedFixtureSet).mockImplementation(h.startComposed);
+  vi.spyOn(console, 'log').mockImplementation(() => {}); vi.spyOn(console, 'error').mockImplementation(() => {});
+  if (failed) for (const fixture of Object.values(h.fixtures)) fixture.attestEvents = async () => { throw new Error('failed'); };
+  const fs = await import('node:fs/promises'); const original = fs.writeFile;
+  let outcomes: unknown[] = [];
+  vi.spyOn(fs, 'writeFile').mockImplementation(async (path, data, ...args) => {
+    if (String(path).endsWith('/runs.captured.json')) {
+      const rows = JSON.parse(String(data)); outcomes = rows.map((row: any) => row.outcome);
+      for (const row of rows) expect(row).not.toHaveProperty('failureReason');
+      for (const row of rows) { row.failureReason = 'evidence-oversized'; row.reason = 'evidence-oversized'; }
+      return original(path, JSON.stringify(rows), ...args);
+    }
+    return original(path, data, ...args);
+  });
+  const execute = runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options);
+  if (failed) await expect(execute).rejects.toBeInstanceOf(UnqualifiedComparisonError);
+  else expect((await execute).runs.map(row => row.outcome)).toEqual(outcomes);
+  const directory = join(root, (await readdir(root))[0]);
+  const stored = JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'));
+  expect(stored).toHaveLength(6);
+  expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(6);
+  for (const close of closes) expect(close).toHaveBeenCalledOnce();
+  if (failed) for (const row of stored) {
+    expect(JSON.parse(await readFile(`${row.eventsPath}.fixture-failure.json`, 'utf8')))
+      .toEqual({ status: 'execution-failed', reason: 'unclassified', acceptedOutcome: null });
+  }
+  expect(stored.every((row: any) => row.failureReason === 'evidence-oversized' && row.reason === 'evidence-oversized')).toBe(true);
+  const provenance = JSON.parse(await readFile(join(directory, 'provenance.json'), 'utf8'));
+  const cohort = JSON.parse(await readFile(join(directory, 'cohort.json'), 'utf8'));
+  const input = { runsPath: join(directory, 'runs.captured.json'), manifestPath: join(directory, 'offline-evidence.json'),
+    artifactDirectory: directory, agentConfigs: createAgentInventory('real-comparison', '0.124.0'),
+    scenarioRegistry: createScenarioRegistry(Object.fromEntries(Object.entries(h.fixtures).map(([id, fixture]) => [id, fixture.origin])) as never),
+    verificationKeys: Object.fromEntries(Object.entries(h.fixtures).map(([id, fixture]) => [id, fixture.verificationPublicKey])) as never,
+    provenanceTrust: { provenance, expectedRuns: cohort.expectedRuns },
+    captureQualifications: stored.map((row: any) => ({ runId: row.runId, status: 'qualified' as const })) };
+  const diagnostic = await diagnosePersistedRuns(input);
+  if (failed) {
+    await expect(adjudicatePersistedRuns(input)).rejects.toThrow();
+    expect(diagnostic.verifiedRuns).toEqual([]); expect(diagnostic.missingPositiveControlCells).toHaveLength(6);
+    expect(diagnostic.runs.every(row => row.status === 'capture-failed' && row.reason === 'signature-mismatch' && row.acceptedOutcome === null)).toBe(true);
+    expect(aggregation).not.toHaveBeenCalled(); await expect(fs.access(join(directory, 'scorecard.json'))).rejects.toThrow();
+  } else {
+    expect((await adjudicatePersistedRuns(input)).map(row => row.outcome)).toEqual(outcomes);
+    expect(diagnostic.verifiedRuns.map(row => row.outcome)).toEqual(outcomes);
+  }
+});

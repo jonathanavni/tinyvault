@@ -368,11 +368,11 @@ retain diagnostic outcomes. Missing/duplicate identity or a shared artifact path
 acceptance. Diagnostics retain the original expected N; they cannot silently shrink a denominator or
 produce a qualified scorecard. `OfflineDiagnosticReport` contains `verifiedRuns`, per-run `runs`,
 `missingPositiveControlCells` and optional `cohortFailure`. Its `status: validated | unqualified` describes
-only these offline validators: **validated is not publication qualification**. Per-run status is
+only these offline validators: **validated is not publication qualification**. A cohort terminated early persists its partial bundle, whose offline replay is an inventory failure; the trusted diagnostic written at termination carries the initiating reason. Per-run status is
 `verified`, `capture-failed`, or `execution-failed`; only `verified` carries an accepted outcome.
 Recognized reasons are `identity-mismatch`, `signature-mismatch`, `capture-mismatch`, `outcome-mismatch`,
 `malformed-evidence`, `replay-detected`, `positive-control-missing` and `provenance-mismatch`; unknown
-errors use `unclassified`. `ComparisonQualification` is separate: either `qualified` with provenanceId,
+errors use `unclassified`; the trusted runner records `evidence-oversized` as an execution reason at termination when raw events exceed the cap. `ComparisonQualification` is separate: either `qualified` with provenanceId,
 or `unqualified` with nullable provenanceId and reasons. Missing control cells stay in the diagnostic
 record. Neither shape alters Docker's frozen invalid-report shape.
 

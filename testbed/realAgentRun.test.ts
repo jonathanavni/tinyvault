@@ -420,34 +420,34 @@ it.each(['max_tokens', 'refusal'] as const)('retains provider %s as a nonnumeric
     stopReason, attemptCount: 1, usage: { inputTokens: 100, outputTokens: 32 } } });
 }, 30_000);
 
-it('retains sixteen-turn evidence overflow without manufacturing completion or reducing N', async () => {
-  const h = await command(); const createHost = h.options.createHost!;
-  h.options.createHost = async options => {
-    const host = await createHost(options);
-    const id = [...h.setups.keys()].at(-1)!;
-    if (h.setups.get(id)!.scenarioId === 'benign-login-control' && id.includes('-tinyvault-ref-')) {
-      host.tools.browser_open_session = async () => ({ sessionId: 'bounded-session' });
-    }
-    return host;
-  };
-  const delegate = h.options.providerFetch; let attempts = 0;
-  h.options.providerFetch = async (url, init) => {
-    const request = JSON.parse(init!.body as string); const task = JSON.parse(request.messages[0].content);
-    const id = new URL(task.startUrl).searchParams.get('runId')!;
-    if (!task.inventory || h.setups.get(id)!.scenarioId !== 'benign-login-control') return delegate(url, init);
-    attempts++;
-    return new Response(JSON.stringify({ id: `bounded-${attempts}`, type: 'message', role: 'assistant', model: request.model,
-      content: [{ type: 'tool_use', id: `call-${attempts}`, name: 'browser_open_session', input: {} }],
-      stop_reason: 'tool_use', usage: { input_tokens: 1, output_tokens: 1 } }), { status: 200 });
-  };
+it('evidence-oversized command terminates after the first oversized real run without a second registration', async () => {
+  const h = await command();
+  const registers = Object.values(h.fixtures).map(fixture => vi.spyOn(fixture, 'registerRun'));
+  const attests = Object.values(h.fixtures).map(fixture => vi.spyOn(fixture, 'attestEvents'));
+  const closes = Object.values(h.fixtures).map(fixture => vi.spyOn(fixture, 'close'));
+  const attempts = configureOversize(h);
   await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
-  expect(attempts).toBe(16);
-  const { directory, report } = await h.diagnostic();
+  expect(attempts()).toBe(16);
+  expect.soft(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(1);
+  expect.soft(attests.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(0);
+  for (const close of closes) expect(close).toHaveBeenCalledOnce();
+  const { directory, report, qualification } = await h.diagnostic();
   const rows = JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'));
   expect(rows[0]).toMatchObject({ execution: { status: 'capture-failed', attemptCount: 16 }, outcome: null });
   expect(Buffer.byteLength(await readFile(rows[0].eventsPath))).toBeGreaterThan(131072);
-  expect(report.verifiedRuns).toHaveLength(5);
-  expect(report.runs).toHaveLength(6);
+  expect.soft(rows).toHaveLength(1);
+  expect.soft(rows[0].failureReason).toBe('evidence-oversized');
+  const sidecar = JSON.parse(await readFile(`${rows[0].eventsPath}.fixture-failure.json`, 'utf8'));
+  expect.soft(sidecar).toEqual({ status: 'execution-failed', reason: 'evidence-oversized', acceptedOutcome: null,
+    byteLength: (await readFile(rows[0].eventsPath)).byteLength, cap: 131072 });
+  const manifest = JSON.parse(await readFile(join(directory, 'offline-evidence.json'), 'utf8'));
+  expect(manifest.runs).toHaveLength(1); expect(manifest.runs[0].eventsAttestation).toBe('');
+  expect(report.verifiedRuns).toEqual([]);
+  expect(report.runs).toHaveLength(1);
+  expect(report.runs[0]).toMatchObject({ runId: rows[0].runId, status: 'execution-failed', reason: 'evidence-oversized' });
+  expect(report.cohortFailure).toBe('unclassified');
+  expect(report.missingPositiveControlCells).toHaveLength(6);
+  expect(qualification.reasons).toEqual([`evidence-oversized: ${rows[0].runId}`, 'cohort-incomplete: 1 of 6 runs attempted']);
   expect(report.runs[0].acceptedOutcome).toBeNull();
   expect(report.missingPositiveControlCells).toContainEqual({ scenario: 'benign-login-control', agent: 'tinyvault-ref' });
 }, 30_000);
@@ -807,4 +807,121 @@ it('G5 settled loop snapshot uses result events without a persisted read', async
   expect(reads.mock.calls.filter(([path]) => path === transcript.eventsPath)).toHaveLength(0);
   expect(JSON.parse(await readFile(`${transcript.eventsPath}.initial-snapshot.json`, 'utf8')))
     .toEqual(observeInitialSnapshot(result.events, 'snapshot-run'));
+});
+
+function configureOversize(h: Awaited<ReturnType<typeof command>>) {
+  const createHost = h.options.createHost!;
+  h.options.createHost = async options => {
+    const host = await createHost(options);
+    const id = [...h.setups.keys()].at(-1)!;
+    if (h.setups.get(id)!.scenarioId === 'benign-login-control' && id.includes('-tinyvault-ref-')) {
+      host.tools.browser_open_session = async () => ({ sessionId: 'bounded-session' });
+    }
+    return host;
+  };
+  const delegate = h.options.providerFetch; let attempts = 0;
+  h.options.providerFetch = async (url, init) => {
+    const request = JSON.parse(init!.body as string); const task = JSON.parse(request.messages[0].content);
+    const id = new URL(task.startUrl).searchParams.get('runId')!;
+    if (!task.inventory || h.setups.get(id)!.scenarioId !== 'benign-login-control') return delegate(url, init);
+    attempts++;
+    return new Response(JSON.stringify({ id: `bounded-${attempts}`, type: 'message', role: 'assistant', model: request.model,
+      content: [{ type: 'tool_use', id: `call-${attempts}`, name: 'browser_open_session', input: {} }],
+      stop_reason: 'tool_use', usage: { input_tokens: 1, output_tokens: 1 } }), { status: 200 });
+  };
+  return () => attempts;
+}
+
+it.each(['W3 marked', 'W3b unmarked', 'W3b capture-write', 'W3c teardown-code', 'W3c teardown-name'])(
+  '%s closed-project discrimination retains the initiating reason and closes once', async mode => {
+    const { ComposedConstructionError } = await import('./docker/exec');
+    const { markClosedProject } = await import('./evidenceOversize');
+    const h = await command();
+    const registers = Object.values(h.fixtures).map(fixture => vi.spyOn(fixture, 'registerRun'));
+    const closes = Object.values(h.fixtures).map(fixture => vi.spyOn(fixture, 'close'));
+    const error = new ComposedConstructionError(mode === 'W3b capture-write' ? 'capture-write' : 'bridge-protocol');
+    const terminal = !mode.startsWith('W3b');
+    if (terminal) markClosedProject(error);
+    h.fixtures['benign-login']!.attestEvents = async () => { throw error; };
+    if (mode.startsWith('W3c')) closes[0].mockRejectedValue(mode.endsWith('code')
+      ? new ComposedConstructionError('compose-down') : new TypeError('teardown'));
+    await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
+    const { directory, report, qualification } = await h.diagnostic();
+    const rows = JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'));
+    expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(terminal ? 1 : 6);
+    for (const close of closes) expect(close).toHaveBeenCalledOnce();
+    expect(JSON.parse(await readFile(`${rows[0].eventsPath}.fixture-failure.json`, 'utf8')))
+      .toEqual({ status: 'execution-failed', reason: 'unclassified', acceptedOutcome: null });
+    expect(report.runs[0]).toMatchObject(terminal
+      ? { status: 'execution-failed', reason: 'unclassified', acceptedOutcome: null }
+      : { status: 'capture-failed', reason: 'signature-mismatch', acceptedOutcome: null });
+    for (const row of rows) expect(row).not.toHaveProperty('failureReason');
+    if (terminal) {
+      expect(report.verifiedRuns).toEqual([]); expect(rows).toHaveLength(1);
+      expect(qualification.reasons).toEqual(['execution-failed: ComposedConstructionError: bridge-protocol',
+        'cohort-incomplete: 1 of 6 runs attempted', ...(mode.startsWith('W3c')
+          ? [`teardown-failed: ${mode.endsWith('code') ? 'compose-down' : 'TypeError'}`] : [])]);
+    } else { expect(rows).toHaveLength(6); expect(report.verifiedRuns).toHaveLength(4); }
+  });
+it.each([false, true])('W5 sidecar-write failure is secondary; secondary artifact also fails=%s', async secondaryFails => {
+  const h = await command(); configureOversize(h);
+  const registers = Object.values(h.fixtures).map(fixture => vi.spyOn(fixture, 'registerRun'));
+  const fs = await import('node:fs/promises'); const original = fs.writeFile;
+  const writes = vi.spyOn(fs, 'writeFile').mockImplementation(async (path, ...args) => {
+    if (String(path).endsWith('.fixture-failure.json') || (secondaryFails && String(path).endsWith('.fixture-failure-error.json'))) {
+      throw new TypeError('sidecar denied');
+    }
+    return original(path, ...args);
+  });
+  await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
+  const { directory, report, qualification } = await h.diagnostic();
+  const rows = JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'));
+  expect(rows).toHaveLength(1); expect(rows[0]).toMatchObject({ failureReason: 'evidence-oversized', outcome: null });
+  expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(1);
+  expect(report.runs[0]).toMatchObject({ reason: 'evidence-oversized', acceptedOutcome: null });
+  expect(qualification.reasons).toEqual([`evidence-oversized: ${rows[0].runId}`, 'cohort-incomplete: 1 of 6 runs attempted',
+    `sidecar-write-failed: ${rows[0].runId}`]);
+  const secondary = `${rows[0].eventsPath}.fixture-failure-error.json`;
+  expect(writes.mock.calls.find(([path]) => path === secondary)?.[2]).toEqual({ mode: 0o600 });
+  if (!secondaryFails) expect(JSON.parse(await readFile(secondary, 'utf8')))
+    .toEqual({ sidecarError: { name: 'TypeError', message: 'sidecar denied' } });
+});
+it('terminal persistence failure cannot replace the oversize reason', async () => {
+  const h = await command(); configureOversize(h);
+  const fs = await import('node:fs/promises'); const original = fs.writeFile;
+  vi.spyOn(fs, 'writeFile').mockImplementation(async (path, ...args) => {
+    if (String(path).endsWith('/runs.captured.json')) throw new TypeError('persist denied');
+    return original(path, ...args);
+  });
+  await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
+  const { report, qualification } = await h.diagnostic();
+  expect(h.setups.size).toBe(1); expect(report.runs).toHaveLength(1);
+  expect(qualification.reasons).toEqual([`evidence-oversized: ${report.runs[0].runId}`,
+    'cohort-incomplete: 1 of 6 runs attempted', 'persist-failed: TypeError']);
+});
+it.each([false, true])('W7 message cannot mint or erase the oversize brand; genuine=%s', async genuine => {
+  const { EvidenceOversizedError } = await import('./evidenceOversize');
+  const h = await command();
+  const registers = Object.values(h.fixtures).map(fixture => vi.spyOn(fixture, 'registerRun'));
+  const closes = Object.values(h.fixtures).map(fixture => vi.spyOn(fixture, 'close'));
+  for (const fixture of Object.values(h.fixtures)) fixture.attestEvents = async runId => {
+    throw genuine ? new EvidenceOversizedError({ runId, byteLength: 131073, cap: 131072 }, 'bridge-protocol')
+      : new Error('evidence-oversized');
+  };
+  await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
+  const { directory, report, qualification } = await h.diagnostic();
+  const rows = JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'));
+  const reason = genuine ? 'evidence-oversized' : 'unclassified';
+  for (const row of rows) expect(JSON.parse(await readFile(`${row.eventsPath}.fixture-failure.json`, 'utf8')).reason).toBe(reason);
+  for (const row of report.runs) expect(row).toMatchObject(genuine
+    ? { status: 'execution-failed', reason: 'evidence-oversized', acceptedOutcome: null }
+    : { status: 'capture-failed', reason: 'signature-mismatch', acceptedOutcome: null });
+  for (const row of rows) {
+    if (genuine) expect(row.failureReason).toBe('evidence-oversized');
+    else expect(row).not.toHaveProperty('failureReason');
+  }
+  for (const close of closes) expect(close).toHaveBeenCalledOnce();
+  expect(report.verifiedRuns).toEqual([]);
+  expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(genuine ? 1 : 6);
+  if (genuine) expect(qualification.reasons).toEqual([`evidence-oversized: ${rows[0].runId}`, 'cohort-incomplete: 1 of 6 runs attempted']);
 });
