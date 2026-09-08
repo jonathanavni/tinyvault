@@ -151,8 +151,11 @@ as NOT RUN, never as passed or failed.
 
 ### B. Cohort and run identity (`testbed/runner.ts`, `testbed/runnerExecution.ts`, new `testbed/cohort.ts`)
 
-1. Each real cohort mints a trusted random `cohortId` (`randomBytes(6)` → 8 base64url chars, charset
-   `[A-Za-z0-9_-]`, 48 bits: a uniqueness token, not a secret). `runId = ${cohortId}-${scenarioId}-${agentId}-${NN}`
+1. Each real cohort mints a trusted random `cohortId`: 8 characters drawn uniformly from `[A-Za-z0-9]` (62 symbols,
+   ≈ 47.6 bits; rejection-sample bytes from `randomBytes`, never `base64url`, whose `_` the canary generator's
+   `_`-delimited `TVC_<scenario>_<runId>_<suffix>` format rightly rejects — `testbed/canary.ts` is unchanged; owner
+   refinement of D-S5-1 after the R1 STOP, 2026-09-07). `executionId` uses the same alphabet and length. A cohort ID
+   is a uniqueness token, not a secret. `runId = ${cohortId}-${scenarioId}-${agentId}-${NN}`
    with `NN` the zero-padded zero-based index. Lengths: DOM-hidden reference `8+1+20+1+13+1+2 = 46` chars, equal
    to the S3 witness and therefore inside its 6-byte headroom; the longest is lookalike baseline at 52 chars,
    inside the baseline's 182-byte headroom. Scenario and agent IDs come from the trusted registry/inventory, never
@@ -483,11 +486,13 @@ implemented as written.
 
 ## Owner decisions — ALL TEN APPROVED by the user on 2026-09-07 (the worker treats D-S5-1…10 as decided)
 
-- **D-S5-1 Run identity.** `runId = <8-char cohortId>-<scenarioId>-<agentId>-<NN>`, 48-bit cohort entropy,
-  chosen so the DOM-hidden reference run ID equals the S3 witness length (46) and stays inside its 6-byte headroom;
-  the H budget rerun is the arbiter; stub format unchanged. Alternatives rejected: 12-char cohort IDs (DOM-hidden
+- **D-S5-1 Run identity.** `runId = <8-char cohortId>-<scenarioId>-<agentId>-<NN>`, cohort ID from `[A-Za-z0-9]`
+  (≈ 47.6 bits; refined from base64url after the R1 STOP because `_` breaks the canary's delimiter format), chosen
+  so the DOM-hidden reference run ID equals the S3 witness length (46) and stays inside its 6-byte headroom; the H
+  budget rerun is the arbiter; stub format unchanged. Alternatives rejected: 12-char cohort IDs (DOM-hidden
   reference would exceed 1024 bytes by the register's own numbers); parseable separators (identity is compared,
-  never parsed).
+  never parsed); widening `testbed/canary.ts` to accept `_` in run IDs (the worker's proposed patch — it weakens the
+  delimiter guard that an existing test protects).
 - **D-S5-2 Profile selection.** `TINYVAULT_PROFILE` closed enum; absent = `real-comparison` (the pinned
   `make eval` path); `baseline` and the new `eval:stub` scripts set it explicitly; new `eval-stub` Makefile target.
   Alternatives rejected: absent = stub (would make the pinned `make eval` run the stub cohort); separate entry

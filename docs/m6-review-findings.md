@@ -1471,3 +1471,25 @@ extensions are minimal and outside `tools`; `runAgentProfile` composes with the 
 `src/agents` edits; the E5 outcome is derivable in `runOnce`; F.2 admits no unverified run. Owner §5.1 sweep run
 after absorption (no stale tokens). One paper round used of three; the packet awaits user approval of D-S5-1…10
 before the pin and Astra dispatch. No implementation, cohort, Docker or release authority follows from this entry.
+
+## S5 R1 — worker STOP at the canary identifier boundary; owner disposition (2026-09-07, owner claude)
+
+Codex Astra (`task --write`, job `task-mts4aqp8-jr66og`, base `b1cd5dd`) stopped after the foundations: it minted a
+base64url cohort ID containing `_` (`SBxEm_VM`) and `CanaryGenerator.mint` rejected the composed run ID
+(`testbed/canary.ts:7-18` permits `[A-Za-z0-9-]` only); `canary.ts` is outside the S5 allowlist, so the worker
+proposed an extension (permit `_` in run IDs) and left ten partial files uncommitted: `testbed/cohort.ts` (+test),
+`testbed/sourceInventory.ts` (+test; exactly the four approved Git commands), `src/supervisor/evidenceLease.ts`
+(frozen pre-abort snapshot + `abortedEvidence()` accessor; repeat abort preserves it), `src/supervisor/host.ts`
+(trusted `setupReasonFor` bound to the host's own `FillService`; `abortedEvidence`; both outside `tools`),
+`src/supervisor/host.evidence.test.ts`, `src/agents/anthropicClient.ts` (`ANTHROPIC_CLIENT_CONFIG` read by the class
+for endpoint, version header, model, temperature, tokens, timeout, retries), `src/agents/anthropicClient.test.ts`
+(request-equality test), `testbed/runner.testkit.ts` (fake host gains the two members). Report, full report and the
+unapplied patch: `astra-s5-report-r1.md`, `astra-s5-report-r1-full.md`, `astra-s5-proposed-canary-extension.patch`.
+
+**Owner disposition: extension DECLINED; claim narrowed instead.** The canary format is `TVC_<scenario>_<runId>_<suffix>`
+with `_` as the delimiter, and `canary.test.ts` deliberately rejects delimiter-breaking identifiers; admitting `_` into
+run IDs would weaken that guard for a token that gains nothing from it. D-S5-1 is refined: cohort and execution IDs
+are 8 characters from `[A-Za-z0-9]` (≈ 47.6 bits, rejection-sampled), same length, no canary change. Packet §B.1 and
+D-S5-1 amended; the job is resumed with that refinement and an instruction to re-read the sections whose bulk reads
+were truncated (a recorded worker deviation). Correct STOP behaviour: no unowned file was edited and no ID was
+resampled to dodge the rejection.
