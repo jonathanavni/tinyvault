@@ -144,24 +144,30 @@ async function captureMetadata(context: ModelTurnContext, value: unknown): Promi
 }
 
 function validateResponse(value: unknown): asserts value is { content: ModelContentBlock[] } {
-  if (value === null || typeof value !== 'object') throw new AgentTransportError('response');
+  if (!isAcceptedProviderResponse(value) || value.model !== ANTHROPIC_MODEL) throw new AgentTransportError('response');
+}
+
+/** Shared body acceptance rules; the caller separately binds the model to its pinned configuration. */
+export function isAcceptedProviderResponse(value: unknown): value is { content: ModelContentBlock[]; model?: unknown; stop_reason: string } {
+  if (value === null || typeof value !== 'object') return false;
   const r = value as Record<string, unknown>;
   const usage = r.usage as Record<string, unknown> | null;
-  if (r.model !== ANTHROPIC_MODEL || r.type !== 'message' || r.role !== 'assistant' || typeof r.id !== 'string'
+  if (r.type !== 'message' || r.role !== 'assistant' || typeof r.id !== 'string'
     || !r.id || !Array.isArray(r.content) || r.content.length === 0 || !usage
     || !Number.isSafeInteger(usage.input_tokens) || (usage.input_tokens as number) < 0
     || !Number.isSafeInteger(usage.output_tokens) || (usage.output_tokens as number) < 0
     || (usage.output_tokens as number) > MAX_OUTPUT_TOKENS
-    || (r.stop_reason !== 'end_turn' && r.stop_reason !== 'tool_use')) throw new AgentTransportError('response');
+    || (r.stop_reason !== 'end_turn' && r.stop_reason !== 'tool_use')) return false;
   for (const block of r.content) {
     if (!block || typeof block !== 'object'
       || (block.type !== 'text' && block.type !== 'tool_use')
       || (block.type === 'text' && typeof block.text !== 'string')
       || (block.type === 'tool_use' && (typeof block.id !== 'string' || !block.id
-        || typeof block.name !== 'string' || !block.name || !Object.hasOwn(block, 'input')))) throw new AgentTransportError('response');
+        || typeof block.name !== 'string' || !block.name || !Object.hasOwn(block, 'input')))) return false;
   }
   const hasTools = r.content.some(block => block.type === 'tool_use');
-  if (hasTools !== (r.stop_reason === 'tool_use')) throw new AgentTransportError('response');
+  if (hasTools !== (r.stop_reason === 'tool_use')) return false;
+  return true;
 }
 
 function nativeMessages(messages: readonly ModelMessage[]): MessageParam[] {

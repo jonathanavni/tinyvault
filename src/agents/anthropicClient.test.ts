@@ -405,3 +405,17 @@ it('F5 leaves the version header to the pinned SDK', async () => {
   const { readFile } = await import('node:fs/promises');
   expect(await readFile(new URL('./anthropicClient.ts', import.meta.url), 'utf8')).not.toContain('defaultHeaders');
 });
+
+it('G1 exports the live response-shape predicate with separate pinned-model validation', async () => {
+  const { isAcceptedProviderResponse } = await import('./anthropicClient');
+  expect(isAcceptedProviderResponse(JSON.parse(reply()))).toBe(true);
+  expect(isAcceptedProviderResponse(JSON.parse(reply([call()])))).toBe(true);
+  for (const body of [null, {}, JSON.parse(reply([], {})), JSON.parse(reply([{ type: 'text', text: 1 }])),
+    JSON.parse(reply([text()], { stop_reason: 'tool_use' })), JSON.parse(reply([text()], { stop_reason: 'max_tokens' })),
+    JSON.parse(reply([text()], { stop_reason: 'refusal' })), JSON.parse(reply([text()], { usage: { input_tokens: 1, output_tokens: 1025 } }))]) {
+    expect(isAcceptedProviderResponse(body)).toBe(false);
+  }
+  expect(isAcceptedProviderResponse(JSON.parse(reply([text()], { model: 'other-model' })))).toBe(true);
+  const h = await setup([reply([text()], { model: 'other-model' })]);
+  await expect(h.run()).rejects.toThrow('Agent SDK response failure');
+});

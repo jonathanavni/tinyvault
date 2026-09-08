@@ -139,8 +139,11 @@ describe('AM09/AM10 independent offline diagnostic collector', () => {
     const request = events.find(event => event.initiator === 'sdk-request-context')!;
     const context = { ...request, bytes: JSON.stringify({ ...JSON.parse(request.bytes), password: b.manifest.runs[0].canary }) };
     async function writeEvents(event: CapturedEvent) {
-      const captured = event.initiator === 'sdk-request-context' && event.documentId === 'run-0'
-        ? events.map(row => row === request ? event : row) : [...events, event];
+      const captured = event.initiator === 'sdk-response'
+        ? events.map(row => row.initiator === 'sdk-response' ? { ...row,
+          bytes: JSON.stringify({ ...JSON.parse(row.bytes), password: b.manifest.runs[0].canary }) } : row)
+        : event.initiator === 'sdk-request-context' && event.documentId === 'run-0'
+          ? events.map(row => row === request ? event : row) : [...events, event];
       const bytes = Buffer.from(JSON.stringify(captured)); await writeFile(b.runs[0].eventsPath, bytes);
       b.manifest.runs[0].eventsAttestation = signEventsDigest('benign-login', 'run-0', bytes, b.privateKey); await b.save();
     }

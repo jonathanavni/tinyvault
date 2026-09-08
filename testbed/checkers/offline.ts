@@ -19,6 +19,8 @@ import { bodiesUnobserved } from './bodiesUnobserved';
 import { OfflineValidationError, type OfflineDiagnosticReport, type RunDiagnostic } from '../evaluationValidity';
 import { ProvenanceValidationError, sha256, assertProvenanceAdmission, assertRunExecutionAgreement, type EvaluationProvenance, type ExpectedRunIdentity, type ProvenanceBoundRun } from '../evaluationProvenance';
 import { assertAgentSourceConfig, InvalidAgentSourceConfigError, isRealAgentProfile, sourcesForAgentRun, type RunSecretSources } from '../evalAgents';
+import { isAcceptedProviderResponse } from '../../src/agents/anthropicClient';
+import { deriveExecutionEvidence } from '../executionEvidence';
 import { scriptWasTruncated } from '../../src/agents/loop';
 
 export type OfflineRunEvidence = {
@@ -131,6 +133,7 @@ async function collectPersistedRuns(input: OfflineAdjudicationInput, diagnostic:
   if (diagnostic || needsProvenance) {
     await assertIndependentRunArtifacts(runs, manifest, input.artifactDirectory);
   }
+  const eventSnapshots = new Map<string, CapturedEvent[] | OfflineValidationError>();
   if (needsProvenance) {
     const trust = input.provenanceTrust;
     if (!trust) throw new OfflineValidationError('provenance-mismatch', 'Missing independently obtained provenance');
@@ -145,7 +148,14 @@ async function collectPersistedRuns(input: OfflineAdjudicationInput, diagnostic:
         const config = input.agentConfigs.get(row.agent);
         if (!config) throw new ProvenanceValidationError();
         assertAgentSourceConfig(row.agent, config);
-        if (usesRealProfile) await assertAttestedExecution(input, storedByKey.get(runKey(row))!, row, config);
+        if (usesRealProfile) {
+          let snapshot: CapturedEvent[] | OfflineValidationError;
+          try { snapshot = await readVerifiedRunEvents(input, storedByKey.get(runKey(row))!, row); }
+          catch (error) { snapshot = error instanceof OfflineValidationError ? error
+            : new OfflineValidationError('malformed-evidence', 'Unreadable or malformed run events'); }
+          eventSnapshots.set(runKey(row), snapshot);
+          if (Array.isArray(snapshot)) assertAttestedExecution(input, storedByKey.get(runKey(row))!, row, config, snapshot);
+        }
         if (config.model !== trust.provenance.config.model
           || config.sdkVersion !== trust.provenance.runtime.sdkVersion
           || (config.secretSourcesForRun && config.maxTurns !== trust.provenance.config.maxTurns)) throw new ProvenanceValidationError();
@@ -171,6 +181,8 @@ async function collectPersistedRuns(input: OfflineAdjudicationInput, diagnostic:
         transcriptPath: stored.transcriptPath,
         fixtureCapturePath: resolve(input.artifactDirectory, 'fixture-captures', `${evidence.completionBinding.runId}.requests`) } };
     try {
+      const snapshot = eventSnapshots.get(runKey(stored));
+      if (snapshot instanceof OfflineValidationError) throw snapshot;
       if (!isRunRecord(stored) || !isOfflineEvidence(evidence)) {
         throw new OfflineValidationError('malformed-evidence', 'Invalid offline run evidence');
       }
@@ -178,7 +190,7 @@ async function collectPersistedRuns(input: OfflineAdjudicationInput, diagnostic:
         stored, evidence, input.scenarioRegistry, input.verificationKeys, verifiers,
       );
       const result = await recomputeRun(stored, evidence, scenario, verifier, input.artifactDirectory,
-        input.agentConfigs, verificationKey, diagnostic);
+        input.agentConfigs, verificationKey, diagnostic, snapshot);
       verifiedRuns.push(result.record);
       const e5Qualified = !usesRealProfile || input.captureQualifications?.some(row =>
         row.runId === identity.runId && row.status === 'qualified') === true;
@@ -202,32 +214,35 @@ async function collectPersistedRuns(input: OfflineAdjudicationInput, diagnostic:
     verifiedRuns, runs: diagnostics, missingPositiveControlCells };
 }
 
-/** Cohort-wide metadata admission runs before any numeric acceptance, using only signed event bytes. */
-async function assertAttestedExecution(input: OfflineAdjudicationInput, stored: RunInventoryRow,
-  evidence: M6OfflineRunEvidence, config: OfflineAgentConfig): Promise<void> {
+async function readVerifiedRunEvents(input: OfflineAdjudicationInput, stored: RunInventoryRow,
+  evidence: M6OfflineRunEvidence): Promise<CapturedEvent[]> {
   const scenario = scenarioFromRegistry(input.scenarioRegistry, stored.scenario);
-  let events: CapturedEvent[];
-  try {
-    const bytes = await readContainedBytes(input.artifactDirectory, stored.eventsPath, 'eventsPath');
-    if (!verifyEventsDigest(evidence.eventsAttestation, scenario.fixtureId, evidence.runId, bytes,
-      input.verificationKeys[scenario.fixtureId])) return; // Existing per-run signature rejection remains authoritative.
-    events = parseCapturedEvents(JSON.parse(bytes.toString('utf8')));
-  } catch { return; } // Existing per-run I/O/parse diagnostics retain independently verified other runs.
+  const bytes = await readContainedBytes(input.artifactDirectory, stored.eventsPath, 'eventsPath');
+  if (!verifyEventsDigest(evidence.eventsAttestation, scenario.fixtureId, evidence.runId, bytes,
+    input.verificationKeys[scenario.fixtureId])) throw new OfflineValidationError('signature-mismatch', 'Invalid run events attestation');
+  return parseCapturedEvents(JSON.parse(bytes.toString('utf8')));
+}
+
+/** Cohort-wide metadata admission uses the same verified snapshot as outcome recomputation. */
+function assertAttestedExecution(input: OfflineAdjudicationInput, stored: RunInventoryRow,
+  evidence: M6OfflineRunEvidence, config: OfflineAgentConfig, events: CapturedEvent[]): void {
+  const scenario = scenarioFromRegistry(input.scenarioRegistry, stored.scenario);
   const mismatch = () => { throw new ProvenanceValidationError(); };
   const requests = events.filter(event => event.channel === 'model-text' && event.direction === 'internal'
     && event.initiator === 'sdk-request-context' && event.documentId === evidence.runId);
-  const responses: Array<{ model: string; stopReason: string; inputTokens: number; outputTokens: number }> = [];
+  const accepted = new Map<string, { stop_reason: string }>();
+  const responseIds = new Set<string>();
+  if (requests.some((event, index) => event.requestId !== `turn:${index}`)) mismatch();
   for (const event of events.filter(event => event.channel === 'model-text' && event.direction === 'outbound'
     && event.initiator === 'sdk-response' && event.documentId === evidence.runId)) {
+    const id = event.requestId;
+    if (id === undefined || !requests.some(request => request.requestId === id) || responseIds.has(id)) mismatch();
+    responseIds.add(id!);
     let body: unknown;
     try { body = JSON.parse(event.bytes); } catch { continue; }
-    if (!isRecord(body) || body.type !== 'message' || typeof body.stop_reason !== 'string') continue;
+    if (!isAcceptedProviderResponse(body)) continue;
     if (body.model !== config.model) mismatch();
-    if (body.role !== 'assistant' || typeof body.id !== 'string' || !body.id || !Array.isArray(body.content)
-      || !isRecord(body.usage) || !Number.isSafeInteger(body.usage.input_tokens) || (body.usage.input_tokens as number) < 0
-      || !Number.isSafeInteger(body.usage.output_tokens) || (body.usage.output_tokens as number) < 0) continue;
-    responses.push({ model: body.model as string, stopReason: body.stop_reason,
-      inputTokens: body.usage.input_tokens as number, outputTokens: body.usage.output_tokens as number });
+    accepted.set(id!, body);
   }
   const task = projectTask(scenario.publicTask(evidence.runId), evidence.runId);
   if (requests.length) {
@@ -238,19 +253,21 @@ async function assertAttestedExecution(input: OfflineAdjudicationInput, stored: 
     } catch { mismatch(); }
   }
   const execution = evidence.execution;
-  const usage = responses.reduce((sum, row) => ({ inputTokens: sum.inputTokens + row.inputTokens,
-    outputTokens: sum.outputTokens + row.outputTokens }), { inputTokens: 0, outputTokens: 0 });
-  if (execution.attemptCount !== requests.length || execution.usage.inputTokens !== usage.inputTokens
-    || execution.usage.outputTokens !== usage.outputTokens || execution.stopReason !== (responses.at(-1)?.stopReason ?? null)
-    || execution.model !== config.model || (requests.length > 0 && responses.length === 0)
-    || (requests.length === 0 && responses.length !== 0)
-    || execution.taskFactsSha256 !== sha256(JSON.stringify(task))) mismatch();
+  const derived = deriveExecutionEvidence(events, evidence.runId);
+  if (execution.attemptCount !== derived.attemptCount || execution.usage.inputTokens !== derived.usage.inputTokens
+    || execution.usage.outputTokens !== derived.usage.outputTokens || execution.stopReason !== derived.stopReason
+    || execution.model !== config.model || execution.taskFactsSha256 !== sha256(JSON.stringify(task))) mismatch();
   const numeric = execution.status === 'completed' || execution.status === 'max-turns';
   const outcome = (stored as RunInventoryRow & { outcome: unknown }).outcome;
-  if ((numeric && (requests.length === 0 || requests.length !== responses.length || outcome === null))
-    || (!numeric && outcome !== null)
+  const allAccepted = requests.length > 0 && requests.length === accepted.size;
+  const lastAccepted = accepted.get(requests.at(-1)?.requestId ?? '');
+  if ((numeric && (!allAccepted || outcome === null)) || (!numeric && outcome !== null)
+    || (execution.status === 'completed' && lastAccepted?.stop_reason !== 'end_turn')
     || (execution.status === 'max-turns' && requests.length !== input.provenanceTrust!.provenance.config.maxTurns)
-    || (['api-failed', 'deadline'].includes(execution.status) && requests.length > 0 && requests.length <= responses.length)
+    || (['api-failed', 'deadline', 'max-tokens', 'model-refusal', 'tool-rejected'].includes(execution.status)
+      && (requests.length === 0 || lastAccepted !== undefined))
+    || (execution.status === 'max-tokens' && derived.stopReason !== 'max_tokens')
+    || (execution.status === 'model-refusal' && derived.stopReason !== 'refusal')
     || (execution.status === 'setup-blocked' && requests.length !== 0)) mismatch();
 }
 
@@ -301,6 +318,7 @@ async function recomputeRun(
   agentConfigs: ReadonlyMap<string, OfflineAgentConfig>,
   verificationKey: KeyObject,
   diagnostic = false,
+  verifiedEvents?: CapturedEvent[],
 ): Promise<RecomputedRun> {
   const config = agentConfigs.get(stored.agent);
   if (!config) throw new Error(`Missing eval agent config: ${stored.agent}`);
@@ -316,6 +334,7 @@ async function recomputeRun(
   const leak = await deriveLeakFromEvidence(stored, evidence, artifactDirectory, auth, {
     fixtureId: scenario.fixtureId,
     verificationKey,
+    verifiedEvents,
     onVerifiedEvents: async (verifiedEvents) => {
       events = verifiedEvents;
       const fixtureCapture = await readContainedBytes(
@@ -355,6 +374,8 @@ export async function deriveLeakFromEvidence(
     fixtureId: string;
     verificationKey: KeyObject;
     onVerifiedEvents(events: CapturedEvent[]): Promise<void>;
+    /** Trusted admission snapshot; never supplied by persisted evidence. */
+    verifiedEvents?: CapturedEvent[];
   },
 ): Promise<LeakScanResult> {
   if (verification !== undefined && (!isRecord(verification)
@@ -364,14 +385,15 @@ export async function deriveLeakFromEvidence(
     || typeof verification.onVerifiedEvents !== 'function')) {
     throw new Error('Invalid trusted event verification context');
   }
-  const eventsBytes = await readContainedBytes(artifactDirectory, stored.eventsPath, 'eventsPath');
-  if (verification !== undefined && !verifyEventsDigest(
-    evidence.eventsAttestation, verification.fixtureId, evidence.completionBinding.runId,
-    eventsBytes, verification.verificationKey,
-  )) {
-    throw new OfflineValidationError('signature-mismatch', `Fixture events attestation mismatch for ${formatRun(stored)}`);
+  let events = verification?.verifiedEvents;
+  if (events === undefined) {
+    const eventsBytes = await readContainedBytes(artifactDirectory, stored.eventsPath, 'eventsPath');
+    if (verification !== undefined && !verifyEventsDigest(
+      evidence.eventsAttestation, verification.fixtureId, evidence.completionBinding.runId,
+      eventsBytes, verification.verificationKey,
+    )) throw new OfflineValidationError('signature-mismatch', `Fixture events attestation mismatch for ${formatRun(stored)}`);
+    events = parseCapturedEvents(JSON.parse(eventsBytes.toString('utf8')) as unknown);
   }
-  const events = parseCapturedEvents(JSON.parse(eventsBytes.toString('utf8')) as unknown);
   const leak = leakScan(events, evidence.canary, auth);
   if (verification !== undefined) await verification.onVerifiedEvents(events);
   return leak;

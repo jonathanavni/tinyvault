@@ -280,6 +280,7 @@ export async function runHostAdapter(input: Readonly<{
   maxTurns?: number;
   /** Trusted execution/producer identity; S5 supplies this when composing real-agent runs. */
   scenarioCapture?: Omit<ScenarioCaptureInput, 'events'>;
+  onInitialSnapshotError?: (error: unknown) => void;
 }>) {
   const adapter = {
     executeTool: (call: ToolCall) => executeHostTool(input.host, call),
@@ -297,16 +298,22 @@ export async function runHostAdapter(input: Readonly<{
       return accumulated;
     },
   };
-  const result = await (input.profile === undefined
+  let result: Awaited<ReturnType<typeof runAgentLoop>> | undefined;
+  try {
+    result = await (input.profile === undefined
     ? runAgentLoop({ ...adapter, client: input.client, messages: input.messages,
       maxTurns: input.maxTurns, secretSources: input.secretSources })
-    : runAgentProfile(input.profile, { ...adapter, createClient: input.createClient! })).finally(async () => {
-      if (input.client.runId !== undefined) {
-        const events = JSON.parse(await readFile(input.transcript.eventsPath, 'utf8'));
+    : runAgentProfile(input.profile, { ...adapter, createClient: input.createClient! }));
+  } finally {
+    if (input.client.runId !== undefined) {
+      try {
+        // A rejected loop has no result; its settled persisted capture is diagnostic only.
+        const events = result?.events ?? JSON.parse(await readFile(input.transcript.eventsPath, 'utf8'));
         await writeFile(`${input.transcript.eventsPath}.initial-snapshot.json`,
           `${JSON.stringify(observeInitialSnapshot(events, input.client.runId))}\n`, { mode: 0o600 });
-      }
-    });
+      } catch (error) { input.onInitialSnapshotError?.(error); }
+    }
+  }
   const initialSnapshotObservation = input.client.runId === undefined ? undefined
     : observeInitialSnapshot(result.events, input.client.runId);
   const captureQualification = input.scenarioCapture === undefined ? undefined

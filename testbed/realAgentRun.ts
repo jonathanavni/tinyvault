@@ -13,6 +13,7 @@ import type { Scenario } from './scenarios/types';
 import type { AgentConfig } from './evalAgents';
 import { sha256, type RunExecutionMetadata } from './evaluationProvenance';
 import { assertHostFinished, runHostAdapter } from './runnerExecution';
+import { deriveExecutionEvidence } from './executionEvidence';
 import { observeInitialSnapshot } from './scenarioCoverage';
 
 export type CreateModelClient = Parameters<typeof runAgentProfile>[1]['createClient'];
@@ -35,6 +36,8 @@ export async function executeRealAgentRun(input: RealRunOptions) {
   let errorDetails = { name: 'Error', message: 'Incomplete real-agent execution' };
   let adapterStarted = false;
   let failureCaught = false;
+  let sidecarError: ReturnType<typeof executionErrorDetails> | undefined;
+  const onInitialSnapshotError = (error: unknown) => { sidecarError = executionErrorDetails(error); };
   const finish = () => {
     const verdict = host!.finish();
     if (verdict.verdict !== 'pass') diagnostic = { event: 'trusted-output-tripwire', runId: input.runId,
@@ -62,7 +65,7 @@ export async function executeRealAgentRun(input: RealRunOptions) {
       host.drainEvidence();
       finish();
     } else {
-      const result = await runPreparedProfile(profile, input, transcript, host, () => { adapterStarted = true; });
+      const result = await runPreparedProfile(profile, input, transcript, host, () => { adapterStarted = true; }, onInitialSnapshotError);
       finish();
       status = result.stopReason === 'max-turns' ? 'max-turns' : 'completed';
       intact = true;
@@ -93,36 +96,35 @@ export async function executeRealAgentRun(input: RealRunOptions) {
     });
   }
   const events: CapturedEvent[] = JSON.parse(await readFile(input.eventsPath, 'utf8'));
-  if (!adapterStarted) await writeFile(`${input.eventsPath}.initial-snapshot.json`,
-    `${JSON.stringify(observeInitialSnapshot([], input.runId))}\n`, { mode: 0o600 });
+  if (!adapterStarted) {
+    try { await writeFile(`${input.eventsPath}.initial-snapshot.json`,
+      `${JSON.stringify(observeInitialSnapshot(events, input.runId))}\n`, { mode: 0o600 }); }
+    catch (error) { onInitialSnapshotError(error); }
+  }
+  if (sidecarError) await writeFile(`${input.eventsPath}.initial-snapshot-error.json`,
+    `${JSON.stringify({ sidecarError })}\n`, { mode: 0o600 }).catch(() => undefined); // A secondary diagnostic write cannot replace the loop failure.
   const records: TranscriptRecord[] = (await readFile(input.transcriptPath, 'utf8')).trim().split('\n')
     .filter(Boolean).map(line => JSON.parse(line));
   if (intact && !completeTranscript(records, status)) { intact = false; status = 'capture-failed'; }
-  const metadata = executionMetadata(records, input.agent, status, sha256(JSON.stringify(task)));
+  const metadata = executionMetadata(events, input.runId, input.agent, status, sha256(JSON.stringify(task)));
   if (!intact && metadata.stopReason === 'max_tokens') metadata.status = 'max-tokens';
   if (!intact && metadata.stopReason === 'refusal') metadata.status = 'model-refusal';
   if (!intact) await writeFile(resolve(dirname(input.eventsPath), 'execution-failure.json'),
-    `${JSON.stringify({ status: metadata.status, acceptedOutcome: null, diagnostic, error: errorDetails })}\n`, { mode: 0o600 });
+    `${JSON.stringify({ status: metadata.status, acceptedOutcome: null, diagnostic, error: errorDetails, ...(sidecarError ? { sidecarError } : {}) })}\n`, { mode: 0o600 });
   return { intact, events, execution: metadata };
 }
 
-async function runPreparedProfile(profile: AgentProfile, input: RealRunOptions, transcript: TranscriptWriter, host: SupervisedHost, onAdapterStart: () => void) {
+async function runPreparedProfile(profile: AgentProfile, input: RealRunOptions, transcript: TranscriptWriter, host: SupervisedHost, onAdapterStart: () => void, onInitialSnapshotError: (error: unknown) => void) {
   // This adapter receives the real class through the invocation closure. The client is constructed once.
   const client = input.createModelClient({ system: profile.system, runId: profile.runId });
   onAdapterStart();
-  return runHostAdapter({ client, messages: [], profile, createClient: () => client, transcript, host });
+  return runHostAdapter({ client, messages: [], profile, createClient: () => client, transcript, host, onInitialSnapshotError });
 }
 
-function executionMetadata(records: TranscriptRecord[], agent: AgentConfig,
+function executionMetadata(events: CapturedEvent[], runId: string, agent: AgentConfig,
   status: RunExecutionMetadata['status'], taskFactsSha256: string): RunExecutionMetadata {
-  const metadata = records.filter(row => row.kind === 'sdk-meta').map(row => JSON.parse(row.bytes));
-  const responses = metadata.filter(row => row.usage !== undefined);
-  const model = responses.length ? responses[responses.length - 1].model : agent.model;
-  const usage = responses.reduce((sum, row) => ({ inputTokens: sum.inputTokens + (row.usage?.input_tokens ?? 0),
-    outputTokens: sum.outputTokens + (row.usage?.output_tokens ?? 0) }), { inputTokens: 0, outputTokens: 0 });
-  return { status, model, sdkVersion: agent.sdkVersion, usage,
-    stopReason: responses.at(-1)?.stopReason ?? null,
-    attemptCount: records.filter(row => row.kind === 'sdk-request').length, taskFactsSha256 };
+  return { status, model: agent.model, sdkVersion: agent.sdkVersion,
+    ...deriveExecutionEvidence(events, runId), taskFactsSha256 };
 }
 
 function completeTranscript(records: TranscriptRecord[], status: RunExecutionMetadata['status']): boolean {
