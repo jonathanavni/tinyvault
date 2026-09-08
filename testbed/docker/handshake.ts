@@ -35,6 +35,7 @@ export function verifyHelloMac(secret: Buffer, fields: HelloFields, mac: Buffer)
   if (!timingSafeEqual(computeHelloMac(secret, fields), mac)) throw new BridgeError('mac-invalid');
 }
 export function decodeBase64url(value: string, size: number | undefined, code: BridgeCode): Buffer {
+  if (size !== undefined && value.length !== Math.ceil(size * 4 / 3)) throw new BridgeError(code);
   const bytes = Buffer.from(value, 'base64url');
   if (bytes.toString('base64url') !== value || (size !== undefined && bytes.length !== size)) {
     throw new BridgeError(code);
@@ -102,7 +103,6 @@ function validateOperation(op: BridgeOp, kind: 'req' | 'res', body: Body): void 
       if (new Set(CAPABILITY_OPS.map((field) => body[field])).size !== 6) throw new BridgeError('capability-refused');
     }
     if (op === 'key') {
-      if ((body.publicKey as string).length !== 59) throw new BridgeError('key-shape');
       importAnnouncedKey(decodeBase64url(body.publicKey as string, 44, 'key-shape'));
     }
     if (op === 'receipt') scalar(body.receipt as string, MAX_ARTIFACT_STRING_BYTES, true);
@@ -118,13 +118,13 @@ function validateOperation(op: BridgeOp, kind: 'req' | 'res', body: Body): void 
   }
 }
 function validateHelloRequest(body: Body): void {
+  if (Buffer.byteLength(body.epoch as string) > 4096) throw new BridgeError('body-shape');
   if (!CONTAINER_ID_PATTERN.test(body.containerId as string) || !EPOCH_PATTERN.test(body.epoch as string)
     || !(FIXTURE_IDS as readonly string[]).includes(body.fixtureId as string)) throw new BridgeError('body-shape');
   decodeBase64url(body.challenge as string, 32, 'challenge-shape');
 }
 function validateHelloResponse(body: Body): void {
   // Closed schema first; key import/re-export precedes MAC decoding and verification.
-  if ((body.publicKey as string).length !== 59) throw new BridgeError('key-shape');
   importAnnouncedKey(decodeBase64url(body.publicKey as string, 44, 'key-shape'));
   decodeBase64url(body.mac as string, 32, 'mac-shape');
 }

@@ -5,7 +5,8 @@ import {
   buildHelloTranscript, computeHelloMac, decodeBase64url, encodeBase64url, importAnnouncedKey,
   validateBody, verifyHelloMac, type HelloFields,
 } from './handshake';
-import { HELLO_PREFIX } from './protocol';
+import { CAPABILITY_OPS, EPOCH_PATTERN, HELLO_PREFIX, type BridgeCode, type BridgeOp } from './protocol';
+import { encodeFrame, FrameDecoder } from './frames';
 
 const secret = Buffer.from(Array.from({ length: 32 }, (_, i) => i));
 const fields: HelloFields = {
@@ -156,7 +157,8 @@ it.each(['key', 'hello'] as const)('AM12 %s key rejects before decode and key im
   const body = (key: string) => op === 'hello' ? { publicKey: key, mac: response.mac } : { publicKey: key };
   expect(fields.publicKeyDer.length).toBe(44); expect(publicKey.length).toBe(59);
   expect(() => validateBody(op, 'res', body(publicKey))).not.toThrow();
-  // Length+1 and decoded-byte+1 controls, plus the widened-frame exposure vector.
+  // Both 60-character vectors (including the encoding of 45 bytes) exercise encoded length,
+  // along with the widened-frame exposure vector; they cannot isolate decoded-size equality.
   const badKeys = ['A'.repeat(1572864), publicKey + 'A',
     Buffer.concat([fields.publicKeyDer, Buffer.from([0])]).toString('base64url')];
   for (const key of badKeys) {
@@ -169,7 +171,8 @@ it.each(['key', 'hello'] as const)('AM12 %s key rejects before decode and key im
     expect(createPublicKey).not.toHaveBeenCalled();
     expect(failure).toMatchObject({ code: 'key-shape' });
   }
-  // Correct encoded length, wrong decoded size is refused before key import too.
+  // The 58-character vector also exercises encoded length. Canonical 59-character base64url
+  // necessarily decodes to 44 bytes, so the retained decoded equality has no independent killing vector.
   vi.mocked(createPublicKey).mockClear();
   expect(() => validateBody(op, 'res', body('A'.repeat(58)))).toThrow('key-shape');
   expect(createPublicKey).not.toHaveBeenCalled();
@@ -202,4 +205,60 @@ it('AM12 attest request encoded boundary and precedence reject before decode', (
     expect(failure).toMatchObject({ code: 'control-limit' });
   }
   expect(() => validateBody('attest', 'req', { ...operation, events: '!' })).toThrow('body-shape');
+});
+
+
+const registeredCapabilities = Object.fromEntries(CAPABILITY_OPS.map((op, index) =>
+  [op, Buffer.alloc(32, index + 1).toString('base64url')]));
+const fixedSizeSites: { site: string; op: BridgeOp; kind: 'req' | 'res'; field: string;
+  body: Record<string, string>; code: BridgeCode }[] = [
+  { site: 'bootstrap secret', op: 'bootstrap', kind: 'req', field: 'secret',
+    body: { secret: secret.toString('base64url') }, code: 'secret-shape' },
+  ...CAPABILITY_OPS.map(op => ({ site: `${op} request capability`, op, kind: 'req' as const, field: 'capability',
+    body: { ...operation, ...(op === 'capture' ? { kind: 'requests', offset: '0' } : {}),
+      ...(op === 'attest' ? { events: '' } : {}) }, code: 'capability-refused' as const })),
+  ...CAPABILITY_OPS.map(field => ({ site: `register response ${field}`, op: 'register' as const,
+    kind: 'res' as const, field, body: registeredCapabilities, code: 'capability-refused' as const })),
+  { site: 'hello challenge', op: 'hello', kind: 'req', field: 'challenge', body: hello, code: 'challenge-shape' },
+  { site: 'hello MAC', op: 'hello', kind: 'res', field: 'mac', body: response, code: 'mac-shape' },
+];
+it.each(fixedSizeSites.flatMap(site => [44, 1572864].map(length => ({ ...site, length }))))(
+  'AM12 F1 $site rejects $length characters before fixed-size decode', ({ op, kind, field, body, code, length }) => {
+    const exact = body[field]!;
+    expect(exact.length).toBe(43); expect(Buffer.from(exact, 'base64url').length).toBe(32);
+    expect(() => validateBody(op, kind, body)).not.toThrow();
+    const value = length === 44 ? exact + 'A' : 'A'.repeat(length);
+    expect(value.length).toBe(length);
+    const from = vi.spyOn(Buffer, 'from'); let failure: unknown; let decoded: boolean;
+    try {
+      try { validateBody(op, kind, { ...body, [field]: value }); } catch (error) { failure = error; }
+      decoded = from.mock.calls.some(args => args[0] === value && (args as unknown[])[1] === 'base64url');
+    } finally { from.mockRestore(); }
+    expect(decoded, `${op} ${field} reached fixed-size base64url decode`).toBe(false);
+    expect(failure).toMatchObject({ code });
+  },
+);
+
+it('AM12 F2 hello epoch accepts 4096 and rejects excess before regex through validateBody', () => {
+  const epoch = (bytes: number) => '1'.repeat(bytes - 33) + '-' + 'a'.repeat(32);
+  const exact = epoch(4096);
+  expect(Buffer.byteLength(exact)).toBe(4096); expect(EPOCH_PATTERN.test(exact)).toBe(true);
+  // Use the actual frame codec and body validator; the frame ceiling cannot mask this scalar bound.
+  const validateHelloFrame = (value: string) => {
+    const wire = encodeFrame({ v: 1, kind: 'req', id: 2, op: 'hello', body: { ...hello, epoch: value } });
+    new FrameDecoder(frame => {
+      if (frame.kind === 'req') validateBody(frame.op, frame.kind, frame.body);
+    }, code => { throw new Error(code); }).feed(wire);
+  };
+  expect(() => validateHelloFrame(exact)).not.toThrow();
+  for (const length of [4097, 300033]) {
+    const value = epoch(length); expect(Buffer.byteLength(value)).toBe(length);
+    const regex = vi.spyOn(EPOCH_PATTERN, 'test'); let failure: unknown; let tested: boolean;
+    try {
+      try { validateHelloFrame(value); } catch (error) { failure = error; }
+      tested = regex.mock.calls.some(([input]) => input === value);
+    } finally { regex.mockRestore(); }
+    expect(tested, 'oversized hello epoch reached EPOCH_PATTERN.test').toBe(false);
+    expect(failure).toMatchObject({ code: 'body-shape' });
+  }
 });

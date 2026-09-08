@@ -395,8 +395,9 @@ change. Its adopted requirements are:
    must fit intact and reach its expected end. Additional serial deterministic trajectories remain required
    rejection/diagnostic tests when oversized. Any oversized real pilot or cohort run still stops progression,
    remains unqualified/nonzero, and cannot be dropped, replaced, resampled or counted as completed.** The
-   known serial witnesses remain part of the evidence and the S2 rejection tests; they are not erased or
-   called maximum-output tests. This explicitly narrows deterministic feasibility coverage and does not
+   known serial-1024/2048 witnesses are fit/attested cases after AM12; their pre-AM12 rejection artifacts
+   are retained as history, and the 16-turn maximum-output trace remains the current rejection witness
+   (amended by [M6-AM12 (2026-09-08)](m6-am12-events-cap-amendment.md)). This explicitly narrows deterministic feasibility coverage and does not
    prove arbitrary ordinary trajectories fit. Publish that limitation with any later result, including that these witness schedules were chosen
    after the serial measurements overflowed; they are not an independent sample.
 4. Keep raw events 1048576, each signed artifact 262144 and bridge payload 2097152 (+4 framing), amended by M6-AM12 (2026-09-08); keep 16 turns,
