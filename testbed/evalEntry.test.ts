@@ -6,42 +6,56 @@ import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as runner from './runner';
 import { runEvalEntry } from './evalEntry';
+import { createAgentInventory } from './evalAgents';
 import { InvalidEvaluationError } from './evaluationValidity';
 const literal = 'A valid composed evaluation assumes the Docker Engine API is unreachable by the evaluated browser, page content and agent. Local endpoint validation does not verify this assumption. An unsatisfied assumption invalidates the evaluation.';
 afterEach(() => vi.restoreAllMocks());
 describe('eval adapter', () => {
+  it('S5 rejects unknown profiles and missing real keys before any runner side effect', async () => {
+    const call = vi.spyOn(runner, 'runEval').mockRejectedValue(new Error('side effect'));
+    for (const profile of ['', 'real', 'STUB', 'stub ']) {
+      await expect(runEvalEntry({ TINYVAULT_PROFILE: profile })).rejects.toThrow('Invalid TINYVAULT_PROFILE');
+    }
+    for (const profile of [undefined, 'real-comparison', 'real-baseline']) {
+      for (const key of [undefined, '', '   ']) {
+        await expect(runEvalEntry({ TINYVAULT_PROFILE: profile, ANTHROPIC_API_KEY: key }))
+          .rejects.toThrow('Missing real evaluation API key');
+      }
+    }
+    expect(call).not.toHaveBeenCalled();
+  });
   it('O-entry-composed calls real runEval export with composed assumed defaults', async () => {
     const failure = new Error('observed real runEval boundary');
     const call = vi.spyOn(runner, 'runEval').mockRejectedValue(failure);
-    await expect(runEvalEntry({})).rejects.toBe(failure);
-    expect(call).toHaveBeenCalledExactlyOnceWith({ architecture: 'composed', dockerDaemonIsolation: 'assumed', sampleSize: 10 });
+    await expect(runEvalEntry({ TINYVAULT_PROFILE: 'stub',})).rejects.toBe(failure);
+    expect(call).toHaveBeenCalledExactlyOnceWith({ profile: 'stub', agentInventory: createAgentInventory('stub'), createModelClient: undefined, architecture: 'composed', dockerDaemonIsolation: 'assumed', sampleSize: 10 });
   });
   it('O-env-parse propagates exact valid isolation and complete decimal N', async () => {
     const failure = new Error('boundary');
     const call = vi.spyOn(runner, 'runEval').mockRejectedValue(failure);
     for (const isolation of ['assumed', 'unsatisfied']) {
-      await expect(runEvalEntry({ TINYVAULT_DOCKER_ISOLATION: isolation, TINYVAULT_N: '12' })).rejects.toBe(failure);
-      expect(call).toHaveBeenLastCalledWith({ architecture: 'composed', dockerDaemonIsolation: isolation, sampleSize: 12 });
+      await expect(runEvalEntry({ TINYVAULT_PROFILE: 'stub', TINYVAULT_DOCKER_ISOLATION: isolation, TINYVAULT_N: '12' })).rejects.toBe(failure);
+      expect(call).toHaveBeenLastCalledWith({ profile: 'stub', agentInventory: createAgentInventory('stub'), createModelClient: undefined, architecture: 'composed', dockerDaemonIsolation: isolation, sampleSize: 12 });
     }
   });
   it('O-env-parse rejects empty and nonliteral isolation and incomplete unsafe N before runner', async () => {
     const call = vi.spyOn(runner, 'runEval').mockRejectedValue(new Error('runner unexpectedly reached'));
     for (const isolation of ['', 'Assumed', ' assumed', 'unsatisfied ', 'false']) {
-      await expect(runEvalEntry({ TINYVAULT_DOCKER_ISOLATION: isolation })).rejects.toThrow('Invalid TINYVAULT_DOCKER_ISOLATION');
+      await expect(runEvalEntry({ TINYVAULT_PROFILE: 'stub', TINYVAULT_DOCKER_ISOLATION: isolation })).rejects.toThrow('Invalid TINYVAULT_DOCKER_ISOLATION');
     }
     for (const n of ['', '0', '-1', '+1', '1.5', '1tail', '1e2', ' 1', '1\n', '9007199254740992']) {
-      await expect(runEvalEntry({ TINYVAULT_N: n })).rejects.toThrow('Invalid TINYVAULT_N');
+      await expect(runEvalEntry({ TINYVAULT_PROFILE: 'stub', TINYVAULT_N: n })).rejects.toThrow('Invalid TINYVAULT_N');
     }
     expect(call).not.toHaveBeenCalled();
   });
   it('O-invalid-shape renders only typed invalidity once and preserves operational errors', async () => {
     const call = vi.spyOn(runner, 'runEval'); const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     const invalid = new InvalidEvaluationError(); call.mockRejectedValue(invalid);
-    await expect(runEvalEntry({ TINYVAULT_DOCKER_ISOLATION: 'unsatisfied' })).rejects.toBe(invalid);
+    await expect(runEvalEntry({ TINYVAULT_PROFILE: 'stub', TINYVAULT_DOCKER_ISOLATION: 'unsatisfied' })).rejects.toBe(invalid);
     expect(log).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ status: 'invalid',
       reason: 'docker-daemon-isolation-unsatisfied', architecture: 'composed', requirement: literal }));
     log.mockClear(); const operational = new Error('operational'); call.mockRejectedValue(operational);
-    await expect(runEvalEntry({})).rejects.toBe(operational); expect(log).not.toHaveBeenCalled();
+    await expect(runEvalEntry({ TINYVAULT_PROFILE: 'stub',})).rejects.toBe(operational); expect(log).not.toHaveBeenCalled();
   });
   it('O-invalid-command real adapter child reports invalid, exits nonzero and preserves historical artifacts', async () => {
     const root = await mkdtemp(join(tmpdir(), 'tinyvault-invalid-entry-'));
@@ -57,7 +71,7 @@ registerHooks({resolve(s,c,next){try{return next(s,c)}catch(e){if(!s.startsWith(
     await mkdir(join(root, 'artifacts/eval'), { recursive: true });
     const sentinel = join(root, 'artifacts/eval/scorecard.json'); await writeFile(sentinel, 'historical');
     const child = spawnSync(process.execPath, ['--import', loader, entry], {
-      cwd: root, env: { ...process.env, TINYVAULT_DOCKER_ISOLATION: 'unsatisfied', TINYVAULT_N: '1' },
+      cwd: root, env: { ...process.env, TINYVAULT_PROFILE: 'stub', TINYVAULT_DOCKER_ISOLATION: 'unsatisfied', TINYVAULT_N: '1' },
       shell: false, timeout: 30_000, maxBuffer: 256 * 1024, encoding: 'utf8',
     });
     expect(child.error).toBeUndefined(); expect(child.signal).toBeNull();

@@ -49,6 +49,8 @@ export type QuiesceHooks = Readonly<{ settleTimeoutMs?: number; beforeClose?(): 
 
 export type SupervisedHost = Readonly<{
   tools: VaultTools & BrowserControls;
+  setupReasonFor: FillService['setupReasonFor'];
+  abortedEvidence(): readonly CapturedEventInput[];
   drainEvidence(): readonly CapturedEventInput[];
   /** Awaits in-flight deferred captures (Blob bodies via CDP); call before a post-loop drain or finish. */
   settleEvidence(): Promise<void>;
@@ -255,6 +257,8 @@ function compose(parts: HostParts, browser: Browser | undefined): SupervisedHost
   const tools = boundedTools(state, createTools(parts.fillService, createBrowserControls(parts.sessions), parts.lease));
   const host: SupervisedHost = Object.freeze({
     tools, drainEvidence: () => parts.lease.drainEvidence(),
+    setupReasonFor: parts.fillService.setupReasonFor,
+    abortedEvidence: () => parts.lease.abortedEvidence(),
     settleEvidence: () => parts.lease.settle(state.deadline),
     quiesceEvidenceProducers: (hooks) => state.quiescence ??= quiesce(state, hooks),
     finish: () => finishHost(state), abort: () => abortHost(state),

@@ -26,7 +26,12 @@ Sol paper pass R1 DONE (NO-SHIP, 3 P1 / 3 P2, all absorbed; register entry "S5 p
 carries ten decisions D-S5-1…10. **Blocked on the user:** approval of D-S5-1…10. Then: owner pre-integration (docker
 capability row for `testbed/sourceInventory.ts`, plan §7 S5 row amendment, docs/README line) → commit packet → pin base
 → Astra `task --write` for S5 → post-impl ladder (Codex adversarial + Claude QA + Claude security, three-round cap).
-No Codex jobs running.
+Astra R1 STOPPED at the canary boundary (`_` in base64url IDs); disposition: D-S5-1 narrowed to `[A-Za-z0-9]`, commit
+`45f1074`; resumed as `task-mts4t4qt-n274ci` → S5 CANDIDATE delivered 2026-09-08 (23 files, 43/43 worker mutants, six H traces in
+budget). Owner `make test` on the candidate: first run red (2 owner-gate fallout items: root-of-trust pins for the approved script/
+Makefile change; the arms commit's wall-clock bound rejected by the meta-gate — both fixed, register correction + gotcha); second run
+GREEN (main 2696/0/1, timing 5/5, 20/20, execution PASS). Candidate committed on main; post-impl ladder R1 next (Codex adversarial,
+Claude QA, Claude security in parallel worktrees; prompts pre-drafted in the evidence dir). No Codex jobs running.
 
 `2026-09-07-d-cancel` — focus: **D-CANCEL resolved; S4 implemented, reviewed and accepted; pushed**;
 owner: claude; **state: closed** (2026-09-07); continuity relinquished for a fresh session.

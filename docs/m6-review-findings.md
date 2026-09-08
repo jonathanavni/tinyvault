@@ -1493,3 +1493,18 @@ are 8 characters from `[A-Za-z0-9]` (≈ 47.6 bits, rejection-sampled), same len
 D-S5-1 amended; the job is resumed with that refinement and an instruction to re-read the sections whose bulk reads
 were truncated (a recorded worker deviation). Correct STOP behaviour: no unowned file was edited and no ID was
 resampled to dodge the rejection.
+
+### Correction to "S4 residual (8) — unmutated arms closed" (2026-09-08, owner claude)
+
+The Arm D edit as committed in `46ae3df` added `expect(performance.now() - start).toBeLessThan(14_000)` to
+`testbed/runner.finalization.browser.test.ts`. The checker meta-gate (`testbed/checkers/metaGate.test.ts`, "keeps
+wall-clock assertions in the two serial timing files and the Docker-only serial entry") rejects a wall-clock
+assertion in that file, and the owner did not run the full `make test` after that commit (deferred to the S5
+integration gate, where it surfaced as 1 of 14 failures). The bound also duplicated an assertion that already
+exists in the serial timing family (`src/supervisor/host.timing.browser.test.ts`, "busy renderer snapshot fails
+within ten seconds plus the three-second disposal grace", `toBeLessThan(14_000)`). Owner disposition: the
+finalization case keeps `await operation` (no fixed sleep, fails fast on rejection, bounded by its 22 s per-test
+timeout) and drops the duplicate wall-clock assertion; the Arm D mutant (`OP_STOP_GRACE_MS` 3_000 → 5_000, observed
+15.0 s) is killed by the timing-family assertion, which is the correct home under the serial-measurement
+convention. The over-claim corrected here: "Arm D … killed by the finalization case" → killed by the timing family.
+No timing constant was loosened; the meta-gate rule is unchanged. The register entry above stands as history.

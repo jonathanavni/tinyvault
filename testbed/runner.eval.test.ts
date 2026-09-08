@@ -1,3 +1,4 @@
+import { assertRealAgentEvaluation } from './runner.realAgent.eval';
 import { runEvalEntry } from './evalEntry';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -18,6 +19,10 @@ import type { CapturedEvent } from './scorecard.schema';
 describe.skipIf(process.env.TINYVAULT_EVAL !== '1')('offline eval entry', () => {
   it('kills the fake fill and missing post-loop drain with the real meta-gated browser scorecard', async () => {
     const result = await runEvalEntry();
+    if ((process.env.TINYVAULT_PROFILE ?? 'real-comparison') !== 'stub') {
+      await assertRealAgentEvaluation(result);
+      return;
+    }
     const expectedPerCell = result.scorecard.sampleSize;
     expect(result.scorecard.evaluationContext).toEqual({ architecture: 'composed', dockerDaemonIsolation: 'assumed' });
     const expectedRuns = expectedPerCell * 3;

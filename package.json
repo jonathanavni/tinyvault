@@ -8,9 +8,10 @@
     "test": "node scripts/check-test-entry.mjs && tsc --noEmit && node --experimental-import-meta-resolve scripts/check-dependency-boundary.mjs && node --experimental-import-meta-resolve scripts/dependency-boundary.selftest.mjs && node scripts/check-docker-invocation.mjs && node scripts/docker-invocation.selftest.mjs && node scripts/check-compose.mjs && node scripts/compose-lint.selftest.mjs && node scripts/check-acceptance-j-results.mjs && vitest run --exclude 'src/supervisor/host.timing.browser.test.ts' --exclude 'testbed/checkers/leakDecoders.timing.test.ts' --reporter=json --outputFile=.vitest/main.json && vitest run testbed/checkers/leakDecoders.timing.test.ts --reporter=json --outputFile=.vitest/timing-1.json && vitest run src/supervisor/host.timing.browser.test.ts --reporter=json --outputFile=.vitest/timing-2.json && node scripts/check-test-execution.mjs",
     "browsers": "playwright install chromium",
     "eval": "node scripts/check-test-entry.mjs --eval && TINYVAULT_EVAL=1 vitest run --config vitest.eval.config.ts --reporter=verbose --reporter=json --outputFile.json=.vitest/eval.json && node scripts/check-test-execution.mjs --eval",
-    "baseline": "node -e \"console.error('not implemented until M6'); process.exit(1)\"",
+    "baseline": "node scripts/check-test-entry.mjs --eval && TINYVAULT_PROFILE=real-baseline TINYVAULT_EVAL=1 vitest run --config vitest.eval.config.ts --reporter=verbose --reporter=json --outputFile.json=.vitest/eval.json && node scripts/check-test-execution.mjs --eval",
     "demo": "node -e \"console.error('not implemented until M10'); process.exit(1)\"",
-    "test:docker": "node scripts/check-test-entry.mjs --docker && vitest run --config vitest.docker.config.ts --reporter=json --outputFile=.vitest/docker.json && node scripts/check-test-execution.mjs --docker"
+    "test:docker": "node scripts/check-test-entry.mjs --docker && vitest run --config vitest.docker.config.ts --reporter=json --outputFile=.vitest/docker.json && node scripts/check-test-execution.mjs --docker",
+    "eval:stub": "node scripts/check-test-entry.mjs --eval && TINYVAULT_PROFILE=stub TINYVAULT_EVAL=1 vitest run --config vitest.eval.config.ts --reporter=verbose --reporter=json --outputFile.json=.vitest/eval.json && node scripts/check-test-execution.mjs --eval"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

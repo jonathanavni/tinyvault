@@ -1,3 +1,13 @@
+import type { ScenarioCaptureInput } from './scenarioCoverage';
+import { createCohort, type Cohort } from './cohort';
+import { captureInvocationSource, assembleProvenance, enumerateSource, SOURCE_ROOT } from './sourceInventory';
+import { assertSourceUnchanged, type EvaluationProvenance } from './evaluationProvenance';
+import type { CreateModelClient } from './realAgentRun';
+import { diagnosePersistedRuns, type OfflineAdjudicationInput } from './checkers/offline';
+import type { ComparisonQualification, OfflineDiagnosticReport } from './evaluationValidity';
+import { printScorecard } from './scorecardAggregate';
+import { HandleRegistry } from './docker/compose';
+import { createDockerProcessRunner, systemClock, IMAGE_NAME } from './docker/exec';
 import { normalizeEvaluationContext, assertValidEvaluationContext, assertScorecardMetadata, type EvaluationContext } from './evaluationValidity';
 import { type KeyObject } from 'node:crypto';
 import { mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
@@ -17,14 +27,14 @@ import { startFixtures, type FixtureSet, type FixtureTransport } from './fixture
 import type { FixtureArchitecture } from './fixtures/transport';
 import { startControlsLab } from './fixtures/controls-lab';
 import { runHarnessGate } from './harnessGate';
-import { runOnce } from './runnerExecution';
+import { runOnce, type FailedRunRecord } from './runnerExecution';
 import { captureFixtureProvenance } from './parity/observe';
 import type { ParityCollector, ParityProvenance } from './parity/types';
 import type { RunRecord, Scorecard } from './scorecard.schema';
 import { createScenarioRegistry, placeholderFixtureOrigins,
   type FixtureOrigins, type ScenarioRegistry } from './scenarios';
 import type { FixtureId, Scenario } from './scenarios/types';
-import { AGENT_CONFIGS } from './evalAgents';
+import { AGENT_CONFIGS, type AgentConfig, type EvaluationProfile } from './evalAgents';
 import { aggregateScorecard, assertEvalPass, assertRunInventory,
   enforceLiveFire } from './scorecardAggregate';
 
@@ -40,7 +50,14 @@ const STUB_SCRIPT_MAX_TURNS = 16;
 
 export const FIXTURE_REACHABILITY_MESSAGE = 'Fixture is not reachable over HTTP';
 
+type RealInvocation = { cohort: Cohort; source: Awaited<ReturnType<typeof captureInvocationSource>>;
+  producers?: ScenarioCaptureInput['producers']; imageIdentity: string | null };
 export type EvalOptions = {
+  profile?: EvaluationProfile;
+  agentInventory?: ReadonlyMap<string, AgentConfig>;
+  createModelClient?: CreateModelClient;
+  sourceRoot?: string;
+  realInvocation?: RealInvocation;
   architecture?: FixtureArchitecture;
   dockerDaemonIsolation?: EvaluationContext['dockerDaemonIsolation'];
   /** Optional trusted parity collector; never exposed to agent tools. */
@@ -76,11 +93,12 @@ export type EvalOptions = {
 
 export type CaptureOptions = Pick<
   EvalOptions,
+  | 'profile' | 'agentInventory' | 'createModelClient' | 'sourceRoot' | 'realInvocation'
   | 'launchChromium' | 'startFixtures' | 'createScenarioRegistry' | 'createHost' | 'createBackend'
   | 'parityObserver' | 'maxTurns' | 'architecture' | 'dockerDaemonIsolation' | 'dockerPreflight' | 'dockerRunner' | 'probeOrigin'
 >;
 
-export type EvalResult = { scorecard: Scorecard; runs: RunRecord[]; scorecardPath: string };
+export type EvalResult = { scorecard: Scorecard; runs: RunRecord[]; scorecardPath: string; offlineInput?: OfflineAdjudicationInput };
 
 export function offlineArtifactPaths(artifactDirectory: string) {
   return {
@@ -101,10 +119,24 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
   const context = normalizeEvaluationContext(options.architecture, options.dockerDaemonIsolation);
   assertValidEvaluationContext(context);
   options = { ...options, ...context };
-  const artifactDirectory = resolve(options.artifactDirectory ?? 'artifacts/eval');
+  const real = options.profile !== undefined && options.profile !== 'stub';
+  if (real && (!options.agentInventory || !options.createModelClient)) throw new Error('Missing trusted real invocation');
+  const agents = options.agentInventory ?? AGENT_CONFIGS;
+  let artifactDirectory = resolve(options.artifactDirectory ?? 'artifacts/eval');
   const pin = await prepareArchitecture(options);
-  await (options.removeArtifactDirectory ?? rm)(artifactDirectory, { recursive: true, force: true });
-  await (options.createArtifactDirectory ?? mkdir)(artifactDirectory, { recursive: true });
+  if (real) {
+    const cohort = createCohort(options.profile as Exclude<EvaluationProfile, 'stub'>, sampleSize, agents,
+      (options.createScenarioRegistry ?? createScenarioRegistry)(placeholderFixtureOrigins('http://fixture-unavailable.invalid')));
+    const source = await captureInvocationSource(options.sourceRoot ?? SOURCE_ROOT);
+    await (options.createArtifactDirectory ?? mkdir)(artifactDirectory, { recursive: true });
+    artifactDirectory = resolve(artifactDirectory, cohort.cohortId);
+    await (options.createArtifactDirectory ?? mkdir)(artifactDirectory);
+    await writeFile(resolve(artifactDirectory, 'cohort.json'), `${JSON.stringify(cohort)}\n`, { mode: 0o600 });
+    options = { ...options, realInvocation: { cohort, source, imageIdentity: null } };
+  } else {
+    await (options.removeArtifactDirectory ?? rm)(artifactDirectory, { recursive: true, force: true });
+    await (options.createArtifactDirectory ?? mkdir)(artifactDirectory, { recursive: true });
+  }
 
   const browser = await (options.launchChromium ?? launchChromium)();
   try {
@@ -117,18 +149,67 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
     } finally {
       await lab.close();
     }
-    const trust = await captureWithBrowser(artifactDirectory, sampleSize, browser, options, pin);
+    if (options.realInvocation) {
+      options.realInvocation.producers = Object.freeze({ executionId: options.realInvocation.cohort.executionId, coverage });
+      await writeFile(resolve(artifactDirectory, 'producer-coverage.json'),
+        `${JSON.stringify(options.realInvocation.producers)}\n`, { mode: 0o600 });
+    }
+    let trust: EvalTrust;
+    try { trust = await captureWithBrowser(artifactDirectory, sampleSize, browser, options, pin); }
+    catch (error) {
+      if (!options.realInvocation) throw error;
+      const cells = options.realInvocation.cohort.selectedScenarioIds.flatMap(scenario =>
+        options.realInvocation!.cohort.selectedAgentIds.map(agent => ({ scenario, agent })));
+      return rejectComparison(artifactDirectory, { status: 'unqualified', verifiedRuns: [], runs: [],
+        missingPositiveControlCells: cells, cohortFailure: 'unclassified' }, null, ['execution-failed']);
+    }
     const paths = offlineArtifactPaths(artifactDirectory);
-    const runs = await adjudicatePersistedRuns({
+    const offlineInput: OfflineAdjudicationInput = {
       runsPath: paths.capturedRunsPath,
       manifestPath: paths.manifestPath,
       artifactDirectory,
       verificationKeys: trust.verificationKeys,
       scenarioRegistry: trust.scenarioRegistry,
-      agentConfigs: AGENT_CONFIGS,
-    });
+      agentConfigs: agents,
+      ...(trust.m6Provenance && options.realInvocation ? { provenanceTrust: {
+        provenance: trust.m6Provenance, expectedRuns: options.realInvocation.cohort.expectedRuns } } : {}),
+    };
+    if (options.realInvocation) {
+      const diagnostic = await diagnosePersistedRuns(offlineInput);
+      const reasons: string[] = [];
+      try { await assertSourceUnchanged(options.sourceRoot ?? SOURCE_ROOT, options.realInvocation.source.source,
+        await enumerateSource(options.sourceRoot ?? SOURCE_ROOT)); } catch { reasons.push('source-drift'); }
+      if (diagnostic.cohortFailure) reasons.push('cohort-binding-failed');
+      if (diagnostic.runs.length !== options.realInvocation.cohort.expectedRuns.length
+        || diagnostic.runs.some(run => run.status !== 'verified')) reasons.push('run-verification-failed');
+      if (diagnostic.missingPositiveControlCells.length) reasons.push('positive-control-missing');
+      if (!trust.captureQualifications || trust.captureQualifications.length !== options.realInvocation.cohort.expectedRuns.length
+        || trust.captureQualifications.some(row => row.status !== 'qualified')) {
+        reasons.push('scenario-capture-unqualified');
+        for (const row of trust.captureQualifications ?? []) if (row.status !== 'qualified') {
+          reasons.push(...row.reasons.map(reason => `${row.runId}: ${reason}`));
+        }
+      }
+      try {
+        const stored = JSON.parse(await readFile(paths.capturedRunsPath, 'utf8'));
+        assertRunInventory(stored, sampleSize, trust.scenarioRegistry, agents);
+      } catch { reasons.push('inventory-mismatch'); }
+      await writeFile(resolve(artifactDirectory, 'cohort.json'), `${JSON.stringify({ ...options.realInvocation.cohort,
+        finishedAt: new Date().toISOString() })}\n`, { mode: 0o600 });
+      if (reasons.length) return rejectComparison(artifactDirectory, diagnostic, trust.m6Provenance!, reasons);
+      try {
+        const result = await finalizeEvaluation(artifactDirectory, sampleSize, diagnostic.verifiedRuns, context,
+          options.generatedAt, trust.scenarioRegistry, coverage, agents, trust.m6Provenance);
+        for (const limitation of trust.captureQualifications?.[0]?.limitations ?? []) console.log(limitation);
+        return { ...result, offlineInput };
+      } catch (error) {
+        if (error instanceof UnqualifiedComparisonError) throw error;
+        return rejectComparison(artifactDirectory, diagnostic, trust.m6Provenance!, ['outcome-gate-failed']);
+      }
+    }
+    const runs = await adjudicatePersistedRuns(offlineInput);
     return finalizeEvaluation(
-      artifactDirectory, sampleSize, runs, context, options.generatedAt, trust.scenarioRegistry, coverage,
+      artifactDirectory, sampleSize, runs, context, options.generatedAt, trust.scenarioRegistry, coverage, agents,
     );
   } finally {
     await browser.close();
@@ -136,6 +217,8 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
 }
 
 export type EvalTrust = {
+  m6Provenance?: EvaluationProvenance;
+  captureQualifications?: NonNullable<Awaited<ReturnType<typeof runOnce>>['captureQualification']>[];
   provenance: ParityProvenance;
   verificationKeys: Readonly<Record<FixtureId, KeyObject>>;
   scenarioRegistry: ScenarioRegistry;
@@ -176,7 +259,8 @@ async function captureWithBrowser(
   const fixtures = options.architecture === 'composed'
     ? await startComposedFixtures(artifactDirectory, pin!, options)
     : await (options.startFixtures ?? startFixtures)(captureDirectory);
-  const capturedRuns: RunRecord[] = [];
+  const capturedRuns: (RunRecord | FailedRunRecord)[] = [];
+  const captureQualifications: NonNullable<Awaited<ReturnType<typeof runOnce>>['captureQualification']>[] = [];
   const evidenceRuns: OfflineRunEvidence[] = [];
   try {
     for (const fixture of Object.values(fixtures)) assertHttpFixture(fixture);
@@ -184,25 +268,39 @@ async function captureWithBrowser(
     const origins = fixtureOrigins(fixtures);
     const scenarioRegistry = (options.createScenarioRegistry ?? createScenarioRegistry)(origins);
     assertScenarioFixturesPresent(scenarioRegistry, fixtures);
+    const real = options.realInvocation;
+    const agents = options.agentInventory ?? AGENT_CONFIGS;
+    const context = normalizeEvaluationContext(options.architecture, options.dockerDaemonIsolation);
+    assertValidEvaluationContext(context);
+    const m6Provenance = real ? await assembleProvenance({ root: options.sourceRoot ?? SOURCE_ROOT,
+      ...real.source, sampleSize, agents, scenarios: scenarioRegistry, context,
+      chromiumVersion: browser.version(), composedImageIdentity: real.imageIdentity }) : undefined;
+    if (m6Provenance) await writeFile(resolve(artifactDirectory, 'provenance.json'),
+      `${JSON.stringify(m6Provenance)}\n`, { mode: 0o600 });
     options.parityObserver?.captureStarted?.();
     const generator = new CanaryGenerator();
     for (const scenario of scenarioRegistry.values()) {
       const fixture = fixtureForScenario(fixtures, scenario);
-      for (let runIndex = 0; runIndex < sampleSize; runIndex += 1) {
+      for (const agent of agents.values()) for (let runIndex = 0; runIndex < sampleSize; runIndex += 1) {
         const result = await runOnce({
-          runIndex, scenario, fixture, generator, artifactDirectory, browser,
+          runIndex, scenario, fixture, generator, artifactDirectory, browser, agent,
+          ...(real ? { real: { runId: real.cohort.expectedRuns.find(row => row.scenario === scenario.id
+            && row.agent === agent.id && row.runIndex === runIndex)!.runId,
+            executionId: real.cohort.executionId, provenance: m6Provenance!, skillText: real.source.skillText,
+            createModelClient: options.createModelClient!, producers: real.producers! } } : {}),
           createHost: options.createHost ?? createSupervisedHost,
           createBackend: options.createBackend ?? createLocalFileBackend,
           parityObserver: options.parityObserver,
           maxTurns: options.maxTurns ?? STUB_SCRIPT_MAX_TURNS,
         });
+        if (result.captureQualification) captureQualifications.push(result.captureQualification);
         capturedRuns.push(result.record);
         evidenceRuns.push(result.evidence);
       }
     }
-    await persistOfflineInputs(artifactDirectory, capturedRuns, { runs: evidenceRuns });
+    await persistOfflineInputs(artifactDirectory, capturedRuns, { runs: evidenceRuns, ...(m6Provenance ? { provenance: m6Provenance } : {}) });
     options.parityObserver?.captureCompleted?.();
-    return { verificationKeys: fixtureVerificationKeys(fixtures), scenarioRegistry, provenance };
+    return { verificationKeys: fixtureVerificationKeys(fixtures), scenarioRegistry, provenance, m6Provenance, captureQualifications };
   } finally {
     await closeFixtures(fixtures);
   }
@@ -267,24 +365,31 @@ export async function finalizeEvaluation(
   generatedAt: string | undefined,
   scenarioRegistry?: ScenarioRegistry,
   captureCoverage: Scorecard['captureCoverage'] = [],
+  agents = AGENT_CONFIGS, provenance?: EvaluationProvenance,
 ): Promise<EvalResult> {
   assertValidEvaluationContext(evaluationContext);
-  assertRunInventory(runs, sampleSize, scenarioRegistry);
-  const scorecard = aggregateScorecard(runs, sampleSize, evaluationContext, generatedAt, captureCoverage);
+  assertRunInventory(runs, sampleSize, scenarioRegistry, agents);
+  const scorecard = { ...aggregateScorecard(runs, sampleSize, evaluationContext, generatedAt, captureCoverage),
+    ...(provenance ? { provenance } : {}) };
   assertScorecardMetadata(scorecard);
+  if (provenance) {
+    enforceLiveFire(runs, scorecard, agents); assertEvalPass(scorecard, agents);
+    const qualification: ComparisonQualification = { status: 'qualified', provenanceId: provenance.provenanceId };
+    await writeFile(resolve(artifactDirectory, 'qualification.json'), `${JSON.stringify(qualification)}\n`, { mode: 0o600 });
+    printScorecard(scorecard);
+  }
   const scorecardPath = resolve(artifactDirectory, 'scorecard.json');
   await Promise.all([
     writeFile(scorecardPath, `${JSON.stringify(scorecard, null, 2)}\n`),
     writeFile(resolve(artifactDirectory, 'runs.json'), `${JSON.stringify(runs, null, 2)}\n`),
   ]);
-  enforceLiveFire(runs, scorecard);
-  assertEvalPass(scorecard);
+  if (!provenance) { enforceLiveFire(runs, scorecard, agents); assertEvalPass(scorecard, agents); }
   return { scorecard, runs, scorecardPath };
 }
 
 export async function persistOfflineInputs(
   artifactDirectory: string,
-  runs: RunRecord[],
+  runs: (RunRecord | FailedRunRecord)[],
   manifest: OfflineEvidenceManifest,
 ): Promise<void> {
   const paths = offlineArtifactPaths(artifactDirectory);
@@ -330,6 +435,36 @@ async function startComposedFixtures(
   pin: PinnedDockerEndpoint,
   options: CaptureOptions,
 ): Promise<FixtureSet> {
-  return startComposedFixtureSet({ pin, artifactRoot: artifactDirectory,
+  if (!options.realInvocation) return startComposedFixtureSet({ pin, artifactRoot: artifactDirectory,
     runner: options.dockerRunner, probeOrigin: options.probeOrigin ?? probeHttpOrigin });
+  const registry = new HandleRegistry();
+  const delegate = options.dockerRunner ?? createDockerProcessRunner(registry);
+  const runner: DockerProcessRunner = { spawnLongLived: spawn => delegate.spawnLongLived(spawn),
+    run: async spawn => {
+      const result = await delegate.run(spawn);
+      if (spawn.args.slice(-3).join(' ') === `image inspect ${IMAGE_NAME}` && result.exitCode === 0) {
+        const image = JSON.parse(result.stdout);
+        if (image.length !== 1 || !/^sha256:[a-f0-9]{64}$/.test(image[0].Id)) throw new Error('Invalid composed image identity');
+        options.realInvocation!.imageIdentity = image[0].Id;
+      }
+      return result;
+    } };
+  try {
+    const fixtures = await startComposedFixtureSet({ pin, artifactRoot: artifactDirectory,
+      runner, probeOrigin: options.probeOrigin ?? probeHttpOrigin });
+    return Object.fromEntries(Object.entries(fixtures).map(([id, fixture]) => [id, { ...fixture,
+      close: async () => { try { await fixture.close(); } finally { await registry.close(systemClock); } } }]));
+  } catch (error) { await registry.close(systemClock); throw error; }
+}
+
+export class UnqualifiedComparisonError extends Error {
+  constructor() { super('Real evaluation is unqualified'); this.name = 'UnqualifiedComparisonError'; }
+}
+async function rejectComparison(directory: string, diagnostic: OfflineDiagnosticReport,
+  provenance: EvaluationProvenance | null, reasons: string[]): Promise<never> {
+  const qualification: ComparisonQualification = { status: 'unqualified', provenanceId: provenance?.provenanceId ?? null, reasons };
+  await Promise.all([writeFile(resolve(directory, 'diagnostic.json'), `${JSON.stringify(diagnostic)}\n`, { mode: 0o600 }),
+    writeFile(resolve(directory, 'qualification.json'), `${JSON.stringify(qualification)}\n`, { mode: 0o600 })]);
+  console.error(JSON.stringify({ diagnostic, qualification }));
+  throw new UnqualifiedComparisonError();
 }

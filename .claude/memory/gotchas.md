@@ -413,3 +413,12 @@ Example:
   convergence, deadline armed too late, stop-failure semantics), R2 3 P1 (child targets destroyed before the drain,
   quiesce budget over-subscribed), R3 one evidence-gap P1. Each round's fixes created the next round's findings; the
   cap with stated P1 criteria is what ended it. (2026-09-07)
+- **Run `make test` after EVERY owner commit to `main`, not only at slice integration — and never add a wall-clock
+  assertion outside the two serial timing files.** The S4 residual-(8) test-only commit (`46ae3df`) added a
+  `performance.now()` bound to a non-serial browser test; the checker meta-gate forbids exactly that (it lists the
+  offending file), and the failure only surfaced two commits later inside the S5 candidate's gate run, where it
+  was briefly indistinguishable from a worker defect. If a bound is needed, it belongs in
+  `src/supervisor/host.timing.browser.test.ts` / `testbed/checkers/leakDecoders.timing.test.ts`; check whether the
+  timing family already asserts it (here it did). Also: `testbed/rootOfTrust.test.ts` pins SHA-256 of
+  `package.json#scripts` and `Makefile`; any approved script/target change needs an owner-reviewed pin update in
+  the same commit. (2026-09-08)

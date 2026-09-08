@@ -736,7 +736,7 @@ describe('lease finalization and composition cleanup', () => {
   });
   it('kills supervised-host and lease capability surface expansion', () => {
     const setup = composed();
-    expect(Reflect.ownKeys(setup.host)).toEqual(['tools', 'drainEvidence', 'settleEvidence', 'quiesceEvidenceProducers', 'finish', 'abort', 'closeAll']);
+    expect(Reflect.ownKeys(setup.host)).toEqual(['tools', 'drainEvidence', 'setupReasonFor', 'abortedEvidence', 'settleEvidence', 'quiesceEvidenceProducers', 'finish', 'abort', 'closeAll']);
     expect(Object.isFrozen(setup.host)).toBe(true);
     expect(inspect(setup.host, { showHidden: true, depth: 10 })).not.toContain(CANARY);
     setup.host.abort();

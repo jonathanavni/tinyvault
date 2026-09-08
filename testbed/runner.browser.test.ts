@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { CredentialBackend } from '../src/backends/backend';
 import { createLocalFileBackend } from '../src/backends/localFile';
@@ -388,3 +388,75 @@ async function temporaryRoot(prefix: string): Promise<string> {
   roots.push(root);
   return root;
 }
+
+import { readFile } from 'node:fs/promises';
+import { runEval } from './runner';
+import { createAgentInventory } from './evalAgents';
+import { AnthropicModelClient, ANTHROPIC_CLIENT_CONFIG, ANTHROPIC_SDK_VERSION } from '../src/agents/anthropicClient';
+import { TranscriptWriter } from '../src/agents/transcript';
+import { s5Witnesses } from './runner.testkit';
+
+it('S5 real profiles quiesce real browser contexts before seal and persist every scenario sidecar', async () => {
+  const artifactDirectory = await mkdtemp(join(tmpdir(), 'tinyvault-s5-real-browser-'));
+  const witnesses = await s5Witnesses();
+  const states = new Map<string, { next: number; turn: number }>();
+  const lifecycle: string[] = [];
+  const realRunIds = new Set<string>(), sealed = new Set<string>();
+  const close = TranscriptWriter.prototype.close;
+  const closeSpy = vi.spyOn(TranscriptWriter.prototype, 'close').mockImplementation(function (this: TranscriptWriter) {
+    if ([...realRunIds].some(id => this.eventsPath.endsWith(`/runs/${id}/events.json`)) && !sealed.has(this.eventsPath)) {
+      expect(lifecycle.at(-1)).toBe('quiesce-done'); sealed.add(this.eventsPath); lifecycle.push('seal');
+    }
+    return close.call(this);
+  });
+  const providerFetch: typeof fetch = async (_url, init) => {
+    const wire = JSON.parse(init!.body as string);
+    const task = JSON.parse(wire.messages[0].content);
+    const id = new URL(task.startUrl).searchParams.get('runId')!;
+    const fixtureId = task.submitSelector.startsWith('form') ? 'dom-hidden-injection'
+      : new URL(task.recoveryUrl).pathname === '/login' ? 'lookalike-origin' : 'benign-login';
+    const witness = witnesses.find(row => row.fixtureId === fixtureId && row.profile === (task.inventory ? 'reference-agent' : 'naive-baseline'))!;
+    const state = states.get(id) ?? { next: 0, turn: 0 }; states.set(id, state);
+    const schedule = fixtureId === 'lookalike-origin' ? [1, 2, 2, 2, 3, 2, 0] : [1, 2, 3, 2, 0];
+    const count = schedule[state.turn++];
+    let sessionId = '';
+    for (const message of wire.messages) if (Array.isArray(message.content)) for (const block of message.content) {
+      if (block.type === 'tool_result') {
+        const result = JSON.parse(block.content); if (result.sessionId) sessionId = result.sessionId;
+      }
+    }
+    const content = count === 0 ? [{ type: 'text', text: 'Login complete.' }] : witness.calls.slice(state.next, state.next += count).map(({ call }) => {
+      const input = { ...(call.input as Record<string, unknown>) };
+      if ('sessionId' in input) input.sessionId = sessionId;
+      if ('url' in input) input.url = new URL(input.url as string).pathname === '/login' ? task.recoveryUrl : task.startUrl;
+      if ('handle' in input) input.handle = task.inventory.items[0].handle;
+      if (call.name === 'browser_type' && input.selector === task.passwordSelector) input.text = task.password;
+      if (call.name === 'browser_click') input.selector = task.submitSelector;
+      return { type: 'tool_use', id: call.id, name: call.name, input };
+    });
+    return new Response(JSON.stringify({ id: `msg_browser_${state.turn}`, type: 'message', role: 'assistant',
+      model: ANTHROPIC_CLIENT_CONFIG.model, content, stop_reason: count === 0 ? 'end_turn' : 'tool_use', stop_sequence: null,
+      usage: { input_tokens: 100, output_tokens: 32 } }), { status: 200 });
+  };
+  try {
+  const result = await runEval({ profile: 'real-comparison', agentInventory: createAgentInventory('real-comparison', ANTHROPIC_SDK_VERSION),
+    createModelClient: args => { realRunIds.add(args.runId); return new AnthropicModelClient({ ...args, apiKey: 'synthetic-browser-key', fetch: providerFetch }); },
+    artifactDirectory, sampleSize: 1, architecture: 'in-process',
+    createHost: async input => {
+      const host = await createSupervisedHost(input);
+      return { ...host, quiesceEvidenceProducers: async hooks => {
+        lifecycle.push('quiesce-start'); await host.quiesceEvidenceProducers!(hooks);
+        expect(input.browser!.contexts()).toHaveLength(0); lifecycle.push('quiesce-done');
+      }, finish: () => {
+        expect(lifecycle.at(-1)).toBe('seal'); lifecycle.push('finish'); return host.finish();
+      } };
+    } });
+  expect(result.runs).toHaveLength(6);
+  expect(lifecycle).toEqual(Array.from({ length: 6 }, () => ['quiesce-start', 'quiesce-done', 'seal', 'finish']).flat());
+  for (const row of result.runs) {
+    expect(await readFile(row.transcriptPath, 'utf8')).toContain('post-loop-drain');
+    expect(await readFile(`${row.eventsPath}.initial-snapshot.json`, 'utf8')).toContain('"sdkObserved":true');
+    expect(await readFile(`${row.eventsPath}.scenario-capture.txt`, 'utf8')).toContain('qualified');
+  }
+  } finally { closeSpy.mockRestore(); }
+}, 240_000);

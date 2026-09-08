@@ -85,6 +85,7 @@ export class EvidenceLease {
   #allowTimedOutAttachOperation = false;
   #active = true;
   #aborted = false;
+  #abortedEvidence: readonly CapturedEventInput[] = Object.freeze([]);
   #needsSettle = false;
   readonly #pending = new Set<Promise<void>>();
   readonly #pendingAttach = new Map<Promise<void>, boolean | Promise<boolean>>();
@@ -461,9 +462,15 @@ export class EvidenceLease {
   }
 
   abort(): void {
+    if (!this.#aborted) this.#abortedEvidence = Object.freeze([...(leaseEvidence.get(this) ?? [])]);
     this.#aborted = true;
     this.markCaptureFailed();
     this.#drop();
+  }
+
+  /** Trusted diagnostic only; abort never restores drain or verdict authority. */
+  abortedEvidence(): readonly CapturedEventInput[] {
+    return this.#abortedEvidence;
   }
 
   captureFailed(): boolean {
@@ -575,4 +582,3 @@ export function inspectEvidenceLeaseForTest(lease: EvidenceLease): readonly Capt
 export function assertLeaseActive(lease: EvidenceLease): void {
   if (!leaseEvidence.has(lease)) throw new InactiveEvidenceLeaseError();
 }
-

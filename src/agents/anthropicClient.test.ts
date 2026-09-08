@@ -3,7 +3,7 @@ import { mkdtemp, readFile, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { AnthropicModelClient, ANTHROPIC_MODEL, ANTHROPIC_SDK_VERSION, PROVIDER_ATTEMPT_TIMEOUT_MS } from './anthropicClient';
+import { AnthropicModelClient, ANTHROPIC_MODEL, ANTHROPIC_SDK_VERSION, PROVIDER_ATTEMPT_TIMEOUT_MS, ANTHROPIC_CLIENT_CONFIG } from './anthropicClient';
 import { runAgentLoop, type ToolExecution } from './loop';
 import { TranscriptWriter, type TranscriptRecord } from './transcript';
 import { baselineSecretSourcesForRun } from '../../testbed/evalAgents';
@@ -51,6 +51,21 @@ async function setup(bodies: (string | Response)[], options: { baseline?: boolea
 }
 
 describe('M6 E2 actual pinned SDK through runner adapter', () => {
+  it('S5 binds the resolved configuration to the actual serialized SDK request', async () => {
+    const h = await setup([reply()]);
+    h.fetch.mockImplementationOnce(async (url, init) => {
+      const body = JSON.parse(init.body);
+      expect(String(url)).toBe(ANTHROPIC_CLIENT_CONFIG.providerEndpoint);
+      expect(new Headers(init.headers).get('anthropic-version')).toBe(ANTHROPIC_CLIENT_CONFIG.apiVersion);
+      expect(body).toMatchObject({ model: ANTHROPIC_CLIENT_CONFIG.model,
+        temperature: ANTHROPIC_CLIENT_CONFIG.temperature, max_tokens: ANTHROPIC_CLIENT_CONFIG.maxTokens });
+      return new Response(reply());
+    });
+    await h.run();
+    expect(Object.isFrozen(ANTHROPIC_CLIENT_CONFIG)).toBe(true);
+    expect(ANTHROPIC_CLIENT_CONFIG.retries).toBe(0);
+    expect(ANTHROPIC_CLIENT_CONFIG.requestTimeoutMs).toBe(60000);
+  });
   it('pins actual native declarations and normalized declarations to independent AM11 byte hashes', async () => {
     const h = await setup([reply()]); await h.run();
     const body = JSON.parse(h.requests[0]);

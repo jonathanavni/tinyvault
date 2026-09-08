@@ -7,7 +7,11 @@ export const ANTHROPIC_MODEL = 'claude-haiku-4-5-20251001';
 export const ANTHROPIC_SDK_VERSION = '0.124.0';
 export const PROVIDER_ATTEMPT_TIMEOUT_MS = 60_000;
 export const MAX_OUTPUT_TOKENS = 1024;
-const PROVIDER_ENDPOINT = 'https://api.anthropic.com/v1/messages';
+export const ANTHROPIC_CLIENT_CONFIG = Object.freeze({
+  providerEndpoint: 'https://api.anthropic.com/v1/messages', apiVersion: '2023-06-01',
+  model: ANTHROPIC_MODEL, temperature: 0, maxTokens: MAX_OUTPUT_TOKENS,
+  requestTimeoutMs: PROVIDER_ATTEMPT_TIMEOUT_MS, retries: 0,
+});
 
 export class AgentTransportError extends Error {
   constructor(readonly category: 'configuration' | 'request' | 'transport' | 'response' | 'deadline') {
@@ -30,8 +34,9 @@ export class AnthropicModelClient implements ModelClient {
     this.runId = options.runId;
     const transport = options.fetch ?? globalThis.fetch;
     this.sdk = new Anthropic({
-      apiKey: options.apiKey, authToken: null, baseURL: 'https://api.anthropic.com',
-      maxRetries: 0, timeout: PROVIDER_ATTEMPT_TIMEOUT_MS, logLevel: 'off',
+      apiKey: options.apiKey, authToken: null, baseURL: new URL(ANTHROPIC_CLIENT_CONFIG.providerEndpoint).origin,
+      defaultHeaders: { 'anthropic-version': ANTHROPIC_CLIENT_CONFIG.apiVersion },
+      maxRetries: ANTHROPIC_CLIENT_CONFIG.retries, timeout: ANTHROPIC_CLIENT_CONFIG.requestTimeoutMs, logLevel: 'off',
       fetch: (url, init) => this.captureFetch(transport, url, init),
     });
   }
@@ -43,7 +48,8 @@ export class AnthropicModelClient implements ModelClient {
     try {
       if (context.signal.aborted) throw new AgentTransportError('deadline');
       const result = await this.sdk.messages.create({
-        model: ANTHROPIC_MODEL, max_tokens: MAX_OUTPUT_TOKENS, temperature: 0, system: this.system,
+        model: ANTHROPIC_CLIENT_CONFIG.model, max_tokens: ANTHROPIC_CLIENT_CONFIG.maxTokens,
+        temperature: ANTHROPIC_CLIENT_CONFIG.temperature, system: this.system,
         messages: nativeMessages(messages), tools: tools.map(({ name, description, inputSchema }) => ({
           name, description, input_schema: inputSchema,
         })) as Tool[],
@@ -64,12 +70,13 @@ export class AnthropicModelClient implements ModelClient {
 
   private async captureFetch(transport: typeof globalThis.fetch, url: string | URL | Request, init?: RequestInit): Promise<Response> {
     const context = this.activeContext;
-    if (!context || context.signal.aborted || String(url) !== PROVIDER_ENDPOINT || init?.method !== 'POST'
+    if (!context || context.signal.aborted || String(url) !== ANTHROPIC_CLIENT_CONFIG.providerEndpoint || init?.method !== 'POST'
       || typeof init.body !== 'string') throw new AgentTransportError('request');
     const requestBody = init.body;
     // Verify the actual serialized body reaching fetch, independently of constructor labels.
     const request = JSON.parse(requestBody);
-    if (request.model !== ANTHROPIC_MODEL || request.max_tokens !== MAX_OUTPUT_TOKENS || request.temperature !== 0
+    if (request.model !== ANTHROPIC_CLIENT_CONFIG.model || request.max_tokens !== ANTHROPIC_CLIENT_CONFIG.maxTokens
+      || request.temperature !== ANTHROPIC_CLIENT_CONFIG.temperature
       || request.stream === true) throw new AgentTransportError('request');
     const identity = { documentId: context.runId, requestId: `turn:${context.turnIndex}` };
     const requestEvent: CapturedEventInput = { channel: 'model-text', direction: 'internal',
@@ -83,7 +90,7 @@ export class AnthropicModelClient implements ModelClient {
     const signals = [context.signal, init.signal].filter((signal): signal is AbortSignal => signal != null);
     const abort = () => controller.abort();
     for (const signal of signals) { signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort(); }
-    const timer = setTimeout(abort, PROVIDER_ATTEMPT_TIMEOUT_MS);
+    const timer = setTimeout(abort, ANTHROPIC_CLIENT_CONFIG.requestTimeoutMs);
     const chunks: Uint8Array[] = [];
     let response: Response | undefined;
     let complete = false;

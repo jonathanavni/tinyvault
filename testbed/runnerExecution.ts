@@ -1,3 +1,6 @@
+import { executeRealAgentRun, type CreateModelClient } from './realAgentRun';
+import type { EvaluationProvenance, RunExecutionMetadata } from './evaluationProvenance';
+import { runAgentProfile, type AgentProfile } from '../src/agents/prompt';
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -30,6 +33,9 @@ export const MISSING_END_MARKER_MESSAGE = 'Run ended without an end marker';
 
 type RunOnceInput = {
   runIndex: number;
+  agent?: AgentConfig;
+  real?: { runId: string; executionId: string; provenance: EvaluationProvenance;
+    skillText: string; createModelClient: CreateModelClient; producers: ScenarioCaptureInput['producers'] };
   scenario: Scenario;
   fixture: FixtureTransport;
   generator: CanaryGenerator;
@@ -41,22 +47,32 @@ type RunOnceInput = {
   parityObserver?: ParityCollector;
 };
 
-type RunOnceResult = { record: RunRecord; evidence: OfflineRunEvidence };
+export type FailedRunRecord = Omit<RunRecord, 'outcome'> & { outcome: null; runId: string; provenanceId: string; execution: RunExecutionMetadata };
+type RunOnceResult = { record: RunRecord | FailedRunRecord; evidence: OfflineRunEvidence; captureQualification?: ReturnType<typeof qualifyScenarioCapture> };
 
 export async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
   // Register residual (S4-2/X4-1): a same-process runner can still fabricate
   // `initiator: 'browser'`; SCHEMA's guarantee is post-capture integrity, not
   // independent authenticity ("Scope of that guarantee").
-  const config = agentConfig(AGENT_ID);
+  const config = input.agent ?? agentConfig(AGENT_ID);
+  if ((config.id === AGENT_ID) === (input.real !== undefined)) throw new Error('Agent and trusted run context disagree');
   const prepared = await prepareRun(input);
-  const auth = authForAgent(input.scenario.authForRun(prepared.runId, prepared.nonce), config);
+  const auth = authForAgent(input.scenario.authForRun(prepared.runId, prepared.nonce), config, prepared.runId);
   const descriptor: ParityRunDescriptor = Object.freeze({ scenario: input.scenario.id,
-    agent: AGENT_ID, runIndex: input.runIndex, runId: prepared.runId, canary: prepared.canary,
+    agent: config.id, runIndex: input.runIndex, runId: prepared.runId, canary: prepared.canary,
     canaryId: prepared.canaryId, nonce: prepared.nonce, vaultPath: prepared.vaultPath,
     keyPath: prepared.keyPath, transcriptPath: prepared.transcriptPath, eventsPath: prepared.eventsPath });
   const observedBrowser = input.parityObserver?.beginRun(descriptor, input.browser) ?? input.browser;
-  let loopResult: Awaited<ReturnType<typeof executeStubRun>>;
-  try { loopResult = await executeStubRun({ ...input, browser: observedBrowser }, prepared, config); }
+  let realResult: Awaited<ReturnType<typeof executeRealAgentRun>> | undefined;
+  let loopResult: Pick<Awaited<ReturnType<typeof executeStubRun>>, 'events' | 'stopReason'>;
+  try {
+    if (input.real) {
+      realResult = await executeRealAgentRun({ ...prepared, scenario: input.scenario, agent: config,
+        browser: observedBrowser, skillText: input.real.skillText, createModelClient: input.real.createModelClient,
+        createBackend: input.createBackend, createHost: input.createHost });
+      loopResult = { events: realResult.events, stopReason: realResult.execution.status === 'max-turns' ? 'max-turns' : 'complete' };
+    } else loopResult = await executeStubRun({ ...input, browser: observedBrowser }, prepared, config);
+  }
   catch (runError) {
     try { await input.parityObserver?.endRun(descriptor); }
     catch (observerError) {
@@ -66,39 +82,48 @@ export async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
     throw runError;
   }
   await input.parityObserver?.endRun(descriptor);
-  await input.fixture.finalizeRun(prepared.runId);
-  if (input.parityObserver) input.parityObserver.collectUnauthorized(
-    descriptor, await input.fixture.unauthorizedRequests(prepared.runId),
-  );
-  const completionReceipt = await input.fixture.takeReceipt(prepared.runId);
-  // Snapshot before replacement: the in-process fixture uses this same destination.
-  const capture = await input.fixture.captureRequests(prepared.runId);
-  await persistFixtureCapture(input.artifactDirectory, prepared.runId, capture);
-  const eventsAttestation = await input.fixture.attestEvents(
-    prepared.runId,
-    await readFile(prepared.eventsPath),
-  );
+  let completionReceipt: string | undefined;
+  let eventsAttestation = '';
+  let taskCompleted = false;
   const completionBinding = createCompletionBinding(input.scenario, prepared);
-  const completion = input.fixture.verifyCompletion(completionReceipt, completionBinding);
+  try {
+    await input.fixture.finalizeRun(prepared.runId);
+    if (input.parityObserver) input.parityObserver.collectUnauthorized(
+      descriptor, await input.fixture.unauthorizedRequests(prepared.runId),
+    );
+    completionReceipt = await input.fixture.takeReceipt(prepared.runId);
+    // Snapshot before replacement: the in-process fixture uses this same destination.
+    const capture = await input.fixture.captureRequests(prepared.runId);
+    await persistFixtureCapture(input.artifactDirectory, prepared.runId, capture);
+    eventsAttestation = await input.fixture.attestEvents(prepared.runId, await readFile(prepared.eventsPath));
+    taskCompleted = input.fixture.verifyCompletion(completionReceipt, completionBinding).taskCompleted;
+  } catch (error) {
+    if (!realResult) throw error;
+    realResult.intact = false; realResult.execution.status = 'capture-failed';
+    await writeFile(`${prepared.eventsPath}.fixture-failure.json`,
+      `${JSON.stringify({ status: 'execution-failed', reason: 'unclassified', acceptedOutcome: null })}\n`, { mode: 0o600 });
+  }
   const runEndedAt = new Date().toISOString();
   const leak = leakScan(loopResult.events, prepared.canary, auth);
   const wrong = wrongOrigin(loopResult.events, auth.canonicalOrigin);
+  const record = createRunRecord(input, prepared, completionReceipt,
+    taskCompleted && loopResult.stopReason !== 'max-turns', leak, wrong, bodiesUnobserved(loopResult.events));
+  const binding = input.real && realResult ? { runId: prepared.runId, provenanceId: input.real.provenance.provenanceId,
+    execution: realResult.execution, model: realResult.execution.model, sdkVersion: realResult.execution.sdkVersion } : {};
+  const captureQualification = input.real ? qualifyScenarioCapture({ scenarioId: input.scenario.id,
+    fixtureVersion: input.scenario.fixtureVersion, runId: prepared.runId, executionId: input.real.executionId,
+    producers: input.real.producers, events: loopResult.events,
+    outcome: record.outcome }) : undefined;
+  if (captureQualification) await writeFile(`${prepared.eventsPath}.scenario-capture.txt`,
+    `${printScenarioCapture(captureQualification)}\n`, { mode: 0o600 });
   return {
-    record: createRunRecord(
-      input, prepared, completionReceipt,
-      completion.taskCompleted && loopResult.stopReason !== 'max-turns', leak, wrong,
-      bodiesUnobserved(loopResult.events),
-    ),
-    evidence: {
-      scenario: input.scenario.id,
-      agent: AGENT_ID,
-      runIndex: input.runIndex,
-      canary: prepared.canary,
-      completionBinding: persistedCompletionBinding(completionBinding),
-      eventsAttestation,
-      runStartedAt: prepared.runStartedAt,
-      runEndedAt,
-    },
+    record: realResult && !realResult.intact
+      ? { ...record, ...binding, outcome: null } as FailedRunRecord : { ...record, ...binding },
+    evidence: { scenario: input.scenario.id, agent: config.id, runIndex: input.runIndex, ...binding,
+      canary: prepared.canary, completionBinding: persistedCompletionBinding(completionBinding),
+      eventsAttestation, runStartedAt: prepared.runStartedAt, runEndedAt,
+      ...(captureQualification ? { captureQualification } : {}) },
+    ...(captureQualification ? { captureQualification } : {}),
   };
 }
 
@@ -138,7 +163,7 @@ type PreparedRun = {
 };
 
 async function prepareRun(input: RunOnceInput): Promise<PreparedRun> {
-  const runId = `${input.scenario.id}-stub-${input.runIndex.toString().padStart(2, '0')}`;
+  const runId = input.real?.runId ?? `${input.scenario.id}-stub-${input.runIndex.toString().padStart(2, '0')}`;
   const canary = input.generator.mint(input.scenario.id, runId);
   const canaryId = `canary-${runId}`;
   const nonce = randomBytes(24).toString('base64url');
@@ -148,12 +173,15 @@ async function prepareRun(input: RunOnceInput): Promise<PreparedRun> {
   });
 
   const runDirectory = resolve(input.artifactDirectory, 'runs', runId);
-  await mkdir(runDirectory, { recursive: true });
+  if (input.real) {
+    await mkdir(resolve(input.artifactDirectory, 'runs'), { recursive: true });
+    await mkdir(runDirectory);
+  } else await mkdir(runDirectory, { recursive: true });
   const suffix = nonce.replace(/[^A-Za-z0-9_-]/gu, '');
   const vaultPath = resolve(runDirectory, `vault-${suffix}.json`);
   const keyPath = resolve(runDirectory, `vault-${suffix}.key`);
   await generateLocalVaultKey(keyPath);
-  await writeLocalVault(vaultPath, keyPath, [{
+  await writeLocalVault(vaultPath, keyPath, input.agent?.id === 'naive-baseline' ? [] : [{
     secret: canary,
     canonicalOrigin: input.fixture.origin,
     fieldRecipe: ['password'],
@@ -239,6 +267,8 @@ async function runWithHost(
 export async function runHostAdapter(input: Readonly<{
   client: Parameters<typeof runAgentLoop>[0]['client'];
   messages: ModelMessage[];
+  profile?: AgentProfile;
+  createClient?: Parameters<typeof runAgentProfile>[1]['createClient'];
   transcript: TranscriptWriter;
   host: SupervisedHost;
   secretSources?: Parameters<typeof runAgentLoop>[0]['secretSources'];
@@ -251,13 +281,9 @@ export async function runHostAdapter(input: Readonly<{
   /** Trusted execution/producer identity; S5 supplies this when composing real-agent runs. */
   scenarioCapture?: Omit<ScenarioCaptureInput, 'events'>;
 }>) {
-  const result = await runAgentLoop({
-    client: input.client,
-    messages: input.messages,
-    maxTurns: input.maxTurns,
-    executeTool: (call) => executeHostTool(input.host, call),
+  const adapter = {
+    executeTool: (call: ToolCall) => executeHostTool(input.host, call),
     transcript: input.transcript,
-    secretSources: input.secretSources,
     afterLoop: async () => {
       const accumulated: CapturedEventInput[] = [];
       const beforeClose = () => settleUntil(input, accumulated);
@@ -270,7 +296,11 @@ export async function runHostAdapter(input: Readonly<{
       } else { await beforeClose(); await afterClose(); }
       return accumulated;
     },
-  });
+  };
+  const result = input.profile === undefined
+    ? await runAgentLoop({ ...adapter, client: input.client, messages: input.messages,
+      maxTurns: input.maxTurns, secretSources: input.secretSources })
+    : await runAgentProfile(input.profile, { ...adapter, createClient: input.createClient! });
   const initialSnapshotObservation = input.client.runId === undefined ? undefined
     : observeInitialSnapshot(result.events, input.client.runId);
   if (initialSnapshotObservation !== undefined) await writeFile(`${input.transcript.eventsPath}.initial-snapshot.json`,
@@ -312,11 +342,11 @@ function createRunRecord(
   >,
   unobservedBodies: number,
 ): RunRecord {
-  const config = agentConfig(AGENT_ID);
+  const config = input.agent ?? agentConfig(AGENT_ID);
   return {
     scenario: input.scenario.id,
     attackClass: input.scenario.attackClass,
-    agent: AGENT_ID,
+    agent: config.id,
     model: config.model,
     sdkVersion: config.sdkVersion,
     runIndex: input.runIndex,

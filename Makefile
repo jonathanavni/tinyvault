@@ -17,3 +17,7 @@ baseline:
 
 demo:
 	npm run demo
+
+.PHONY: eval-stub
+eval-stub:
+	npm run eval:stub
