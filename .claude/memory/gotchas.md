@@ -422,3 +422,9 @@ Example:
   timing family already asserts it (here it did). Also: `testbed/rootOfTrust.test.ts` pins SHA-256 of
   `package.json#scripts` and `Makefile`; any approved script/target change needs an owner-reviewed pin update in
   the same commit. (2026-09-08)
+- **An owner mutant "kill" must record the failing test NAME, never just a nonzero exit — and the Bash tool's shell
+  is zsh.** Two pitfalls produced six false kills in one S5 spot-check run: (1) `PIPESTATUS` is bash-only (zsh:
+  `pipestatus`), so under `set -u` the loop died after the first iteration; (2) zsh does not word-split an unquoted
+  `$FILES`, so vitest received five paths as ONE argument, printed "No test files found" and exited 1 — which looks
+  exactly like a kill. Pass file names inline (or `${=FILES}`), write vitest output to a per-mutant file, and grep
+  the `Tests N failed` line plus the failing title into the log before calling anything killed. (2026-09-08)

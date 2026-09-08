@@ -1508,3 +1508,60 @@ timeout) and drops the duplicate wall-clock assertion; the Arm D mutant (`OP_STO
 15.0 s) is killed by the timing-family assertion, which is the correct home under the serial-measurement
 convention. The over-claim corrected here: "Arm D … killed by the finalization case" → killed by the timing family.
 No timing constant was loosened; the meta-gate rule is unchanged. The register entry above stands as history.
+
+## S5 R1 — candidate `fb8816b`, three-channel review and owner dispositions (2026-09-08, owner claude)
+
+Candidate: Codex Astra (`task-mts4t4qt-n274ci`, resumed after the R1 STOP) on pin `45f1074`; 23 files; worker 43/43
+command-path mutants; six H traces within caps (max raw 126,612 B; DOM-hidden reference prompt 1,018/1,024 B). Owner
+`make test` on the candidate: first run red on two owner-gate items (root-of-trust pins for the approved script/Makefile
+change; the arms commit's wall-clock bound rejected by the meta-gate — see the correction entry above), second run
+GREEN (main 2696/0/1 pinned skip; timing 5/5, 20/20; execution gate PASS), including the real-browser S5 lifecycle case
+in `testbed/runner.browser.test.ts`. Committed as `fb8816b`. Owner mutant spot-checks in an isolated worktree (six of the
+worker's patches, all five S5 Node test files): E1-ignore-dirty, C3-second-backend-probe, E7-credit-failed-control (9
+failures), F2-allow-failed-diagnostic (25), G-drop-abort-snapshot (2), E8-suppress-live-fire — all KILLED with named
+failing tests, source restored (`owner-s5-mutants-r1.log`; an earlier run of the same script produced six false "kills"
+from a zsh word-splitting bug — recorded in gotchas, not counted).
+
+Channels (parallel, isolated worktrees, blind to each other; reports archived as `codex-adversarial-review-r1.md`,
+`claude-qa-review-r1.md`, `claude-security-review-r1.md` in the S5 evidence dir):
+
+- **Codex adversarial (Astra) — NEEDS-ATTENTION, 2 P1.** (C1) Coordinated edits to BOTH unsigned copies of a run's
+  execution metadata (stored row + manifest) promote an api-failed run into a `completed`, numeric, qualified result;
+  admission compares the two copies (`assertRunExecutionAgreement`) and never recomputes completeness/usage/stop reason
+  from attested evidence; a second probe qualified six rows labelled `capture-failed` with `attemptCount: 0` and a bogus
+  `taskFactsSha256`. (C2) E5-unqualified runs still credit positive-control cells in `diagnostic.json` because
+  `diagnosePersistedRuns` receives no E5 input and the runner checks E5 afterwards; publication is still withheld.
+  Probes: identity (12 distinct registrations across two cohorts), custody (no canary in reference requests; a synthetic
+  key in a transport exception never reached artifacts/logs), provenance (SKILL edit mid-run → source-drift), abort
+  snapshot, gates.
+- **Claude QA — NEEDS-ATTENTION, 0 P1, 3 P2, 4 P3.** Q1 every rejection path discards the caught error's identity
+  (`runner.ts:157-189`, `realAgentRun.ts:61-64`); Q1a the baseline tripwire failure is indistinguishable from a capture
+  failure and its test would pass for any throw; Q2 `runEvalEntry` gained a second parameter exposing every remaining
+  `EvalOptions` seam (undeclared; production caller passes none; profile/inventory/client cannot be overridden); Q3
+  `defaultHeaders` forces `anthropic-version`, making the §J "what the SDK actually sends" assertion tautological; Q4
+  packet inconsistency (executionId 8 vs 12); Q5 limitations printing uses only run 0; Q6 the key sweep covers only the
+  qualified path. All packet-named tests present. Eight mutants reproduced (six worker + two own key-custody probes).
+- **Claude security — no P1, 1 P2, 3 P3.** S1 the "baseline never receives a usable vault" invariant has no killing
+  test (seeding the baseline vault with the canary survives the whole tracked suite); S2 executionId length; S3 two
+  writers for the initial-snapshot sidecar; S4 `toolRegistrySha256` scraped from source text by regex. Seven mutation
+  probes; an empirical custody probe over a full cohort passed. Residuals noted: `source.dirty` recorded, not blocking
+  (matches SCHEMA); same-process live re-adjudication.
+
+**Owner dispositions (fix round 1, `fix-round-1.md`):** C1 ACCEPT — admission recomputes execution completeness,
+attempt count, usage, stop reason and the task-facts digest from the fixture-attested events (SDK request/response bodies
+are attested events) and rejects disagreement as cohort-level `provenance-mismatch`; a numeric row requires status
+`completed`/`max-turns` with recomputed completeness, and a failed-status row must carry `outcome: null`; owner
+pre-authorizes a bounded extension of `testbed/checkers/offline.ts` (S1 file). C2 ACCEPT — trusted per-run E5 statuses
+become an input to the diagnostic adjudicator; a run without `qualified` E5 gets no positive-control credit (numeric
+diagnostic preserved); `OfflineAdjudicationInput` gains an optional trusted field (SCHEMA diff proposed). Q1/Q1a ACCEPT —
+rejection reasons and failure sidecars carry the error name/message; the trusted-output tripwire gets a distinct
+diagnostic event and a test that would fail for any other throw; the key/canary sweep extends to rejection-path artifacts
+and `console.error` (Q6). Q2 ACCEPT as a declared trusted-caller seam with a runtime guard rejecting own-properties
+`profile`/`agentInventory`/`createModelClient` and a static assertion that the production eval test passes no second
+argument; recorded in the deviations and the SCHEMA diff. Q3 ACCEPT — remove `defaultHeaders`; the composed test compares
+the header the SDK actually sends to `ANTHROPIC_CLIENT_CONFIG.apiVersion`. Q4/S2 OWNER ERROR — packet §B.4 amended to
+8 characters (B.1 was already amended; 8 is correct). Q5 ACCEPT (union across runs). S1 ACCEPT — composed test asserts
+every `naive-baseline` vault has zero records and `fill_from_vault` refuses. S3 ACCEPT (single writer: the adapter's).
+S4 ACCEPT — hash the runtime frozen declaration object, not scraped source. Test-gap notes (fake host on the Node
+composed path) are recorded as residual: the real-host path is covered by the browser lifecycle case, which the owner's
+`make test` ran green. One review round used of three; round-3 P1 criteria are the packet's.

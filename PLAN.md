@@ -31,7 +31,10 @@ Astra R1 STOPPED at the canary boundary (`_` in base64url IDs); disposition: D-S
 budget). Owner `make test` on the candidate: first run red (2 owner-gate fallout items: root-of-trust pins for the approved script/
 Makefile change; the arms commit's wall-clock bound rejected by the meta-gate — both fixed, register correction + gotcha); second run
 GREEN (main 2696/0/1, timing 5/5, 20/20, execution PASS). Candidate committed on main; post-impl ladder R1 next (Codex adversarial,
-Claude QA, Claude security in parallel worktrees; prompts pre-drafted in the evidence dir). No Codex jobs running.
+Claude QA, Claude security in parallel worktrees). R1 DONE 2026-09-08: Codex 2 P1 (unsigned execution metadata admitted;
+E5-unqualified runs credit control cells), QA 0 P1/3 P2/4 P3, security 0 P1/1 P2/3 P3; owner 6/6 spot-check kills; register
+entry "S5 R1 — candidate fb8816b". Fix round 1 packet `fix-round-1.md` dispatched to Astra (write, main checkout; job id in
+the evidence breadcrumb); hold commits while it runs. Then R2 reviews; R3 is the cap with the packet's P1 criteria.
 
 `2026-09-07-d-cancel` — focus: **D-CANCEL resolved; S4 implemented, reviewed and accepted; pushed**;
 owner: claude; **state: closed** (2026-09-07); continuity relinquished for a fresh session.

@@ -171,7 +171,8 @@ as NOT RUN, never as passed or failed.
 3. Real cohorts write to a fresh directory `artifacts/eval/<cohortId>/` that must not pre-exist; nothing is
    removed. A `cohort.json` records profile, cohortId, executionId, N, selected agents/scenarios and timestamps. The
    stub path keeps its existing replace-in-place behaviour on `artifacts/eval` (D-S5-4).
-4. `executionId` for E5 is minted once per cohort (a second 12-char token, distinct from `cohortId`) and threaded to
+4. `executionId` for E5 is minted once per cohort (a second 8-character token from the same alphabet, distinct from
+   `cohortId`; §B.4 corrected 2026-09-08 after R1, the earlier "12-char" was an owner inconsistency) and threaded to
    the harness-gate coverage record and to every run's `ScenarioCaptureInput.producers.executionId`.
 
 ### C. Composing a real run (`testbed/runnerExecution.ts`, new `testbed/realAgentRun.ts`)
