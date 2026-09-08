@@ -49,8 +49,9 @@ export class EvaluationTerminatedError extends Error {
   readonly causeName?: string;
   fixtureCloseFailure?: ErrorDetails & { code?: ConstructionCode };
   persistFailed?: ErrorDetails;
-  constructor(input: RunTerminal & { attempted: number; expected: number }, cause: unknown) {
-    super(input.kind, { cause }); this.name = 'EvaluationTerminatedError';
+  /** No `cause`: the run result would carry the plaintext canary into any inspected/printed form (security R3 P3-06). */
+  constructor(input: RunTerminal & { attempted: number; expected: number }) {
+    super(input.kind); this.name = 'EvaluationTerminatedError';
     this.kind = input.kind; this.runId = input.runId;
     this.attempted = input.attempted; this.expected = input.expected;
     this.code = input.code; this.teardownCode = input.teardownCode;

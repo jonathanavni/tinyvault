@@ -307,7 +307,7 @@ async function captureWithBrowser(
         evidenceRuns.push(result.evidence);
         if (result.terminal) {
           termination = new EvaluationTerminatedError({ ...result.terminal, attempted: capturedRuns.length,
-            expected: real?.cohort.expectedRuns.length ?? scenarioRegistry.size * agents.size * sampleSize }, result);
+            expected: real?.cohort.expectedRuns.length ?? scenarioRegistry.size * agents.size * sampleSize });
           break capture;
         }
       }
