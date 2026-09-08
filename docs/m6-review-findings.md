@@ -1629,3 +1629,54 @@ acceptance commit). Declared residuals (recorded, no code): bootstrap projection
 present; digest pinned separately); `sdkVersion` bound to provenance; sibling-credit at N>1 (publication still gated);
 same-process live re-adjudication; `source.dirty` non-blocking; S4 residuals 1, 3, 4, 6, 7, 9. Two review rounds used
 of three.
+
+## S5 R3 (cap) — fix-round-2 candidate `74ca1e2`, three-channel review and the cap-round integrator disposition (2026-09-08, owner claude)
+
+Fix round 2 (`fix-round-2.md`; Astra; no STOPs) delivered G1–G5 across nine files including the new shared
+`testbed/executionEvidence.ts`; worker 10/10 mutants; owner `make test` GREEN (main 2754/0/1, timing 5/5, 20/20, PASS);
+committed `74ca1e2`. Owner spot-checks (six fix mutants, isolated worktree): all KILLED with named tests
+(`owner-s5-mutants-r3.log`). Round-3 prompts were written in defensive framing from the start; Codex ran in task mode.
+
+**All three channels converge on ONE remaining P1 (criterion b), each by an independent reproduction:**
+- **Codex (`codex-adversarial-review-r3.md`) — NO-SHIP, 2 P1 + 1 P2.** P1-1: a valid final `end_turn` body delivered
+  over a failed transport (HTTP 503 with the complete body; HTTP 200 with the body then a stream failure) is
+  `api-failed` live but satisfies offline pairing/acceptance, so relabelling both metadata copies `completed` publishes a
+  qualified scorecard (reference 3/3, zero leaks); the honest labels instead reject the whole cohort. P1-2: a quiesce
+  exception or a trusted-output tripwire failure (confirmed with the real `EvidenceLease.captureTrusted`/`finish()`)
+  after a valid final response leaves `capture-failed` with no trace in the signed events; relabelled `completed` →
+  qualified scorecard. P2: a rejected body with `usage.input_tokens = MAX_SAFE_INTEGER` makes the honest run's summed
+  usage exceed the metadata schema and rejects the cohort (availability). C3 named cases and C4 CLOSED (27 differential
+  predicate cases identical old/new; pairing, terminal controls, G5 all confirmed).
+- **Claude QA (`claude-qa-review-r3.md`) — NO-SHIP, 1 P1.** The same gap through three runtime paths (tripwire,
+  `closeAll` failure, incomplete transcript): two probes — promoted run becomes `verified` and its cell leaves
+  `missingPositiveControlCells`; a single-tripwire cohort returns a qualified scorecard. E5 does not backstop. P3s:
+  claims-table mutation sites for `P-attestation`/`P-same-observation` name `deriveLeakFromEvidence` while the real-path
+  check moved to `readVerifiedRunEvents`; `G5-disk-snapshot` is killed only off the command path. All other R2 items
+  CLOSED; 214/0 changed-file tests; timing pair 101/101 twice; gates green.
+- **Claude security (`claude-security-review-r3.md`) — NO-SHIP, 1 P1.** The same gap via an incomplete transcript
+  (`post-loop-drain` lines dropped) → `g1Promote` → `scorecard.json` written. P3s: duplicate/ordinal `requestId` guards
+  and the usage sanitiser have no killing test; `tool-rejected` is never produced and its rule would reject an honest
+  case. All R2 items CLOSED; probe A proves the live class rejects exactly what it rejected before plus the pinned
+  model; S2 S-1 holds; full Node-only suite 2520/1 green.
+
+**Owner disposition — cap reached; convention applied.** Codex has beaten the admission invariant three rounds running
+(C1 → C3/C4 → this), so the claim is narrowed before more rules are added, and the narrowing IS the fix: the fixture's
+events attestation becomes the trusted process's finalization disposition. The runner mints the attestation ONLY
+after the run finalized intact (tripwire verdict pass, transcript complete, `closeAll` clean, fixture receipt/capture
+steps succeeded) and as the LAST post-execution step; a numeric row already requires a verifying attestation, so any
+run that failed after a clean-looking provider exchange is unattested and admits only as a per-run `capture-failed`
+diagnostic (`signature-mismatch`), never numeric, never a control credit — for every variant all three channels
+reproduced (failed transport with complete body, quiesce exception, tripwire, `closeAll`, incomplete transcript, and
+the `max-turns` analogue). Narrowed claim (to be written into SCHEMA at acceptance): *offline admission binds a numeric
+row to fixture-attested events that the trusted runner attests only after successful finalization, attested provider
+request/response pairing under the live acceptance rules, the registry-recomputed task facts and the fixture receipt;
+the unsigned execution metadata is checked for consistency with that evidence and is never a source of completeness.*
+This is the cap-round integrator fix (`cap-round-integrator-fix.md`: H1 attestation-after-finalization with the six
+reproductions as red-first command tests and the "attest regardless" mutant; H2 usage-aggregate saturation; H3 the
+security test-only items), verified by an integrator confirmation pass — every channel's exact reaching input re-run
+through `runEvalEntry`, owner `make test`, owner mutant reproduction — NOT a fourth review round. Recorded residuals:
+QA claims-site drift (owner claims-table integration at acceptance); `G5-disk-snapshot` helper-path kill;
+`tool-rejected` unproduced; bootstrap projection-equality; `sdkVersion` provenance-bound; N>1 sibling credit;
+`source.dirty` non-blocking; same-process live re-adjudication; the transcript remains unattested (its completeness
+is now folded into the attestation decision, not signed itself); S4 residuals 1, 3, 4, 6, 7, 9. Three review rounds
+used; no fourth review round will be opened.

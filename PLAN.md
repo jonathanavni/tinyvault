@@ -41,8 +41,12 @@ mode after three classifier-flagged `adversarial-review` failures) NO-SHIP 2 P1 
 early-return/TOCTOU bypass of the recomputation); QA 0 P1/1 P2/3 P3; security PASS 0 P1/0 P2/4 P3; owner 6/6 spot-check kills;
 register entry "S5 R2". Fix round 2 (`fix-round-2.md`, the LAST fix round) DELIVERED 2026-09-08 without STOPs: shared live
 acceptance predicate, requestId pairing, terminal-state rules, single verified snapshot, G3–G5 tests; 10/10 mutants; owner `make test`
-GREEN (main 2754/0/1, timing 5/5, 20/20, PASS); committed on main. R3 = capped review (three channels, defensive framing, P1 only per
-the packet's criteria); then acceptance + owner docs integration (SCHEMA/phase/M6 plan diffs from the worker's proposed-docs.patch).
+GREEN (main 2754/0/1, timing 5/5, 20/20, PASS); committed `74ca1e2`. R3 (cap) DONE 2026-09-08: all three channels converge on ONE
+remaining P1 (a run failing after a clean provider exchange — failed transport, tripwire, closeAll, incomplete transcript — is
+promotable because finalization lives only in unsigned metadata); owner 6/6 spot-check kills; register entry "S5 R3 (cap)".
+Disposition: claim narrowed + cap-round INTEGRATOR FIX (`cap-round-integrator-fix.md`): attestation minted only after intact
+finalization, so unattested ⇒ never numeric; dispatched to Astra; then owner make test + confirmation pass (no fourth review round),
+then acceptance + owner docs integration (SCHEMA/phase/M6 plan diffs, claims-site update).
 
 `2026-09-07-d-cancel` — focus: **D-CANCEL resolved; S4 implemented, reviewed and accepted; pushed**;
 owner: claude; **state: closed** (2026-09-07); continuity relinquished for a fresh session.
