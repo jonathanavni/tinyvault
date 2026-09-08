@@ -238,6 +238,14 @@ STOP conditions hit.
 - (post-impl R2, recorded) The two non-terminal `rejectComparison` callers (`runner.ts:205,213`) keep today's write-first ordering
   (diagnostic/qualification files before stderr emission); only the terminal path emits first and records a write failure as a
   secondary reason (fix round 2, F9). Pre-existing behaviour, out of this packet's scope.
+- (post-impl R3 cap, recorded) F8's `stat` guard closes the attest-site read only; the real-run body already reads and parses
+  the events file at `realAgentRun.ts:98` (untouched, pre-existing), so a file too large to read there fails non-terminally.
+  Security R1 P3-04 is closed for the attest site; any bound on the first read belongs to AM12/AM11 ownership (security R3 P3-05).
+- (post-impl R3 cap, recorded) M6 kills by an incidental crash of the mutated branch rather than by a restored swallow; W9
+  is discriminating against a swallow regardless (six registrations / six-row report would fail its pins) (security R3 P3-08).
+- (post-impl R3 cap, recorded) `causeName`, `teardown-failed`, `persist-failed` and `diagnostic-write-failed` interpolate a raw
+  host-sourced `error.name`, no wider than the pre-existing `formatExecutionFailure`; D4's single-marking-site rule is a
+  convention checked by W3d, not a construction (security R3 residual risk).
 
 ## 10. Sol pre-implementation R1 dispositions (owner, 2026-09-08)
 
@@ -280,6 +288,10 @@ STOP conditions hit.
 | P3-01 `teardown-failed: <code>` for non-coded rejections | Accepted. | ABSORBED — `<code-or-name>`. |
 
 ## 13. Post-implementation ladder — what shipped beyond §3–§5 (owner, 2026-09-08)
+
+- **Cap-round integrator correction** (security R3 P3-06): `EvaluationTerminatedError` no longer takes a `cause` — the run
+  result would have carried the plaintext canary into any `util.inspect`/printed form; the trusted payload travels only in the
+  typed fields. Unit pin: no own `cause` property and no `[cause]` in the inspected form.
 
 - **Fix round 1** (Codex R1 P1; QA/security R1 P3s): `RunTerminal` / `EvaluationTerminatedError` gained `scenarioCaptureWriteFailed?`
   and `causeName?`; the `.scenario-capture.txt` write is secondary only under a terminal result (best-effort

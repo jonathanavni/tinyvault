@@ -1807,3 +1807,30 @@ no gate added; companion S5-return `evidence-oversized` packet before the post-A
 512 KiB; accept the disclosed frame-ceiling side effect; sequence the companion packet first.
 
 **M6-AM12 ADOPTED by the user (2026-09-08, "I agree with your recommendations, let's proceed")**: 1 MiB raw / 2 MiB frame / five explicit bridge scalar bounds / item-3 amendment; frame-ceiling side effect accepted; companion `evidence-oversized` packet first. Implementation and the P-v2 claim-row packet follow on the full ladder; nothing implemented at adoption.
+
+## S6 companion slice — explicit `evidence-oversized` diagnostic — ACCEPTED at the round-3 cap, landed `a666b13` (2026-09-08, owner claude)
+
+**Packet.** `docs/m6-s6-oversize-diagnostic-packet.md` (v4.3): three Sol pre-implementation rounds (5/4/1 P1) closed at the cap by
+narrowing to a single runner-level guard in `runOnce`; no fixture transport, testkit, container, protocol or offline file changed.
+**Implementation.** Astra on `codex/s6-oversize-diagnostic`: three correct STOPs (W3/M1d pairing; wrapper ownership line; W3b/W7
+offline-diagnostic expectation), each resolved by a packet correction, then `80ab225` (+288/−41): WeakSet-branded
+`EvidenceOversizedError` / `markClosedProject` / `EvaluationTerminatedError`; runner guard before any `attestEvents`; predicate-only
+classification; trusted `RunDiagnostic` row constructed in `runOnce`; stop-before-next-run with partial-bundle persistence and
+teardown precedence; cohort reasons `evidence-oversized: <runId>` / `execution-failed: <name>: <code|project-closed>` +
+`cohort-incomplete: k of N` + secondary reasons. Witnesses W1a, W1b, W2–W7; mutants M1, M1c, M1d, M2, M3, M4.
+**Post-implementation ladder (three channels, three rounds).** R1: Codex 1 P1 (scenario-capture write could replace the terminal
+result), QA 0 P1/P2 + 4 P3, security 0 P1/P2 + 4 P3 → fix round 1 `570c731` (F1, F2, F4, F5, F8; W8–W10; M5–M7). R2: Codex 1 P1
+(`rejectComparison` wrote artifacts before emitting/throwing on the terminal path), QA all R1 fixes FIXED + 3 P3 → fix round 2
+`c59fbbf` (F9 terminal-only emit-first; F10, F11; W11/W11b; M8, M9). R3 (cap, P1 criteria up front): Codex PASS — no P1, no
+material findings; security 0 P1/P2 + 4 P3 → cap-round integrator correction `e7ad116` (no `cause` on the terminal error — it
+carried the plaintext canary into inspected forms). Owner `make test` after every delivery: 2812→2820→2827→2828 total, 0 failed,
+1 pending, timing 5/5 and 20/20, execution PASS; owner reproduced M1, M3, M1d, M5, M8 with hash-identical restores.
+**Declared residuals (carried).** (1) `failureReason` / sidecars are runner-authored, unattested diagnostic data — tampering can change
+the displayed label, never admission, N, credit or aggregation (W6). (2) Offline replay of an early-terminated partial bundle is a
+cohort-level inventory failure without per-run reasons. (3) `project-closed` reports the initiating code, itself possibly
+non-unique. (4) `capturePersistedRuns` propagates the raw terminal error (fail-closed). (5) A hostile page/model inflating a run's
+evidence past the cap halts the cohort at that run (bounded). (6) Partial-bundle persistence is guaranteed only for the two
+terminal kinds. (7) Non-terminal `rejectComparison` callers keep write-first ordering. (8) F8's `stat` guard closes the attest-site
+read only; the real-run body's own read (`realAgentRun.ts:98`, untouched) is unbounded — AM12/AM11 ownership. (9) M6 kills by an
+incidental crash; W9 is discriminating regardless. (10) Raw host-sourced `error.name` interpolated in secondary reasons; D4's
+single-marking-site rule is a convention checked by W3d. Evidence: `artifacts/review-evidence/tinyvault-m6-s6-acceptance-20260908/oversize-slice/` (local).
