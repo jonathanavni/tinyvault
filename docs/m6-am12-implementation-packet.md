@@ -21,9 +21,8 @@ mutants at the new values and kill one new mutant per new bound with masking-res
 
 ## 2. Branch / worktree
 
-`codex/m6-am12-caps`, base = **`<POST-COMPANION SHA — TO BE PINNED BY THE OWNER; STOP if this placeholder is still present>`**
-(main after `docs/m6-s6-oversize-diagnostic-packet.md` has landed and passed its acceptance ladder). The same SHA is repeated in
-the dispatch prompt. Separate worktree; no other write job in it.
+`codex/m6-am12-caps`, base = **`9ba93922c9951667881b24fbeeb1948bcb829966`** (`9ba9392`, main after the companion slice landed at `a666b13` and its acceptance
+register entry). The same SHA is repeated in the dispatch prompt. Separate worktree; no other write job in it.
 
 ## 3. Required reading (in order)
 
@@ -223,7 +222,7 @@ is a disclosed diagnostic change, not an admission change.
 | P2-02 V5 timing scope | Accepted. | ABSORBED — complete-call timing, three runs, headroom. |
 | P2-03 V7 counters not on the result surface | Confirmed (`leakScan.ts:23-29`). | ABSORBED — test-only instrumentation; forbidden surfaces named. |
 | B docs/README stale | Confirmed. | ABSORBED — reconciled by the owner. |
-| H10 base SHA after companion | Accepted. | PENDING — §2 carries an explicit STOP placeholder until the owner pins the post-companion SHA (Sol R2 P1-04). |
+| H10 base SHA after companion | Accepted. | RESOLVED — §2 pinned to `9ba9392`. |
 
 ## 12. Sol pre-implementation R2 dispositions (owner, 2026-09-08)
 
@@ -232,7 +231,7 @@ is a disclosed diagnostic change, not an admission change.
 | P1-01 V4 snapshots after close | Confirmed: every witness's final call is `browser_close_session` (k=8/12; snapshots at 2,5 / 2,6,9). | ABSORBED — V4 schedule keeps the original close at response 15. |
 | P1-02 V6 private-function proof | Confirmed (`offline.ts:117,222,317` private; only `completionVerifierFactory` is a seam). | ABSORBED — external oracle (readFile spy + verifier-factory ordering); `offline.ts` stays unowned. |
 | P1-03 companion W1a not repinned | Confirmed (`realAgentRun.test.ts:439-441` has no filler). | ABSORBED — V9a. |
-| P1-04 base SHA placeholder | Confirmed. | PENDING by design — explicit STOP placeholder in §2; §11 H10 row corrected. |
+| P1-04 base SHA placeholder | Confirmed. | RESOLVED — pinned to `9ba9392` after the companion slice landed. |
 | P2 V6 process-history-sensitive memory | Accepted. | ABSORBED — child process, baseline/peak/interval/sample count. |
 | P2 V7 seam unnamed | Accepted; `createEventWork` is exported (`leakDecoders.ts:50`) and called per event (`leakScan.ts:93`). | ABSORBED — named file and partial module mock. |
 | P2 V13 procedure | Accepted. | ABSORBED — `/usr/bin/time -l`, three runs, medians. |
