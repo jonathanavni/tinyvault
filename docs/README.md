@@ -115,12 +115,12 @@ Active planning docs:
   `P-same-observation` name `readVerifiedRunEvents`; applied by Astra and landed as `dfb8ddb`.
 - `m6-am12-events-cap-amendment.md` — M6-AM12 (v4, **ADOPTED 2026-09-08**): raw signed-events cap 131,072 → 1,048,576, frame
   ceiling 262,144 → 2,097,152, explicit bounds for five bridge scalars, AM11 item 3 amended; three-round paper cap (Sol R1,
-  Opus 5 R2, Sol R3) with dispositions and residuals. Implementation pending (`m6-am12-implementation-packet.md`).
+  Opus 5 R2, Sol R3) with dispositions and residuals. Implemented on `codex/m6-am12-caps`, ACCEPTED at the round-3 cap and merged `623a8b7` (see `m6-review-findings.md`).
 - `m6-s6-oversize-diagnostic-packet.md` — S6 companion slice (v4.3): explicit `evidence-oversized` reason at trusted run
   finalization and stop-before-next-run; three-round pre-implementation paper cap, Astra implementation, three-round
   post-implementation ladder; **landed** `a666b13` with ten declared residuals.
 - `m6-am12-implementation-packet.md` — Astra implementation handoff for the adopted M6-AM12 (values, five bridge scalar bounds,
   item-3 flips, certifying witness, Docker exact-cap gate, P-v2 claim-row packet, plan §4.3 text). Sequenced after the
-  oversize diagnostic packet. Sol pre-implementation review pending.
+  oversize diagnostic packet. Sol pre-implementation review done (three rounds); implemented and merged `623a8b7`.
 - `archive/implementation-plan-superseded.md` — earlier orphaned Phase 0 draft, consolidated into
   `phase-0-plan.md` (provenance only)

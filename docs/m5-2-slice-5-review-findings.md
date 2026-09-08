@@ -1447,3 +1447,16 @@ no workers, reviewers, mutations or tests are running. Only continuity documents
 Not run during wrapup: repeated test/review gates, because source/tests are unchanged and their exact
 accepted results are Entry10. Verification: documentation diff hygiene and source-diff exclusion.
 Deviations From Handoff: none. No user-global memory was changed.
+
+
+### M6-AM12 historical-command mapping (owner-appended 2026-09-08 at merge `623a8b7`; prepared by the AM12 implementer)
+
+AM12 historical-command mapping (2026-09-08; existing evidence and lines 939–959, 1207–1232 retained): substitute these current selectors/guards when reproducing the old cap-bound mutations on the AM12 candidate. Historical logs continue to certify their historical values, not the AM12 candidate.
+
+| Historical selector / mutant | Current selector / guard |
+| --- | --- |
+| `accepts exactly 131072 raw bytes and refuses 131073 before signing` (raw producer) | `accepts exactly 1048576 raw bytes and refuses 1048577 before signing`; remove `eventsBytes.byteLength > MAX_EVENTS_BYTES` producer guard |
+| `direct attestation verifier refuses independently signed 131073 raw bytes with a 131072 positive` (raw consumer) | `direct attestation verifier refuses independently signed 1048577 raw bytes with a 1048576 positive`; remove the verifier's `eventsBytes.byteLength > MAX_EVENTS_BYTES` guard |
+| `direct shared fixture accepts 131072 bytes and consumes a separate 131073 refusal before signer entry` (fixture cap; consume-after-success) | `direct shared fixture accepts 1048576 bytes and consumes a separate 1048577 refusal before signer entry`; fixture guard uses `MAX_EVENTS_BYTES`; the consume-after-success mutation must retain that imported-cap guard while moving only consumption |
+
+Use `npx vitest run testbed/fixtures/shared/eventsDigest.test.ts -t '<current selector>'` for the two codec selectors and `npx vitest run testbed/docker/slice5.attestation.test.ts -t '<current selector>'` for the fixture selector. For each experiment retain the full native report, isolated mutation, uncommitted-file snapshot/hash, exact restoration and subsequent green result. No existing register claim or evidence file is overwritten.
