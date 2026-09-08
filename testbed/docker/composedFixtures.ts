@@ -1,5 +1,5 @@
-import { markClosedProject } from '../evidenceOversize';
 // Private administrative capabilities stay within this trusted client and its exposure registry.
+import { markClosedProject } from '../evidenceOversize';
 import { CompletionVerifier } from '../completion';
 import type { FixtureSet } from '../fixtures';
 import type { FixtureRunSetup, FixtureTransport } from '../fixtures/transport';

@@ -925,3 +925,73 @@ it.each([false, true])('W7 message cannot mint or erase the oversize brand; genu
   expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(genuine ? 1 : 6);
   if (genuine) expect(qualification.reasons).toEqual([`evidence-oversized: ${rows[0].runId}`, 'cohort-incomplete: 1 of 6 runs attempted']);
 });
+
+it.each([false, true])('W8 terminal scenario-capture write failure preserves the partial cohort; secondary fails=%s', async secondaryFails => {
+  const h = await command(); configureOversize(h);
+  const registers = Object.values(h.fixtures).map(fixture => vi.spyOn(fixture, 'registerRun'));
+  const fs = await import('node:fs/promises'); const original = fs.writeFile;
+  const writes = vi.spyOn(fs, 'writeFile').mockImplementation(async (path, ...args) => {
+    if (String(path).endsWith('.scenario-capture.txt') || (secondaryFails && String(path).endsWith('.scenario-capture-error.json'))) {
+      throw new TypeError('scenario capture denied');
+    }
+    return original(path, ...args);
+  });
+  await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
+  const { directory, report, qualification } = await h.diagnostic();
+  expect(report.runs).toHaveLength(1);
+  const runId = report.runs[0].runId;
+  expect(qualification.reasons[0]).toBe(`evidence-oversized: ${runId}`);
+  expect(qualification.reasons).toContain(`scenario-capture-write-failed: ${runId}`);
+  expect(qualification.reasons).toContain('cohort-incomplete: 1 of 6 runs attempted');
+  expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(1);
+  const rows = JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'));
+  expect(rows).toHaveLength(1); expect(rows[0]).toMatchObject({ runId, outcome: null, failureReason: 'evidence-oversized' });
+  const secondary = `${rows[0].eventsPath}.scenario-capture-error.json`;
+  expect(writes.mock.calls.find(([path]) => path === secondary)?.[2]).toEqual({ mode: 0o600 });
+  if (!secondaryFails) expect(JSON.parse(await readFile(secondary, 'utf8')))
+    .toEqual({ sidecarError: { name: 'TypeError', message: 'scenario capture denied' } });
+});
+it('W8 non-terminal scenario-capture write failure retains loud propagation', async () => {
+  const h = await command();
+  const fs = await import('node:fs/promises'); const original = fs.writeFile;
+  vi.spyOn(fs, 'writeFile').mockImplementation(async (path, ...args) => {
+    if (String(path).endsWith('.scenario-capture.txt')) throw new TypeError('scenario capture denied');
+    return original(path, ...args);
+  });
+  await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
+  const { report, qualification } = await h.diagnostic();
+  expect(report.runs).toEqual([]);
+  expect(qualification.reasons).toEqual(['execution-failed: TypeError: scenario capture denied']);
+  expect(h.setups.size).toBe(1);
+});
+it('W9 non-terminal fixture-failure sidecar rejection retains the generic cohort failure', async () => {
+  const h = await command();
+  h.fixtures['benign-login']!.attestEvents = async () => { throw new Error('unmarked finalization failure'); };
+  const registers = Object.values(h.fixtures).map(fixture => vi.spyOn(fixture, 'registerRun'));
+  const closes = Object.values(h.fixtures).map(fixture => vi.spyOn(fixture, 'close'));
+  const fs = await import('node:fs/promises'); const original = fs.writeFile;
+  vi.spyOn(fs, 'writeFile').mockImplementation(async (path, ...args) => {
+    if (String(path).endsWith('.fixture-failure.json')) throw new TypeError('fixture sidecar denied');
+    return original(path, ...args);
+  });
+  await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
+  const { directory, report, qualification } = await h.diagnostic();
+  expect(report.runs).toEqual([]); expect(report.verifiedRuns).toEqual([]);
+  expect(qualification.reasons).toEqual(['execution-failed: TypeError: fixture sidecar denied']);
+  expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(1);
+  for (const close of closes) expect(close).toHaveBeenCalledOnce();
+  await expect(access(join(directory, 'runs.captured.json'))).rejects.toThrow();
+});
+it('W10 marked plain error cannot supply construction codes to qualification', async () => {
+  const { markClosedProject } = await import('./evidenceOversize');
+  const h = await command();
+  const error = Object.assign(new Error('initiator'), { code: 'attacker-string', teardownCode: 'attacker-teardown' });
+  markClosedProject(error);
+  h.fixtures['benign-login']!.attestEvents = async () => { throw error; };
+  await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
+  const { report, qualification } = await h.diagnostic();
+  expect(qualification.reasons).toEqual(['execution-failed: Error: project-closed', 'cohort-incomplete: 1 of 6 runs attempted']);
+  expect(JSON.stringify(qualification)).not.toContain('attacker');
+  expect(JSON.stringify(qualification)).not.toContain('undefined');
+  expect(report.runs).toHaveLength(1); expect(h.setups.size).toBe(1);
+});

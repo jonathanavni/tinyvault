@@ -499,8 +499,9 @@ function formatExecutionFailure(reason: string, error: unknown): string {
 
 function terminationReasons(error: EvaluationTerminatedError): string[] {
   const reasons = [error.kind === 'evidence-oversized' ? `evidence-oversized: ${error.runId}`
-    : `execution-failed: ComposedConstructionError: ${error.code}`,
+    : `execution-failed: ${error.causeName ?? 'Error'}: ${error.code ?? 'project-closed'}`,
   `cohort-incomplete: ${error.attempted} of ${error.expected} runs attempted`];
+  if (error.scenarioCaptureWriteFailed) reasons.push(`scenario-capture-write-failed: ${error.runId}`);
   if (error.sidecarWriteFailed) reasons.push(`sidecar-write-failed: ${error.runId}`);
   if (error.fixtureCloseFailure) reasons.push(`teardown-failed: ${error.fixtureCloseFailure.code ?? error.fixtureCloseFailure.name}`);
   if (error.persistFailed) reasons.push(`persist-failed: ${error.persistFailed.name}`);

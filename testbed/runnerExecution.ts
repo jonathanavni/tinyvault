@@ -1,11 +1,11 @@
 import { EvidenceOversizedError, isEvidenceOversized, isClosedProjectError, type RunTerminal } from './evidenceOversize';
 import { MAX_EVENTS_BYTES } from './docker/protocol';
-import type { ConstructionCode } from './docker/exec';
+import { ComposedConstructionError } from './docker/exec';
 import { executeRealAgentRun, executionErrorDetails, type CreateModelClient } from './realAgentRun';
 import type { EvaluationProvenance, RunExecutionMetadata } from './evaluationProvenance';
 import { runAgentProfile, type AgentProfile } from '../src/agents/prompt';
 import { randomBytes } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { runAgentLoop, scriptWasTruncated, type ModelMessage, type ToolCall,
   type ToolExecution } from '../src/agents/loop';
@@ -100,6 +100,9 @@ export async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
     const capture = await input.fixture.captureRequests(prepared.runId);
     await persistFixtureCapture(input.artifactDirectory, prepared.runId, capture);
     const attest = async () => {
+      const { size } = await stat(prepared.eventsPath);
+      if (size > MAX_EVENTS_BYTES) throw new EvidenceOversizedError({
+        runId: prepared.runId, byteLength: size, cap: MAX_EVENTS_BYTES });
       const bytes = await readFile(prepared.eventsPath);
       if (bytes.byteLength > MAX_EVENTS_BYTES) throw new EvidenceOversizedError({
         runId: prepared.runId, byteLength: bytes.byteLength, cap: MAX_EVENTS_BYTES });
@@ -118,9 +121,10 @@ export async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
     const oversized = isEvidenceOversized(error);
     const reason = oversized ? 'evidence-oversized' : 'unclassified';
     if (oversized || isClosedProjectError(error)) {
-      const codes = error as { code?: ConstructionCode; teardownCode?: ConstructionCode };
+      const codes = error instanceof ComposedConstructionError ? error : undefined;
       terminal = { kind: oversized ? 'evidence-oversized' : 'project-closed', runId: prepared.runId,
-        code: codes.code, teardownCode: codes.teardownCode, sidecarWriteFailed: false,
+        code: codes?.code, teardownCode: codes?.teardownCode, sidecarWriteFailed: false,
+        causeName: error instanceof Error ? error.name : 'Error',
         row: { scenario: input.scenario.id, agent: config.id, runIndex: input.runIndex, runId: prepared.runId,
           artifacts: { eventsPath: prepared.eventsPath, transcriptPath: prepared.transcriptPath,
             fixtureCapturePath: resolve(input.artifactDirectory, 'fixture-captures', `${prepared.runId}.requests`) },
@@ -131,7 +135,8 @@ export async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
         `${JSON.stringify({ status: 'execution-failed', reason, acceptedOutcome: null,
           ...(oversized ? { byteLength: error.byteLength, cap: error.cap } : {}) })}\n`, { mode: 0o600 });
     } catch (sidecarError) {
-      if (terminal) terminal.sidecarWriteFailed = true;
+      if (!terminal) throw sidecarError;
+      terminal.sidecarWriteFailed = true;
       await writeFile(`${prepared.eventsPath}.fixture-failure-error.json`,
         `${JSON.stringify({ sidecarError: executionErrorDetails(sidecarError) })}\n`, { mode: 0o600 }).catch(() => undefined);
     }
@@ -147,8 +152,16 @@ export async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
     fixtureVersion: input.scenario.fixtureVersion, runId: prepared.runId, executionId: input.real.executionId,
     producers: input.real.producers, events: loopResult.events,
     outcome: record.outcome }) : undefined;
-  if (captureQualification) await writeFile(`${prepared.eventsPath}.scenario-capture.txt`,
-    `${printScenarioCapture(captureQualification)}\n`, { mode: 0o600 });
+  if (captureQualification) {
+    try { await writeFile(`${prepared.eventsPath}.scenario-capture.txt`,
+      `${printScenarioCapture(captureQualification)}\n`, { mode: 0o600 }); }
+    catch (error) {
+      if (!terminal) throw error;
+      terminal.scenarioCaptureWriteFailed = true;
+      await writeFile(`${prepared.eventsPath}.scenario-capture-error.json`,
+        `${JSON.stringify({ sidecarError: executionErrorDetails(error) })}\n`, { mode: 0o600 }).catch(() => undefined);
+    }
+  }
   return {
     ...(terminal ? { terminal } : {}),
     record: realResult && !realResult.intact

@@ -33,6 +33,7 @@ export type RunTerminal = {
   kind: 'evidence-oversized' | 'project-closed'; runId: string;
   code?: ConstructionCode; teardownCode?: ConstructionCode;
   row: RunDiagnostic; sidecarWriteFailed: boolean;
+  scenarioCaptureWriteFailed?: boolean; causeName?: string;
 };
 type ErrorDetails = ReturnType<typeof executionErrorDetails>;
 export class EvaluationTerminatedError extends Error {
@@ -44,6 +45,8 @@ export class EvaluationTerminatedError extends Error {
   readonly teardownCode?: ConstructionCode;
   readonly row: RunDiagnostic;
   readonly sidecarWriteFailed: boolean;
+  readonly scenarioCaptureWriteFailed?: boolean;
+  readonly causeName?: string;
   fixtureCloseFailure?: ErrorDetails & { code?: ConstructionCode };
   persistFailed?: ErrorDetails;
   constructor(input: RunTerminal & { attempted: number; expected: number }, cause: unknown) {
@@ -52,6 +55,7 @@ export class EvaluationTerminatedError extends Error {
     this.attempted = input.attempted; this.expected = input.expected;
     this.code = input.code; this.teardownCode = input.teardownCode;
     this.row = input.row; this.sidecarWriteFailed = input.sidecarWriteFailed;
+    this.scenarioCaptureWriteFailed = input.scenarioCaptureWriteFailed; this.causeName = input.causeName;
     terminatedErrors.add(this);
   }
 }
