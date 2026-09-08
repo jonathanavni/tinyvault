@@ -444,3 +444,7 @@ Example:
   and poll `<output>/summary.json` with a re-arming watcher. (2026-09-08)
 - **Codex-sandbox `make test` on this repo reliably shows ~70 failures** (loopback `listen EPERM`, Chromium mach-port denial,
   occasionally a container-startup readiness `vi.waitFor`) — all host-only; the owner rerun is the gate. (2026-09-08)
+
+- **Measurement runs (gate cost, timing partitions) must have the host to themselves.** A Codex `task` that runs `make test` in its sandbox, an Opus review helper, or an owner gate running concurrently contaminates wall/RSS numbers and pushes the statistical timing-2 partition toward rejection. Sequence: measure first on an idle host, then dispatch. Preserve every `.vitest/*.json` after each run — a later run overwrites them and a red becomes unattributable (happened once: V13 candidate run 2, 2026-09-08).
+- **`scripts/claude-review.mjs` needs an unambiguous first status line.** A reviewer that writes `## Status: PASS | NEEDS-ATTENTION` followed by the verdict makes the helper report `Missing or ambiguous review status` and skip `report.md`; the full text is still in `events.jsonl` (last assistant text block) — recover it rather than re-dispatching.
+- **A test at >90% of Vitest's 5,000 ms default timeout is a latent clean-clone red.** Check `.vitest/main.json` durations after a slice lands (W6 in `runner.realAgent.test.ts` ran 4.83–4.94 s with no explicit timeout while every neighbour had `30_000`); the implementer's sandbox timeout was the early warning.
