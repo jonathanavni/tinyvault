@@ -111,5 +111,9 @@ Active planning docs:
   trusted Git enumeration, composed collection/admission and command-path proof before published comparisons; **A7**'s doc half was corrected at that assessment. The rest
   were dispositioned as M6 planning inputs or existing declared residuals. Carries an
   integrator note recording what in it is superseded. **Append-only.**
+- `m6-s6-claims-amendment.md` — S6 packet (Sol draft, owner-verified) closing S5 residual (1): `P-attestation` /
+  `P-same-observation` name `readVerifiedRunEvents`; applied by Astra and landed as `dfb8ddb`.
+- `m6-am12-events-cap-amendment.md` — **DRAFT** M6-AM12: raise the raw signed-events cap after the S6 pilot overflowed it
+  (132,056 vs 131,072 bytes). Sol R1 NO-SHIP absorbed in v2; Opus 5 R2 pending; needs user approval before any implementation.
 - `archive/implementation-plan-superseded.md` — earlier orphaned Phase 0 draft, consolidated into
   `phase-0-plan.md` (provenance only)

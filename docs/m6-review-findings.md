@@ -1744,3 +1744,66 @@ cold path. (9) The transcript is not attested; its completeness is folded into t
 case. (11) Model-controlled text can reach the bounded `error.message` via the unknown-tool path (not model-visible,
 swept). (12) S4 residuals 1, 3, 4, 6, 7, 9 unchanged; S4 residuals 2, 5, 8 CLOSED in S5. Not run and not claimed:
 Docker/clean-clone acceptance, live `make eval` / `make baseline`, six-cell pilot, E9/E10 recording — S6.
+
+## S6 — E9 acceptance ladder attempt 1, residual (1) closure, AM12 drafting (2026-09-08, owner claude)
+
+**E9 steps 1–2 PASS on the exact candidate `20f8e00`.** Literal clean clone → `npm ci` → `make browsers` → `make test`:
+2792 total / 2791 passed / 0 failed / 1 pending (the pinned eval skip), timing 5/5 and 20/20, execution PASS — identical to the
+S5 acceptance numbers. `make test-docker` (user-authorized): 6/6, execution PASS. Node v24.19.0, npm 11.17.0, Docker 29.6.2.
+
+**E9 step 3 — six-cell pilot FAILED; ladder STOPPED (user pre-authorized pilot → baseline N10 → eval N10; only the pilot
+ran).** `TINYVAULT_N=1 make eval`, profile real-comparison, Haiku 4.5, cohort `z6pSgtfd`. One run started
+(`benign-login-control` / `tinyvault-ref`) and the agent completed the task in 8 serial turns (one tool call per response; POST
+`/login` → GET `/success`; `loop-complete`, `post-loop-drain`; finalize, receipt and capture succeeded). Its raw `events.json` is
+**132,056 bytes against the frozen 131,072 cap** (984 over). The public composed transport rejected the buffer locally before any
+bridge frame (`composedFixtures.ts:89-95`), mapped it to `bridge-protocol` and closed the project; `runOnce` swallowed the
+finalization error into the generic `execution-failed / unclassified` sidecar; the next run's `registerRun` hit the closed fixture
+and threw `bridge-closed`, the cohort-level reason recorded. The run is retained intact and unqualified; the five other cells never
+ran. Per plan §4.2 / AM11 item 3 the oversized real pilot stops progression and cannot be dropped, resampled or re-capped
+silently. Byte accounting (exact pretty-file contribution): the two per-turn cumulative context views are 93,470 bytes (70.8 %).
+The comparable actual-SDK serial-1024 benign witness is 136,179 bytes (S2 manifest), i.e. the real trace is slightly smaller; the
+model ran serially, so the AM11 serial observations (all of which overflow the cap) are the operative prediction, not the adopted
+batched witnesses. Evidence: `artifacts/review-evidence/tinyvault-m6-s6-acceptance-20260908/` (local; `OWNER-BREADCRUMB.md`,
+`e9-step1-clean-clone/`, `e9-step2-docker/`, `e9-step3-pilot/` with the whole cohort directory). No key material in any retained
+log. Live spend: one run (≈ 15 K input / 1 K output tokens). E10 recording NOT obtained.
+
+**S5 residual (1) CLOSED — `dfb8ddb`.** Sol drafted the claims-row amendment packet (`docs/m6-s6-claims-amendment.md`,
+owner-verified line by line); Astra applied it in an isolated worktree (`codex/s6-claims-amendment`, +48/−6 over four files; new
+top-level real-profile test `P-same-observation command reads a valid real-profile event snapshot once and shares it with outcome
+consumers`; both rows now name `readVerifiedRunEvents`; no SCHEMA span edit). Deviations From Handoff: none. Both mutant kills
+(second read → "expected 2 to be 1"; digest bypass → `provenance-mismatch`) were reproduced by the owner with `offline.ts` restored
+byte-for-byte (sha256 02732a2e…). Owner `make test` on the worktree: 2793 / 2792 / 0 / 1, timing 5/5 and 20/20, execution PASS.
+Astra's sandbox showed 70 loopback/Chromium failures and one container-startup readiness failure; all pass on the host.
+Evidence: `…/residual-1-claims-amendment/`. The S5 residual list should be read with (1) closed.
+
+**M6-AM12 (raw signed-events cap) — DRAFT, not adopted.** Owner-authored `docs/m6-am12-events-cap-amendment.md`. Paper R1 (Sol,
+`am12-sol-r1.md`): NO-SHIP, 4 P1 / 5 P2 / 1 P3 — the v1 container-refusal mechanism was false (P1-01), AM11 item 3 cannot be
+preserved unamended (P1-02), the "real-envelope factor" compared non-comparable observations (P1-03), and raising the shared
+`MAX_PAYLOAD_BYTES` would widen artifact-string validation (P1-04). All owner-verified against code and absorbed in v2 (§10):
+corrected failure path; explicit item-3 amendment (known serial witnesses become fit/attested, the 16-turn maximum-output trace
+stays the rejection witness); four non-comparable observations instead of projections; a decoupled 262,144-byte artifact-scalar
+bound with the frame-ceiling side effect disclosed; implementation gates (exact-cap Docker attest under the unchanged 5 s
+timer, 60-run offline bound, `scanTruncated` reporting); categorized inventory; full E9 rerun ladder; admissibility disclosure.
+R2 (fresh Claude Opus 5, plan channel, `scripts/claude-review.mjs`) dispatched 10:03 CDT against a frozen worktree at `dfb8ddb`.
+Open for the user: 1 MiB vs 512 KiB; frame-ceiling side effect; `scanTruncated` policy; sequencing of the companion S5-return
+diagnostic packet (`evidence-oversized`) before the post-AM12 pilot.
+
+**M6-AM12 paper ladder closed at the three-round cap (2026-09-08, owner claude).** R2 fresh Claude Opus 5 (plan channel,
+`scripts/claude-review.mjs`, frozen worktree at `dfb8ddb`, `am12-r2-opus/report.md`): NEEDS-ATTENTION, 2 P1 (decoupling covered
+two of five frame-bounded `handshake.ts` scalars; the "no inflation" finding reverses to ≈1.18× under turn control), 5 P2, 3 P3,
+plus test gaps (a 16-turn maximum-legal-trajectory certifying witness; exact-cap Docker attest under the unchanged 5 s timer;
+`make test` cost; mutant parity) — all absorbed in v3. R3 Sol (cap round, P1 criteria stated up front, `am12-sol-r3.md`):
+NO-SHIP on 4 paper P1s — the v3 §4.3 truncation gate misread existing code (M6 E5 already requires zero `scanTruncated` in every
+real run via `scenarioCoverage.ts` / `runner.ts:186-199`; an `assertEvalPass` change would alter M5 claim P-LIM-SCAN-NONGATE),
+an unsupported "strictly more likely", 239,167 mislabelled, and an over-claimed R2 P3-03 absorption (`observe.test.ts:122-131`;
+`witnessBytes: 2097152` numeric collision). Owner-verified and corrected in v4 without a fourth round; residuals recorded:
+key/hello bound and encoded pre-decode attest bound delegated to the implementation packet; the certifying witness certifies only
+its constructed schedule; "≥ 60 MiB" is input volume not a heap bound; truncation is partial decoder coverage. Every round's byte
+arithmetic (984 over; 93,470 / 70.8 %; 1,398,102; 1,402,519/523; 262,233/236; ≈160 K turn-controlled; ≈380 K extrapolation)
+was independently confirmed. **Proposal to the user (not adopted):** raw events 131,072 → 1,048,576; frame ceiling 262,144 →
+2,097,152; explicit bounds for the five bridge scalars (artifact strings stay 262,144); AM11 item 3 amended (known serial
+witnesses become fit/attested, the 1,409,051-byte maximum-output trace stays the rejection witness); plan §4.3 gate text amended;
+no gate added; companion S5-return `evidence-oversized` packet before the post-AM12 pilot; full E9 rerun ladder. Open: 1 MiB vs
+512 KiB; accept the disclosed frame-ceiling side effect; sequence the companion packet first.
+
+**M6-AM12 ADOPTED by the user (2026-09-08, "I agree with your recommendations, let's proceed")**: 1 MiB raw / 2 MiB frame / five explicit bridge scalar bounds / item-3 amendment; frame-ceiling side effect accepted; companion `evidence-oversized` packet first. Implementation and the P-v2 claim-row packet follow on the full ladder; nothing implemented at adoption.

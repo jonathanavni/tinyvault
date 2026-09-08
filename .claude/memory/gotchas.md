@@ -434,3 +434,13 @@ Example:
   Turn failed.` The focus text carried forgery/tamper/promote/attack vocabulary. Check the job log for that line
   before retrying identical arguments; then re-dispatch in defensive framing (what the harness is, what the validator
   must reject) via `task --fresh --model gpt-6-astra`, which needs no structured output. (2026-09-08)
+- **A cohort-level `bridge-closed` from the composed transport is not a root cause.** The public client rejects an oversized
+  events buffer LOCALLY (`composedFixtures.ts:89-95` → `control-limit` → mapped to `bridge-protocol`) and closes the whole
+  project; `runOnce` swallows the first run's error into `execution-failed / unclassified`; the NEXT run's `registerRun` hits the
+  closed fixture and throws `bridge-closed`, which is what `qualification.json` records. Diagnose from the first run's sidecar and
+  the raw `events.json` byte size against `MAX_EVENTS_BYTES`, not from the cohort reason. (S6 pilot, 2026-09-08)
+- **Long review helpers must be detached from the Bash tool.** Background Bash calls die at the 10-minute ceiling; `setsid` does
+  not exist on macOS. Launch `scripts/claude-review.mjs` (Opus 5 reviews run 10–30 min) with `nohup node … > log 2>&1 & disown`
+  and poll `<output>/summary.json` with a re-arming watcher. (2026-09-08)
+- **Codex-sandbox `make test` on this repo reliably shows ~70 failures** (loopback `listen EPERM`, Chromium mach-port denial,
+  occasionally a container-startup readiness `vi.waitFor`) — all host-only; the owner rerun is the gate. (2026-09-08)
