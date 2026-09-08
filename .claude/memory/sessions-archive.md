@@ -104,3 +104,4 @@ running code. (commits `9f216b0`..`6a6b67c`)
   (Codex found admission defects every round; classifier-flagged review mode → defensive task mode) + two fix rounds + the
   cap-round integrator fix (attestation = finalization disposition); owner gate green after every delivery; 24 owner mutant
   reproductions; S5 ACCEPTED `1d32657`, pushed. S6 (E9/E10 ladder, needs per-step user authorization) next.
+- 2026-09-08 (s6, session 3) — AM12 adopted → Astra-implemented → three-round post-impl cap → merged `623a8b7`; E9 attempt-2 steps 1–2 PASS (3× clean-clone green); pilot attempt 2 UNQUALIFIED on the lookalike cell (assertedOrigin trailing slash; all-diverted baseline). Open: Probe P gate policy; F1/F2 decisions.
