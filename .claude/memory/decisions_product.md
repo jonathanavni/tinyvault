@@ -93,3 +93,8 @@ See `PROJECT-SPEC.md` §4 (the mechanism/invariants) and §11 (model/safeguards)
   **hygiene, not containment**: `worker_threads` realms and `process.binding` escape it, and the code says so.
 - **Nothing claims the Docker daemon has no other listeners or cannot proxy.** That remains the declared
   deployment requirement (C-R8). All three review channels independently confirmed the claim boundary is clean.
+- **Offline admission: the fixture events attestation is the trusted finalization disposition (S5, 2026-09-08).**
+  The runner mints the attestation last and only for runs that finalized intact; a numeric row requires it; unsigned
+  execution metadata is checked for consistency against attested provider evidence but is never a source of
+  completeness. Chosen over attesting the transcript or adding a harness marker event (both contract amendments)
+  after three review rounds each beat a rule-based table — the finalization decision is signed by construction.

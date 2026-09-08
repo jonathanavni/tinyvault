@@ -1680,3 +1680,67 @@ QA claims-site drift (owner claims-table integration at acceptance); `G5-disk-sn
 `source.dirty` non-blocking; same-process live re-adjudication; the transcript remains unattested (its completeness
 is now folded into the attestation decision, not signed itself); S4 residuals 1, 3, 4, 6, 7, 9. Three review rounds
 used; no fourth review round will be opened.
+
+## S5 implementation — accepted at the round-3 cap with the integrator confirmation pass (2026-09-08, owner claude)
+
+Scope: M6 slice S5 (composed real-agent command path, E7/E8) implemented by Codex Astra in write mode: an initial
+candidate (after one correct STOP at the canary identifier boundary), two fix rounds (four and zero owner-answered STOP
+questions), and the cap-round integrator fix; reviewed by three channels per round (Codex adversarial → task-mode in
+defensive framing after the classifier flagged review mode; fresh Claude QA; fresh Claude security), with the owner
+running the full gate after every delivery and reproducing mutants in isolated worktrees. Evidence archive (local,
+ignored): `artifacts/review-evidence/tinyvault-m6-s5-packet-20260907/` (packet, Sol paper pass, dispatch prompts, worker
+reports and mutant ledgers under `fix-round-{1,2}-worker/` and `cap-fix-worker/`, per-round reviews
+`codex-adversarial-review-r{1,2,3}.md`, `claude-qa-review-r{1,2,3}.md`, `claude-security-review-r{1,2,3}.md`, fix packets,
+owner gate logs `owner-make-test-*.log`, owner mutant logs, `OWNER-BREADCRUMB.md`) and the implementation worker's
+`tinyvault-m6-s5-implementation-20260908/` (H-cohort budget bundle).
+
+**Mechanism as landed** (commits `fb8816b` candidate, `5685d01` fix 1, `74ca1e2` fix 2, `742c13b` cap fix). Sole command
+adapter: `TINYVAULT_PROFILE` closed enum, absent = `real-comparison` (the pinned `make eval`), `baseline` / `eval:stub`
+scripts and `eval-stub` target; the API key read only at the entry and passed as a client-construction closure;
+trusted-caller test seams declared and guarded. Alphanumeric 8-character cohort/execution IDs; exclusive per-cohort
+directories; expected identities from the trusted cross-product; run IDs compared, never parsed. Reference composition
+through `runAgentProfile` with the exact root `SKILL.md` bytes, a vault-discovery `meta` record, and discovery/probe/
+setup-reason/fill bound to one backend via the host's trusted `setupReasonFor`; baseline with an empty vault. Four-
+command Git enumerator; provenance assembled from the exported frozen client config and the exported frozen tool
+declarations; one-byte `SKILL.md` edit changes every binding; post-run drift rejects. Offline admission (AM09/AM10 with
+invocation-held E5 statuses gating control credit): one verified event snapshot per run; execution recomputed from
+attested events under the live client's acceptance predicate with requestId/documentId pairing, terminal-state rules,
+and the registry-recomputed task digest; **the fixture events attestation is minted only after intact finalization and
+is required for every numeric row** — the narrowed claim adopted at the cap: *offline admission binds a numeric row to
+fixture-attested events that the trusted runner attests only after successful finalization, attested provider
+request/response pairing under the live acceptance rules, the registry-recomputed task facts and the fixture receipt;
+unsigned execution metadata is checked for consistency and is never a source of completeness.* Failure identity
+retained (bounded, category-only), tripwire diagnostics distinct for both agents, custody sweeps (API key everywhere;
+reference canary only in trusted custody surfaces, raw events only as `authorized-sink` with the browser-POST or
+fill-service identity) on qualified and rejection cohorts; abort evidence snapshot persisted as diagnostic; six H
+witnesses within all caps (max raw 126,612 B; DOM-hidden reference prompt 1,018/1,024 B).
+
+**Owner verification.** `make test` after each delivery: candidate 2696/0/1 (after two owner-gate items), fix 1
+2725/0/1, fix 2 2754/0/1, cap fix 2791/0/1; timing families 5/5 and 20/20 and execution gate PASS every time; the
+real-browser S5 lifecycle case runs inside the main partition. Owner mutant reproductions with named failing tests and
+byte-exact restore: R1 six, R2 six, R3 six, confirmation pass six (the two attestation-gating mutants each fail all six
+promotion variants and their controls; `verifyCompletion`-before-attest, empty-attestation fast-fail, saturation and
+the duplicate-id guard each killed by their named test). Claims test 153/153 after the docs integration; no claim-row
+or TV-CLAIM-SPAN edit. Docs integration applied from the worker's final `proposed-docs.patch` (SCHEMA S5 paragraphs,
+phase plan §5 result contract, M6 plan §7 row) with the acceptance wording.
+
+**Review rounds.** R1: Codex 2 P1 (unsigned metadata admitted; E5-unqualified credit), QA 3 P2/4 P3, security 1 P2/3 P3.
+R2: Codex 2 P1 (offline acceptance weaker than live; early-return/TOCTOU), QA 1 P2/3 P3, security PASS 4 P3. R3 (cap):
+all three channels converge on one P1 (finalization failure invisible in signed evidence), Codex 1 P2, QA/security P3s.
+Disposition: claim narrowed and closed structurally by the cap-round integrator fix with a confirmation pass; no fourth
+review round.
+
+**Declared residuals (carried, not silently absorbed).** (1) Claims-table mutation sites for `P-attestation` /
+`P-same-observation` name `deriveLeakFromEvidence`; the real-profile digest check lives in `readVerifiedRunEvents`
+(their named tests still cover the stub path they were written for) — claim-row amendment packet filed for S6.
+(2) `G5-disk-snapshot` is killed off the command path. (3) `tool-rejected` is never produced by the runtime; its
+offline rule is unexercised. (4) Bootstrap comparison is projection-equality (extra bootstrap keys allowed; digest
+pinned separately). (5) `execution.sdkVersion` is provenance-bound, not recomputed from attested bytes. (6) At N>1 a
+cell can be credited by a qualified sibling while another run is E5-unqualified (publication still gated by the
+all-qualified rule; diagnostic shows the cell covered). (7) `source.dirty` is recorded, byte-bound, not blocking (per
+SCHEMA). (8) The live `runner.realAgent.eval.ts` re-adjudication is same-process; E9's offline re-adjudication is the
+cold path. (9) The transcript is not attested; its completeness is folded into the runner's decision to attest.
+(10) The Node composed harness substitutes the host for most families; real-host coverage is the browser lifecycle
+case. (11) Model-controlled text can reach the bounded `error.message` via the unknown-tool path (not model-visible,
+swept). (12) S4 residuals 1, 3, 4, 6, 7, 9 unchanged; S4 residuals 2, 5, 8 CLOSED in S5. Not run and not claimed:
+Docker/clean-clone acceptance, live `make eval` / `make baseline`, six-cell pilot, E9/E10 recording — S6.

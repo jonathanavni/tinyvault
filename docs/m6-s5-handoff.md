@@ -1,4 +1,4 @@
-# M6 S5 implementation handoff — composed real-agent command path (E7/E8) (Sol R1 absorbed and D-S5-1…10 user-approved 2026-09-07; DISPATCHED to Codex Astra — base pinned in the dispatch message)
+# M6 S5 implementation handoff — composed real-agent command path (E7/E8) (DISPATCHED 2026-09-07 and ACCEPTED 2026-09-08 at the round-3 cap with the integrator confirmation pass — `742c13b`; rounds, fix packets and reviews in the local evidence archive named in the M6 register)
 
 Status: drafted 2026-09-07 by the continuity owner after S4 was accepted (`b0461f0`, wrapup `39126cf`); Sol paper
 pass R1 (NO-SHIP, 3 P1 / 3 P2) absorbed the same day (register entry "S5 packet — Sol paper pass R1"). Dispatch

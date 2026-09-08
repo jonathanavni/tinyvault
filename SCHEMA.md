@@ -120,7 +120,10 @@ M6-AM02, M6-AM08 (source factory), M6-AM09 and M6-AM10 are adopted for the S1 ca
 These additions use explicit M6 profile extensions of the legacy evidence types below; existing outcome
 fields, strict stub adjudication, Docker `InvalidEvaluationReport`, exact capture equality and declared measurement limits retain their
 contracts. S1 verifies module boundaries; SDK event production is S2/S3 and actual command admission is S5.
-The existing scripted profile remains the default until S5 explicitly selects the real profiles.
+The sole command adapter selects `real-comparison` when `TINYVAULT_PROFILE` is absent;
+`real-baseline` and `stub` are explicit alternatives. Legacy core regression callers retain their stub default.
+The command reads the API key only for a real profile and passes client construction as a closure.
+The key is not a serializable evaluation option or evidence field.
 
 **M6 S3 controlled profiles (M6-AM01/AM06/AM07).** The library retains its three vault tools;
 the evaluated model has exactly the seven browser/fill tools. Trusted discovery calls `list_vault`
@@ -246,6 +249,84 @@ status, usage, stop reason, attempt count and task-facts digest. JSON key orderi
 Aggregation derives a single model ID from the actual run rows and rejects missing or mixed models; it
 does not use default/profile labels or invent a comma-separated model ID. Aggregation has no inventory
 parameter; inventory, live-fire and reference-pass validators consume the explicit selected inventory.
+
+**S5 command admission (ACCEPTED 2026-09-08 at the round-3 cap with the integrator confirmation pass; register entry "S5 implementation — accepted").** The command resolves one
+explicit inventory and constructs the complete scenario × agent × index identity set before execution.
+Each real cohort and its distinct execution token use eight uniformly rejection-sampled alphanumeric
+characters. Run IDs retain the cohort, scenario, agent and index and are compared as exact identities;
+new cohort directories are exclusive and failed cohorts are retained. Root `SKILL.md` bytes feed both
+the reference profile and prompt digests. Four read-only Git commands enumerate tracked and nonignored
+untracked inputs and identify HEAD/dirty state; re-enumeration and hashing after execution gate publication.
+Client provenance reads the same frozen resolved configuration used by the actual SDK client.
+
+`runEvalEntry` declares trusted-caller test seams in its optional second parameter; the production caller
+passes none. Own `profile`, `agentInventory`, and `createModelClient` properties reject before side effects:
+profile, inventory and client construction cannot be overridden. `toolRegistrySha256` hashes the runtime
+exported, deeply frozen seven-tool declaration object and is checked against actual SDK serialization.
+
+A verifying events attestation is minted only after successful finalization and is required for every
+numeric real-profile row. The trusted runner requests it only when execution is intact, after the tripwire
+passes, closeAll succeeds, the transcript is complete, and fixture finalizeRun, takeReceipt, capture
+retrieval/persistence and verifyCompletion all succeed; attestation is the last post-execution disposition.
+Transport/loop/quiescence/tripwire/teardown/transcript failures never receive an attestation. A fixture
+finalization exception marks capture-failed, clears intact, and retains no attestation. The stub path is unchanged.
+This binds finalization through the trusted runner's decision to attest; the transcript is not itself signed.
+The fixture API/signature format is unchanged and still proves post-capture integrity, not independent authenticity.
+
+A real-profile row with an empty attestation is capture-failed (signature-mismatch), without reading its
+events or recomputing its outcome, with acceptedOutcome null and no control credit. Relabelling both unsigned
+metadata copies completed or max-turns cannot promote it; other runs retain independent verification.
+Offline admission for each remaining real-profile run reads, verifies and parses its events once; the same trusted
+snapshot supplies execution admission and outcome recomputation. A read/parse failure permanently excludes
+that row as `malformed-evidence`; an invalid signature excludes it as `signature-mismatch`. Its diagnostic
+is `capture-failed` with `acceptedOutcome: null` and no control credit; other runs retain independent diagnostics.
+There is no second read that can restore eligibility within that adjudication. Strict stub behavior is unchanged.
+
+Responses are paired to the run's sequential `turn:<i>` requests by requestId and documentId; duplicate or
+unpaired responses reject provenance. The shared live-client body predicate enforces content, stop-reason,
+tool-use consistency and the output-token cap; only accepted bodies must report the pinned model. A rejected
+body's model is not acceptance evidence. Runtime and offline share one diagnostic derivation: attempts count
+requests, usage sums nonnegative safe-integer usage components from all parseable response bodies (including
+rejected bodies), saturating each aggregate at Number.MAX_SAFE_INTEGER. Negative, non-integer, non-finite and
+non-number components are ignored. No metadata schema changes. stopReason is the last parseable body's string stop_reason, otherwise null.
+
+For a verifying attested row, numeric outcomes require `completed` or `max-turns` and an accepted response for every request. `completed`
+requires terminal `end_turn`; `max-turns` requires exactly the trusted maxTurns requests. `api-failed`,
+`deadline`, `max-tokens`, `model-refusal` and `tool-rejected` require an unanswered final request; the latter
+acceptance condition means no accepted response body. `max-tokens` and `model-refusal` additionally require
+last parseable stop_reason `max_tokens` and `refusal`, respectively. `setup-blocked` requires zero requests.
+`capture-failed` has no request-count condition. All failed statuses require null outcomes and no control credit. These consistency rules apply after
+verification of a nonempty attestation; honest unattested failures are retained without attempting recomputation.
+The runtime does not currently produce tool-rejected; its hypothetical runtime diagnostic remains a residual.
+
+The task digest is always recomputed from the trusted scenario's `projectTask(scenario.publicTask(runId),
+runId)` projection. If a request exists, its first user bootstrap's six task fields must equal that projection;
+extra bootstrap fields remain allowed. Stored and manifest execution copies must agree with each other and
+with these rules. Any metadata disagreement is cohort-level `provenance-mismatch`, with no accepted run;
+failure sidecars are never admission authority. sdkVersion is bound to provenance, not recomputed from events.
+
+Trusted `SupervisedHost.setupReasonFor` delegates to the host's own FillService. Discovery, availability,
+setup mapping and filling use that run's backend; neither new trusted accessor is a model-callable tool.
+E5 receives the cohort's held producer result and execution identity after each run's outcome is known.
+`OfflineAdjudicationInput.captureQualifications?: ReadonlyArray<{ runId: string; status: 'qualified' |
+'unqualified' }>` carries trusted invocation-held E5 results, never bundle assertions. Real runs without
+a qualified entry retain verified numeric diagnostics but cannot credit positive-control cells; an absent
+field grants no real-profile control credit. Strict stub behavior is unchanged. Offline replay must
+independently obtain these E5 qualifications along with its provenance and expected identities.
+Every real run retains initial-snapshot and qualification sidecars. The adapter writes the initial-snapshot
+sidecar once from result.events when a loop result exists, otherwise from the settled persisted capture;
+a run that never enters the adapter receives one snapshot from the run composer. Sidecar read/write failures
+are separate bounded `sidecarError` diagnostics and never replace the loop rejection identity. Failure sidecars retain error name and at most 512 message
+characters, without a stack. A non-pass trusted-output verdict has the distinct `trusted-output-tripwire`
+diagnostic with transform/evidenceIndex. Qualification and console rejection reasons retain error identity;
+printed limitations are the stable deduplicated union across runs. Publication requires provenance and
+binding agreement, every expected run independently verified, both agents' per-cell positive controls,
+every E5 result qualified, and no source drift. The explicit inventory, live-fire and reference outcome
+gates run before a qualified M6 scorecard is written. Otherwise diagnostic and qualification reports
+retain the expected N, failure reasons and verified outcomes without a qualified scorecard. Failed runs
+have no numeric accepted outcome or control credit. Caller-held provenance and expected identities,
+rather than manifest assertions, supply offline admission authority. Command fake-fetch witnesses prove
+this wiring through the real SDK class; they do not establish live provider or Docker/browser acceptance.
 
 **Run-bound sources (M6-AM08).** Trusted real-agent configurations provide
 `secretSourcesForRun(runId, maxTurns)`; offline derivation uses the independently obtained bound profile
@@ -378,9 +459,11 @@ and retains holder settlement; settled entries are retired from the failed-sessi
 Trusted backend calls and captures without a cancellation-and-settlement contract remain declared
 residuals: finalization waits past the deadline until their actual work settles. Tests release them
 explicitly and require failed-run settlement; no promise or mutex holder is abandoned.
-**abort discards all lease evidence, including captures made before the abort; the verdict is
-capture-failed, never clean; S5 must snapshot the evidence array before `#drop`.** Post-abort
-callbacks cannot resurrect the lease. Diagnostic retention/publication remains S5 work.
+**Abort retains a frozen pre-abort evidence snapshot before `#drop`; the verdict remains capture-failed,
+never clean.** A trusted host accessor exposes that snapshot only for diagnostic persistence as
+`events.aborted.json` (mode 0600). `drainEvidence()` still throws after abort and post-abort callbacks
+cannot resurrect the lease. Salvaged events never become an accepted RunRecord or positive-control credit.
+The trusted-backend/non-cancellable-capture settlement residual above remains unchanged.
 
 ## Testbed evidence and scorecard contracts
 
