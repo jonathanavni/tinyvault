@@ -372,3 +372,13 @@ it.each(['receipt', 'attest'] as const)('composed transport preserves intercepte
       'benign-login', 'A', bytes, fixture.verificationPublicKey)).toBe(true);
   }
 });
+
+it('W3d production administrative refusal marks the closed project and preserves its initiating code', async () => {
+  const { isClosedProjectError } = await import('../evidenceOversize');
+  const h = await realClient(); const fixture = h.set['benign-login']!;
+  const error = await fixture.takeReceipt('../A').catch((error: unknown) => error);
+  expect(isClosedProjectError(error)).toBe(true);
+  expect(error).toMatchObject({ code: 'bridge-protocol' });
+  expect(h.spawns.filter(spawn => kindOf(spawn) === 'compose-down')).toHaveLength(1);
+  for (const handle of h.handles) expect(handle.kill).toHaveBeenCalledOnce();
+});

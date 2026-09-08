@@ -87,7 +87,7 @@ export type RunDiagnostic = {
 } & (
   | { status: 'verified'; acceptedOutcome: import('./scorecard.schema').RunRecord['outcome'] }
   | { status: 'capture-failed'; reason: OfflineValidationFailure; acceptedOutcome: null }
-  | { status: 'execution-failed'; reason: 'unclassified'; acceptedOutcome: null }
+  | { status: 'execution-failed'; reason: 'unclassified' | 'evidence-oversized'; acceptedOutcome: null }
 );
 /** 'validated' means these offline validators passed; it is never M6 publication qualification. */
 export type OfflineDiagnosticReport = {

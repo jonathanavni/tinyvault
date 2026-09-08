@@ -1,3 +1,5 @@
+import { EvaluationTerminatedError, isEvaluationTerminated } from './evidenceOversize';
+import { ComposedConstructionError } from './docker/exec';
 import { executionErrorDetails } from './realAgentRun';
 import type { ScenarioCaptureInput } from './scenarioCoverage';
 import { createCohort, type Cohort } from './cohort';
@@ -161,8 +163,11 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
       if (!options.realInvocation) throw error;
       const cells = options.realInvocation.cohort.selectedScenarioIds.flatMap(scenario =>
         options.realInvocation!.cohort.selectedAgentIds.map(agent => ({ scenario, agent })));
-      return rejectComparison(artifactDirectory, { status: 'unqualified', verifiedRuns: [], runs: [],
-        missingPositiveControlCells: cells, cohortFailure: 'unclassified' }, null, [formatExecutionFailure('execution-failed', error)]);
+      return rejectComparison(artifactDirectory, { status: 'unqualified', verifiedRuns: [],
+        runs: isEvaluationTerminated(error) ? [error.row] : [],
+        missingPositiveControlCells: cells, cohortFailure: 'unclassified' }, null,
+      isEvaluationTerminated(error) ? terminationReasons(error) : [formatExecutionFailure('execution-failed', error)],
+      isEvaluationTerminated(error) ? { terminal: true } : {});
     }
     const paths = offlineArtifactPaths(artifactDirectory);
     const offlineInput: OfflineAdjudicationInput = {
@@ -264,6 +269,7 @@ async function captureWithBrowser(
   const capturedRuns: (RunRecord | FailedRunRecord)[] = [];
   const captureQualifications: NonNullable<Awaited<ReturnType<typeof runOnce>>['captureQualification']>[] = [];
   const evidenceRuns: OfflineRunEvidence[] = [];
+  let fixturesClosed = false;
   try {
     for (const fixture of Object.values(fixtures)) assertHttpFixture(fixture);
     const provenance = captureFixtureProvenance(fixtures, options.architecture ?? 'in-process');
@@ -281,7 +287,8 @@ async function captureWithBrowser(
       `${JSON.stringify(m6Provenance)}\n`, { mode: 0o600 });
     options.parityObserver?.captureStarted?.();
     const generator = new CanaryGenerator();
-    for (const scenario of scenarioRegistry.values()) {
+    let termination: EvaluationTerminatedError | undefined;
+    capture: for (const scenario of scenarioRegistry.values()) {
       const fixture = fixtureForScenario(fixtures, scenario);
       for (const agent of agents.values()) for (let runIndex = 0; runIndex < sampleSize; runIndex += 1) {
         const result = await runOnce({
@@ -298,13 +305,28 @@ async function captureWithBrowser(
         if (result.captureQualification) captureQualifications.push(result.captureQualification);
         capturedRuns.push(result.record);
         evidenceRuns.push(result.evidence);
+        if (result.terminal) {
+          termination = new EvaluationTerminatedError({ ...result.terminal, attempted: capturedRuns.length,
+            expected: real?.cohort.expectedRuns.length ?? scenarioRegistry.size * agents.size * sampleSize });
+          break capture;
+        }
       }
+    }
+    if (termination) {
+      try { await persistOfflineInputs(artifactDirectory, capturedRuns,
+        { runs: evidenceRuns, ...(m6Provenance ? { provenance: m6Provenance } : {}) }); }
+      catch (error) { termination.persistFailed = executionErrorDetails(error); }
+      fixturesClosed = true;
+      try { await closeFixtures(fixtures); }
+      catch (error) { termination.fixtureCloseFailure = { ...executionErrorDetails(error),
+        ...(error instanceof ComposedConstructionError ? { code: error.code } : {}) }; }
+      throw termination;
     }
     await persistOfflineInputs(artifactDirectory, capturedRuns, { runs: evidenceRuns, ...(m6Provenance ? { provenance: m6Provenance } : {}) });
     options.parityObserver?.captureCompleted?.();
     return { verificationKeys: fixtureVerificationKeys(fixtures), scenarioRegistry, provenance, m6Provenance, captureQualifications };
   } finally {
-    await closeFixtures(fixtures);
+    if (!fixturesClosed) await closeFixtures(fixtures);
   }
 }
 
@@ -463,8 +485,20 @@ export class UnqualifiedComparisonError extends Error {
   constructor() { super('Real evaluation is unqualified'); this.name = 'UnqualifiedComparisonError'; }
 }
 async function rejectComparison(directory: string, diagnostic: OfflineDiagnosticReport,
-  provenance: EvaluationProvenance | null, reasons: string[]): Promise<never> {
+  provenance: EvaluationProvenance | null, reasons: string[], options: { terminal?: true } = {}): Promise<never> {
   const qualification: ComparisonQualification = { status: 'unqualified', provenanceId: provenance?.provenanceId ?? null, reasons };
+  if (options.terminal) {
+    console.error(JSON.stringify({ diagnostic, qualification }));
+    const artifacts = [['diagnostic.json', diagnostic], ['qualification.json', qualification]] as const;
+    const writes = await Promise.allSettled(artifacts.map(async ([file, value]) =>
+      writeFile(resolve(directory, file), `${JSON.stringify(value)}\n`, { mode: 0o600 })));
+    writes.forEach((result, index) => {
+      if (result.status === 'rejected') reasons.push(
+        `diagnostic-write-failed: ${artifacts[index][0]}: ${executionErrorDetails(result.reason).name}`);
+    });
+    if (writes.some(result => result.status === 'rejected')) console.error(JSON.stringify({ diagnostic, qualification }));
+    throw new UnqualifiedComparisonError();
+  }
   await Promise.all([writeFile(resolve(directory, 'diagnostic.json'), `${JSON.stringify(diagnostic)}\n`, { mode: 0o600 }),
     writeFile(resolve(directory, 'qualification.json'), `${JSON.stringify(qualification)}\n`, { mode: 0o600 })]);
   console.error(JSON.stringify({ diagnostic, qualification }));
@@ -474,4 +508,15 @@ async function rejectComparison(directory: string, diagnostic: OfflineDiagnostic
 function formatExecutionFailure(reason: string, error: unknown): string {
   const detail = executionErrorDetails(error);
   return `${reason}: ${detail.name}: ${detail.message}`;
+}
+
+function terminationReasons(error: EvaluationTerminatedError): string[] {
+  const reasons = [error.kind === 'evidence-oversized' ? `evidence-oversized: ${error.runId}`
+    : `execution-failed: ${error.causeName ?? 'Error'}: ${error.code ?? 'project-closed'}`,
+  `cohort-incomplete: ${error.attempted} of ${error.expected} runs attempted`];
+  if (error.scenarioCaptureWriteFailed) reasons.push(`scenario-capture-write-failed: ${error.runId}`);
+  if (error.sidecarWriteFailed) reasons.push(`sidecar-write-failed: ${error.runId}`);
+  if (error.fixtureCloseFailure) reasons.push(`teardown-failed: ${error.fixtureCloseFailure.code ?? error.fixtureCloseFailure.name}`);
+  if (error.persistFailed) reasons.push(`persist-failed: ${error.persistFailed.name}`);
+  return reasons;
 }

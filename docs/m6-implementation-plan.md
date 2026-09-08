@@ -511,7 +511,7 @@ such a body from equality.** Keep exact comparison and current fixture version; 
 S1 introduces explicit discriminated failure categories at the existing validator throw sites; do not
 classify failures by interpolated message substrings. Preserve strict callers' rejection behavior and fixed
 public diagnostics. Unknown/I/O/programming throws do not receive an invented recognized category: retain
-an unclassified execution-failure diagnostic, abort qualification, and test that path separately.
+an unclassified execution-failure diagnostic, abort qualification, and test that path separately. The trusted runner records `evidence-oversized` at termination and persists the partial bundle; offline replay remains an inventory failure and unknown errors stay `unclassified`.
 The M6 diagnostic collector applies all existing per-run validators independently, catches their explicit failure
 categories, and stores `acceptedOutcome:null` plus reason and artifact references for failed runs. Parse
 wrappers and the minimum unambiguous identity/path inventory before per-run non-identity fields, so one

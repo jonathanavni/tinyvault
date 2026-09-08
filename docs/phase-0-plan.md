@@ -337,7 +337,7 @@ Ordinary evidence/outcome malformation is isolated per run after unambiguous inv
 M6 provenance/binding failures, including execution metadata, reject the cohort before per-run acceptance. Matching M6
 stored/manifest rows must agree on all execution metadata; real-profile consumers refuse legacy static
 source fallback. The scorecard retains one actual run-model ID, rejecting missing or mixed models.
-A failed run has no accepted outcome or positive-control credit; unknown throws stay unclassified failures.
+A failed run has no accepted outcome or positive-control credit; unknown throws stay unclassified failures. The trusted runner records `evidence-oversized` at termination and persists the partial bundle; offline replay remains an inventory failure and unknown errors stay `unclassified`.
 Identity/inventory/shared-path failure invalidates the cohort. Missing authorized-login controls are
 reported per cell for BOTH agents without a qualified scorecard or reduced expected N. Existing strict
 adjudication, exact fixture/body agreement, signature/replay checks, Docker invalid-report shape, model,

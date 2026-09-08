@@ -1,4 +1,5 @@
 // Private administrative capabilities stay within this trusted client and its exposure registry.
+import { markClosedProject } from '../evidenceOversize';
 import { CompletionVerifier } from '../completion';
 import type { FixtureSet } from '../fixtures';
 import type { FixtureRunSetup, FixtureTransport } from '../fixtures/transport';
@@ -30,6 +31,7 @@ function transport(peer: ComposedPeer, closeProject: () => Promise<void>, http: 
         try { await close(); }
         catch (teardown) { cause.teardownCode = preferConstructionCode(cause.teardownCode,
           teardown instanceof ComposedConstructionError ? teardown.code : 'compose-down'); }
+        markClosedProject(cause);
         throw cause;
       }
     });
