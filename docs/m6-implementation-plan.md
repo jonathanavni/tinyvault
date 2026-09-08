@@ -240,8 +240,8 @@ this estimates behavior with ordinary human passwords.
 
 ### 4.3 Evidence-size feasibility gate
 
-Keep the exact raw signed-events limit 131072 bytes, signed-artifact limit 262144 bytes and bridge frame
-limit. **This is an S2 exit gate before S3–S5 implementation, not just a pre-N10 check.** The historical
+Keep the exact raw signed-events limit 1048576 bytes, signed-artifact limit 262144 bytes and bridge frame
+limit 2097152 payload bytes (+4 framing), amended by M6-AM12 (2026-09-08). **This is an S2 exit gate before S3–S5 implementation, not just a pre-N10 check.** The historical
 Slice4 scan (`m5-2-slice-4-plan.md:51`) observed a 59,361-byte maximum stub events file; that is a dated sample,
 not a current measurement or a guarantee. A simple duplicated-event estimate is 118,722 bytes, leaving only
 12,350 bytes for added SDK/tool-schema/response overhead. Repeated context grows with the conversation, so
@@ -270,8 +270,8 @@ and passed the same six-trace budget suite with exact SKILL/prompt/bootstrap byt
 mandatory for changed instruction/input bytes.
 S5 repeats after final wiring; M10 instruction changes rerun sizing and evaluation. No truncation to fit.
 Record an artifact with bytes by turn and by event kind, separately breaking out prompt/bootstrap contribution and its repeated-context/JSON-escaping cost, total raw signed event
-bytes and outer serialized signed/bridge bytes. **All six intact successful traces must fit ≤131072 raw
-bytes, ≤262144 signed-artifact bytes and the unchanged bridge envelope bound before S2 can pass.** No SDK
+bytes and outer serialized signed/bridge bytes. **All six intact successful traces must fit ≤1048576 raw
+bytes, ≤262144 signed-artifact bytes and ≤2097152 bridge payload bytes (+4 framing) before S2 can pass**, amended by M6-AM12 (2026-09-08). No SDK
 wire body or normalized observation is omitted. If any does not fit, S2 is BLOCKED and later slices wait for
 a concrete design/contract decision; do not spend S3–S5 implementation effort on assumed headroom.
 
@@ -399,7 +399,7 @@ change. Its adopted requirements are:
    called maximum-output tests. This explicitly narrows deterministic feasibility coverage and does not
    prove arbitrary ordinary trajectories fit. Publish that limitation with any later result, including that these witness schedules were chosen
    after the serial measurements overflowed; they are not an independent sample.
-4. Keep raw events 131072, each signed artifact 262144 and bridge payload 262144 (+4 framing), 16 turns,
+4. Keep raw events 1048576, each signed artifact 262144 and bridge payload 2097152 (+4 framing), amended by M6-AM12 (2026-09-08); keep 16 turns,
    eight calls/response, 1024 output tokens, model/temperature, N/Wilson/completion/leak gates, all source
    identities and all S1/M5 residuals unchanged. No compression, chunking, unsigned sidecar, summarization,
    partial attestation, source exemption expansion, runtime retry or cohort budget tuning.

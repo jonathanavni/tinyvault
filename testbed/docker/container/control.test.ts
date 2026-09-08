@@ -378,11 +378,12 @@ it('server validates adapter response before writing a success frame', async () 
   expect(frames).toEqual([{ v: 1, kind: 'res', id: 4, op: 'receipt', ok: false, code: 'body-shape' }]);
   expect(p.session.closed).toBe(true);
 });
-it('oversized signer output fails the unchanged frame ceiling without a truncated success', async () => {
+it('AM12 near-limit signer artifact fits the amended frame ceiling intact', async () => {
   const p = await connected(), a = await p.register();
   await p.host.request('finalize', auth(p, a, 'finalize'));
   p.ops.attestEvents.mockResolvedValue('x'.repeat(262144));
-  await expect(p.host.request('attest', { ...auth(p, a, 'attest'), events: '' })).rejects.toMatchObject({ code: 'frame-length' });
+  await expect(p.host.request('attest', { ...auth(p, a, 'attest'), events: '' }))
+    .resolves.toEqual({ attestation: 'x'.repeat(262144) });
 });
 
 it.each(['finalize', 'ack', 'attest'] as const)('dispatch consumes %s before entering its trusted callback', async (op) => {

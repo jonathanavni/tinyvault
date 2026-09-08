@@ -608,7 +608,7 @@ The authoritative full-section corpus also retains the unchanged SECRET_TRANSFOR
 whose exact NEW `P-TRANSFORM-NAMES` selector independently pins the published transform-name inventory
 against `src/shared/secretTransforms.ts`; each deleted/renamed entry must fail. This is inventory, not an added
 encoding detector. Retain the existing signed-artifact rows; NEW `P-v2 enforces each raw and artifact byte bound at producer
-and consumer` in claims.test.ts separately pins 131072 raw-event bytes and 262144 serialized-artifact
+and consumer` in claims.test.ts separately pins 131072 raw-event bytes and 262144 serialized-artifact [values amended by M6-AM12, 2026-09-08]
 UTF-8 bytes through the real signing/verification consumers. Each bound's removal dies independently;
 the outer bridge frame may still reject near-limit envelopes, exactly as SCHEMA declares.
 

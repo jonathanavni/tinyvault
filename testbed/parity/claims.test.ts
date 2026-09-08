@@ -307,10 +307,10 @@ and operation are therefore inside the Ed25519 signed bytes. \`eventsSha256\` ha
 event bytes, without parsing or re-serialization. The receipt artifact operation does not authorize
 administrative receipt retrieval.
 
-Raw events are bounded to 131072 bytes and each serialized signed artifact to 262144 UTF-8 bytes;
-producers check artifact size before signing, consumers before parsing the envelope. The unchanged
-bridge frame limit also includes its outer envelope, so a near-limit artifact can fail closed over the
-bridge. Exact preimage and separate prefix-removal proof requirements are in
+Raw events are bounded to 1048576 bytes and each serialized signed artifact to 262144 UTF-8 bytes;
+producers check artifact size before signing, consumers before parsing the envelope. The bridge frame
+limit (2097152 payload bytes plus framing) includes its outer envelope, and artifact strings carried on
+the bridge are separately bounded to 262144 bytes (M6-AM12). Exact preimage and separate prefix-removal proof requirements are in
 [\`docs/m5-2-slice-5-plan.md\` §3–§5](docs/m5-2-slice-5-plan.md#3-exact-version-2-transcript-and-envelope).
 
 \`CapturedEvent\` is raw immutable evidence and deliberately has no sink/classification field.
@@ -883,7 +883,7 @@ function independentlySigned(kind: 'receipt' | 'attest', payload: Record<string,
 describe('Slice6 signed byte boundaries', () => {
   for (const kind of ['receipt', 'attest'] as const) {
     it(`P-v2 enforces each raw and artifact byte bound at producer and consumer: ${kind}`, () => {
-      const key = generateKeyPairSync('ed25519'), raw = Buffer.alloc(131072, 0x21), over = Buffer.alloc(131073, 0x21);
+      const key = generateKeyPairSync('ed25519'), raw = Buffer.alloc(1048576, 0x21), over = Buffer.alloc(1048577, 0x21);
       if (kind === 'attest') {
         const envelope = (bytes: Buffer) => independentlySigned('attest', { fixtureId: 'fixture', runId: 'run',
           eventsSha256: createHash('sha256').update(bytes).digest('hex') }, key.privateKey);

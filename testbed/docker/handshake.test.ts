@@ -1,6 +1,6 @@
 // Fixed synthetic vectors prove the exact transcript binding; no vector establishes provenance.
-import { createHmac, generateKeyPairSync } from 'node:crypto';
-import { expect, it } from 'vitest';
+import { createHmac, createPublicKey, generateKeyPairSync } from 'node:crypto';
+import { expect, it, vi } from 'vitest';
 import {
   buildHelloTranscript, computeHelloMac, decodeBase64url, encodeBase64url, importAnnouncedKey,
   validateBody, verifyHelloMac, type HelloFields,
@@ -121,8 +121,8 @@ it.each(['01', '-1', '1.0', '1e0', '1\n', '1\r', ' 1', '8388609', '9'.repeat(50)
 });
 it('capture kind is closed and event bytes are canonical and bounded', () => {
   expect(() => validateBody('capture', 'req', { ...operation, kind: '../requests', offset: '0' })).toThrow('body-shape');
-  expect(() => validateBody('attest', 'req', { ...operation, events: Buffer.alloc(131072).toString('base64url') })).not.toThrow();
-  expect(() => validateBody('attest', 'req', { ...operation, events: Buffer.alloc(131073).toString('base64url') })).toThrow('control-limit');
+  expect(() => validateBody('attest', 'req', { ...operation, events: Buffer.alloc(1048576).toString('base64url') })).not.toThrow();
+  expect(() => validateBody('attest', 'req', { ...operation, events: Buffer.alloc(1048577).toString('base64url') })).toThrow('control-limit');
   expect(() => validateBody('attest', 'req', { ...operation, events: 'AA==' })).toThrow('body-shape');
 });
 it.each([
@@ -137,4 +137,69 @@ it.each([
 it('capture accepts empty snapshots and terminal rereads', () => {
   expect(() => validateBody('capture', 'res', { bytes: '', total: '0', next: '0' })).not.toThrow();
   expect(() => validateBody('capture', 'res', { bytes: '', total: '1', next: '1' })).not.toThrow();
+});
+
+vi.mock('node:crypto', async original => {
+  const actual = await original<typeof import('node:crypto')>();
+  return { ...actual, createPublicKey: vi.fn(actual.createPublicKey) };
+});
+
+it.each(['receipt', 'attest'] as const)('AM12 %s artifact scalar UTF-8 boundary', op => {
+  const field = op === 'receipt' ? 'receipt' : 'attestation';
+  const exact = 'é'.repeat(131072);
+  expect(Buffer.byteLength(exact)).toBe(262144);
+  expect(() => validateBody(op, 'res', { [field]: exact })).not.toThrow();
+  expect(() => validateBody(op, 'res', { [field]: exact + 'a' })).toThrow('body-shape');
+});
+
+it.each(['key', 'hello'] as const)('AM12 %s key rejects before decode and key import', op => {
+  const body = (key: string) => op === 'hello' ? { publicKey: key, mac: response.mac } : { publicKey: key };
+  expect(fields.publicKeyDer.length).toBe(44); expect(publicKey.length).toBe(59);
+  expect(() => validateBody(op, 'res', body(publicKey))).not.toThrow();
+  // Length+1 and decoded-byte+1 controls, plus the widened-frame exposure vector.
+  const badKeys = ['A'.repeat(1572864), publicKey + 'A',
+    Buffer.concat([fields.publicKeyDer, Buffer.from([0])]).toString('base64url')];
+  for (const key of badKeys) {
+    const from = vi.spyOn(Buffer, 'from'); vi.mocked(createPublicKey).mockClear();
+    let failure: unknown;
+    try { validateBody(op, 'res', body(key)); } catch (error) { failure = error; }
+    const decoded = from.mock.calls.some(args => args[0] === key && (args as unknown[])[1] === 'base64url');
+    from.mockRestore();
+    expect(decoded, 'oversized public key reached base64url decode').toBe(false);
+    expect(createPublicKey).not.toHaveBeenCalled();
+    expect(failure).toMatchObject({ code: 'key-shape' });
+  }
+  // Correct encoded length, wrong decoded size is refused before key import too.
+  vi.mocked(createPublicKey).mockClear();
+  expect(() => validateBody(op, 'res', body('A'.repeat(58)))).toThrow('key-shape');
+  expect(createPublicKey).not.toHaveBeenCalled();
+});
+
+it('AM12 capture encoded boundary rejects before decode', () => {
+  const exact = Buffer.alloc(65536).toString('base64url');
+  expect(exact.length).toBe(87382);
+  expect(() => validateBody('capture', 'res', { bytes: exact, total: '65536', next: '65536' })).not.toThrow();
+  for (const bytes of [exact + 'A', Buffer.alloc(65537).toString('base64url')]) {
+    const from = vi.spyOn(Buffer, 'from'); let failure: unknown;
+    try { validateBody('capture', 'res', { bytes, total: '65537', next: '65537' }); } catch (error) { failure = error; }
+    const decoded = from.mock.calls.some(args => args[0] === bytes && (args as unknown[])[1] === 'base64url');
+    from.mockRestore();
+    expect(decoded, 'oversized capture reached base64url decode').toBe(false);
+    expect(failure).toMatchObject({ code: 'body-shape' });
+  }
+});
+
+it('AM12 attest request encoded boundary and precedence reject before decode', () => {
+  const exact = Buffer.alloc(1048576).toString('base64url');
+  expect(exact.length).toBe(1398102);
+  expect(() => validateBody('attest', 'req', { ...operation, events: exact })).not.toThrow();
+  for (const events of [exact + 'A', Buffer.alloc(1048577).toString('base64url'), '!'.repeat(1398103)]) {
+    const from = vi.spyOn(Buffer, 'from'); let failure: unknown;
+    try { validateBody('attest', 'req', { ...operation, events }); } catch (error) { failure = error; }
+    const decoded = from.mock.calls.some(args => args[0] === events && (args as unknown[])[1] === 'base64url');
+    from.mockRestore();
+    expect(decoded, 'oversized events reached base64url decode').toBe(false);
+    expect(failure).toMatchObject({ code: 'control-limit' });
+  }
+  expect(() => validateBody('attest', 'req', { ...operation, events: '!' })).toThrow('body-shape');
 });

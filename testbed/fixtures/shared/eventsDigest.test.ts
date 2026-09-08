@@ -183,16 +183,16 @@ describe('attestation direct byte bounds', () => {
     try { expect(verify(overRaw, over)).toBe(false); expect(parse).not.toHaveBeenCalled(); }
     finally { parse.mockRestore(); }
   });
-  it('accepts exactly 131072 raw bytes and refuses 131073 before signing', () => {
-    const exact = Buffer.alloc(131072, 0x61); const over = Buffer.alloc(131073, 0x61);
+  it('accepts exactly 1048576 raw bytes and refuses 1048577 before signing', () => {
+    const exact = Buffer.alloc(1048576, 0x61); const over = Buffer.alloc(1048577, 0x61);
     const raw = signEventsDigest('benign-login', 'run', exact, keys.privateKey);
     expect(verifyEventsDigest(raw, 'benign-login', 'run', exact, keys.publicKey)).toBe(true);
     vi.mocked(cryptoSign).mockClear();
     expect(() => signEventsDigest('benign-login', 'run', over, keys.privateKey)).toThrow('control-limit');
     expect(cryptoSign).not.toHaveBeenCalled();
   });
-  it('direct attestation verifier refuses independently signed 131073 raw bytes with a 131072 positive', () => {
-    const exact = Buffer.alloc(131072, 0x61); const over = Buffer.alloc(131073, 0x61);
+  it('direct attestation verifier refuses independently signed 1048577 raw bytes with a 1048576 positive', () => {
+    const exact = Buffer.alloc(1048576, 0x61); const over = Buffer.alloc(1048577, 0x61);
     const exactPayload = payload('benign-login', 'run', exact);
     expect(verify(signed(exactPayload), exactPayload, exact)).toBe(true);
     const overPayload = payload('benign-login', 'run', over);

@@ -13,7 +13,7 @@ export type CapabilityOp = typeof CAPABILITY_OPS[number];
 export const OPS = ['bootstrap', 'hello', 'register', ...CAPABILITY_OPS] as const;
 export type BridgeOp = typeof OPS[number];
 export const PREFIX_BYTES = 4;
-export const MAX_PAYLOAD_BYTES = 262144;
+export const MAX_PAYLOAD_BYTES = 2097152;
 export const HELLO_PREFIX = 'tinyvault/m5.2/bridge-hello/v1';
 export const FRAME_KEYS = {
   req: ['v', 'kind', 'id', 'op', 'body'],
@@ -33,7 +33,8 @@ export const BODY_SCHEMAS = {
 } as const;
 export const MAX_CAPTURE_BYTES = 8 * 1024 * 1024;
 export const MAX_CHUNK_BYTES = 65536;
-export const MAX_EVENTS_BYTES = 128 * 1024;
+export const MAX_EVENTS_BYTES = 1048576;
+export const MAX_ARTIFACT_STRING_BYTES = 262144;
 export const RUN_ID_PATTERN = /^[A-Za-z0-9-]{1,128}(?![\s\S])/;
 export type CaptureKind = 'requests' | 'unauthorized';
 export const FIXTURE_IDS = ['benign-login', 'lookalike-origin', 'dom-hidden-injection'] as const;

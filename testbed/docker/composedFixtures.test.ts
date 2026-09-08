@@ -1,3 +1,4 @@
+import { MAX_EVENTS_BYTES } from './protocol';
 // Reachability comes from an injected probe; data-plane requests and completion use the authenticated key.
 import { readFile } from 'node:fs/promises';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -155,10 +156,12 @@ it.each(['local-run', 'local-setup', 'local-events', 'duplicate', 'early-capture
   'administrative refusal %s cleans the complete project and has no HTTP fallback', async (mode) => {
     const h = await realClient(); const fixture = h.set['benign-login']!;
     await fixture.registerRun(setupFor('A'));
+    const calls = vi.spyOn(BridgeSession.prototype, 'request');
+    const before = [...h.entries[0]];
     let operation: Promise<unknown>;
     if (mode === 'local-run') operation = fixture.takeReceipt('../A');
     else if (mode === 'local-setup') operation = fixture.registerRun({ ...setupFor('B'), nonce: '\ud800' });
-    else if (mode === 'local-events') operation = fixture.attestEvents('A', Buffer.alloc(128 * 1024 + 1));
+    else if (mode === 'local-events') operation = fixture.attestEvents('A', Buffer.alloc(MAX_EVENTS_BYTES + 1));
     else if (mode === 'duplicate') operation = fixture.registerRun(setupFor('A'));
     else if (mode === 'early-capture') operation = fixture.captureRequests('A');
     else {
@@ -168,6 +171,11 @@ it.each(['local-run', 'local-setup', 'local-events', 'duplicate', 'early-capture
       else { await fixture.attestEvents('A', Buffer.from('[]')); operation = fixture.attestEvents('A', Buffer.from('[]')); }
     }
     await expect(operation).rejects.toMatchObject({ code: 'bridge-protocol' });
+    if (mode === 'local-events') {
+      expect(calls.mock.calls.filter(([op]) => op === 'attest')).toEqual([]);
+      expect(h.entries[0]).toEqual(before);
+    }
+    calls.mockRestore();
     expect(h.http).not.toHaveBeenCalled();
     expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
     for (const handle of h.handles) expect(handle.kill).toHaveBeenCalledOnce();
@@ -327,12 +335,12 @@ it('discarded actual capture chunk rereads its same offset with a fresh request 
   expect(snapshot.equals(Buffer.from(body + '\n'))).toBe(true);
 });
 
-it('public composed client refuses 131073 events locally before attest dispatch or primitive entry', async () => {
+it('public composed client refuses 1048577 events locally before attest dispatch or primitive entry', async () => {
   const h = await realClient(); const fixture = h.set['benign-login']!;
   await fixture.registerRun(setupFor('A')); await fixture.finalizeRun('A');
   const calls = vi.spyOn(BridgeSession.prototype, 'request');
   const before = [...h.entries[0]];
-  await expect(fixture.attestEvents('A', Buffer.alloc(131073))).rejects.toMatchObject({ code: 'bridge-protocol' });
+  await expect(fixture.attestEvents('A', Buffer.alloc(1048577))).rejects.toMatchObject({ code: 'bridge-protocol' });
   expect(calls.mock.calls.filter(([op]) => op === 'attest')).toEqual([]);
   expect(h.entries[0]).toEqual(before);
   expect(h.responses.filter((r) => r.op === 'attest')).toEqual([]);
@@ -341,7 +349,7 @@ it('public composed client refuses 131073 events locally before attest dispatch 
   calls.mockRestore();
   const valid = await realClient(); const other = valid.set['benign-login']!;
   await other.registerRun(setupFor('A')); await other.finalizeRun('A');
-  const exact = Buffer.alloc(131072);
+  const exact = Buffer.alloc(1048576);
   const raw = await other.attestEvents('A', exact);
   expect(verifyEventsDigest(raw, 'benign-login', 'A', exact, other.verificationPublicKey)).toBe(true);
 });

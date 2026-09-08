@@ -4,7 +4,7 @@
 import { createHmac, createPublicKey, timingSafeEqual, type KeyObject } from 'node:crypto';
 import {
   BODY_SCHEMAS, BridgeError, CONTAINER_ID_PATTERN, EPOCH_PATTERN, FIXTURE_IDS, HELLO_PREFIX, OPS,
-  CAPABILITY_OPS, MAX_CAPTURE_BYTES, MAX_CHUNK_BYTES, MAX_EVENTS_BYTES, MAX_PAYLOAD_BYTES, RUN_ID_PATTERN,
+  CAPABILITY_OPS, MAX_CAPTURE_BYTES, MAX_CHUNK_BYTES, MAX_EVENTS_BYTES, MAX_ARTIFACT_STRING_BYTES, RUN_ID_PATTERN,
   exactKeys, isBody, type Body, type BridgeCode, type BridgeOp, type FixtureId,
 } from './protocol';
 
@@ -89,6 +89,9 @@ function validateOperation(op: BridgeOp, kind: 'req' | 'res', body: Body): void 
       if (body.kind !== 'requests' && body.kind !== 'unauthorized') throw new BridgeError('body-shape');
       canonicalInteger(body.offset as string);
     }
+    if (op === 'attest' && (body.events as string).length > Math.ceil(MAX_EVENTS_BYTES * 4 / 3)) {
+      throw new BridgeError('control-limit');
+    }
     if (op === 'attest'
       && decodeBase64url(body.events as string, undefined, 'body-shape').length > MAX_EVENTS_BYTES) {
       throw new BridgeError('control-limit');
@@ -98,10 +101,14 @@ function validateOperation(op: BridgeOp, kind: 'req' | 'res', body: Body): void 
       for (const field of CAPABILITY_OPS) decodeBase64url(body[field] as string, 32, 'capability-refused');
       if (new Set(CAPABILITY_OPS.map((field) => body[field])).size !== 6) throw new BridgeError('capability-refused');
     }
-    if (op === 'key') importAnnouncedKey(decodeBase64url(body.publicKey as string, undefined, 'key-shape'));
-    if (op === 'receipt') scalar(body.receipt as string, MAX_PAYLOAD_BYTES, true);
-    if (op === 'attest') scalar(body.attestation as string, MAX_PAYLOAD_BYTES);
+    if (op === 'key') {
+      if ((body.publicKey as string).length !== 59) throw new BridgeError('key-shape');
+      importAnnouncedKey(decodeBase64url(body.publicKey as string, 44, 'key-shape'));
+    }
+    if (op === 'receipt') scalar(body.receipt as string, MAX_ARTIFACT_STRING_BYTES, true);
+    if (op === 'attest') scalar(body.attestation as string, MAX_ARTIFACT_STRING_BYTES);
     if (op === 'capture') {
+      if ((body.bytes as string).length > Math.ceil(MAX_CHUNK_BYTES * 4 / 3)) throw new BridgeError('body-shape');
       const bytes = decodeBase64url(body.bytes as string, undefined, 'body-shape');
       const total = canonicalInteger(body.total as string);
       const next = canonicalInteger(body.next as string);
@@ -117,6 +124,7 @@ function validateHelloRequest(body: Body): void {
 }
 function validateHelloResponse(body: Body): void {
   // Closed schema first; key import/re-export precedes MAC decoding and verification.
-  importAnnouncedKey(decodeBase64url(body.publicKey as string, undefined, 'key-shape'));
+  if ((body.publicKey as string).length !== 59) throw new BridgeError('key-shape');
+  importAnnouncedKey(decodeBase64url(body.publicKey as string, 44, 'key-shape'));
   decodeBase64url(body.mac as string, 32, 'mac-shape');
 }

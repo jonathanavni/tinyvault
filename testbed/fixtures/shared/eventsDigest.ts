@@ -1,3 +1,4 @@
+import { MAX_EVENTS_BYTES } from '../../docker/protocol';
 import { createHash, sign as cryptoSign, verify as cryptoVerify, type KeyObject } from 'node:crypto';
 
 type EventsDigestPayload = { fixtureId: string; runId: string; eventsSha256: string };
@@ -15,7 +16,7 @@ export function verifyEventsDigest(
   eventsBytes: Uint8Array,
   verificationKey: KeyObject,
 ): boolean {
-  if (eventsBytes.byteLength > 131072) return false;
+  if (eventsBytes.byteLength > MAX_EVENTS_BYTES) return false;
   const envelope = parseEventsDigest(serialized);
   if (!envelope || envelope.payload.fixtureId !== expectedFixtureId
     || envelope.payload.runId !== expectedRunId
@@ -31,7 +32,7 @@ export function verifyEventsDigest(
 export function signEventsDigest(
   fixtureId: string, runId: string, eventsBytes: Uint8Array, signingKey: KeyObject,
 ): string {
-  if (eventsBytes.byteLength > 131072) throw new Error('Events exceed control-limit');
+  if (eventsBytes.byteLength > MAX_EVENTS_BYTES) throw new Error('Events exceed control-limit');
   const payload: EventsDigestPayload = { fixtureId, runId, eventsSha256: sha256(eventsBytes) };
   if (!isPayload(payload)) throw new Error('Invalid events digest payload');
   if (Buffer.byteLength(serializeEnvelope(payload, 'A'.repeat(86)), 'utf8') > 262144) {
