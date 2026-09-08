@@ -164,7 +164,11 @@ terminal via `isEvidenceOversized` (the runner guard). The retained reason is th
 **Mutants (each an exact edit, red assertion named, restore byte-for-byte, green):**
 M1 delete the runner guard (`runOnce` calls `attestEvents` regardless) → W1a red (the synthetic transport attests the oversized
 file, the run is admitted, a scorecard appears / `registerRun` reaches 6) and W2 red (`attestEvents` called at cap+1);
-M1d delete the `markClosedProject` call in `administrative` → W3 red (loop continues);
+M1d delete the `markClosedProject` call in `administrative` → **W3d** red (W3 cannot see it: W3 mints its own mark — Astra STOP
+2026-09-08). **W3d — production-administrative marking witness** (additive `it` in `testbed/docker/composedFixtures.test.ts`,
+using its existing `realClient()` harness; no existing test in that file changes): after any administrative refusal (e.g. the
+`local-events` case at `:161`, or a fresh `takeReceipt('../A')`), the rejected error satisfies `isClosedProjectError` and still
+carries its original `code`; M1d makes that assertion red;
 M1c in `runOnce`, replace `isEvidenceOversized(error)` with `false` → W1a red (sidecar `unclassified`);
 M2 delete the loop `break` → W1a red (`registerRun` called twice);
 M3 in `runOnce`, classify by `error.message === 'evidence-oversized'` instead of the predicate → W7 red (unmarked error becomes
@@ -186,7 +190,8 @@ shape-identical object is neither `isEvidenceOversized` nor `isClosedProjectErro
 `testbed/runnerExecution.oversize.test.ts` (new), `testbed/runner.ts`, `testbed/evaluationValidity.ts` (+ its test if pins change),
 `testbed/checkers/offline.test.ts` (W6/W7 only; not `offline.ts`), `testbed/realAgentRun.test.ts`, `testbed/runner.realAgent.test.ts`,
 `SCHEMA.md:360-375` (wording), `docs/phase-0-plan.md:335-345` and `docs/m6-implementation-plan.md:506-523` (one synchronized
-sentence each). **Untouched:** `loginFixture.ts`, `runner.testkit.ts`, `composedFixtures.test.ts`, `slice5.attestation.test.ts`,
+sentence each), `testbed/docker/composedFixtures.test.ts` (**additive only** — one new `it` for W3d; every existing test byte-for-byte
+unchanged). **Untouched:** `loginFixture.ts`, `runner.testkit.ts`, `slice5.attestation.test.ts`,
 `captureTransfer.ts`, `protocol.ts`, `exec.ts`, `bridge.ts`, `handshake.ts`, `frames.ts`, container code, `offline.ts`,
 `evaluationProvenance.ts`.
 STOP conditions: a structural pin (line counts, 800-line max, function-length) goes red — report, do not edit pins; a claim row or
