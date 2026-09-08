@@ -105,7 +105,7 @@ using an 86-character canonical signature placeholder (Ed25519's fixed base64url
 UTF-8 byte size BEFORE crypto.sign; actual signature replacement cannot change serialized size.
 Check aggregate serialized size, not each field or the smaller binary preimage alone. The unchanged bridge
 frame ceiling still applies to its full response envelope; an artifact near the standalone bound may
-therefore fail closed over the bridge. Do not raise that ceiling or truncate evidence to fit it.
+therefore fail closed over the bridge. Do not raise that ceiling or truncate evidence to fit it. [consequence superseded by M6-AM12, 2026-09-08: the outer frame ceiling is 2097152 and a 262144-byte artifact envelope now fits]
 Raw events remain at most 131072 bytes, hashed exactly as received; do not canonicalize/reparse events [values amended by M6-AM12, 2026-09-08]
 before hashing. Preserve capability TTL, operation deadline, stderr, export and snapshot budgets.
 

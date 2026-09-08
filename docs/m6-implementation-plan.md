@@ -340,7 +340,7 @@ All six serial 2048 projections overflow (143677–239167 bytes). With only requ
 (reference/baseline). Even removing every prompt/bootstrap contribution counterfactually leaves those
 four above 131072; removing JSON whitespace also does not suffice. Thus a smaller allowance alone does
 not repair these ordinary serial witnesses. These are concrete projections, not an impossibility proof
-for every possible future transport design.
+for every possible future transport design. [historical AM11-era measurement against the 131072 cap; values amended by M6-AM12, 2026-09-08 — these serial witnesses now fit and attest]
 
 The largest batched 1024 candidate's 119691 bytes partition exactly into bootstrap 774,
 normalized-request 43160, SDK-request 46887, SDK-response 5534, SDK-metadata 3254, tool-arg 4047,
@@ -356,7 +356,7 @@ response payloads 407–417; each frame adds its separate four-byte prefix. Base
 a 43-character capability and maximum safe-integer frame ID are included. These are measured canonical
 frame candidates, not a live Docker exchange. Current production signer/verifier and frame encoder
 accepted or rejected all 36 projections consistently with their independent caps; raw boundary 131071/
-131072/131073 behaved as specified. No oversized projection was truncated or labelled qualified.
+131072/131073 behaved as specified. No oversized projection was truncated or labelled qualified. [AM11-era boundary values; amended by M6-AM12, 2026-09-08]
 Production SDK/runner deletion mutants, 16-turn maximum-output retention and later composed gates remain
 S2/S5 work; direct entry-probe checks do not substitute for them.
 

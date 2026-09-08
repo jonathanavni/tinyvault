@@ -140,6 +140,8 @@ it('AM12 retains all 60 verified cap-sized real-profile snapshots before recompu
       await writeFile(process.argv[3], JSON.stringify({ wallMs, baselineRss: baseline.rss, peakRss, peakHeapUsed,
         sampleCount, intervalMs, platform: process.platform, node: process.version, maxRSS, maxRSSUnit: 'KiB', verifiedRuns: verified.length }, null, 2));
     ` }, bundle: true, platform: 'node', format: 'esm', packages: 'external', outfile: script });
+    // The guard import lives inside a template literal, invisible to the AST scanners; assert it was bundled.
+    expect(await fs.readFile(script, 'utf8')).toContain('Docker access forbidden during tests');
     const measurementPath = resolve('.vitest/am12-retention.measurement.json');
     await fs.mkdir(resolve('.vitest'), { recursive: true });
     const result = await new Promise<{ code: number | null; stderr: string }>((resolve, reject) => {

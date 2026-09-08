@@ -173,9 +173,15 @@ it.each(['key', 'hello'] as const)('AM12 %s key rejects before decode and key im
   }
   // The 58-character vector also exercises encoded length. Canonical 59-character base64url
   // necessarily decodes to 44 bytes, so the retained decoded equality has no independent killing vector.
-  vi.mocked(createPublicKey).mockClear();
-  expect(() => validateBody(op, 'res', body('A'.repeat(58)))).toThrow('key-shape');
+  const short = 'A'.repeat(58); const shortFrom = vi.spyOn(Buffer, 'from'); vi.mocked(createPublicKey).mockClear();
+  let shortFailure: unknown;
+  try { validateBody(op, 'res', body(short)); } catch (error) { shortFailure = error; }
+  const shortDecoded = shortFrom.mock.calls.some(args => args[0] === short && (args as unknown[])[1] === 'base64url');
+  shortFrom.mockRestore();
+  // Short direction: rejected by the encoded-length check before decode (kills a `!==` → `>` operator mutant).
+  expect(shortDecoded, 'short public key reached base64url decode').toBe(false);
   expect(createPublicKey).not.toHaveBeenCalled();
+  expect(shortFailure).toMatchObject({ code: 'key-shape' });
 });
 
 it('AM12 capture encoded boundary rejects before decode', () => {

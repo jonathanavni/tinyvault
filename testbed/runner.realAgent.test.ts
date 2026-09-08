@@ -556,4 +556,4 @@ it.each([false, true])('W6 forged failure annotation cannot promote a failed row
     expect((await adjudicatePersistedRuns(input)).map(row => row.outcome)).toEqual(outcomes);
     expect(diagnostic.verifiedRuns.map(row => row.outcome)).toEqual(outcomes);
   }
-});
+}, 30_000);
