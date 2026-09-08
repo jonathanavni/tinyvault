@@ -99,7 +99,7 @@ Findings:
 | Capture (`MAX_CAPTURE_BYTES` 8 MiB, `MAX_CHUNK_BYTES` 64 KiB) | unchanged | unchanged | Not on the failing path. |
 | Turns / calls per response / `max_tokens` / model / temperature / N / Wilson / completion / leak gates / source identities / decoder limits | unchanged | unchanged | AM11 item 4. No gate is added (§4.3). |
 
-**Behavioural consequences of the frame-ceiling change (disclosed — the complete list):** (i) a 262,144-byte artifact today
+**Behavioural consequences of the frame-ceiling change (disclosed):** *(the R1 Codex/QA finding that the five-site table was not complete is corrected by §4.1a below — every fixed-size field now has an encoded-length check before decode, and the hello-request epoch a 4,096-byte bound.)* (i) a 262,144-byte artifact today
 yields a 262,233-byte receipt or 262,236-byte attestation response payload and is deliberately rejected by the old ceiling
 (`control.test.ts:381-385`; SCHEMA s104 "a near-limit artifact can fail closed over the bridge"); under AM12 such a response fits
 the frame — the artifact bound itself is unchanged, only that s104 sentence becomes false (P-v2 span packet). (ii) The three
@@ -115,6 +115,52 @@ lookalike serial-1024 at 13 turns = 226,840; apply the turn-matched real-envelop
 **1 MiB**: a 1.38× margin on a quantity that has been mis-estimated in both prior rounds is too thin, and a second overflow costs
 another live cohort. **What makes the cap a measurement rather than a choice is §5.1's certifying witness**, which needs no live
 spend.
+
+### 4.1a Complete bridge-field inventory after fix round 1 (replaces the five-site table's completeness claim; post-impl R1)
+
+This inventories every `BODY_SCHEMAS` field after F1/F2, rather than calling the original five AM12 sites a complete list. Bounds apply to the parsed string value before JSON escaping; every body also shares the outer 2097152-byte canonical JSON payload cap (+4 framing). “Encoded” means canonical base64url character count for binary fields; UTF-8 byte count or ASCII shape for text fields. A dash means no binary decoding, not an unbounded field. All body validation first requires a known operation, the exact key set, and string-valued fields (`unknown-op`, then `body-shape`). Precedence below describes body validation after those shared checks; later authentication/state checks remain separate.
+
+| Field | Op / kind | Encoded-length or text bound | Decoded bound | Code | Precedence / other predicates |
+| --- | --- | --- | --- | --- | --- |
+| `secret` | bootstrap / req | Exactly 43 base64url characters | Exactly 32 bytes | `secret-shape` | Encoded equality before decode; then canonicality and decoded equality. |
+| `epoch` | hello / req | At most 4096 UTF-8 bytes; canonical nonnegative decimal prefix, `-`, exactly 32 lowercase hex digits (34–4096 ASCII characters) | — | `body-shape` | Byte bound before container/epoch regexes; then container pattern, epoch pattern and fixture membership, before challenge decoding. |
+| `containerId` | hello / req | Exactly 64 lowercase hex characters | — | `body-shape` | After hello epoch byte bound, before epoch pattern, fixture membership and challenge decoding. |
+| `fixtureId` | hello / req | Exactly one of `benign-login`, `lookalike-origin`, `dom-hidden-injection` (12, 15, 20 ASCII bytes) | — | `body-shape` | After epoch byte bound and container/epoch patterns; before challenge decoding. |
+| `challenge` | hello / req | Exactly 43 base64url characters | Exactly 32 bytes | `challenge-shape` | After hello scope validation; encoded equality before decode, then canonicality and decoded equality. |
+| `publicKey` | hello / res | Exactly 59 base64url characters | Exactly 44 bytes (redundant equality) | `key-shape` | Encoded equality before decode; canonicality/equality before `createPublicKey`; byte-identical Ed25519 SPKI import before MAC shape. |
+| `mac` | hello / res | Exactly 43 base64url characters | Exactly 32 bytes | `mac-shape` | After complete public-key validation; encoded equality before MAC decode, then canonicality/equality. MAC authentication is a later `mac-invalid` check. |
+| `epoch` | register, receipt, capture, attest, key, finalize, ack / req | At most 4096 UTF-8 bytes and the same canonical decimal-prefix/32-hex pattern | — | `body-shape` | Existing operation order is epoch regex, then byte bound, then fixture and runId; before registration scalars or capability decode. F2 changes hello only. |
+| `fixtureId` | register, receipt, capture, attest, key, finalize, ack / req | Same three fixture IDs (12, 15, 20 ASCII bytes) | — | `body-shape` | After epoch regex/byte bound, before runId and op-specific fields. |
+| `runId` | register, receipt, capture, attest, key, finalize, ack / req | 1–128 ASCII characters from `[A-Za-z0-9-]` | — | `body-shape` | After epoch/fixture checks, before registration scalars or capability decode. |
+| `scenarioId`, `canaryId` | register / req | 1–128 UTF-8 bytes each; no lone surrogate | — | `body-shape` | After common request scope; scalar iteration is scenarioId, nonce, canaryId, canary. |
+| `nonce`, `canary` | register / req | 1–4096 UTF-8 bytes each; no lone surrogate | — | `body-shape` | Same scalar iteration; no binary decoding. |
+| `receipt`, `capture`, `attest`, `key`, `finalize`, `ack` (six separate capability fields) | register / res | Exactly 43 base64url characters per field | Exactly 32 bytes per field | `capability-refused` | In the listed order, each encoded equality before its decode/canonicality/equality; all-six uniqueness checked afterwards. |
+| `capability` | receipt, capture, attest, key, finalize, ack / req | Exactly 43 base64url characters | Exactly 32 bytes | `capability-refused` | After common scope, before capture kind/offset or attest events; encoded equality before decode, then canonicality/equality. |
+| `kind` | capture / req | Exactly `requests` (8 ASCII bytes) or `unauthorized` (12) | — | `body-shape` | After capability, before offset. |
+| `offset` | capture / req | Canonical decimal integer string, 1–7 ASCII digits, numeric 0–8388608 | — | `body-shape` | After kind; canonical-integer regex, encoded digit count, then numeric bound. |
+| `events` | attest / req | At most 1398102 base64url characters (`ceil(1048576*4/3)`) | At most 1048576 bytes | `control-limit` for either size excess; `body-shape` for noncanonical encoding | After scope/capability; encoded excess rejected before decode (even invalid alphabet), then canonicality, then decoded excess. Empty encoding is shape-valid here; attestation validity is checked downstream. |
+| `receipt` | receipt / res | 0–262144 UTF-8 bytes; no lone surrogate | — | `body-shape` | Artifact scalar validation; empty allowed. |
+| `attestation` | attest / res | 1–262144 UTF-8 bytes; no lone surrogate | — | `body-shape` | Artifact scalar validation; empty rejected. |
+| `publicKey` | key / res | Exactly 59 base64url characters | Exactly 44 bytes (redundant equality) | `key-shape` | Encoded equality before decode; canonicality/equality before byte-identical Ed25519 SPKI import. |
+| `bytes` | capture / res | At most 87382 base64url characters (`ceil(65536*4/3)`) | At most 65536 bytes | `body-shape` | Encoded bound before decode/canonicality; parse total then next before decoded-size and consistency checks. |
+| `total`, `next` | capture / res | Each canonical decimal, 1–7 ASCII digits, numeric 0–8388608 | — | `body-shape` | After bytes decode/canonicality; total then next; finally decoded bytes ≤65536, next ≤total, decoded bytes ≤next, and empty bytes permitted only when next = total. |
+| No fields (exact empty body) | bootstrap, finalize, ack / res | Zero keys | — | `body-shape` for any key | Shared exact-key body check. |
+
+The frame envelope has additional closed fields, inventoried separately so the body table is not mistaken for the entire transport contract:
+
+| Field | Op / kind | Encoded-length or value bound | Decoded bound | Code | Precedence |
+| --- | --- | --- | --- | --- | --- |
+| Four-byte length prefix / whole payload | All frames | Unsigned big-endian length 1–2097152; four prefix bytes excluded from payload bound | UTF-8 JSON payload ≤2097152 bytes | `frame-length` | Stream decoder checks length before UTF-8/JSON; encoder checks after serialization and before its payload validation. Incomplete stream end is `frame-partial`. |
+| Whole JSON / exact envelope keys | All frames | Canonical UTF-8 serialization, exact ordered envelope keys; payload cap above | Object | `frame-utf8`, `frame-canonical` | UTF-8, JSON parse, canonical rebuild/equality, then field types. |
+| `v` | All frames | JSON number exactly 1 | — | `frame-type` | Shared frame type validation, before operation membership and body validation. |
+| `kind` | All frames | Exactly `req` or `res` | — | `frame-type` (noncanonical envelope fails earlier) | Shared frame type validation. |
+| `id` | All frames | Safe JSON integer 1–9007199254740991 | — | `frame-type` | Shared frame type validation. Correlation/ordering remains later. |
+| `op` | All frames | Exactly bootstrap, hello, register, receipt, capture, attest, key, finalize or ack | — | `frame-type` if not string; `unknown-op` if not a listed op | Type validation, then op membership; before body validation. |
+| `ok` | Response only | JSON boolean | — | `frame-type` (noncanonical envelope fails earlier) | Shared type validation; true selects body, false selects code. Absent from requests. |
+| `body` | Requests and successful responses | Exact per-op object; every field/string bound in preceding table; outer payload cap applies | — | `frame-type` if not object; `body-shape` for schema/field type | Frame type before `validateBody`; failures omit body. |
+| `code` | Failed response only | Exact member of `BRIDGE_CODES`: unsolicited, duplicate-id, id-mismatch, op-mismatch, bridge-timeout, bridge-closed, protocol-order, unknown-op, pipelined, body-shape, secret-shape, challenge-shape, mac-shape, mac-invalid, key-shape, hello-mismatch, hostname-mismatch, frame-length, frame-utf8, frame-canonical, frame-type, frame-kind, frame-partial, capability-refused, run-state, control-limit, key-mismatch | — | `frame-type` for nonmember | Shared type validation; no body or body decoding for a failed response. |
+
+These limits are independent: the outer payload ceiling cannot replace fixed-width pre-decode bounds, raw-event admission, chunk limits or artifact-string limits. No decoder scan budget is widened; the owner-recorded decoder disclosure residual remains.
 
 ### 4.2 AM11 items amended (explicit — R1 P1-02, R2 P2-03)
 
@@ -320,3 +366,20 @@ and the rest of items 3–4 unchanged.
 Owner note on the ladder: three paper rounds were consumed (Sol, Opus 5, Sol). Round 3's four P1s were all statements in the
 paper, none a defect in the proposed byte values or in the code; v4 fixes them without a fourth review round, per the three-round
 cap convention. The proposal now put to the user is the one in §4.1–§4.2 with the residuals above and the open questions in §9.
+
+## 14. Post-implementation residuals recorded at integration (owner, 2026-09-08)
+
+- **Decoder budgets not rescaled with the cap (security R1 P2-01).** `inflateScanBytes` (64 KiB header window), `wrapperInflateTrialsPerEvent`
+  (512) and `rawInflateTrialsPerEvent` (4,096) are unchanged by design (§4.1 "decoder limits unchanged"; SCHEMA s064/s065 declare them
+  in kind). Consequence of the 8× cap, now stated in magnitude: the per-value region never header-scanned for embedded compressed
+  sources grew from ≤ 64 KiB to ≤ ~984 KiB; wrapper-trial exhaustion is counted as `scanTruncated` (E5 rejects such a run); raw-DEFLATE
+  trial exhaustion stays silent by design. A rescale is a separate decoder-budget amendment with its own benchmark evidence, not part
+  of AM12. The V7 near-cap observation (`truncated = true` at 1,048,575 bytes under synthetic decoder-stress leaves) is the
+  absence-detection signal that this residual is real.
+- **Inventory completeness (Codex R1 P1-1, QA R1 P2-01).** The original five-site scalar table under-counted the fields that
+  inherited the frame ceiling as their only pre-decode bound; §4.1a is the complete inventory after fix round 1.
+- **Redundant 44-byte key argument (security R1 P3-02).** A canonical 59-character base64url string always decodes to 44 bytes; the
+  decoded-size argument is defence in depth with no independent killing vector.
+- **Leave-alone synthetic pair (QA R1 P3-03).** `testbed/evidenceOversize.test.ts:6` carries `byteLength: 131073, cap: 131072` as a
+  forgery-predicate payload only; intentionally retained alongside the `realAgentRun.test.ts` pair.
+- **V13 gate cost (QA R1 P3-01).** Owner-run; measured at acceptance and recorded in the register.
