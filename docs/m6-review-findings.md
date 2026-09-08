@@ -1429,3 +1429,45 @@ S5 packet is still under paper review; no other tree change). Deviations recorde
 (1)–(7) and (9) are unchanged and carried by the S5 packet. Real-clock margins in the new tests (200–1000 ms,
 350–850 ms, 900–1500 ms) are wide but not immune to heavy machine load; if they flake under the serial timing
 convention, widen the observation, never the reserve.
+
+## S5 packet — Sol paper pass R1 and owner dispositions (2026-09-07, owner claude)
+
+Scope: pre-dispatch read-only review of `docs/m6-s5-handoff.md` by Codex `gpt-5.6-sol` (`task --fresh`, review-shaped
+prompt with an explicit READ-ONLY preamble). First attempt `task-mts2g9xk-rvqmq9` died silently at ~13 min (pid gone,
+log stale, no result; archived as `sol-packet-review-r1-attempt1-dead.log`); cancelled and re-dispatched once with
+identical arguments as `task-mts3amtl-w3s8u7`, which completed. Prompt and review:
+`artifacts/review-evidence/tinyvault-m6-s5-packet-20260907/sol-packet-review-r1-prompt.md`, `sol-packet-review-r1.md`.
+
+**Verdict NO-SHIP; 3 P1 / 3 P2; all six verified by the owner and ABSORBED.**
+
+- **F1 (P1, process)** — the packet's decision D-S5-9 (single eval test file + non-test module in place of the plan
+  row's `runner.realAgent.eval.test.ts`) was missing from the approval list and the plan row was not scheduled for
+  amendment before dispatch. Absorbed: approval list is now D-S5-1…10; the §7 S5 row amendment is owner
+  pre-integration step 2 (before the pin).
+- **F2 (P1)** — "assert `list_vault` exactly once and before the first provider request through the transcript" was
+  unobservable: `host.tools.list_vault` runs through `capturedVault` → `captureTrusted`, which feeds only the tripwire
+  and writes no transcript record (verified `src/supervisor/evidenceLease.ts:431-441`, `host.ts:402`). Absorbed with
+  Sol's fix: a trusted runner-side wrapper appends one `meta` transcript record (the kind the runner already uses for
+  `post-loop-drain`) and delegates once; order via that record preceding the first `sdk-request`; count via a backend
+  spy. No new record kind.
+- **F3 (P1)** — "read `provenance.config` from the S2/S3 constants, not re-declared" was unimplementable: the endpoint
+  is a private constant, `temperature: 0` / `maxRetries: 0` are literals inside the class, and no API-version constant
+  exists (verified `src/agents/anthropicClient.ts:10,34,46`), while the packet forbids editing that file. Absorbed as a
+  new pre-authorized Astra-only extension §J / **D-S5-10**: export a frozen resolved-config object the class itself
+  reads, bound to the captured request (URL, `anthropic-version` header, body fields) by the composed test. Rejected
+  alternative: re-declaring in `testbed/` (provenance could diverge from the live client).
+- **F4 (P2)** — the `dirty` derivation was ambiguous ("derived from hashing"). Absorbed with Sol's wording: `dirty` iff
+  `git status --porcelain=v1 -z --untracked-files=all` prints anything; the four read-only Git commands are now the
+  enumerated permitted set.
+- **F5 (P2)** — the mutant inventory named only E1/E7/E8 rows although the plan's S5 row requires E1–E4 re-proved at
+  the command boundary. Absorbed: E2 and E3/E4 rows added, each applied temporarily to its production file and killed
+  through `runEvalEntry` with the fake-fetch cohort, then restored byte-exact.
+- **F6 (P2)** — `TINYVAULT_PROFILE=… && …` would bind the variable to the first command only. Absorbed with the exact
+  `scripts.baseline` / `scripts['eval:stub']` strings, the variable prefixed to the vitest command itself.
+
+Sol's specific checks 2, 3, 4, 6, 7, 9 returned "no issue": the eval-gate pins hold as the packet states; the run-ID
+arithmetic is `1018 + 2×(46−46) = 1018 ≤ 1024` (6 bytes spare on the DOM-hidden reference cell); the two supervisor
+extensions are minimal and outside `tools`; `runAgentProfile` composes with the owned executor/finalizer without
+`src/agents` edits; the E5 outcome is derivable in `runOnce`; F.2 admits no unverified run. Owner §5.1 sweep run
+after absorption (no stale tokens). One paper round used of three; the packet awaits user approval of D-S5-1…10
+before the pin and Astra dispatch. No implementation, cohort, Docker or release authority follows from this entry.

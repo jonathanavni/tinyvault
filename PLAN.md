@@ -11,6 +11,23 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
+`2026-09-07-s5` — focus: **S5 packet (composed real-agent command path, E7/E8) — draft, Sol paper pass, Astra dispatch under the full ladder**;
+owner: claude; state: active. Checkout: `/Users/jonathanavni/Documents/Coding/tinyvault`, branch main at `39126cf` (== origin).
+Breadcrumb (2026-09-07): two stale busy-loop shells from the 2026-09-02 probeP stress run killed (PIDs 60983/60984). S5
+packet drafted at `docs/m6-s5-handoff.md` (uncommitted) with nine open owner decisions D-S5-1…9 awaiting user approval;
+evidence dir `artifacts/review-evidence/tinyvault-m6-s5-packet-20260907/`. Running: Sol read-only paper pass over the
+packet (first job `task-mts2g9xk-rvqmq9` died silently at ~13 min, log archived as `sol-packet-review-r1-attempt1-dead.log`;
+re-dispatched once with identical arguments as `task-mts3amtl-w3s8u7`, main checkout); Sol test-only "unmutated arms" job (S4 residual 8) in worktree
+`<scratchpad>/wt-s4-arms` on branch `codex/s4-arms` (Codex job `task-mts2i6mf-90u9gv`) — DONE: four tests + 14 s sync
+fix, owner-verified on main (35/35 ×3, typecheck, 31/31 browser control, Arm D mutant killed), register entry "S4
+residual (8) — unmutated arms closed", committed on main; worktree/branch removed. Hold further commits while the
+paper pass runs.
+Sol paper pass R1 DONE (NO-SHIP, 3 P1 / 3 P2, all absorbed; register entry "S5 packet — Sol paper pass R1"); packet now
+carries ten decisions D-S5-1…10. **Blocked on the user:** approval of D-S5-1…10. Then: owner pre-integration (docker
+capability row for `testbed/sourceInventory.ts`, plan §7 S5 row amendment, docs/README line) → commit packet → pin base
+→ Astra `task --write` for S5 → post-impl ladder (Codex adversarial + Claude QA + Claude security, three-round cap).
+No Codex jobs running.
+
 `2026-09-07-d-cancel` — focus: **D-CANCEL resolved; S4 implemented, reviewed and accepted; pushed**;
 owner: claude; **state: closed** (2026-09-07); continuity relinquished for a fresh session.
 State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`; branch main; local == origin at `b0461f0`.
