@@ -197,6 +197,39 @@ describe('browser session lifecycle over the CDP seam', () => {
     expect(context.owner.contexts()).toEqual([]);
     expect(host.openSessionCount()).toBe(0);
   });
+  it('retains an emergency-close failure for a later recovery attempt', async () => {
+    const { host, context } = setup(); await host.openSession();
+    vi.spyOn(context.owner, 'contexts').mockReturnValue([context]);
+    const close = vi.spyOn(context, 'close').mockRejectedValue(new Error('context remains owned'));
+    await host.abortSessions();
+    expect(close).toHaveBeenCalledTimes(3);
+    await host.abortSessions();
+    expect(close).toHaveBeenCalledTimes(6);
+  });
+  it('waits for an in-flight model close before per-entry abort disposal', async () => {
+    const { host, context } = setup(); const { sessionId } = await host.openSession();
+    let entered!: () => void; let release!: () => void;
+    const stopEntered = new Promise<void>((resolve) => { entered = resolve; });
+    const stopGate = new Promise<void>((resolve) => { release = resolve; });
+    const send = context.cdp.send.bind(context.cdp);
+    vi.spyOn(context.cdp, 'send').mockImplementation(async (method, params) => {
+      const result = await send(method, params);
+      if (method === 'Page.stopLoading') { entered(); await stopGate; }
+      return result;
+    });
+    const closing = host.closeSession(sessionId); await stopEntered;
+    let released = false; const closePhases: boolean[] = [];
+    const close = context.close.bind(context);
+    vi.spyOn(context, 'close').mockImplementation(async () => { closePhases.push(released); await close(); });
+    const aborting = host.abortSessions();
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect([...closePhases]).toEqual([false]);
+    } finally {
+      released = true; release(); await Promise.all([closing, aborting]);
+    }
+    expect(closePhases).toEqual([false, true, true]);
+  });
   it('abort disposes an owned context whose session is still initializing', async () => {
     const { context, host } = setup();
     let entered!: () => void;
@@ -292,6 +325,57 @@ describe('browser session lifecycle over the CDP seam', () => {
     expect(sequence).toEqual(['courtesy', 'holder', 'Page.stopLoading', 'Emulation.setScriptExecutionDisabled']);
     expect(context.cdp.calls.at(-1)?.params).toEqual({ value: true });
     await host.closeAll();
+  });
+  it('uses the quiesce deadline to end courtesy before the two-second window', async () => {
+    const { host, context } = setup(); const { sessionId } = await host.openSession();
+    let active!: () => void; let release!: () => void;
+    const holderActive = new Promise<void>((resolve) => { active = resolve; });
+    const holder = host.runControl(sessionId, () => new Promise<void>((resolve) => {
+      release = resolve; active();
+    }));
+    await holderActive;
+    const start = Date.now(); let stoppedAt = Infinity;
+    const send = context.cdp.send.bind(context.cdp);
+    vi.spyOn(context.cdp, 'send').mockImplementation(async (method, params) => {
+      if (method === 'Page.stopLoading') { stoppedAt = Date.now(); release(); }
+      return send(method, params);
+    });
+    await host.quiesceControls(start + 300); await holder; await host.closeAll();
+    expect(stoppedAt - start).toBeGreaterThanOrEqual(200);
+    expect(stoppedAt - start).toBeLessThan(1_000);
+  });
+  it('reserves disposal time before a blocked script-suspension round trip', async () => {
+    const { host, context } = setup(); await host.openSession();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const send = context.cdp.send.bind(context.cdp);
+    vi.spyOn(context.cdp, 'send').mockImplementation(async (method, params) => {
+      const result = await send(method, params);
+      if (method === 'Emulation.setScriptExecutionDisabled') await gate;
+      return result;
+    });
+    const start = Date.now(); await host.quiesceControls(start + 1_500);
+    const reservedElapsed = Date.now() - start;
+    let closed = false; const closing = host.closeAll().then(() => { closed = true; });
+    await new Promise<void>((resolve) => setImmediate(resolve)); expect(closed).toBe(false);
+    release(); await closing; expect(closed).toBe(true);
+
+    const control = setup(); await control.host.openSession();
+    let releaseControl!: () => void;
+    const controlGate = new Promise<void>((resolve) => { releaseControl = resolve; });
+    const controlSend = control.context.cdp.send.bind(control.context.cdp);
+    vi.spyOn(control.context.cdp, 'send').mockImplementation(async (method, params) => {
+      const result = await controlSend(method, params);
+      if (method === 'Emulation.setScriptExecutionDisabled') await controlGate;
+      return result;
+    });
+    const controlStart = Date.now(); await control.host.quiesceControls(controlStart + 5_000);
+    const controlElapsed = Date.now() - controlStart;
+    releaseControl(); await control.host.closeAll();
+    expect(reservedElapsed).toBeGreaterThanOrEqual(350);
+    expect(reservedElapsed).toBeLessThan(850);
+    expect(controlElapsed).toBeGreaterThanOrEqual(900);
+    expect(controlElapsed).toBeLessThan(1_500);
   });
 
   it('closes a gone target without reporting infrastructure failure', async () => {

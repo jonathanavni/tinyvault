@@ -1392,3 +1392,40 @@ generation 4+ degrades to markers by design. (4) Socket release is proven only b
 courtesy deadline term and the suspension reserve; the G3 regression's fixed 14 s sync; `abortSessions`' recovery loop
 per-entry guard — S5 test items. (9) M5-C7 unload/keepalive limits unchanged. Rounds are capped at three; no fourth
 paper or fix round was opened.
+
+## S4 residual (8) — unmutated arms closed by a Sol test-only packet (2026-09-07, owner claude)
+
+Scope: the four arms declared unmutated at S4 acceptance (residual 8): the `deadlineAt` term of `courtesyWait`
+(`src/browser/session.ts:369`), the one-second reserve in `suspendScripts` (`session.ts:790`), the per-entry guards of
+`abortSessions`' recovery loop (`session.ts:202`, `:204`), and the fixed 14 s sleep in
+`testbed/runner.finalization.browser.test.ts:192`. Dispatched as a test-only packet to Codex `gpt-5.6-sol` in an
+isolated worktree (`codex/s4-arms`, base `39126cf`), in parallel with the S5 packet's paper pass. Packet, worker report,
+patch and owner logs: `artifacts/review-evidence/tinyvault-m6-s5-packet-20260907/sol-s4-arms-*.md`,
+`sol-s4-arms.patch`, `owner-arms-verification.log`, `owner-arms-mutants.log` (local, ignored).
+
+**Delivered (test-only; no production edit; `session.ts` SHA-256 unchanged).** `src/browser/session.test.ts` 585 → 669
+lines: four Node tests over the existing `FakeCdp`/`FakeContext` seam — "uses the quiesce deadline to end courtesy
+before the two-second window", "reserves disposal time before a blocked script-suspension round trip" (with a
+far-deadline control in the same case and the retained suspension promise proven awaited at `closeAll`), "retains an
+emergency-close failure for a later recovery attempt", "waits for an in-flight model close before per-entry abort
+disposal". `testbed/runner.finalization.browser.test.ts` 796 → 796 lines: the 14 s sleep replaced by awaiting the
+captured operation under `expect(elapsed).toBeLessThan(14_000)`; every prior assertion, the `finally` and the 22 s
+timeout retained.
+
+**Mutants.** Worker (Node, worktree, owner toolchain): A `Math.min(deadlineAt, courtesyUntil)` → `courtesyUntil`:
+killed (`expected 2011 to be less than 1000`); B(1) delete `- 1_000`: killed (`expected 1002 to be less than 850`);
+B(2) delete `Math.max(0, …)`: EQUIVALENT for the required observation (Node clamps a negative delay to 1 ms with
+`TimeoutNegativeWarning`; recorded, not claimed); C:204 unconditional delete: killed (`expected 6 close calls, got 3`);
+C:202 drop the close-promise await: killed (`expected [false], received [false, false]`). Owner reproduction on main:
+A killed (`expected 2006 to be less than 1000`), C:204 killed (`"close" called 3 times, expected 6`), source restored
+byte-exact. Owner-run Arm D mutant `OP_STOP_GRACE_MS` 3_000 → 5_000: killed (`expected 15005.27 to be less than
+14000`); the previous fixed sleep would have passed; `host.ts` restored byte-exact.
+
+**Owner verification on main:** `src/browser/session.test.ts` 35/35 three consecutive runs; `npx tsc --noEmit` exit 0;
+`testbed/runner.finalization.browser.test.ts` 31/31 (control). `make test` deferred to the S5 integration gate (the
+S5 packet is still under paper review; no other tree change). Deviations recorded by the worker: sandbox could not run
+`git checkout` (index.lock EPERM) so mutants were restored by reverse patch and hash-verified; the worktree had no
+`node_modules`, so the suite ran through the owner checkout's Vitest with `--root`. Residual (8) is CLOSED; residuals
+(1)–(7) and (9) are unchanged and carried by the S5 packet. Real-clock margins in the new tests (200–1000 ms,
+350–850 ms, 900–1500 ms) are wide but not immune to heavy machine load; if they flake under the serial timing
+convention, widen the observation, never the reserve.

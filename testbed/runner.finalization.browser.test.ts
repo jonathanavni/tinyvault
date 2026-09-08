@@ -186,10 +186,10 @@ describe.sequential('M6 S4 real finalization', () => {
     const entered = page.waitForEvent('console', (message) => message.text() === 's4-busy-loop-entered');
     await page.evaluate(() => { setTimeout(() => document.querySelector<HTMLButtonElement>('#busy')!.click(), 0); });
     await entered;
-    let result: unknown = 'pending';
+    let result: unknown = 'pending'; const start = performance.now();
     const operation = host.tools.browser_snapshot(session).then((value) => { result = value; });
     try {
-      await new Promise((resolve) => setTimeout(resolve, 14_000));
+      await operation; expect(performance.now() - start).toBeLessThan(14_000);
       expect(result).toEqual({ ok: false, reason: 'session-unknown' });
       expect(browser.contexts()).not.toContain(context);
       expect(browser.contexts()).toHaveLength(1);
