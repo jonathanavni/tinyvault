@@ -95,10 +95,15 @@ export async function runOnce(input: RunOnceInput): Promise<RunOnceResult> {
     // Snapshot before replacement: the in-process fixture uses this same destination.
     const capture = await input.fixture.captureRequests(prepared.runId);
     await persistFixtureCapture(input.artifactDirectory, prepared.runId, capture);
-    eventsAttestation = await input.fixture.attestEvents(prepared.runId, await readFile(prepared.eventsPath));
+    if (!realResult) eventsAttestation = await input.fixture.attestEvents(prepared.runId, await readFile(prepared.eventsPath));
     taskCompleted = input.fixture.verifyCompletion(completionReceipt, completionBinding).taskCompleted;
+    // A real run's attestation is its trusted finalization disposition, minted last.
+    if (realResult?.intact === true) {
+      eventsAttestation = await input.fixture.attestEvents(prepared.runId, await readFile(prepared.eventsPath));
+    }
   } catch (error) {
     if (!realResult) throw error;
+    eventsAttestation = '';
     realResult.intact = false; realResult.execution.status = 'capture-failed';
     await writeFile(`${prepared.eventsPath}.fixture-failure.json`,
       `${JSON.stringify({ status: 'execution-failed', reason: 'unclassified', acceptedOutcome: null })}\n`, { mode: 0o600 });

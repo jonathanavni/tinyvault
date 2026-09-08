@@ -11,6 +11,7 @@ import { ANTHROPIC_CLIENT_CONFIG } from '../src/agents/anthropicClient';
 import type { M6Scorecard } from './scorecard.schema';
 import { assertRealAgentEvaluation } from './runner.realAgent.eval';
 
+vi.mock('node:fs/promises', async original => ({ ...await original<typeof import('node:fs/promises')>() }));
 vi.mock('./docker/composedFixtures', async original => ({ ...await original<typeof composed>(), startComposedFixtureSet: vi.fn() }));
 afterEach(() => vi.restoreAllMocks());
 describe('S5 actual command composition', () => {
@@ -283,3 +284,219 @@ it('command admission compares execution metadata independently of JSON key orde
     expect(setup.host.tools).not.toHaveProperty('setupReasonFor');
     await setup.host.closeAll();
   });
+
+// Cap-round confirmation witnesses: actual entry/client, finite fake-fetch/browser observations.
+async function capCommand() {
+  const root = await mkdtemp(join(tmpdir(), 'tinyvault-cap-round-'));
+  const h = await s5ComposedHarness(root); let directory = ''; let editError: unknown;
+  vi.mocked(composed.startComposedFixtureSet).mockImplementation(input => { directory = input.artifactRoot; return h.startComposed(input); });
+  vi.spyOn(console, 'log').mockImplementation(() => {}); vi.spyOn(console, 'error').mockImplementation(() => {});
+  const inventory = async () => ({ rows: JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8')),
+    manifest: JSON.parse(await readFile(join(directory, 'offline-evidence.json'), 'utf8')) });
+  const edit = (change: (rows: any[], manifest: any) => Promise<void>) => {
+    h.fixtures['benign-login']!.close = async () => {
+      const { rows, manifest } = await inventory();
+      try { await change(rows, manifest); } catch (error) { editError = error; throw error; }
+      await writeFile(join(directory, 'runs.captured.json'), JSON.stringify(rows));
+      await writeFile(join(directory, 'offline-evidence.json'), JSON.stringify(manifest));
+    };
+  };
+  return { ...h, inventory, edit, execute: () => runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options),
+    diagnostic: async () => {
+      if (editError) throw editError;
+      await expect(readFile(join(directory, 'scorecard.json'))).rejects.toThrow();
+      const report = JSON.parse(await readFile(join(directory, 'diagnostic.json'), 'utf8'));
+      expect(JSON.parse(await readFile(join(directory, 'qualification.json'), 'utf8')).status).toBe('unqualified');
+      return report;
+    } };
+}
+async function capPromote(h: Awaited<ReturnType<typeof capCommand>>, row: any, evidence: any, status = 'completed') {
+  const { leakScan } = await import('./checkers/leakScan');
+  const { wrongOrigin } = await import('./checkers/wrongOrigin');
+  const { bodiesUnobserved } = await import('./checkers/bodiesUnobserved');
+  const { CompletionVerifier, canaryCommitment } = await import('./completion');
+  const scenario = createScenarioRegistry(Object.fromEntries(Object.entries(h.fixtures).map(([id, f]) => [id, f.origin])) as never).get(row.scenario)!;
+  const events = JSON.parse(await readFile(row.eventsPath, 'utf8'));
+  const auth = scenario.authForRun(row.runId, evidence.completionBinding.nonce), leak = leakScan(events, evidence.canary, auth);
+  const completed = new CompletionVerifier(h.fixtures[scenario.fixtureId]!.verificationPublicKey).verify(row.completionReceipt,
+    { ...evidence.completionBinding, canaryCommitment: canaryCommitment(evidence.canary) }).taskCompleted;
+  expect(completed).toBe(true);
+  row.outcome = { secretLeaked: leak.secretLeaked, ...wrongOrigin(events, auth.canonicalOrigin),
+    scanTruncated: leak.truncated ? 1 : 0, bodiesUnobserved: bodiesUnobserved(events), approvalBypassed: false,
+    taskCompleted: status === 'completed' && completed };
+  row.execution.status = status; evidence.execution = structuredClone(row.execution);
+}
+async function capDiagnostic(h: Awaited<ReturnType<typeof capCommand>>, reason = 'signature-mismatch') {
+  await expect(h.execute()).rejects.toThrow('Real evaluation is unqualified');
+  const report = await h.diagnostic();
+  expect(report.cohortFailure).toBeUndefined(); expect(report.verifiedRuns).toHaveLength(5);
+  expect(report.runs[0]).toMatchObject({ status: 'capture-failed', reason, acceptedOutcome: null });
+  expect(report.runs.slice(1).every((row: any) => row.status === 'verified')).toBe(true);
+  expect(report.missingPositiveControlCells).toEqual([{ scenario: 'benign-login-control', agent: 'tinyvault-ref' }]);
+}
+const capFailures = ['503-body', 'stream-body', 'tripwire', 'closeAll', 'transcript', 'quiesce', 'max-turns-tripwire'] as const;
+it.each(capFailures.flatMap(fault => [false, true].map(promote => ({ fault, promote }))))(
+  'H1 command finalization $fault promotion=$promote', async ({ fault, promote }) => {
+    const h = await capCommand(), fetch = h.options.providerFetch, createHost = h.options.createHost!;
+    const { EvidenceLease } = await import('../src/supervisor/evidenceLease');
+    let target = '', finalSeen = false, accepted = 0, honestStatus = '';
+    h.options.createHost = async input => {
+      const host = await createHost(input); if (target) return host;
+      target = [...h.setups.keys()].at(-1)!;
+      const lease = new EvidenceLease(input.canary!);
+      return { ...host,
+        tools: { ...host.tools, browser_snapshot: args => finalSeen && fault === 'max-turns-tripwire'
+          ? Promise.resolve({ snapshot: { nodes: [] } } as never) : host.tools.browser_snapshot(args) },
+        finish: () => {
+          if (fault === 'tripwire' || fault === 'max-turns-tripwire') {
+            expect(finalSeen).toBe(true); lease.captureTrusted(input.canary!); return lease.finish();
+          }
+          return host.finish();
+        }, closeAll: async () => { await host.closeAll(); if (fault === 'closeAll') throw new Error('closeAll probe'); },
+        quiesceEvidenceProducers: async callbacks => {
+          await host.quiesceEvidenceProducers!(callbacks);
+          if (fault === 'quiesce') { expect(finalSeen).toBe(true); throw new Error('quiesce probe'); }
+        } };
+    };
+    h.options.providerFetch = async (url, init) => {
+      const task = JSON.parse(JSON.parse(init!.body as string).messages[0].content);
+      const id = new URL(task.startUrl).searchParams.get('runId')!;
+      const response = await fetch(url, init), body = await response.clone().json();
+      if (id !== target) return response;
+      if (body.stop_reason !== 'end_turn' && !finalSeen) { accepted++; return response; }
+      finalSeen = true; expect(h.captures.get(id)!.length).toBeGreaterThan(0);
+      if (fault === '503-body') return new Response(JSON.stringify(body), { status: 503 });
+      if (fault === 'stream-body') {
+        let sent = false;
+        return new Response(new ReadableStream({ pull(controller) {
+          if (!sent) { sent = true; controller.enqueue(new TextEncoder().encode(JSON.stringify(body))); }
+          else controller.error(new Error('stream probe'));
+        } }));
+      }
+      if (fault === 'max-turns-tripwire') {
+        accepted++; body.stop_reason = 'tool_use'; body.content = [{ type: 'tool_use', id: `cap-${accepted}`,
+          name: 'browser_snapshot', input: { sessionId: 'cap-session' } }];
+        return new Response(JSON.stringify(body));
+      }
+      accepted++; return response;
+    };
+    if (fault === 'transcript') {
+      const fs = await import('node:fs/promises'), read = fs.readFile;
+      vi.spyOn(fs, 'readFile').mockImplementation((async (path: any, ...args: any[]) => {
+        const result = await (read as any)(path, ...args);
+        return target && String(path).endsWith(`${target}/transcript.jsonl`)
+          ? String(result).split('\n').filter(line => !line.includes('post-loop-drain')).join('\n') : result;
+      }) as typeof readFile);
+    }
+    const attest = vi.spyOn(h.fixtures['benign-login']!, 'attestEvents');
+    h.edit(async (rows, manifest) => {
+      honestStatus = rows[0].execution.status; expect(rows[0].outcome).toBeNull();
+      if (promote) await capPromote(h, rows[0], manifest.runs[0], fault === 'max-turns-tripwire' ? 'max-turns' : 'completed');
+    });
+    await capDiagnostic(h);
+    expect(finalSeen).toBe(true);
+    expect(honestStatus).toBe(['503-body', 'stream-body'].includes(fault) ? 'api-failed' : 'capture-failed');
+    expect((await h.inventory()).manifest.runs[0].eventsAttestation).toBe('');
+    expect(attest.mock.calls.filter(([id]) => id === target)).toHaveLength(0);
+    if (fault === 'max-turns-tripwire') expect(accepted).toBe(16);
+    const row = (await h.inventory()).rows[0];
+    const records = (await readFile(row.transcriptPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+    if (fault === 'tripwire' || fault === 'max-turns-tripwire') {
+      expect(JSON.parse(await readFile(join(dirname(row.eventsPath), 'execution-failure.json'), 'utf8')).diagnostic)
+        .toMatchObject({ event: 'trusted-output-tripwire', verdict: { transform: 'raw', evidenceIndex: 0 } });
+      expect(records.filter(row => row.kind === 'meta').map(row => JSON.parse(row.bytes).event))
+        .toContain(fault === 'max-turns-tripwire' ? 'loop-max-turns' : 'loop-complete');
+    }
+    // The 16-turn witness also exceeds the signing-byte cap; the no-mint assertion above isolates H1.
+    if (fault === '503-body' || fault === 'stream-body') {
+      expect(JSON.parse(records.filter(row => row.kind === 'sdk-response').at(-1).bytes).stop_reason).toBe('end_turn');
+      const wire = records.filter(row => row.kind === 'sdk-meta').map(row => JSON.parse(row.bytes))
+        .filter(row => row.transportDirection === 'inbound').at(-1);
+      expect(wire).toMatchObject({ status: fault === '503-body' ? 503 : 200, complete: fault === '503-body' });
+    }
+  }, 30_000);
+
+it.each(['finalizeRun', 'takeReceipt', 'captureRequests', 'persist', 'verifyCompletion'])(
+  'H1 command never attests after fixture step failure: %s', async fault => {
+    const h = await capCommand(), fixture = h.fixtures['benign-login']!;
+    const attest = vi.spyOn(fixture, 'attestEvents'); let target = '';
+    const register = fixture.registerRun; fixture.registerRun = async setup => { target ||= setup.runId; await register(setup); };
+    if (fault === 'persist') {
+      const fs = await import('node:fs/promises'), rename = fs.rename;
+      vi.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+        if (target && String(to).endsWith(`/${target}.requests`)) throw new Error('persist probe');
+        return rename(from, to);
+      });
+    } else {
+      const original = (fixture as any)[fault];
+      (fixture as any)[fault] = (...args: any[]) => {
+        if ((fault === 'verifyCompletion' ? args[1].runId : args[0]) === target) throw new Error('fixture probe');
+        return original(...args);
+      };
+    }
+    h.edit(async (rows, manifest) => { expect(rows[0].execution.status).toBe('capture-failed'); expect(rows[0].outcome).toBeNull();
+      expect(manifest.runs[0].eventsAttestation).toBe(''); });
+    await capDiagnostic(h); expect(attest.mock.calls.filter(([id]) => id === target)).toHaveLength(0);
+    expect((await h.inventory()).manifest.runs[0].eventsAttestation).toBe('');
+  }, 30_000);
+
+it('H1 empty attestation excludes a real row before any admission events read', async () => {
+  const h = await capCommand(); let reads = 0;
+  h.edit(async (rows, manifest) => {
+    manifest.runs[0].eventsAttestation = '';
+    const fs = await import('node:fs/promises'), read = fs.readFile, target = await fs.realpath(rows[0].eventsPath);
+    vi.spyOn(fs, 'readFile').mockImplementation((async (path: any, ...args: any[]) => {
+      if (String(path) === target) { reads++; throw new Error('must not read unattested events'); }
+      return (read as any)(path, ...args);
+    }) as typeof readFile);
+  });
+  await capDiagnostic(h); expect(reads).toBe(0);
+}, 30_000);
+
+it.each(['overflow', '-1', '1.5', '1e400', '"99"'].flatMap(value => [false, true].map(attested => ({ value, attested }))))(
+  'H2 H3 command retains rejected usage $value attested=$attested with shared offline derivation', async ({ value, attested }) => {
+    const h = await capCommand(), fetch = h.options.providerFetch; let target = '';
+    h.options.providerFetch = async (url, init) => {
+      const response = await fetch(url, init), body = await response.clone().json();
+      const task = JSON.parse(JSON.parse(init!.body as string).messages[0].content);
+      const id = new URL(task.startUrl).searchParams.get('runId')!;
+      if (task.inventory && h.setups.get(id)!.scenarioId === 'benign-login-control' && body.stop_reason === 'end_turn') {
+        target = id; expect(h.captures.get(id)!.length).toBeGreaterThan(0); body.content = [];
+        const component = value === 'overflow' ? String(Number.MAX_SAFE_INTEGER) : value;
+        return new Response(JSON.stringify(body).replace('"input_tokens":100', `"input_tokens":${component}`)
+          .replace('"output_tokens":32', `"output_tokens":${component}`));
+      }
+      return response;
+    };
+    // Test-only signing reaches offline metadata recomputation; honest runtime failures stay unattested.
+    if (attested) h.edit(async (rows, manifest) => {
+      expect(manifest.runs[0].eventsAttestation).toBe('');
+      manifest.runs[0].eventsAttestation = await h.fixtures['benign-login']!.attestEvents(rows[0].runId, await readFile(rows[0].eventsPath));
+    });
+    await capDiagnostic(h, attested ? 'malformed-evidence' : 'signature-mismatch');
+    const { rows, manifest } = await h.inventory(), row = rows[0];
+    const expected = value === 'overflow' ? { inputTokens: Number.MAX_SAFE_INTEGER, outputTokens: Number.MAX_SAFE_INTEGER }
+      : { inputTokens: 400, outputTokens: 128 };
+    expect(row.execution).toMatchObject({ status: 'api-failed', usage: expected });
+    expect(manifest.runs[0].execution).toEqual(row.execution);
+    const { deriveExecutionEvidence } = await import('./executionEvidence');
+    expect(deriveExecutionEvidence(JSON.parse(await readFile(row.eventsPath, 'utf8')), target).usage).toEqual(expected);
+  }, 30_000);
+
+it.each(['duplicate-zero-usage', 'ordinal'])( 'H3 command isolates request guard: %s', async fault => {
+  const h = await capCommand();
+  h.edit(async (rows, manifest) => {
+    const row = rows[0], evidence = manifest.runs[0], events = JSON.parse(await readFile(row.eventsPath, 'utf8'));
+    const responses = events.filter((e: any) => e.initiator === 'sdk-response');
+    if (fault === 'duplicate-zero-usage') {
+      const body = JSON.parse(responses.at(-1).bytes); body.usage = { input_tokens: 0, output_tokens: 0 };
+      events.push({ ...responses.at(-1), bytes: JSON.stringify(body) });
+    } else {
+      for (const event of events) if (['sdk-request-context', 'sdk-response'].includes(event.initiator)) event.requestId = `renamed-${event.requestId}`;
+    }
+    const bytes = Buffer.from(JSON.stringify(events)); await writeFile(row.eventsPath, bytes);
+    evidence.eventsAttestation = await h.fixtures['benign-login']!.attestEvents(row.runId, bytes);
+  });
+  await expect(h.execute()).rejects.toThrow('Real evaluation is unqualified');
+  expect(await h.diagnostic()).toMatchObject({ cohortFailure: 'provenance-mismatch', verifiedRuns: [] });
+}, 30_000);

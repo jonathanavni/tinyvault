@@ -150,7 +150,12 @@ async function collectPersistedRuns(input: OfflineAdjudicationInput, diagnostic:
         assertAgentSourceConfig(row.agent, config);
         if (usesRealProfile) {
           let snapshot: CapturedEvent[] | OfflineValidationError;
-          try { snapshot = await readVerifiedRunEvents(input, storedByKey.get(runKey(row))!, row); }
+          try {
+            if (isRealAgentProfile(row.agent, config) && row.eventsAttestation === '') {
+              throw new OfflineValidationError('signature-mismatch', 'Missing finalized run events attestation');
+            }
+            snapshot = await readVerifiedRunEvents(input, storedByKey.get(runKey(row))!, row);
+          }
           catch (error) { snapshot = error instanceof OfflineValidationError ? error
             : new OfflineValidationError('malformed-evidence', 'Unreadable or malformed run events'); }
           eventSnapshots.set(runKey(row), snapshot);

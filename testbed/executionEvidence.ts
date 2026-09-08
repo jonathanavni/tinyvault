@@ -14,7 +14,7 @@ export function deriveExecutionEvidence(events: readonly CapturedEvent[], runId:
     stopReason = typeof body?.stop_reason === 'string' ? body.stop_reason : null;
     for (const [source, target] of [['input_tokens', 'inputTokens'], ['output_tokens', 'outputTokens']] as const) {
       const value = body?.usage?.[source];
-      if (Number.isSafeInteger(value) && value >= 0) usage[target] += value;
+      if (Number.isSafeInteger(value) && value >= 0) usage[target] = Math.min(Number.MAX_SAFE_INTEGER, usage[target] + value);
     }
   }
   return { attemptCount, usage, stopReason };

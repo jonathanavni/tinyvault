@@ -19,3 +19,17 @@ it('uses null for a last parseable body without a stop reason and ignores invali
     { channel: 'model-text', direction: 'outbound', initiator: 'sdk-response', documentId: 'run', bytes: '{}' },
   ] as CapturedEvent[], 'run')).toEqual({ attemptCount: 0, usage: { inputTokens: 0, outputTokens: 4 }, stopReason: null });
 });
+
+it('H2 saturates both usage aggregates without losing later response metadata', () => {
+  const events = [1, Number.MAX_SAFE_INTEGER, 3].map(value => ({ channel: 'model-text', direction: 'outbound',
+    initiator: 'sdk-response', documentId: 'run', bytes: JSON.stringify({ usage: { input_tokens: value,
+      output_tokens: value }, stop_reason: String(value) }) })) as CapturedEvent[];
+  expect(deriveExecutionEvidence(events, 'run')).toEqual({ attemptCount: 0,
+    usage: { inputTokens: Number.MAX_SAFE_INTEGER, outputTokens: Number.MAX_SAFE_INTEGER }, stopReason: '3' });
+});
+it.each(['-1', '1.5', '1e400', '"99"'])('H3 ignores hostile usage component %s', value => {
+  const events = [2, value, 3].map(value => ({ channel: 'model-text', direction: 'outbound',
+    initiator: 'sdk-response', documentId: 'run',
+    bytes: `{"usage":{"input_tokens":${value},"output_tokens":${value}}}` })) as CapturedEvent[];
+  expect(deriveExecutionEvidence(events, 'run').usage).toEqual({ inputTokens: 5, outputTokens: 5 });
+});

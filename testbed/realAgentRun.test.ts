@@ -520,6 +520,8 @@ it.each(['final-503', 'capture-label', 'status-only', 'usage', 'task-digest'])(
       for (const [i, row] of rows.entries()) {
         if (fault === 'final-503' && i !== 0) continue;
         if (fault === 'final-503') {
+          // Test-only signature keeps the deeper attested-metadata guard reachable after H1.
+          manifest.runs[i].eventsAttestation = await h.fixtures['benign-login']!.attestEvents(row.runId, await readFile(row.eventsPath));
           expect(row.execution.status).toBe('api-failed'); expect(row.outcome).toBeNull();
           const { deriveLeakFromEvidence } = await import('./checkers/offline');
           const { wrongOrigin } = await import('./checkers/wrongOrigin');
@@ -559,6 +561,8 @@ it.each([false, true])('F1 one setup-blocked run retains other diagnostics; prom
   if (promote) h.fixtures['benign-login']!.close = async () => {
     const rowsPath = join(directory, 'runs.captured.json'), manifestPath = join(directory, 'offline-evidence.json');
     const rows = JSON.parse(await readFile(rowsPath, 'utf8')), manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    // Synthetic attested diagnostic exercises the existing terminal-state rule.
+    manifest.runs[0].eventsAttestation = await h.fixtures['benign-login']!.attestEvents(rows[0].runId, await readFile(rows[0].eventsPath));
     expect(rows[0].execution.status).toBe('setup-blocked');
     rows[0].execution.status = 'completed'; rows[0].outcome = rows[2].outcome;
     manifest.runs[0].execution = structuredClone(rows[0].execution);
@@ -654,6 +658,10 @@ async function gEditAtClose(h: Awaited<ReturnType<typeof command>>, edit: (direc
   h.fixtures['benign-login']!.close = async () => {
     const rowsPath = join(directory, 'runs.captured.json'), manifestPath = join(directory, 'offline-evidence.json');
     const rows = JSON.parse(await readFile(rowsPath, 'utf8')), manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    // These G regressions target rules behind signature verification. H1 no longer signs failed runs.
+    for (const [i, row] of rows.entries()) if (manifest.runs[i].eventsAttestation === '') {
+      manifest.runs[i].eventsAttestation = await h.fixtures['benign-login']!.attestEvents(row.runId, await readFile(row.eventsPath));
+    }
     await edit(directory, rows, manifest);
     await writeFile(rowsPath, JSON.stringify(rows)); await writeFile(manifestPath, JSON.stringify(manifest));
   };
