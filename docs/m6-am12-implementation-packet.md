@@ -1,10 +1,11 @@
-# M6-AM12 implementation packet (v3 — pre-implementation cap round) — raw cap 1 MiB, frame ceiling 2 MiB, explicit bridge scalar bounds
+# M6-AM12 implementation packet (v4 — paper ladder closed at the cap; awaiting base SHA) — raw cap 1 MiB, frame ceiling 2 MiB, explicit bridge scalar bounds
 
 Status: **DRAFT v3 implementation handoff (owner, 2026-09-08, session `2026-09-08-s6`)** for the ADOPTED amendment
 `docs/m6-am12-events-cap-amendment.md` (v4, relocked 2026-09-08). v1: Sol R1 NO-SHIP (9 P1 / 3 P2, `…/am12-impl-packet-sol-r1.md`);
-v2: Sol R2 NO-SHIP (4 P1 / 3 P2 / 1 P3, `…/am12-impl-packet-sol-r2.md`); every finding is dispositioned in §11–§12. R3 is the
-pre-implementation cap round with P1 criteria stated up front. **NOT DISPATCHABLE until §2's base SHA is pinned** (the companion
-slice must land first). Ladder: Sol pre-implementation R2 → Astra implementation in an isolated worktree (full ladder: signing,
+v2: Sol R2 NO-SHIP (4 P1 / 3 P2 / 1 P3, `…/am12-impl-packet-sol-r2.md`); v3: Sol R3 (cap) NO-SHIP on two ownership P1s
+(`…/am12-impl-packet-sol-r3.md`), corrected in this v4 with the residuals recorded in §13; **the pre-implementation paper ladder is
+closed at the three-round cap**. **NOT DISPATCHABLE until §2's base SHA is pinned** (the companion slice must land first). Ladder
+from here: Astra implementation in an isolated worktree (full ladder: signing,
 bridge, admission) → owner `make test` + owner mutant reproductions → post-impl Codex adversarial review, fresh Claude QA, fresh
 Claude security pass → three-round fix cap. **Sequenced after** the companion `evidence-oversized` packet
 (`docs/m6-s6-oversize-diagnostic-packet.md`) has landed on main (both touch `testbed/docker/composedFixtures.ts` and its test);
@@ -176,8 +177,13 @@ line edit, compression/chunking/sidecar/partial attestation. No edits to `PLAN.m
 ## 9. File ownership, verification, report
 
 Astra owns the files named in V1–V13 (source: `protocol.ts`, `handshake.ts`, `eventsDigest.ts`, `loginFixture.ts`,
-`composedFixtures.ts` (constant use only); tests listed in §3.5 plus the new `offline.retention.test.ts`; `SCHEMA.md:925-929`;
-`claims.test.ts:310-314` and the P-v2 boundary literals; `docs/m6-implementation-plan.md` normative lines; the annotate-only docs).
+`composedFixtures.ts` (constant use only); tests listed in §3.5 plus the new `testbed/checkers/offline.retention.test.ts` **and the
+new `testbed/checkers/leakDecoders.nearcap.test.ts`** (Sol R3 P1-02); `SCHEMA.md:925-929`; `claims.test.ts:310-314` and the P-v2
+boundary literals; `docs/m6-implementation-plan.md` normative lines; the annotate-only docs; **and `scripts/docker-invocation.mjs`
+for exactly one additive `DOCKER_CAPABILITY_ALLOWLIST` row** — the V6 test's `node:child_process` import
+(`scripts/docker-invocation.mjs:11-45,151-164` rejects any capability import whose exact file/specifier pair is absent; Sol R3
+P1-01) — with the existing generic self-test (`scripts/docker-invocation.selftest.mjs`) run green; using the gate's documented
+`process.getBuiltinModule` blind spot instead is forbidden).
 STOP conditions: structural pin red; a second span; the 5 s timer not met at the exact cap on real Docker (report ms; never raise
 the timer); V12 finds a title-keyed gate; any needed edit outside ownership.
 
@@ -231,3 +237,16 @@ is a disclosed diagnostic change, not an admission change.
 | P2 V7 seam unnamed | Accepted; `createEventWork` is exported (`leakDecoders.ts:50`) and called per event (`leakScan.ts:93`). | ABSORBED — named file and partial module mock. |
 | P2 V13 procedure | Accepted. | ABSORBED — `/usr/bin/time -l`, three runs, medians. |
 | P3 s104 copy escaping | Accepted. | ABSORBED — rendered-prose wording. |
+
+## 13. Sol pre-implementation R3 (cap) dispositions (owner, 2026-09-08) — ladder closed
+
+| Finding | Owner verification | Disposition |
+| --- | --- | --- |
+| P1-01 V6 child process trips the Docker-capability allowlist (`scripts/docker-invocation.mjs`) | Confirmed. | CORRECTED — §9 owns exactly one additive allowlist row; blind-spot route forbidden. |
+| P1-02 §9 omits the V7 file | Confirmed. | CORRECTED — §9 names `leakDecoders.nearcap.test.ts`. |
+| P2 V4 certifies only its constructed schedule | Accepted. | RESIDUAL (already declared in AM12 §12). |
+| P2 V6 is a measurement, not a heap bound | Accepted. | RESIDUAL. |
+| P2 V5 latency unknown until the real-Docker gate runs | Accepted. | RESIDUAL — the gate is the evidence. |
+| P2 adaptive admission change | Accepted. | RESIDUAL — disclosed in the amendment. |
+| P3 attest-request precedence diagnostic change | Accepted. | RESIDUAL — disclosed in §4. |
+| P3 stale ladder label | Accepted. | CORRECTED — status paragraph. |
