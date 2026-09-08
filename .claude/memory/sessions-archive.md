@@ -99,3 +99,8 @@ running code. (commits `9f216b0`..`6a6b67c`)
   candidate + two fix rounds under a three-channel ladder (Codex adversarial, Claude QA, Claude security ×3), owner gate
   green each round after fixes, six owner mutant spot-checks, one Sol test-only witness; accepted at the cap with nine
   declared residuals; committed. S5 next.
+- **2026-09-07 → 08 (`2026-09-07-s5`)** — stale probeP busy-loops killed; S4 residual (8) closed by a Sol test-only packet;
+  S5 packet drafted (Sol paper pass, ten user-approved decisions), Astra candidate after one correct STOP, three review rounds
+  (Codex found admission defects every round; classifier-flagged review mode → defensive task mode) + two fix rounds + the
+  cap-round integrator fix (attestation = finalization disposition); owner gate green after every delivery; 24 owner mutant
+  reproductions; S5 ACCEPTED `1d32657`, pushed. S6 (E9/E10 ladder, needs per-step user authorization) next.

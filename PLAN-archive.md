@@ -928,3 +928,31 @@ docs/m6-implementation-plan.md, docs/m6-review-findings.md, docs/phase-0-plan.md
 .claude/memory/gotchas.md and .claude/memory/sessions-archive.md.
 Documentation drift/wording checks passed (153/153); all ten wrapup edits remain uncommitted.
 No active workers, reviewers, tests or pending publication jobs.
+
+## Archived 2026-09-08 (wrapup of `2026-09-07-s5`): the closed `2026-09-07-d-cancel` stamp and narrative, verbatim
+
+`2026-09-07-d-cancel` — focus: **D-CANCEL resolved; S4 implemented, reviewed and accepted; pushed**;
+owner: claude; **state: closed** (2026-09-07); continuity relinquished for a fresh session.
+State checkout/worktree: `/Users/jonathanavni/Documents/Coding/tinyvault`; branch main; local == origin at `b0461f0`.
+
+**This session (all pushed):** S3 wrapup committed (`0acb6bb`); three merged codex branches pruned; D-CANCEL resolved with
+a nine-experiment evidence packet and three capped Sol paper rounds (`2bcfbbd`; M6 plan §7 + register entry "D-CANCEL —
+resolution and evidence packet"); S4 packet drafted, Sol-reviewed, user-approved (10 s navigation/per-op bounds; failed-run
+retention stays S5; optional quiesce method + four pre-authorized test files) and dispatched to Codex Astra; candidate + two
+fix rounds under a three-channel ladder (Codex adversarial, fresh Claude QA, fresh Claude security ×3), owner `make test`
+green each round after fixes, six owner mutant spot-checks, one Sol test-only witness at the round-3 cap; **S4 accepted**
+(`b0461f0`; register entry "S4 implementation — accepted at the round-3 cap", nine declared residuals). Final gate: main
+2629/0/1 inherited skip, timing 5/5 and 20/20, execution gate PASS. Evidence archives (local, ignored):
+`artifacts/review-evidence/tinyvault-m6-d-cancel-20260907/` and `tinyvault-m6-s4-packet-20260907/` (+ manifests/tarballs).
+
+**Retained boundaries:** S4 proves lifecycle bounds on this host with page-scoped producers; trusted-side stalls (backend,
+non-cancellable captures) are bounded only at the abort trigger; `abort()` discards all lease evidence (verdict capture-failed,
+never clean); E5 qualification is a module + initial-snapshot observation, not production-wired; socket release rests on the
+owner's SYN_SENT observations; nested/service-worker targets are counted, not defeated. Full list: register entry.
+
+**Next session:** `/start` read-only; propose the **S5 packet** (composed real-agent command path, E7/E8) carrying the S4
+residuals by name — E5 publication wiring, evidence snapshot before `#drop`, bounded trusted-backend/capture contract (or
+explicit residual), the unmutated arms (courtesy deadline term, suspension reserve, `abortSessions` recovery loop, 14 s sync)
+— plus S5's own obligations from S3 (remeasure prompt headroom with real cohort IDs; same-backend discovery/probe/setup/fill;
+root instructions/provenance bound to execution). Sol paper pass on the packet, then Astra under the full ladder. No live
+cohorts, Docker/clean-clone acceptance or release are authorized by this wrapup. No workers, reviewers or jobs are running.
