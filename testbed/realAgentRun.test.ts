@@ -926,11 +926,13 @@ it.each([false, true])('W7 message cannot mint or erase the oversize brand; genu
   if (genuine) expect(qualification.reasons).toEqual([`evidence-oversized: ${rows[0].runId}`, 'cohort-incomplete: 1 of 6 runs attempted']);
 });
 
-it.each([false, true])('W8 terminal scenario-capture write failure preserves the partial cohort; secondary fails=%s', async secondaryFails => {
+it.each([{ secondaryFails: false, sidecarFails: false }, { secondaryFails: true, sidecarFails: false },
+  { secondaryFails: false, sidecarFails: true }])('W8 terminal scenario-capture write failure preserves the partial cohort; %j', async ({ secondaryFails, sidecarFails }) => {
   const h = await command(); configureOversize(h);
   const registers = Object.values(h.fixtures).map(fixture => vi.spyOn(fixture, 'registerRun'));
   const fs = await import('node:fs/promises'); const original = fs.writeFile;
   const writes = vi.spyOn(fs, 'writeFile').mockImplementation(async (path, ...args) => {
+    if (sidecarFails && String(path).endsWith('.fixture-failure.json')) throw new TypeError('fixture sidecar denied');
     if (String(path).endsWith('.scenario-capture.txt') || (secondaryFails && String(path).endsWith('.scenario-capture-error.json'))) {
       throw new TypeError('scenario capture denied');
     }
@@ -940,9 +942,9 @@ it.each([false, true])('W8 terminal scenario-capture write failure preserves the
   const { directory, report, qualification } = await h.diagnostic();
   expect(report.runs).toHaveLength(1);
   const runId = report.runs[0].runId;
-  expect(qualification.reasons[0]).toBe(`evidence-oversized: ${runId}`);
-  expect(qualification.reasons).toContain(`scenario-capture-write-failed: ${runId}`);
-  expect(qualification.reasons).toContain('cohort-incomplete: 1 of 6 runs attempted');
+  expect(qualification.reasons).toEqual([`evidence-oversized: ${runId}`,
+    'cohort-incomplete: 1 of 6 runs attempted', `scenario-capture-write-failed: ${runId}`,
+    ...(sidecarFails ? [`sidecar-write-failed: ${runId}`] : [])]);
   expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(1);
   const rows = JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'));
   expect(rows).toHaveLength(1); expect(rows[0]).toMatchObject({ runId, outcome: null, failureReason: 'evidence-oversized' });
@@ -995,3 +997,56 @@ it('W10 marked plain error cannot supply construction codes to qualification', a
   expect(JSON.stringify(qualification)).not.toContain('undefined');
   expect(report.runs).toHaveLength(1); expect(h.setups.size).toBe(1);
 });
+
+it.each([{ failedFiles: ['diagnostic.json'] }, { failedFiles: ['qualification.json'] },
+  { failedFiles: ['diagnostic.json', 'qualification.json'] }])(
+  'W11 terminal diagnostic emission survives rejected artifact writes: %j', async ({ failedFiles }) => {
+    const h = await command(); configureOversize(h);
+    const registers = Object.values(h.fixtures).map(fixture => vi.spyOn(fixture, 'registerRun'));
+    const order: string[] = [];
+    vi.mocked(console.error).mockImplementation(() => { order.push('stderr'); });
+    const fs = await import('node:fs/promises'); const original = fs.writeFile;
+    const writes = vi.spyOn(fs, 'writeFile').mockImplementation(async (path, ...args) => {
+      const file = String(path).split('/').at(-1)!;
+      if (file === 'diagnostic.json' || file === 'qualification.json') order.push(file);
+      if (failedFiles.includes(file)) throw new TypeError(`write denied: ${file}`);
+      return original(path, ...args);
+    });
+    await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
+    const emitted = vi.mocked(console.error).mock.calls.map(([value]) => JSON.parse(String(value)));
+    expect(emitted).toHaveLength(2);
+    const runId = emitted[0].diagnostic.runs[0].runId;
+    const initiating = [`evidence-oversized: ${runId}`, 'cohort-incomplete: 1 of 6 runs attempted'];
+    expect(emitted[0].qualification.reasons).toEqual(initiating);
+    expect(emitted[1].qualification.reasons).toEqual([...initiating,
+      ...failedFiles.map(file => `diagnostic-write-failed: ${file}: TypeError`)]);
+    expect(order).toEqual(['stderr', 'diagnostic.json', 'qualification.json', 'stderr']);
+    for (const file of ['diagnostic.json', 'qualification.json']) {
+      expect(writes.mock.calls.filter(([path]) => String(path).endsWith(`/${file}`))).toHaveLength(1);
+      expect(writes.mock.calls.find(([path]) => String(path).endsWith(`/${file}`))?.[2]).toEqual({ mode: 0o600 });
+    }
+    expect(emitted[1].diagnostic.runs).toHaveLength(1);
+    expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(1);
+    const root = h.options.artifactDirectory!;
+    const directory = join(root, (await readdir(root))[0]);
+    await expect(access(join(directory, 'scorecard.json'))).rejects.toThrow();
+    expect(JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'))).toHaveLength(1);
+  });
+it.each([{ failedFiles: ['diagnostic.json'] }, { failedFiles: ['qualification.json'] },
+  { failedFiles: ['diagnostic.json', 'qualification.json'] }])(
+  'W11b non-terminal rejection retains raw artifact-write failure: %j', async ({ failedFiles }) => {
+    const h = await command();
+    h.fixtures['benign-login']!.attestEvents = async () => { throw new Error('unmarked finalization failure'); };
+    const registers = Object.values(h.fixtures).map(fixture => vi.spyOn(fixture, 'registerRun'));
+    const fs = await import('node:fs/promises'); const original = fs.writeFile;
+    const diskError = new TypeError('diagnostic disk denied');
+    vi.spyOn(fs, 'writeFile').mockImplementation(async (path, ...args) => {
+      if (failedFiles.includes(String(path).split('/').at(-1)!)) throw diskError;
+      return original(path, ...args);
+    });
+    await expect(h.execute()).rejects.toBe(diskError);
+    expect(console.error).not.toHaveBeenCalled();
+    expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(6);
+    const root = h.options.artifactDirectory!;
+    await expect(access(join(root, (await readdir(root))[0], 'scorecard.json'))).rejects.toThrow();
+  });

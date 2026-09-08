@@ -166,7 +166,8 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
       return rejectComparison(artifactDirectory, { status: 'unqualified', verifiedRuns: [],
         runs: isEvaluationTerminated(error) ? [error.row] : [],
         missingPositiveControlCells: cells, cohortFailure: 'unclassified' }, null,
-      isEvaluationTerminated(error) ? terminationReasons(error) : [formatExecutionFailure('execution-failed', error)]);
+      isEvaluationTerminated(error) ? terminationReasons(error) : [formatExecutionFailure('execution-failed', error)],
+      isEvaluationTerminated(error) ? { terminal: true } : {});
     }
     const paths = offlineArtifactPaths(artifactDirectory);
     const offlineInput: OfflineAdjudicationInput = {
@@ -484,8 +485,20 @@ export class UnqualifiedComparisonError extends Error {
   constructor() { super('Real evaluation is unqualified'); this.name = 'UnqualifiedComparisonError'; }
 }
 async function rejectComparison(directory: string, diagnostic: OfflineDiagnosticReport,
-  provenance: EvaluationProvenance | null, reasons: string[]): Promise<never> {
+  provenance: EvaluationProvenance | null, reasons: string[], options: { terminal?: true } = {}): Promise<never> {
   const qualification: ComparisonQualification = { status: 'unqualified', provenanceId: provenance?.provenanceId ?? null, reasons };
+  if (options.terminal) {
+    console.error(JSON.stringify({ diagnostic, qualification }));
+    const artifacts = [['diagnostic.json', diagnostic], ['qualification.json', qualification]] as const;
+    const writes = await Promise.allSettled(artifacts.map(async ([file, value]) =>
+      writeFile(resolve(directory, file), `${JSON.stringify(value)}\n`, { mode: 0o600 })));
+    writes.forEach((result, index) => {
+      if (result.status === 'rejected') reasons.push(
+        `diagnostic-write-failed: ${artifacts[index][0]}: ${executionErrorDetails(result.reason).name}`);
+    });
+    if (writes.some(result => result.status === 'rejected')) console.error(JSON.stringify({ diagnostic, qualification }));
+    throw new UnqualifiedComparisonError();
+  }
   await Promise.all([writeFile(resolve(directory, 'diagnostic.json'), `${JSON.stringify(diagnostic)}\n`, { mode: 0o600 }),
     writeFile(resolve(directory, 'qualification.json'), `${JSON.stringify(qualification)}\n`, { mode: 0o600 })]);
   console.error(JSON.stringify({ diagnostic, qualification }));
