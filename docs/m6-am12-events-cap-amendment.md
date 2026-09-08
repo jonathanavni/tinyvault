@@ -1,6 +1,6 @@
-# M6-AM12 — raw signed-events cap amendment (v4 — owner corrections after the R3 cap round; for user approval)
+# M6-AM12 — raw signed-events cap amendment (v4 — ADOPTED 2026-09-08)
 
-Status: **v4, owner-authored 2026-09-08 (session `2026-09-08-s6`), NOT adopted — awaiting user approval.** Paper ladder (three-round
+Status: **v4, owner-authored 2026-09-08 (session `2026-09-08-s6`), ADOPTED by the user 2026-09-08 ("I agree with your recommendations, let's proceed"): raw cap 1 MiB (over 512 KiB); the disclosed frame-ceiling side effect accepted; the companion `evidence-oversized` packet sequenced before the post-AM12 pilot. Implementation packet: `docs/m6-am12-implementation-packet.md`.** Paper ladder (three-round
 cap, no fourth round): R1 Sol NO-SHIP (4 P1 / 5 P2 / 1 P3, `am12-sol-r1.md`) → v2 → R2 fresh Claude Opus 5 NEEDS-ATTENTION (2 P1 /
 5 P2 / 3 P3, `am12-r2-opus/report.md`) → v3 → **R3 Sol (cap) NO-SHIP (4 P1, all paper corrections; 3 P2 / 1 P3 recorded as
 residuals, `am12-sol-r3.md`)** → this v4 = owner corrections only (§12). Every R1/R2/R3 finding is dispositioned in §10–§12. Nothing in this file
@@ -78,7 +78,7 @@ Findings:
 
 | Option | What changes | Disposition |
 | --- | --- | --- |
-| A. Raise the raw cap and the outer bridge frame ceiling; keep every observation and both context views; give every bridge scalar that today inherits the frame ceiling its own explicit bound | `MAX_EVENTS_BYTES` and its five enforcement sites; `MAX_PAYLOAD_BYTES` (frame ceiling only); five `handshake.ts` scalar sites; pinned tests | **PROPOSED** (§4) |
+| A. Raise the raw cap and the outer bridge frame ceiling; keep every observation and both context views; give every bridge scalar that today inherits the frame ceiling its own explicit bound | `MAX_EVENTS_BYTES` and its five enforcement sites; `MAX_PAYLOAD_BYTES` (frame ceiling only); five `handshake.ts` scalar sites; pinned tests | **ADOPTED** (§4) — 1 MiB selected |
 | B. Drop one of the two per-turn context views (or record deltas) | Evidence representation: AM08 / SCHEMA context-view rows, source-exemption tuples, claim spans binding `model-context` and `sdk-request-context`, the leak-checker corpus | REJECTED for AM12 — AM11 approval was "no observation removal"; AM08 defines both views as distinct evidence; Slice-6 claim rows bind them. Deferred alternative with its own claim-row packet. |
 | C. Prompt guidance to batch tool calls | `SKILL.md` / reference prompt | REJECTED — prohibited by AM11 item 2 without a separate evaluation-design disposition; changes the measured quantity. |
 | D. Compression, chunked attestation, unsigned sidecar, transcript trimming | Transport / evidence | REJECTED — prohibited by AM11 item 4 and plan §4.2. |
@@ -122,7 +122,7 @@ spend.
   bridge scalars (artifact strings at the old 262,144; key/hello public keys and capture chunks at their type-sized values);
   everything else in item 4 unchanged (16 turns, eight calls per response, 1,024 output tokens, model/temperature, N/Wilson/
   completion/leak gates, source identities, S1/M5 residuals; no compression, chunking, unsigned sidecar, summarization, partial
-  attestation, source-exemption expansion, runtime retry or cohort budget tuning). §4.3 proposes one *additional* gate.
+  attestation, source-exemption expansion, runtime retry or cohort budget tuning). No gate is added (§4.3).
 - **Item 3, amended:** the known serial-1024 and serial-2048 deterministic witnesses (134,484–239,167 bytes) **become fit /
   attested cases after AM12**; their pre-AM12 rejection artifacts are retained as history, not erased. The **16-turn
   maximum-output trace remains the current rejection witness** and the raw-boundary tests move to the new cap. The rest of item 3
@@ -262,15 +262,14 @@ value, three at type-sized values); item 3's disposition of the known serial wit
 maximum-output trace remains the rejection witness); plan §4.3 gate values. No gate is added or loosened (§4.3). Items 1 and 2
 and the rest of items 3–4 unchanged.
 
-## 9. Open questions for the user (R3 reviewer: verify, do not decide)
+## 9. Decisions (user, 2026-09-08 — formerly open questions)
 
-1. Raw cap: **1 MiB (owner recommendation)** or 512 KiB? §4.1.
-2. Accept the disclosed frame-ceiling side effect (near-limit artifacts no longer fail over the bridge)? R2 answer (b) and the
-   owner both recommend accepting it: preserving it would need an op-dependent frame ceiling threaded through the `FrameDecoder`,
-   which has no op context at its length check — real complexity in the most load-bearing parser to keep a behaviour that was
-   never a designed guarantee.
-3. (withdrawn — no truncation gate is proposed; the existing all-run E5 rule already decides it, §4.3)
-4. Land the §5.7 companion diagnostic packet before the post-AM12 pilot (owner and R2 recommend yes)?
+1. Raw cap: **1 MiB** (owner recommendation accepted over 512 KiB; §4.1).
+2. The disclosed frame-ceiling side effect (near-limit artifacts no longer fail over the bridge) is **accepted**; the artifact
+   bound itself is unchanged; s104's sentence is replaced in the P-v2 claim-row packet.
+3. (withdrawn — no truncation gate; the existing all-run E5 rule already decides it, §4.3.)
+4. The companion `evidence-oversized` diagnostic packet (§5.7, `docs/m6-s6-oversize-diagnostic-packet.md`) **lands before** the
+   post-AM12 pilot.
 
 ## 10. Sol R1 dispositions (owner, 2026-09-08)
 

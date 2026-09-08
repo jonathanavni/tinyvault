@@ -113,7 +113,14 @@ Active planning docs:
   integrator note recording what in it is superseded. **Append-only.**
 - `m6-s6-claims-amendment.md` — S6 packet (Sol draft, owner-verified) closing S5 residual (1): `P-attestation` /
   `P-same-observation` name `readVerifiedRunEvents`; applied by Astra and landed as `dfb8ddb`.
-- `m6-am12-events-cap-amendment.md` — **DRAFT** M6-AM12: raise the raw signed-events cap after the S6 pilot overflowed it
-  (132,056 vs 131,072 bytes). Sol R1 NO-SHIP absorbed in v2; Opus 5 R2 pending; needs user approval before any implementation.
+- `m6-am12-events-cap-amendment.md` — M6-AM12 (v4, **ADOPTED 2026-09-08**): raw signed-events cap 131,072 → 1,048,576, frame
+  ceiling 262,144 → 2,097,152, explicit bounds for five bridge scalars, AM11 item 3 amended; three-round paper cap (Sol R1,
+  Opus 5 R2, Sol R3) with dispositions and residuals. Implementation pending (`m6-am12-implementation-packet.md`).
+- `m6-s6-oversize-diagnostic-packet.md` — S6 companion implementation packet (Astra): explicit `evidence-oversized` reason at
+  trusted run finalization and stop-before-next-run once the composed project is torn down; sequenced before the AM12 cap
+  implementation and the post-AM12 pilot. Sol pre-implementation review pending.
+- `m6-am12-implementation-packet.md` — Astra implementation handoff for the adopted M6-AM12 (values, five bridge scalar bounds,
+  item-3 flips, certifying witness, Docker exact-cap gate, P-v2 claim-row packet, plan §4.3 text). Sequenced after the
+  oversize diagnostic packet. Sol pre-implementation review pending.
 - `archive/implementation-plan-superseded.md` — earlier orphaned Phase 0 draft, consolidated into
   `phase-0-plan.md` (provenance only)
