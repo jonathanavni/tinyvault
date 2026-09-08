@@ -698,6 +698,44 @@ it.each(['EIO', 'unsigned'])('G2 command permanently excludes first-read %s desp
   expect(report.runs[0]).toMatchObject({ status: 'capture-failed', reason: fault === 'EIO' ? 'malformed-evidence' : 'signature-mismatch', acceptedOutcome: null });
   expect(report.missingPositiveControlCells).toContainEqual({ scenario: 'benign-login-control', agent: 'tinyvault-ref' });
 }, 30_000);
+it('P-same-observation command reads a valid real-profile event snapshot once and shares it with outcome consumers', async () => {
+  try {
+    const h = await command(); let reads = 0;
+    const fs = await import('node:fs/promises'), originalRead = fs.readFile;
+    const leakModule = await import('./checkers/leakScan'), originModule = await import('./checkers/wrongOrigin');
+    const nativeLeak = leakModule.leakScan, nativeOrigin = originModule.wrongOrigin;
+    let scored: readonly import('./scorecard.schema').CapturedEvent[] | undefined;
+    let originalObjects: readonly import('./scorecard.schema').CapturedEvent[] = [];
+    let targetPath = '', honestOutcome: unknown;
+    let leakObserver: ReturnType<typeof vi.spyOn>, outcomeObserver: ReturnType<typeof vi.spyOn>;
+    await gEditAtClose(h, async (_directory, rows) => {
+      const row = rows.find((row: any) => row.agent === 'tinyvault-ref' && row.scenario === 'benign-login-control');
+      targetPath = row.eventsPath; honestOutcome = structuredClone(row.outcome);
+      expect(honestOutcome).toMatchObject({ taskCompleted: true, secretLeaked: false });
+      const eventsPath = await fs.realpath(targetPath), authentic = await originalRead(eventsPath);
+      const different = Buffer.from('[]');
+      expect(authentic.equals(different)).toBe(false);
+      vi.spyOn(fs, 'readFile').mockImplementation((async (path: any, ...args: any[]) => {
+        if (String(path) === eventsPath) return reads++ === 0 ? authentic : different;
+        return (originalRead as any)(path, ...args);
+      }) as typeof readFile);
+      leakObserver = vi.spyOn(leakModule, 'leakScan').mockImplementation((events, canary, policy) => {
+        scored = events; originalObjects = [...events];
+        return nativeLeak(events, canary, policy);
+      });
+      outcomeObserver = vi.spyOn(originModule, 'wrongOrigin').mockImplementation((events, origin) => {
+        expect(events).toBe(scored);
+        expect(events.every((event, index) => event === originalObjects[index])).toBe(true);
+        return nativeOrigin(events, origin);
+      });
+    });
+    const result = await h.execute().catch(() => undefined);
+    expect(reads).toBe(1);
+    expect(result?.runs).toHaveLength(6);
+    expect(result?.runs.find(row => row.eventsPath === targetPath)?.outcome).toEqual(honestOutcome);
+    expect(leakObserver!).toHaveBeenCalledTimes(6); expect(outcomeObserver!).toHaveBeenCalledTimes(6);
+  } finally { vi.restoreAllMocks(); }
+}, 30_000);
 it.each(['setup-blocked', 'bootstrap', 'documentId', 'requestId', 'duplicate-response', 'wrong-model', 'unaccepted-wrong-model'])(
   'G3 G4 command binds attested execution: %s', async fault => {
     const h = await command();
