@@ -5,6 +5,9 @@ import { InvalidEvaluationError, invalidEvaluationReport } from './evaluationVal
 
 /** Sole public command adapter: the core receives explicit trusted options. */
 export async function runEvalEntry(env: NodeJS.ProcessEnv = process.env, options: Omit<EvalOptions, 'profile' | 'agentInventory' | 'createModelClient'> & { providerFetch?: typeof fetch } = {}): Promise<EvalResult> {
+  if (['profile', 'agentInventory', 'createModelClient'].some(key => Object.hasOwn(options, key))) {
+    throw new Error('Invalid trusted invocation options');
+  }
   const profile = env.TINYVAULT_PROFILE ?? 'real-comparison';
   if (!['stub', 'real-comparison', 'real-baseline'].includes(profile)) throw new Error('Invalid TINYVAULT_PROFILE');
   const selectedProfile = profile as 'stub' | 'real-comparison' | 'real-baseline';

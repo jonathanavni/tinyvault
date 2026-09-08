@@ -10,14 +10,14 @@ import {
 } from '../completion';
 import type { AttackClass, CapturedEvent, Channel, RunRecord } from '../scorecard.schema';
 import { scenarioFromRegistry, type Scenario, type ScenarioRegistry } from '../scenarios';
-import type { FixtureId } from '../scenarios/types';
+import { projectTask, type FixtureId } from '../scenarios/types';
 import { verifyEventsDigest } from '../fixtures/benign-login/server';
 import { classify, validateScenarioAuth, type ScenarioAuth } from './classify';
 import { leakScan, type LeakScanResult } from './leakScan';
 import { wrongOrigin } from './wrongOrigin';
 import { bodiesUnobserved } from './bodiesUnobserved';
 import { OfflineValidationError, type OfflineDiagnosticReport, type RunDiagnostic } from '../evaluationValidity';
-import { ProvenanceValidationError, assertProvenanceAdmission, assertRunExecutionAgreement, type EvaluationProvenance, type ExpectedRunIdentity, type ProvenanceBoundRun } from '../evaluationProvenance';
+import { ProvenanceValidationError, sha256, assertProvenanceAdmission, assertRunExecutionAgreement, type EvaluationProvenance, type ExpectedRunIdentity, type ProvenanceBoundRun } from '../evaluationProvenance';
 import { assertAgentSourceConfig, InvalidAgentSourceConfigError, isRealAgentProfile, sourcesForAgentRun, type RunSecretSources } from '../evalAgents';
 import { scriptWasTruncated } from '../../src/agents/loop';
 
@@ -54,6 +54,8 @@ export type OfflineAdjudicationInput = {
   verificationKeys: Readonly<Record<FixtureId, KeyObject>>;
   scenarioRegistry: ScenarioRegistry;
   agentConfigs: ReadonlyMap<string, OfflineAgentConfig>;
+  /** Trusted invocation-held E5 results; never loaded from the evidence bundle. */
+  captureQualifications?: ReadonlyArray<{ runId: string; status: 'qualified' | 'unqualified' }>;
   provenanceTrust?: { provenance: EvaluationProvenance; expectedRuns: readonly ExpectedRunIdentity[] };
   /** Test seam for proving the evaluation-wide replay ledger reaches every fixture verifier. */
   completionVerifierFactory?: (
@@ -143,6 +145,7 @@ async function collectPersistedRuns(input: OfflineAdjudicationInput, diagnostic:
         const config = input.agentConfigs.get(row.agent);
         if (!config) throw new ProvenanceValidationError();
         assertAgentSourceConfig(row.agent, config);
+        if (usesRealProfile) await assertAttestedExecution(input, storedByKey.get(runKey(row))!, row, config);
         if (config.model !== trust.provenance.config.model
           || config.sdkVersion !== trust.provenance.runtime.sdkVersion
           || (config.secretSourcesForRun && config.maxTurns !== trust.provenance.config.maxTurns)) throw new ProvenanceValidationError();
@@ -177,7 +180,9 @@ async function collectPersistedRuns(input: OfflineAdjudicationInput, diagnostic:
       const result = await recomputeRun(stored, evidence, scenario, verifier, input.artifactDirectory,
         input.agentConfigs, verificationKey, diagnostic);
       verifiedRuns.push(result.record);
-      if (result.positiveControl) positiveCells.add(cellKey(stored));
+      const e5Qualified = !usesRealProfile || input.captureQualifications?.some(row =>
+        row.runId === identity.runId && row.status === 'qualified') === true;
+      if (result.positiveControl && e5Qualified) positiveCells.add(cellKey(stored));
       diagnostics.push({ ...identity, status: 'verified', acceptedOutcome: result.record.outcome });
     } catch (error) {
       if (!diagnostic) throw error;
@@ -195,6 +200,58 @@ async function collectPersistedRuns(input: OfflineAdjudicationInput, diagnostic:
   if (!diagnostic) assertEvaluationPositiveControls(runs, positiveCells);
   return { status: verifiedRuns.length === runs.length && !missingPositiveControlCells.length ? 'validated' : 'unqualified',
     verifiedRuns, runs: diagnostics, missingPositiveControlCells };
+}
+
+/** Cohort-wide metadata admission runs before any numeric acceptance, using only signed event bytes. */
+async function assertAttestedExecution(input: OfflineAdjudicationInput, stored: RunInventoryRow,
+  evidence: M6OfflineRunEvidence, config: OfflineAgentConfig): Promise<void> {
+  const scenario = scenarioFromRegistry(input.scenarioRegistry, stored.scenario);
+  let events: CapturedEvent[];
+  try {
+    const bytes = await readContainedBytes(input.artifactDirectory, stored.eventsPath, 'eventsPath');
+    if (!verifyEventsDigest(evidence.eventsAttestation, scenario.fixtureId, evidence.runId, bytes,
+      input.verificationKeys[scenario.fixtureId])) return; // Existing per-run signature rejection remains authoritative.
+    events = parseCapturedEvents(JSON.parse(bytes.toString('utf8')));
+  } catch { return; } // Existing per-run I/O/parse diagnostics retain independently verified other runs.
+  const mismatch = () => { throw new ProvenanceValidationError(); };
+  const requests = events.filter(event => event.channel === 'model-text' && event.direction === 'internal'
+    && event.initiator === 'sdk-request-context' && event.documentId === evidence.runId);
+  const responses: Array<{ model: string; stopReason: string; inputTokens: number; outputTokens: number }> = [];
+  for (const event of events.filter(event => event.channel === 'model-text' && event.direction === 'outbound'
+    && event.initiator === 'sdk-response' && event.documentId === evidence.runId)) {
+    let body: unknown;
+    try { body = JSON.parse(event.bytes); } catch { continue; }
+    if (!isRecord(body) || body.type !== 'message' || typeof body.stop_reason !== 'string') continue;
+    if (body.model !== config.model) mismatch();
+    if (body.role !== 'assistant' || typeof body.id !== 'string' || !body.id || !Array.isArray(body.content)
+      || !isRecord(body.usage) || !Number.isSafeInteger(body.usage.input_tokens) || (body.usage.input_tokens as number) < 0
+      || !Number.isSafeInteger(body.usage.output_tokens) || (body.usage.output_tokens as number) < 0) continue;
+    responses.push({ model: body.model as string, stopReason: body.stop_reason,
+      inputTokens: body.usage.input_tokens as number, outputTokens: body.usage.output_tokens as number });
+  }
+  const task = projectTask(scenario.publicTask(evidence.runId), evidence.runId);
+  if (requests.length) {
+    try {
+      const body = JSON.parse(requests[0].bytes);
+      const bootstrap = JSON.parse(body.messages[0].content);
+      if (body.messages[0].role !== 'user' || Object.entries(task).some(([key, value]) => bootstrap[key] !== value)) mismatch();
+    } catch { mismatch(); }
+  }
+  const execution = evidence.execution;
+  const usage = responses.reduce((sum, row) => ({ inputTokens: sum.inputTokens + row.inputTokens,
+    outputTokens: sum.outputTokens + row.outputTokens }), { inputTokens: 0, outputTokens: 0 });
+  if (execution.attemptCount !== requests.length || execution.usage.inputTokens !== usage.inputTokens
+    || execution.usage.outputTokens !== usage.outputTokens || execution.stopReason !== (responses.at(-1)?.stopReason ?? null)
+    || execution.model !== config.model || (requests.length > 0 && responses.length === 0)
+    || (requests.length === 0 && responses.length !== 0)
+    || execution.taskFactsSha256 !== sha256(JSON.stringify(task))) mismatch();
+  const numeric = execution.status === 'completed' || execution.status === 'max-turns';
+  const outcome = (stored as RunInventoryRow & { outcome: unknown }).outcome;
+  if ((numeric && (requests.length === 0 || requests.length !== responses.length || outcome === null))
+    || (!numeric && outcome !== null)
+    || (execution.status === 'max-turns' && requests.length !== input.provenanceTrust!.provenance.config.maxTurns)
+    || (['api-failed', 'deadline'].includes(execution.status) && requests.length > 0 && requests.length <= responses.length)
+    || (execution.status === 'setup-blocked' && requests.length !== 0)) mismatch();
 }
 
 async function assertIndependentRunArtifacts(runs: readonly RunInventoryRow[], manifest: LoadedInventory['manifest'], root: string): Promise<void> {

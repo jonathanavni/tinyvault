@@ -6,7 +6,7 @@ import { join, dirname } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as composed from './docker/composedFixtures';
 import { runEvalEntry } from './evalEntry';
-import { s5ComposedHarness } from './runner.testkit';
+import { s5ComposedHarness, assertS5Custody } from './runner.testkit';
 import { ANTHROPIC_CLIENT_CONFIG } from '../src/agents/anthropicClient';
 import type { M6Scorecard } from './scorecard.schema';
 import { assertRealAgentEvaluation } from './runner.realAgent.eval';
@@ -46,6 +46,11 @@ describe('S5 actual command composition', () => {
           max_tokens: ANTHROPIC_CLIENT_CONFIG.maxTokens });
       }
       for (const run of result.runs) {
+        if (run.agent === 'naive-baseline') {
+          const files = await readdir(dirname(run.eventsPath));
+          const vault = files.find(path => /^vault-.*\.json$/u.test(path))!;
+          expect(JSON.parse(await readFile(join(dirname(run.eventsPath), vault), 'utf8')).records).toEqual([]);
+        }
         const events = JSON.parse(await readFile(run.eventsPath, 'utf8'));
         const contextEvents = events.filter((event: any) => ['model-context', 'sdk-request-context'].includes(event.initiator));
         for (const event of contextEvents) {
@@ -78,6 +83,7 @@ describe('S5 actual command composition', () => {
       }
       for (const path of await allFiles(dirname(result.scorecardPath))) expect(await readFile(path, 'utf8')).not.toContain(key);
       expect(JSON.stringify([...stdout.mock.calls, ...stderr.mock.calls])).not.toContain(key);
+      await assertS5Custody(dirname(result.scorecardPath), harness, key, [...stdout.mock.calls, ...stderr.mock.calls]);
     }, 30_000);
 });
 async function allFiles(root: string): Promise<string[]> {
@@ -195,6 +201,13 @@ it('C3 discovery, availability, setup mapping and fill reach the same backend on
     };
     const fillService = createFillService({ backend: input.backend, sessions: sessions as never, registry: domain.registry });
     const trusted = composeSupervisedHost({ fillService, sessions: sessions as never, lease });
+    if (setup.runId.includes('-naive-baseline-')) {
+      currentSession = 'baseline-custody-probe'; currentOrigin = h.fixtures[createScenarioRegistry(Object.fromEntries(Object.entries(h.fixtures).map(([id, fixture]) => [id, fixture.origin])) as never).get(setup.scenarioId)!.fixtureId]!.origin;
+      for (const handle of ['lv_' + 'a'.repeat(32), 'unknown-handle']) {
+        expect(await trusted.tools.fill_from_vault({ sessionId: currentSession, handle, fields: [{ role: 'password', selector: '#password' }] }))
+          .toEqual({ ok: false, reason: 'handle-unavailable' });
+      }
+    }
     // Exercise the trusted member as well as the ready-profile path; it must probe this very instance.
     await trusted.setupReasonFor({ ok: false, reason: 'backend-error' });
     return { ...historical, setupReasonFor: trusted.setupReasonFor,

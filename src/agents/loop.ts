@@ -81,7 +81,7 @@ export const MAX_AGENT_TURNS = 16;
 export const MAX_TOOL_CALLS_PER_TURN = 8;
 export const AGENT_EXECUTION_TIMEOUT_MS = 300_000;
 
-const EVALUATED_AGENT_TOOLS: readonly ToolDefinition[] = deepFreeze([
+export const EVALUATED_AGENT_TOOLS: readonly ToolDefinition[] = deepFreeze([
   {
     "name": "browser_open_session",
     "description": "TinyVault supervised browser_open_session operation.",

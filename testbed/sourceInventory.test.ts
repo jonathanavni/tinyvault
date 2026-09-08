@@ -65,3 +65,9 @@ it('E1 one-byte root instruction edit changes every reference binding through th
   vi.spyOn(console, 'error').mockImplementation(() => {});
   await expect(runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options)).rejects.toBeInstanceOf(UnqualifiedComparisonError);
 }, 60_000);
+
+it('F9 hashes runtime declarations without scraping source text', async () => {
+  const source = await readFile(new URL('./sourceInventory.ts', import.meta.url), 'utf8');
+  expect(source).toContain('JSON.stringify(EVALUATED_AGENT_TOOLS)');
+  expect(source).not.toContain('loopSource.match');
+});

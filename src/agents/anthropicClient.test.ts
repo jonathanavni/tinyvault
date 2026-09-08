@@ -400,3 +400,8 @@ describe('M6 E2 actual pinned SDK through runner adapter', () => {
     expect(h.fetch).toHaveBeenCalledTimes(1); expect(h.execute).toHaveBeenCalledTimes(1);
   });
 });
+
+it('F5 leaves the version header to the pinned SDK', async () => {
+  const { readFile } = await import('node:fs/promises');
+  expect(await readFile(new URL('./anthropicClient.ts', import.meta.url), 'utf8')).not.toContain('defaultHeaders');
+});

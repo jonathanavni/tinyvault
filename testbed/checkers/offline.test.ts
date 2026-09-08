@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { adjudicatePersistedRuns, diagnosePersistedRuns, type OfflineAdjudicationInput, type OfflineEvidenceManifest } from './offline';
 import { createEvaluationProvenance, captureSourceIdentity, sha256, type RunExecutionMetadata } from '../evaluationProvenance';
+import { projectTask } from '../scenarios/types';
 import { AGENT_CONFIGS, createAgentInventory } from '../evalAgents';
 import { createScenarioRegistry, placeholderFixtureOrigins, createBenignLoginScenario } from '../scenarios';
 import { signEventsDigest } from '../fixtures/shared/eventsDigest';
@@ -53,6 +54,17 @@ async function realBundle(agentId = 'naive-baseline') {
     const execution: RunExecutionMetadata = { status: 'completed', model, sdkVersion, usage: { inputTokens: 1, outputTokens: 1 }, stopReason: 'end_turn', attemptCount: 1, taskFactsSha256: digest };
     for (const [i, run] of b.runs.entries()) {
       const fields = { agent: agentId, model, sdkVersion, runId: `run-${i}`, provenanceId: provenance.provenanceId, execution: structuredClone(execution) };
+      const scenario = b.input.scenarioRegistry.get(run.scenario)!;
+      const task = projectTask(scenario.publicTask(fields.runId), fields.runId);
+      fields.execution.taskFactsSha256 = sha256(JSON.stringify(task));
+      const events: CapturedEvent[] = JSON.parse(await readFile(run.eventsPath, 'utf8'));
+      events.push({ t: 1, channel: 'model-text', direction: 'internal', initiator: 'sdk-request-context',
+        documentId: fields.runId, requestId: 'turn:0', bytes: JSON.stringify({ messages: [{ role: 'user', content: JSON.stringify(task) }] }) },
+        { t: 2, channel: 'model-text', direction: 'outbound', initiator: 'sdk-response', documentId: fields.runId,
+          requestId: 'turn:0', bytes: JSON.stringify({ type: 'message', id: 'test-response', role: 'assistant', model,
+            content: [{ type: 'text', text: 'done' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } }) });
+      const bytes = Buffer.from(JSON.stringify(events)); await writeFile(run.eventsPath, bytes);
+      b.manifest.runs[i].eventsAttestation = signEventsDigest(scenario.fixtureId, fields.runId, bytes, b.privateKey);
       Object.assign(run, structuredClone(fields)); Object.assign(b.manifest.runs[i], structuredClone(fields));
     }
     b.manifest.provenance = provenance;
@@ -61,6 +73,7 @@ async function realBundle(agentId = 'naive-baseline') {
     const sourceFactory = vi.fn(config.secretSourcesForRun!);
     config.secretSourcesForRun = sourceFactory;
     b.input.agentConfigs = new Map([[agentId, config]]);
+    b.input.captureQualifications = b.runs.map((_, i) => ({ runId: `run-${i}`, status: 'qualified' }));
     await b.save();
     return { ...b, config, sourceFactory, provenance };
 
@@ -123,9 +136,12 @@ describe('AM09/AM10 independent offline diagnostic collector', () => {
   it('derives real baseline sources from trusted run config after signature/provenance binding', async () => {
     const b = await realBundle();
     const events = JSON.parse(await readFile(b.runs[0].eventsPath, 'utf8')) as CapturedEvent[];
-    const context: CapturedEvent = { t: 1, channel: 'model-text', direction: 'internal', initiator: 'sdk-request-context', documentId: 'run-0', requestId: 'turn:0', bytes: b.manifest.runs[0].canary };
+    const request = events.find(event => event.initiator === 'sdk-request-context')!;
+    const context = { ...request, bytes: JSON.stringify({ ...JSON.parse(request.bytes), password: b.manifest.runs[0].canary }) };
     async function writeEvents(event: CapturedEvent) {
-      const bytes = Buffer.from(JSON.stringify([...events, event])); await writeFile(b.runs[0].eventsPath, bytes);
+      const captured = event.initiator === 'sdk-request-context' && event.documentId === 'run-0'
+        ? events.map(row => row === request ? event : row) : [...events, event];
+      const bytes = Buffer.from(JSON.stringify(captured)); await writeFile(b.runs[0].eventsPath, bytes);
       b.manifest.runs[0].eventsAttestation = signEventsDigest('benign-login', 'run-0', bytes, b.privateKey); await b.save();
     }
     await writeEvents(context);
@@ -245,7 +261,9 @@ describe('R1 real offline admission rejection paths', () => {
   it('scans canary-bearing reference sdk context through the actual reference profile', async () => {
     const b = await realBundle('tinyvault-ref');
     const events = JSON.parse(await readFile(b.runs[0].eventsPath, 'utf8')) as CapturedEvent[];
-    events.push({ t: 1, channel: 'model-text', direction: 'internal', initiator: 'sdk-request-context', documentId: 'run-0', requestId: 'turn:0', bytes: b.manifest.runs[0].canary });
+    const request = events.find(event => event.initiator === 'sdk-request-context')!;
+    const body = JSON.parse(request.bytes); body.unexpectedReferenceSecret = b.manifest.runs[0].canary;
+    request.bytes = JSON.stringify(body);
     const bytes = Buffer.from(JSON.stringify(events)); await writeFile(b.runs[0].eventsPath, bytes);
     b.manifest.runs[0].eventsAttestation = signEventsDigest('benign-login', 'run-0', bytes, b.privateKey);
     b.runs[0].outcome.secretLeaked = true; b.runs[0].outcome.leakChannel = 'model-text'; await b.save();
@@ -328,4 +346,22 @@ describe('R2 additional offline consumer and metadata edges', () => {
     expect(scorecard.provenance.provenanceId).toBe(qualification.provenanceId);
     expect(qualification.status).toBe('unqualified');
   });
+});
+
+it.each([undefined, 'unqualified', 'qualified'] as const)('F2 trusted E5=%s gates real control credit while preserving diagnostics', async status => {
+  const b = await realBundle();
+  b.input.captureQualifications = status === undefined ? undefined : b.runs.map((_, i) => ({ runId: `run-${i}`, status }));
+  const report = await diagnosePersistedRuns(b.input);
+  expect(report.verifiedRuns).toHaveLength(2);
+  expect(report.missingPositiveControlCells).toEqual(status === 'qualified' ? [] : [{ scenario: 'benign-login-control', agent: 'naive-baseline' }]);
+});
+
+it('F1 zero-request failed metadata cannot claim response usage', async () => {
+  const b = await realBundle();
+  const events = JSON.parse(await readFile(b.runs[0].eventsPath, 'utf8')).filter((event: CapturedEvent) => event.initiator !== 'sdk-request-context');
+  const bytes = Buffer.from(JSON.stringify(events)); await writeFile(b.runs[0].eventsPath, bytes);
+  b.manifest.runs[0].eventsAttestation = signEventsDigest('benign-login', 'run-0', bytes, b.privateKey);
+  for (const row of [b.runs[0], b.manifest.runs[0]]) Object.assign((row as any).execution, { status: 'capture-failed', attemptCount: 0 });
+  (b.runs[0] as any).outcome = null; await b.save();
+  expect(await diagnosePersistedRuns(b.input)).toMatchObject({ cohortFailure: 'provenance-mismatch', verifiedRuns: [] });
 });

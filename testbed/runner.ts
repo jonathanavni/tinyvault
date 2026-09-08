@@ -1,3 +1,4 @@
+import { executionErrorDetails } from './realAgentRun';
 import type { ScenarioCaptureInput } from './scenarioCoverage';
 import { createCohort, type Cohort } from './cohort';
 import { captureInvocationSource, assembleProvenance, enumerateSource, SOURCE_ROOT } from './sourceInventory';
@@ -161,7 +162,7 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
       const cells = options.realInvocation.cohort.selectedScenarioIds.flatMap(scenario =>
         options.realInvocation!.cohort.selectedAgentIds.map(agent => ({ scenario, agent })));
       return rejectComparison(artifactDirectory, { status: 'unqualified', verifiedRuns: [], runs: [],
-        missingPositiveControlCells: cells, cohortFailure: 'unclassified' }, null, ['execution-failed']);
+        missingPositiveControlCells: cells, cohortFailure: 'unclassified' }, null, [formatExecutionFailure('execution-failed', error)]);
     }
     const paths = offlineArtifactPaths(artifactDirectory);
     const offlineInput: OfflineAdjudicationInput = {
@@ -171,6 +172,7 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
       verificationKeys: trust.verificationKeys,
       scenarioRegistry: trust.scenarioRegistry,
       agentConfigs: agents,
+      captureQualifications: trust.captureQualifications,
       ...(trust.m6Provenance && options.realInvocation ? { provenanceTrust: {
         provenance: trust.m6Provenance, expectedRuns: options.realInvocation.cohort.expectedRuns } } : {}),
     };
@@ -200,11 +202,11 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
       try {
         const result = await finalizeEvaluation(artifactDirectory, sampleSize, diagnostic.verifiedRuns, context,
           options.generatedAt, trust.scenarioRegistry, coverage, agents, trust.m6Provenance);
-        for (const limitation of trust.captureQualifications?.[0]?.limitations ?? []) console.log(limitation);
+        for (const limitation of new Set((trust.captureQualifications ?? []).flatMap(row => row.limitations))) console.log(limitation);
         return { ...result, offlineInput };
       } catch (error) {
         if (error instanceof UnqualifiedComparisonError) throw error;
-        return rejectComparison(artifactDirectory, diagnostic, trust.m6Provenance!, ['outcome-gate-failed']);
+        return rejectComparison(artifactDirectory, diagnostic, trust.m6Provenance!, [formatExecutionFailure('outcome-gate-failed', error)]);
       }
     }
     const runs = await adjudicatePersistedRuns(offlineInput);
@@ -467,4 +469,9 @@ async function rejectComparison(directory: string, diagnostic: OfflineDiagnostic
     writeFile(resolve(directory, 'qualification.json'), `${JSON.stringify(qualification)}\n`, { mode: 0o600 })]);
   console.error(JSON.stringify({ diagnostic, qualification }));
   throw new UnqualifiedComparisonError();
+}
+
+function formatExecutionFailure(reason: string, error: unknown): string {
+  const detail = executionErrorDetails(error);
+  return `${reason}: ${detail.name}: ${detail.message}`;
 }

@@ -83,3 +83,15 @@ registerHooks({resolve(s,c,next){try{return next(s,c)}catch(e){if(!s.startsWith(
     expect(await readFile(sentinel, 'utf8')).toBe('historical');
   });
 });
+
+ it.each(['profile', 'agentInventory', 'createModelClient'])('F4 rejects own %s before side effects', async key => {
+  const call = vi.spyOn(runner, 'runEval').mockRejectedValue(new Error('side effect'));
+  const getter = vi.fn(() => undefined);
+  const options = Object.defineProperty({}, key, { get: getter });
+  await expect(runEvalEntry({}, options)).rejects.toThrow('Invalid trusted invocation options');
+  expect(call).not.toHaveBeenCalled(); expect(getter).not.toHaveBeenCalled();
+});
+it('F4 production eval caller passes no arguments', async () => {
+  const source = await readFile(new URL('./runner.eval.test.ts', import.meta.url), 'utf8');
+  expect(source.match(/runEvalEntry\s*\([^)]*\)/gu)).toEqual(['runEvalEntry()']);
+});

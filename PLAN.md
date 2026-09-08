@@ -34,7 +34,10 @@ GREEN (main 2696/0/1, timing 5/5, 20/20, execution PASS). Candidate committed on
 Claude QA, Claude security in parallel worktrees). R1 DONE 2026-09-08: Codex 2 P1 (unsigned execution metadata admitted;
 E5-unqualified runs credit control cells), QA 0 P1/3 P2/4 P3, security 0 P1/1 P2/3 P3; owner 6/6 spot-check kills; register
 entry "S5 R1 — candidate fb8816b". Fix round 1 packet `fix-round-1.md` dispatched to Astra (write, main checkout; job id in
-the evidence breadcrumb); hold commits while it runs. Then R2 reviews; R3 is the cap with the packet's P1 criteria.
+the evidence breadcrumb). Fix round 1 DELIVERED after four owner-answered STOP questions (zero-request runs; canary custody
+boundaries; loop.ts export; authorized dom-fill control) — 15 files, F1–F9, 152 targeted tests, 10/10 mutants; owner `make test`
+GREEN (main 2725/0/1, timing 5/5, 20/20, execution PASS); committed on main. R2 reviews next (three channels, fresh worktrees);
+R3 is the cap with the packet's P1 criteria.
 
 `2026-09-07-d-cancel` — focus: **D-CANCEL resolved; S4 implemented, reviewed and accepted; pushed**;
 owner: claude; **state: closed** (2026-09-07); continuity relinquished for a fresh session.

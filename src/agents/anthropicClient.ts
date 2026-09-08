@@ -35,7 +35,6 @@ export class AnthropicModelClient implements ModelClient {
     const transport = options.fetch ?? globalThis.fetch;
     this.sdk = new Anthropic({
       apiKey: options.apiKey, authToken: null, baseURL: new URL(ANTHROPIC_CLIENT_CONFIG.providerEndpoint).origin,
-      defaultHeaders: { 'anthropic-version': ANTHROPIC_CLIENT_CONFIG.apiVersion },
       maxRetries: ANTHROPIC_CLIENT_CONFIG.retries, timeout: ANTHROPIC_CLIENT_CONFIG.requestTimeoutMs, logLevel: 'off',
       fetch: (url, init) => this.captureFetch(transport, url, init),
     });

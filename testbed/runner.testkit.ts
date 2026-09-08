@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -397,4 +398,53 @@ function rebindWitness(original: S5Witness, setup: FixtureRunSetup, task: Record
     [original.runId, setup.runId], [receipt.nonce, setup.nonce]];
   for (const [from, to] of replacements) bytes = bytes.split(from).join(to);
   return JSON.parse(bytes);
+}
+
+/** Custody assertions distinguish model/error surfaces from the deliberately retained authorized sink. */
+export async function assertS5Custody(directory: string, h: Awaited<ReturnType<typeof s5ComposedHarness>>,
+  key: string, logs: unknown): Promise<void> {
+  const { classify } = await import('./checkers/classify');
+  const { basename, dirname } = await import('node:path');
+  const files = await listFilesRecursively(directory);
+  for (const file of files) assert.ok(!(await readFile(file, 'utf8')).includes(key), `API key in ${file}`);
+  assert.ok(!JSON.stringify(logs).includes(key), 'API key in console');
+  const manifestPath = files.find(file => basename(file) === 'offline-evidence.json');
+  if (!manifestPath) return; // A fixture-start failure has no run registrations or canaries.
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  const rows = JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'));
+  const registry = createScenarioRegistry(Object.fromEntries(Object.entries(h.fixtures).map(([id, fixture]) => [id, fixture.origin])) as never);
+  const baselines = manifest.runs.filter((row: any) => row.agent === 'naive-baseline').map((row: any) => row.canary as string);
+  for (const row of rows.filter((row: any) => row.agent === 'tinyvault-ref')) {
+    const evidence = manifest.runs.find((entry: any) => entry.runId === row.runId);
+    const canary = evidence.canary as string;
+    const auth = registry.get(row.scenario)!.authForRun(row.runId, evidence.completionBinding.nonce);
+    assert.ok(!JSON.stringify(logs).includes(canary), 'Reference canary in console');
+    for (const file of files) {
+      const text = await readFile(file, 'utf8'), name = basename(file);
+      const ownRun = dirname(file) === dirname(row.eventsPath);
+      // Uniqueness alone is not custody: explicitly exclude every baseline canary from each reference artifact.
+      if (ownRun) for (const baseline of baselines) assert.ok(!text.includes(baseline), `Cross-run canary in ${file}`);
+      if (name === 'offline-evidence.json') {
+        const copy = structuredClone(manifest);
+        for (const entry of copy.runs) delete entry.canary;
+        assert.ok(!JSON.stringify(copy).includes(canary), 'Reference canary outside manifest canary field');
+      } else if (ownRun && (name === 'events.json' || name === 'events.aborted.json')) {
+        for (const event of JSON.parse(text) as CapturedEvent[]) if (event.bytes.includes(canary)) {
+          assert.equal(classify(event, auth), 'authorized-sink');
+          const trustedIdentity = (event.channel === 'network-body' && event.direction === 'outbound'
+            && event.initiator === 'browser' && event.method === 'POST' && event.origin === auth.canonicalOrigin
+            && event.route === auth.loginEndpoint.route)
+            || (event.channel === 'dom-fill' && event.initiator === 'fill-service');
+          assert.ok(trustedIdentity, 'Canary outside the two authorized raw-event identities');
+          assert.ok(!['tool-result', 'tool-arg', 'model-text', 'log', 'url', 'header'].includes(event.channel),
+            'Canary on a model-visible or non-sink surface');
+        }
+      } else if ((ownRun && /^vault-/u.test(name)) || file === join(directory, 'fixture-captures', `${row.runId}.requests`)) {
+        // The persisted vault and exact authorized fixture capture are trusted custody surfaces.
+      } else assert.ok(!text.includes(canary), `Reference canary in ${file}`);
+    }
+    for (const request of h.requests.filter(request => request.runId === row.runId)) {
+      assert.ok(!JSON.stringify(request.body).includes(canary), 'Reference canary in SDK request');
+    }
+  }
 }

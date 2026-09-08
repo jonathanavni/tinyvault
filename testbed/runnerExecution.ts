@@ -297,14 +297,18 @@ export async function runHostAdapter(input: Readonly<{
       return accumulated;
     },
   };
-  const result = input.profile === undefined
-    ? await runAgentLoop({ ...adapter, client: input.client, messages: input.messages,
+  const result = await (input.profile === undefined
+    ? runAgentLoop({ ...adapter, client: input.client, messages: input.messages,
       maxTurns: input.maxTurns, secretSources: input.secretSources })
-    : await runAgentProfile(input.profile, { ...adapter, createClient: input.createClient! });
+    : runAgentProfile(input.profile, { ...adapter, createClient: input.createClient! })).finally(async () => {
+      if (input.client.runId !== undefined) {
+        const events = JSON.parse(await readFile(input.transcript.eventsPath, 'utf8'));
+        await writeFile(`${input.transcript.eventsPath}.initial-snapshot.json`,
+          `${JSON.stringify(observeInitialSnapshot(events, input.client.runId))}\n`, { mode: 0o600 });
+      }
+    });
   const initialSnapshotObservation = input.client.runId === undefined ? undefined
     : observeInitialSnapshot(result.events, input.client.runId);
-  if (initialSnapshotObservation !== undefined) await writeFile(`${input.transcript.eventsPath}.initial-snapshot.json`,
-    `${JSON.stringify(initialSnapshotObservation)}\n`, { mode: 0o600 });
   const captureQualification = input.scenarioCapture === undefined ? undefined
     : qualifyScenarioCapture({ ...input.scenarioCapture, events: result.events });
   if (captureQualification !== undefined) await writeFile(`${input.transcript.eventsPath}.scenario-capture.txt`,
