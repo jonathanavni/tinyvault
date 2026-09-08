@@ -93,6 +93,8 @@ function validateOperation(op: BridgeOp, kind: 'req' | 'res', body: Body): void 
     if (op === 'attest' && (body.events as string).length > Math.ceil(MAX_EVENTS_BYTES * 4 / 3)) {
       throw new BridgeError('control-limit');
     }
+    // Redundant with the encoded bound; no independent killing vector: ceil(4*1048577/3)
+    // is 1398103 > 1398102. Retain the decoded check as defence in depth.
     if (op === 'attest'
       && decodeBase64url(body.events as string, undefined, 'body-shape').length > MAX_EVENTS_BYTES) {
       throw new BridgeError('control-limit');
@@ -112,6 +114,8 @@ function validateOperation(op: BridgeOp, kind: 'req' | 'res', body: Body): void 
       const bytes = decodeBase64url(body.bytes as string, undefined, 'body-shape');
       const total = canonicalInteger(body.total as string);
       const next = canonicalInteger(body.next as string);
+      // Redundant with the encoded bound; no independent killing vector: ceil(4*65537/3)
+      // is 87383 > 87382. Retain the decoded check as defence in depth.
       if (bytes.length > MAX_CHUNK_BYTES || next > total || bytes.length > next
         || (bytes.length === 0 && next !== total)) throw new BridgeError('body-shape');
     }

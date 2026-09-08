@@ -115,6 +115,7 @@ it('AM12 retains all 60 verified cap-sized real-profile snapshots before recompu
     childDirectory = await fs.mkdtemp(resolve('.vitest/am12-child-'));
     const script = join(childDirectory, 'adjudicate.mjs');
     await build({ stdin: { resolveDir: process.cwd(), contents: `
+      import './testbed/docker/no-docker.setup.ts';
       import { readFile, writeFile } from 'node:fs/promises';
       import { createPublicKey } from 'node:crypto';
       import { join } from 'node:path';
