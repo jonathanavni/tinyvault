@@ -377,7 +377,7 @@ change. Its adopted requirements are:
    external `schemas.json` SHA256 `f319fd47cd1a4840ef7d274ee5881dfc3ec52a80dd65fa575f7b569ffab968c5`;
    compact normalized declaration array 1972 bytes, SHA256
    `567545650168480703cd5e7a0e6991ae8300806851355a142e873d0770691597`; compact native array 1979 bytes,
-   SHA256 `6c179698185ae12f71c6334036f3f446bc920f0a505fa5207cefba50a4bcee50`. S2 must have a gate
+   SHA256 `6c179698185ae12f71c6334036f3f446bc920f0a505fa5207cefba50a4bcee50`. [declaration bytes re-frozen by F1, 2026-09-08 (user-decided): normalized 2436 bytes SHA256 c7475344b94ebcc4748970c168330a8e3d9106c24e2e9213000386ec16d27d12; native 2443 bytes SHA256 74307fb3ab1fed7d4510505c27a4724f7a6a0674bfd2441266ffd43d483e483c; the historical schemas.json digest is unchanged history] S2 must have a gate
    comparing its actual declaration serialization with these independent literals; altering descriptions,
    schemas or serialization requires renewed entry accounting before source work depends on the change.
    No presumed description-growth headroom is approved. Exact S3 instruction/bootstrap sizing remains

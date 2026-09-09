@@ -173,7 +173,8 @@ export const EVALUATED_AGENT_TOOLS: readonly ToolDefinition[] = deepFreeze([
           }
         },
         "assertedOrigin": {
-          "type": "string"
+          "type": "string",
+          "description": "Optional; omit it unless you are certain. If given, it must be exactly the bare origin of the page you are filling: http or https, then :// and the host (lowercase) with an optional :port, and nothing else - no trailing slash, path, query, fragment or user@. Valid: \"https://vault.example\". Invalid: \"https://vault.example/\". The service verifies the live page origin itself; a wrong or malformed assertion is refused as origin-not-authorized."
         }
       },
       "required": [
