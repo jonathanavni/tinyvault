@@ -149,3 +149,8 @@ Owner gate discipline, verification blind spots, mutant hygiene, evidence handli
   share one backend at S5 construction. Injected callbacks cannot detect a mismatched binding. Preserve
   the shallow-bootstrap/trusted-caller and probe-count/throw-arm proof limits in the M6 register. (2026-09-07)
 - **Example values in model-facing text must never be live or fixed fixture origins.** The composed topology pins fixtures at `http://127.0.0.1:47110/47120/47121/47130` (`testbed/docker/compose.ts` PORTS) and the K-leg parity normalizer symbolizes anchored origins wherever they occur in text, so a literal that matches one leg's origin breaks two-transport parity. Use RFC 2606 names (`https://vault.example`). A regression witness now pins this in `src/agents/anthropicClient.test.ts`.
+- **Do not edit the working tree while a blind review of a pinned range is running, even without committing.** The 2026-09-09
+  M7-entry Opus QA review consulted the tree mid-run, saw four reviewed files change under it, and filed a P1 process finding
+  ("the green gate on `4b0f3b7` no longer describes the tree"). "Hold commits while a review runs" is not enough: reviewers
+  read the tree, not only the range. Draft fixes in the evidence directory or a separate worktree and apply them after every
+  channel has reported. (2026-09-09)

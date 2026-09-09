@@ -54,17 +54,17 @@ work in flight, the rest stay parked here (register "Final5 round"):
   canary substituted + outcome restated; sibling intact; signed events unchanged; both real profiles) paired with a legitimate
   receiptless baseline admission. Recorded cohorts unaffected (all baseline rows completed with receipts). README claim narrowed
   meanwhile.
-- **[M7 entry input] Eval-test timeout derived from the selected inventory.** `testbed/runner.eval.test.ts:107` pins
+- ~~**[M7 entry input] Eval-test timeout derived from the selected inventory.**~~ **CLOSED 2026-09-09** (packet A, `5967448`, merged `4b0f3b7`: `testbed/evalBudget.ts`, default 3,900,000 ms; M7 register). Original: `testbed/runner.eval.test.ts:107` pins
   `1_800_000` ms; at the observed ~19 s/run, 5 scenarios × 2 agents × 10 ≈ 32 min exceeds it (fail-closed, but it would burn an
   authorized cohort on a harness bound). Derive from `sampleSize × |scenarios|` with the arithmetic recorded (QA P3-05).
-- **[M7 entry input] `testbed/runner.realAgent.eval.ts:12-13` hard-codes three scenarios**; extending the inventory is a
+- ~~**[M7 entry input] `testbed/runner.realAgent.eval.ts:12-13` hard-codes three scenarios**~~ **CLOSED 2026-09-09 for the pin** (packet A: `DEFAULT_SCENARIO_IDS` pinned by identity; extending the inventory now fails the registry-identity test deliberately). Still open for M7: per-fixture capture applicability, exposure checks, recovery recipes, positive controls, admission cases, and the prompt/capture budget requalification. Original: hard-codes three scenarios; extending the inventory is a
   deliberate gate change, together with per-fixture capture applicability, exposure checks, recovery recipes, positive controls
   and adversarial admission cases (Codex rec. 3). Requalify prompt and capture budgets for longer M7 recipes/traces
   (`src/agents/prompt.ts:14-17`; Codex rec. 4).
 - **[M7 fixture target] Drive a declared limit rather than another origin/DOM variant:** a chunked/streamed exfil body
   (`P-LIM-CHUNKED`, `src/supervisor/bodyCorrelation.ts:61-77`) or the console budget (`CONSOLE_EVENT_LIMIT = 1000`,
   `src/supervisor/evidenceLease.ts:24`), converting "declared" into "measured" (security rec. 4).
-- **[Sol test-only packets] (a)** one negative classification test: a `tool-arg` event carrying the canonical `origin` still
+- ~~**[Sol test-only packets]**~~ **CLOSED 2026-09-09** — (a) packet B `1628a85` (`classify.test.ts`); (b) packet B (`src/core/originSweep.ts` + test, U+0020..U+2FFF in the main partition, ~0.3 s, with a positive control); (c) packet D `eeff175` (`baseline` and `eval:stub` grammar rules + Makefile `baseline` target). Merged `4b0f3b7`; M7 register. Original: **(a)** one negative classification test: a `tool-arg` event carrying the canonical `origin` still
   classifies `unauthorized-sink` (`src/agents/loop.ts:498-506` copies model-supplied `origin`/`route`/`method` before
   `validateToolCall`; inert today via `testbed/checkers/classify.ts:39-68`, unpinned); **(b)** a bounded UTS-46 sweep in the default
   gate (`scripts/unicode-origin-sweep.mjs --max 0x2FFF`, ~30 s) so a new collapse class outside `src/core/originGuard.test.ts`'s
@@ -74,7 +74,7 @@ work in flight, the rest stay parked here (register "Final5 round"):
   distributed) or narrow the README further (S5 (8)); promote the persisted `diagnostic.json`↔`runs.json` binding to a production
   check (AM13 (1)); `runEvalEntry` positive allowlist (AM13 (3)); break `src/agents/prompt.ts` → `testbed` imports before packaging
   (Codex); `SKILL.md` is a measured input — expanding it for humans re-opens E8 (QA rec. 6); decide the Probe P timing-2 policy
-  before M7 doubles fixture load.
+  before M7 doubles fixture load — **2026-09-09: converted to a measurement question; C1 landed (`e040175`), C2 (sidecar + sham-A/B and A/A twins, D10 wording amendment) and the N = 20 campaign await user adoption of [`docs/probe-p-timing2-policy.md`](docs/probe-p-timing2-policy.md).**
 - **[Graduated residuals]** S4 (1) bounded trusted-backend contract (M9 adapter step); S4 (9) unload/keepalive (already listed
   above); AM12 §14 (1) decoder-budget rescale amendment with benchmark evidence; AM13 §9 (1) trusted attempt ledger.
 
