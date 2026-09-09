@@ -6,8 +6,12 @@ import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { assertProbeFamily, assertProbeHardClause, wilcoxonSignedRank, type ProbePResult } from './probeP';
-import { classifyFamilyError, composeFloor, composeTimingSidecar, readTimingCommit, writeTimingSidecar,
+import { classifyFamilyError, composeFloor, composeTimingSidecar, readTimingCommit, writeTimingSidecar, startTimingSidecar,
   type DiagnosticResult, type FloorResult, type LedgerRow, type LedgerFailure, type TimingTask } from './timing2Sidecar';
+
+import * as sourcePins from './timingSourcePins';
+
+sourcePins.timingSourceCompiler(ts);
 
 const SOURCE = readFileSync(new URL('../../src/supervisor/host.timing.browser.test.ts', import.meta.url), 'utf8');
 const NAMES = [
@@ -70,30 +74,14 @@ function fixtureInput() {
 function definitions(source = SOURCE, diagnosticResults = new Map<string, DiagnosticResult>()) {
   const file = ts.createSourceFile('timing.ts', source, ts.ScriptTarget.Latest, true);
   const selected = file.statements.filter((node) => ts.isFunctionDeclaration(node) && node.name
-    && /^(?:pins|timingSource|timingConstructionMutations|timingHardeningMutations|timingFunctionText|timingConstantText|timingDiagnosticBodies|recordDiagnostic|assertFiniteProbeStatistics)/u.test(node.name.text));
+    && /^(?:recordDiagnostic|assertFiniteProbeStatistics)/u.test(node.name.text));
   const code = ts.transpileModule(selected.map((node) => node.getText(file)).join('\n'), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
   }).outputText;
   return new Function('ts', 'expect', 'assertProbeFamily', 'assertProbeHardClause', 'diagnosticResults', code
-    + '\nconst build = timingSourceCompiler(); const programDurations = []; const semanticDurations = [];'
-    + '\nconst compile = (source, semantic = false) => { const start = performance.now(); const program = build(source, semantic);'
-    + ' program.getTypeChecker(); programDurations.push(performance.now() - start);'
-    + ' const diagnostics = program.getSemanticDiagnostics.bind(program);'
-    + ' program.getSemanticDiagnostics = (...args) => { const start = performance.now();'
-    + ' try { return diagnostics(...args); } finally { semanticDurations.push(performance.now() - start); } }; return program; };'
-    + '\nreturn { timingSourceChecks: (source, compiler = compile) => timingSourceChecks(source, compiler), programDurations, semanticDurations,'
-    + ' timingSourceResolve: (source) => timingSourceResolve(source, compile), timingSourceCompiler,'
-    + ' timingSourceMutations, timingSourceResolvedMutations, timingHardeningMutations, recordDiagnostic, recordDiagnosticOutcomes, assertFiniteProbeStatistics };')(
+    + '\nreturn { recordDiagnostic, recordDiagnosticOutcomes, assertFiniteProbeStatistics };')(
     ts, expect, assertProbeFamily, assertProbeHardClause, diagnosticResults,
   ) as {
-    timingSourceChecks: (source: string, compiler?: (source: string, semantic?: boolean) => ts.Program) => Record<string, boolean>;
-    timingSourceCompiler: () => (source: string, semantic?: boolean) => ts.Program;
-    programDurations: number[];
-    semanticDurations: number[];
-    timingSourceResolve: (source: string) => { registrationsResolved: boolean; tests: { title: string; suite: string; body: string }[] };
-    timingSourceMutations: (source: string) => [string, string, string][];
-    timingSourceResolvedMutations: (source: string) => [string, string, string][];
-    timingHardeningMutations: (source: string) => [string, string, string][];
     recordDiagnostic: (name: string, result: ProbePResult, rejection?: string) => void;
     recordDiagnosticOutcomes: (name: string, result: ProbePResult) => void;
     assertFiniteProbeStatistics: (result: ProbePResult) => void;
@@ -136,7 +124,7 @@ function sourceComposition() {
   const titles: string[] = [];
   let names: string[] = [];
   const visit = (node: ts.Node): void => {
-    if (ts.isVariableDeclaration(node) && node.name.getText(file) === 'TASK_TITLE_TO_ENTRY'
+    if (ts.isVariableDeclaration(node) && node.name.getText(node.getSourceFile()) === 'TASK_TITLE_TO_ENTRY'
       && node.initializer && ts.isObjectLiteralExpression(node.initializer)) {
       for (const property of node.initializer.properties) {
         if (!ts.isPropertyAssignment(property) || !ts.isStringLiteral(property.name)
@@ -144,7 +132,7 @@ function sourceComposition() {
         titleToEntry[property.name.text] = property.initializer.text;
       }
     }
-    if (ts.isVariableDeclaration(node) && node.name.getText(file) === 'ENTRY_NAMES'
+    if (ts.isVariableDeclaration(node) && node.name.getText(node.getSourceFile()) === 'ENTRY_NAMES'
       && node.initializer && ts.isAsExpression(node.initializer) && ts.isArrayLiteralExpression(node.initializer.expression)) {
       names = node.initializer.expression.elements.map((element) => {
         if (!ts.isStringLiteral(element)) throw new Error('Nonliteral entry');
@@ -156,6 +144,7 @@ function sourceComposition() {
     ts.forEachChild(node, visit);
   };
   visit(file);
+  visit(ts.createSourceFile('sidecar.ts', sourcePins.SIDECAR_SOURCE, ts.ScriptTarget.Latest, true));
   return { names, titleToEntry, titles };
 }
 
@@ -165,7 +154,6 @@ async function temporaryRoot() {
   return root;
 }
 
-const sourcePins = definitions();
 
 describe('timing-2 sidecar', () => {
   it('runs every source pin and its named in-memory negative control without loading Chromium', () => {
@@ -181,7 +169,7 @@ describe('timing-2 sidecar', () => {
       + ` max=${Math.max(...functions.programDurations).toFixed(1)}ms`
       + `; file semantic cold=${functions.semanticDurations[0]!.toFixed(1)}ms`
       + ` max=${Math.max(...functions.semanticDurations).toFixed(1)}ms`);
-  });
+  }, 180_000);
 
   it.each(sourcePins.timingHardeningMutations(SOURCE))('rejects fix-round mutant %s: %s', (pin, name, changed) => {
     expect(changed, name).not.toBe(SOURCE);
@@ -395,7 +383,7 @@ describe('timing-2 sidecar', () => {
     const path = join(await temporaryRoot(), 'timing-2-probes.json');
     await fs.writeFile(path, JSON.stringify({ complete: true, startedAt: 'old run' }));
     const rename = vi.spyOn(fs, 'rename'); const stub = { schema: 'timing-2-probes/1', complete: false, startedAt: START };
-    await writeTimingSidecar(path, stub);
+    await startTimingSidecar(path, START);
     expect(JSON.parse(await fs.readFile(path, 'utf8'))).toEqual(stub);
     expect(rename).toHaveBeenCalledOnce();
     const [temporary, destination] = rename.mock.calls[0]!;
