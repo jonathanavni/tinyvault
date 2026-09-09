@@ -126,3 +126,9 @@ Runtime quirks of the harness's substrate: Chromium/Playwright/CDP behaviour, Do
   source-comment reader pulled TypeScript into production-reachable claims.ts; moving the unchanged
   helper/import to its sole test consumer preserved the dependency gate without a new exception.
   Keep compiler tooling in test-only consumers. Slice6 register Entry22. (2026-09-06)
+- **A worktree with a symlinked `node_modules` cannot pass the provenance-dependent suites.** `testbed/evaluationProvenance.ts`
+  `hashFiles` rejects any symlink component on an enumerated source path (the SDK version file lives under `node_modules`), so
+  `make test` in such a worktree reds ~170 tests with `Source input must be a regular file without symlinks` across
+  `evalEntry`, `realAgentRun`, `runner.browser`, `runner.realAgent` and `sourceInventory` — an environment artifact, not a
+  code red. Worktrees are fine for Codex workers and single-file runs; the owner gate runs in a real checkout (or a clean
+  clone). (2026-09-09)
