@@ -38,6 +38,7 @@ type FillRequest = {
   sessionId: string;
   fields: FillField[];
   assertedOrigin?: Origin;
+  // optional; bare origin exactly (validateBareOrigin); described to the model in the tool schema (F1, 2026-09-08)
 };
 
 type FillResult =

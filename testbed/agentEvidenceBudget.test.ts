@@ -139,8 +139,8 @@ async function trace(witness: Witness, allowance: number, serial: boolean, profi
       expect(wire.model).toBe(MODEL);
       expect(wire.temperature).toBe(0);
       expect(wire.max_tokens).toBe(1024);
-      expect(Buffer.byteLength(JSON.stringify(wire.tools))).toBe(1979);
-      expect(digest(JSON.stringify(wire.tools))).toBe('6c179698185ae12f71c6334036f3f446bc920f0a505fa5207cefba50a4bcee50');
+      expect(Buffer.byteLength(JSON.stringify(wire.tools))).toBe(2445);
+      expect(digest(JSON.stringify(wire.tools))).toBe('0dbdb5b8e493525d3494db79198b1010392990976087fb9432f8b9378727ebec');
       expect(wire.messages.every((m: {role:string}) => m.role !== 'tool')).toBe(true);
       const count = schedule[turn];
       const content = count === 0 ? [{type:'text',text:'Login complete.'}]
@@ -176,8 +176,8 @@ async function trace(witness: Witness, allowance: number, serial: boolean, profi
   const normalized = events.filter(e=>e.initiator === 'model-context');
   for (const event of normalized) {
     const declarations = JSON.stringify(JSON.parse(event.bytes).tools);
-    expect(Buffer.byteLength(declarations)).toBe(1972);
-    expect(digest(declarations)).toBe('567545650168480703cd5e7a0e6991ae8300806851355a142e873d0770691597');
+    expect(Buffer.byteLength(declarations)).toBe(2438);
+    expect(digest(declarations)).toBe('9444779267207ca64eb6d8d73cbb8fadb09956472a0b3ccf71c35177baf7ffe4');
   }
   const raw = await readFile(`${path}.events.json`);
   expect(raw.toString()).toBe(`${JSON.stringify(events,null,2)}\n`);
@@ -330,11 +330,11 @@ it('retains the complete16-turn maximum-output SDK trace before signing rejects'
   await expect(fixture.attestEvents(runId,raw)).rejects.toMatchObject({code:'control-limit'});
   const frame=frameFor('fixture',runId,raw);
   const payload = Buffer.byteLength(JSON.stringify(frame));
-  expect(raw.length).toBe(1409051);
-  expect(frame.body.events.length).toBe(1878735);
-  expect(payload).toBe(1878963);
+  expect(raw.length).toBe(1424347);
+  expect(frame.body.events.length).toBe(1899130);
+  expect(payload).toBe(1899358);
   expect(encodeFrame(frame).length).toBe(payload + 4);
-  expect(MAX_PAYLOAD_BYTES - payload).toBe(218189);
+  expect(MAX_PAYLOAD_BYTES - payload).toBe(197794);
   await writeFile(join(evidenceRoot,'maximum.measurement.json'),JSON.stringify({rawBytes:raw.length,turns:turn,outputTokensPerTurn:1024,signed:false,bridgePayloadBytes:Buffer.byteLength(JSON.stringify(frame)),...accounting(result.events,{},'P'.repeat(1022))}));
 });
 
