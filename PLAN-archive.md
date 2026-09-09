@@ -968,3 +968,30 @@ cohorts, Docker/clean-clone acceptance or release are authorized by this wrapup.
 `make test`; `make test-docker`; composed six-cell pilot; `make baseline` N10; `make eval` N10; independent offline
 re-adjudication; early recording) — each step needs the user's explicit authorization (Docker, live provider spend). Also file
 the claims-row amendment packet for residual (1). No workers, reviewers or Codex jobs are running.
+
+## Archived 2026-09-09 (at the M6 close + M6.1 wrapup) — the s6 and s5 Current State blocks
+
+Collapsed from `PLAN.md` Current State once M6 closed (assessment `7bf50bd`) and M6.1 merged (`7ae23be`, integration `352e465`). Verbatim as they stood:
+
+`2026-09-08-s6` — focus: **S6 acceptance ladder (E9/E10) plus the S5 residual (1) amendment**; owner: claude; **state: closed** (2026-09-09); continuity relinquished for a fresh session. State checkout: `/Users/jonathanavni/Documents/Coding/tinyvault`; branch main at `c594f41` (never pushed this session; origin still at `1d32657`).
+
+**This session (2026-09-08 → 09):** residual (1) closed (`dfb8ddb`). Pilot attempt 1 stopped on the 131,072-byte cap → **M6-AM12** (1 MiB) adopted, Astra-implemented, three-round cap, merged `623a8b7`; companion `evidence-oversized` slice merged `a666b13`. E9 attempt 2 steps 1–2 PASS, but pilot 2 (`TYuNic3U`) was unqualified on the lookalike cell → **F1** (exact `assertedOrigin` format described in the model-facing schema; fill service unchanged; merged `dd669ba`) and **M6-AM13** (only N=10 qualifies on the real path; fail-closed pilot readiness on exact reason lists; `BASELINE_SYSTEM` v2 `/success`-path recovery as a disclosed protocol change; three Sol paper rounds, user-adopted with corrections A/B; Astra-implemented, two review rounds on three channels, ten owner-reproduced mutants; merged `fe8e9e1`). Clean-clone checks PASS on `3072e0b`; pilot 3 (`cY3Deep4`) READY; N10 sequence `E9-A3-N10` **QUALIFIED** (baseline `z22Kn2eT` 30/30 leaks; comparison `y9WmFqoL` reference 0/30 leaks 30/30 completed, baseline 30/30 leaks 30/30 completed; eval assertion incl. no-provider re-adjudication PASS) — **E8 met, E9 met, E10 recorded** (lookalike cell, run index 0). Two owner tooling errors (an ungated commit/review dispatch; a fixture-origin example) and one runner bug are recorded in the register and gotchas. Evidence: `artifacts/review-evidence/tinyvault-m6-s6-acceptance-20260908/` (+ tarball and sha256 manifest, local). Verbatim mid-session narrative in `PLAN-archive.md`.
+
+**Open / next session:** (1) Probe P timing-2 gate policy — DEFERRED by the user (gate retained, every failure preserved, no retry-to-pass; two idle-host rejections recorded 2026-09-08; no rejection in any gated run after `3072e0b`). (2) Push decision — main is far ahead of origin and was never pushed this session; the user's call. (3) M6 close-out: the read-only cross-model project assessment CLAUDE.md requires after a milestone close, a residual sweep (AM12 §14, AM13 §9, the S6 entries), and README/release readiness per `guides/release.md`. (4) Backlog candidates: reporting-only readiness script; trusted attempt ledger; `runs.json` mode on the pilot path; `runEvalEntry` allowlist hardening. No workers, reviewers or jobs are running; no live spend is authorized by this wrapup.
+
+`2026-09-07-s5` — focus: **S5 implemented, reviewed through three rounds plus the cap-round integrator fix, and ACCEPTED**;
+owner: claude; **state: closed** (2026-09-08); continuity relinquished for a fresh session. State checkout:
+`/Users/jonathanavni/Documents/Coding/tinyvault`; branch main; local == origin at `1d32657` (+ this wrapup commit).
+
+**This session (2026-09-07 → 08):** stale probeP busy-loops killed; S4 residual (8) closed by a Sol test-only packet (`46ae3df`);
+S5 packet drafted, Sol-reviewed (3 P1 / 3 P2 absorbed), ten owner decisions D-S5-1…10 user-approved, pre-integration
+(`b1cd5dd`); Astra candidate after one correct STOP (canary alphabet → D-S5-1 narrowed, `45f1074`) → `fb8816b`; three review
+rounds (R1 Codex 2 P1; R2 Codex 2 P1 after three classifier-flagged review-mode failures → defensive task mode; R3 cap: all
+three channels converge on one P1) with two fix rounds (`5685d01`, `74ca1e2`) and the cap-round integrator fix (`742c13b`:
+attestation minted only after intact finalization); owner `make test` green after every delivery (final main 2791/0/1, timing
+5/5 and 20/20, execution PASS); 24 owner mutant reproductions across four passes; docs integration (SCHEMA, phase plan §5,
+M6 plan §7) applied; register entry "S5 implementation — accepted" with twelve declared residuals. Evidence archive
+`artifacts/review-evidence/tinyvault-m6-s5-packet-20260907/` (+ the worker's `tinyvault-m6-s5-implementation-20260908/`).
+
+**Next session (as written at the S5 close):** superseded by the s6 session above; verbatim in `PLAN-archive.md`.
+

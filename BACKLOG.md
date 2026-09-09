@@ -143,12 +143,12 @@ work in flight, the rest stay parked here (register "Final5 round"):
 - **[Graduated to M6 plan/SCHEMA] A1 — agent interface and recovery flow.** The planning decision and S3
   controlled profiles/recipes are complete at `db78a1c`. The frozen seven-tool registry still excludes
   `list_vault` and `request_vault_setup`; discovery/setup remains trusted and out of band. S5 same-backend
-  construction and composed command/recovery proof remain due. Tool-surface expansion still requires an
+  construction and composed command/recovery proof remain due *[delivered by S5/S6, accepted 2026-09-08/09]*. Tool-surface expansion still requires an
   explicit threat-model decision. Original assessment disposition: PLAN Decisions Log (2026-09-04).
 - **[M6 spec input] A2 — explicit coverage requirements per M6 scenario.** Zero missing-body markers ≠ complete observation
   (unload beacons, screenshot text, worker/popup limits, finite decoder inventory — see the M6 capture items above and
   `SCHEMA.md`). Each M6 scenario states which channels it requires observed, and the limitations stay printed beside any
-  published result. Planned in M6 E5/AM05 (§5/§7); S4/S5 implementation and qualification proof remain due.
+  published result. Planned in M6 E5/AM05 (§5/§7); S4/S5 implementation and qualification proof remain due *[delivered by S4–S6; E5 zero counts in every qualified cohort, 2026-09-09]*.
 - **A4 — `finish()` should settle evidence itself or refuse pending work** (`src/supervisor/host.ts`). It can currently return a verdict and drop state without settling pending captures; the runner happens to supply the settle/drain sequence, so the verified path passes and another caller can silently omit it. Scope before external consumers (the MCP adapter), not inside M5.2.
 - **A7 — local-vault durability.** Exclusive key creation can leave a partial file after failure, and vault replacement lacks a directory `fsync` (`src/backends/localFileWriter.ts`). Bounded follow-up.
 - **[S4 residual → S5 / backend step] Trusted-side stalls are bounded only at the abort trigger.** A stalled `CredentialBackend`

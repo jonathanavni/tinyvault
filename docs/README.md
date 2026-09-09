@@ -111,9 +111,10 @@ Active planning docs:
   trusted Git enumeration, composed collection/admission and command-path proof before published comparisons; **A7**'s doc half was corrected at that assessment. The rest
   were dispositioned as M6 planning inputs or existing declared residuals. Carries an
   integrator note recording what in it is superseded. **Append-only.**
+- `m6-1-canary-authentication-packet.md` — **M6.1** (v4, ADOPTED at the three-round Sol paper cap, 2026-09-09): every `naive-baseline` row's manifest canary must equal the `password` in its fixture-signed loop bootstrap event, checked before the receipt and any canary search (rule R1, tests T1–T4, mutants M1–M4, `P-receipt-binding` row + SCHEMA s115/s116). Astra-implemented with one STOP → Extension 1 (retention fixture); Codex MERGEABLE, Claude QA/security no code defect; merged `7ae23be`; register entry "M6.1 receiptless-row canary authentication".
 - `project-assessment-2026-09-09.md` — the **M6 milestone-close assessment** (read-only, three blind channels: Codex GPT-6 Astra,
   Claude Opus 5 QA, Claude Opus 5 security; owner-verified line by line). M6 CLOSED; one verified P1 cross-slice admission gap
-  (receiptless baseline rows carry an unauthenticated canary) becomes the **M6.1 remediation slice**; residual sweep of every
+  (receiptless baseline rows carry an unauthenticated canary) becomes the **M6.1 remediation slice** — **landed the same day** (`7ae23be`, integration `352e465`); residual sweep of every
   M6 residual; E1–E10 crosswalk. Register entry in `m6-review-findings.md`.
 - `m6-s6-claims-amendment.md` — S6 packet (Sol draft, owner-verified) closing S5 residual (1): `P-attestation` /
   `P-same-observation` name `readVerifiedRunEvents`; applied by Astra and landed as `dfb8ddb`.
