@@ -104,3 +104,20 @@ Opus test gap 5 closed by F2b (default-N budgets for one- and two-agent profiles
 **Owner gate 2 on the fixed tree (main checkout, 2026-09-09 13:17–13:30 CDT, host otherwise idle, tree untouched for the duration — `gate2-status-before.txt` = `gate2-status-after.txt`):** `make test` exit 0 — main 2937 / 2936 passed / 0 failed / 1 expected opt-in skip (+2 tests over gate 1: the timer-boundary and retired-literal budget tests); timing-1 5/5; timing-2 20/20 (no Probe P rejection); `test execution PASS`. Reports under `owner-gate-2-fixed-tree/` with the C1-pin owner run `fix1-timing-2.json`. The fixes are committed as `4909ba8` (`test(m7-entry): round-1 fixes …`, twelve files, test-only); a Sol read-only round-2 pass over `4b0f3b7..4909ba8` (`review-fixes-sol-r2.md`) closes the round — its disposition follows.
 
 **Sol R2 over `4b0f3b7..4909ba8` (`review-fixes-sol-r2-report.md`): PASS** — every F1–F8 closes its finding for the stated reason (F1 regex hits the executing call only and flips both predicates; F3 shapes match the authorized predicates except `channel`, `dom-fill` positive genuine; F4 rank/threshold formula identical to `assertProbeFamily`; F5 recipe pin matches `Makefile:22`, mutant caught by `make-eval-stub` only, digest `c40b7499…` equals the committed file; F2/F6/F8 no unintended change; U+33FF sweep 323 ms in the preserved gate); twelve changed files all map to F1–F8. Residuals carried: the source-pin wrapper-shape limit; the Makefile grammar limit; the classifier's nine-channel list is not type-exhaustive against a future `Channel` addition; `DEFAULT_TEMPLATES` readonly in type only. **Round closed at round 2 (cap 3); no open P1/P2.** Range on main: `d9b4942..4909ba8` (docs `d3f8064`, merge `4b0f3b7`, fixes `4909ba8`). Not pushed.
+
+## Policy note ADOPTED (user, 2026-09-09) — v2.1 clarifications, push authorization
+
+The user adopted the observability-first direction with clarifications now folded into
+[`docs/probe-p-timing2-policy.md`](probe-p-timing2-policy.md) §2 (v2.1): the gate is unchanged; C2 approved through the
+full ladder with "reported, not gated" resolved as *structural completion only* for the twins, the injected-bias control
+specified per probe (synthetic: 2 µs × 64 calls per sample, gated, unchanged; real-click: per-sample 250 µs and 1,000 µs,
+diagnostic), sidecar and full rejection details preserved on failing runs, missing diagnostics recorded as missing, D10 time
+limits kept with a stop if C2 cannot fit; one campaign of 20 started `make test` runs authorized after C2 with everything
+frozen before run 1, an objective competing-job predicate, the valid denominator printed, an exhaustive rule whose mixed and
+insufficient patterns are inconclusive, and every outcome a proposal; M7 packet preparation proceeds in parallel; no live
+spend. Push authorized after verification. **Review-drift distinction, retained:** the Astra and Opus round-1 reviews are
+reviews of the pinned committed range `d9b4942..4b0f3b7`; the working-tree edits they observed were not part of what they
+reviewed. Re-gating (`gate 2`) proves the final tests passed; it does not establish that the final changes were reviewed.
+**What establishes that:** the Sol round-2 read-only review of `4b0f3b7..4909ba8` (PASS, every F1–F8 verified against the
+committed diff) — that is the review coverage of every final code change on main; `03e21f7` and the adoption commit are
+docs-only (`git diff-tree` verified).

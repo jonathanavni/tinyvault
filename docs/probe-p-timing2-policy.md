@@ -1,12 +1,15 @@
-# Probe P timing-2 gate policy — decision and pre-registered characterization (v2, 2026-09-09)
+# Probe P timing-2 gate policy — decision and pre-registered characterization (v2.1, ADOPTED 2026-09-09)
 
-Owner: Claude, session `2026-09-09-m7-entry`. Status: **v2 after two blind paper reviews (Codex Sol R1, Opus 5 R1;
-both NEEDS-ATTENTION, every finding owner-verified or dispositioned in the register), for user adoption.** Nothing
-here changes a threshold, a sample size, the gated probe set, the hard clause, or what `make test` certifies. The
-locked specification stays: **D10** in [`docs/m4-slice-spec.md`](m4-slice-spec.md) ("Probe P is a shared, pinned,
-tested statistic"; the six-probe Holm family; 180 s per test, ≤ 10 min for the partition) and the Decisions Log
-entries of 2026-09-02 (paired, counterbalanced, family-corrected gate) and 2026-09-08 (policy change DEFERRED; the
-gate stays; every failure preserved; no retry-to-pass; later green runs do not resolve earlier rejections).
+Owner: Claude, session `2026-09-09-m7-entry`. Status: **ADOPTED by the user on 2026-09-09 as the
+observability-first direction, with the clarifications folded into §2 (v2.1).** The user's framing governs: *the
+existing gate remains unchanged; this is authorization to characterize the problem, not to relax or reinterpret
+the gate.* Nothing here changes a threshold, a sample size, the gated probe set, the hard clause, or what
+`make test` certifies. The locked specification stays: **D10** in [`docs/m4-slice-spec.md`](m4-slice-spec.md)
+("Probe P is a shared, pinned, tested statistic"; the six-probe Holm family; 180 s per test, ≤ 10 min for the
+partition — both time limits kept) and the Decisions Log entries of 2026-09-02 (paired, counterbalanced,
+family-corrected gate) and 2026-09-08 (policy change DEFERRED; the gate stays; every failure preserved; no
+retry-to-pass; later green runs do not resolve earlier rejections). v2 (the reviewed proposal) is preserved in the
+git history at `d3f8064`; the two blind paper reviews and their dispositions are in the M7 register.
 
 ## 1. What the record shows
 
@@ -56,80 +59,115 @@ compatible with any of three readings, and the preserved evidence cannot separat
 
 Deciding a gate policy before knowing which reading holds would be asserting, not measuring.
 
-## 2. Decision (proposed for user adoption)
+## 2. Decision (adopted; the user's clarifications are the normative text where they differ from v2)
 
-1. **The gate is unchanged until the user decides otherwise.** No rerun-to-pass rule, no threshold or alpha change,
-   no idle-host clause in the gate contract. An owner gate whose only red is a timing-2 family rejection is recorded
-   as red with its report preserved, never rerun to green, never graded green. The three recorded reds stay red.
+1. **The gate is unchanged.** No rerun-to-pass rule, no threshold or alpha change, no idle-host clause in the gate
+   contract, no reinterpretation. An owner gate whose only red is a timing-2 family rejection is recorded as red
+   with its report preserved, never rerun to green, never graded green. The three recorded reds stay red. A later
+   gate failure — during C2, during the campaign, or at M7 — is never erased or cleared by retrying.
 2. **Observability first, in two separately reviewed pieces.**
-   - **C1 (land now, before any campaign):** the family error names each rejected probe with its p-value, Holm
-     threshold and rank; the gated family test calls `assertProbeFamily` directly so the full message reaches the
-     JSON report. Touches `testbed/probe/probeP.ts` (the certified statistic's *message*, not its arithmetic), its
-     unit test's exact-string pins, and the family line of the timing file. Adversarial code review by Astra because
-     it edits the certifying file.
-   - **C2 (adopted with this note, since it needs a D10 wording amendment):** a per-run sidecar
-     `.vitest/timing-2-probes.json` carrying, for every probe, the full `ProbePResult` including the ordered
-     `aSamplesMs`, `bSamplesMs` and `differencesMs`, the p95s D10 requires, and the family verdict; plus **null
-     variants of the two tripwire probes, reported not gated**: for each, an A/A twin (both arms `CANARY`) and a
-     **sham-A/B** twin (two *different* non-matching payloads of identical length and shape, so content alternates
-     pair by pair without the tripwire branch alternating). `NONMATCH/NONMATCH` is omitted: the A/A twin covers the
-     single-path null and the sham covers content alternation, which is the mechanism the A/B probes add on top.
-     The twins run immediately after their siblings, use the siblings' `pairs`, `warmup` and timeout, assert only
-     the hard clause and a finite p-value, and must be shown to reject an injected 2 µs bias like the gated family
-     (absence-detection). **D10 amendment required:** "the six probes of `host.timing.browser.test.ts`" becomes
-     "the six probes named in `PROBE_NAMES` in `host.timing.browser.test.ts`; further probes in that file are
-     reported, not gated", and the four twins' runtime is costed against D10's ten-minute sentence in the
-     implementer's report (today's partition: ~165 s).
-3. **A pre-registered characterization campaign**, after C1 and C2 land, conducted as the gate is conducted:
-   - **N = 20 `make test` runs**, fixed before run 1; not the timing file alone, because every recorded observation
-     came from the timing partition starting immediately after a ~9-minute saturated main partition, and a
-     standalone run measures a different quantity.
-   - **Every started run counts.** Each run's directory `artifacts/review-evidence/probe-p-campaign-<date>/run-NN/`
-     is created before the run starts and holds: `host-state.json` captured automatically at start (load average,
-     process list, power source, thermal state where readable), the three partition reports, the sidecar, the
-     `make test` exit status, the commit SHA and dirty state, Node and Chromium versions, timestamps. A run may be
-     excluded only when its `host-state.json` shows a competing job at start; every exclusion is reported with its
-     numbers. No replacement, restart or extension; a run that fails for a non-Probe-P reason is reported as such
-     and still counts in the enumeration.
-   - **Validity:** a run in which the injected-bias positive control does not reject is invalid for rate purposes
-     (reported, listed, excluded from the counts below).
-   - **Analysis script committed before run 1**, computing everything in §2.4 once, at N; this note's commit SHA is
-     cited in the campaign directory. Reported alongside: per-probe stationarity diagnostic (slope of arm-A sample
-     on pair index, with its interval) from the raw series, and the sensitivity-floor value per run.
-4. **Decision rule, in run counts, fixed before the data.** For each tripwire probe *i*, over the valid runs:
-   `k_AB(i)` = runs with the A/B probe's p ≤ 0.01/6; `k_AA(i)` and `k_sham(i)` = the same event for its twins
-   (identical bar, identical per-probe comparison — no family-size mismatch). Primary sign series: the sign of
-   `medianDiffMs` of the A/B probe, per probe, zero counting for neither side; `z` and the other probe's sign are
-   secondary and reported only.
-   - **Outcome A — calibration concern:** `k_AA(i) ≥ 2` or `k_sham(i) ≥ 2` for any *i* (under valid p-values the
-     expected count is ≈ 0.03 per twin over 20 runs). Proposal to the user: a D10 amendment packet changing the
-     *statistic* for the affected probe(s) to one that respects the measured dependence (block permutation on the
-     interleaved pairs with the block length derived from the retained series, or a declared false-rejection rate
-     measured rather than assumed), keeping α, pairs and the hard clause; Sol paper review, Astra implementation
-     and code review.
-   - **Outcome B — harness audit, then security investigation:** `k_AB(i) ≥ 2` with `k_AA(i) = k_sham(i) = 0` for
-     that probe. Proposal to the user: first an audit of the probe construction in the timing file (H3: host
-     accumulation, setup asymmetry, warm-up order, the stationarity diagnostic), Astra, test-file only; if the audit
-     clears the harness, an Astra investigation packet on the tripwire path in `src/supervisor`. A consistent
-     primary sign (same sign in ≥ 16 of 20 valid runs) is reported as strengthening B but does not by itself skip
-     the audit. The gate stays as it is throughout.
-   - **Outcome C — inconclusive:** `k_AB(i) ≤ 1` for both probes and twins quiet. Proposal to the user: none; the
-     gate and the 2026-09-08 deferral stand, the campaign directory is the evidence, and the historical reds remain
-     unresolved. This is **not** "load contamination" and adopts no idle-host convention.
-   - **Coexistence and precedence:** A and B can both hold (calibration can be off *and* a channel can exist).
-     Report both; B's audit and investigation are proposed first, A's amendment second, because a statistic change
-     must not be adopted while a channel is an open question.
-   - **Power, stated up front:** N = 20 resolves counts, not percentages — it separates a ~20 % rate from ~0 % but
-     cannot separate 1 % from 5 %. If the true family rate is the ~12 % the record suggests, roughly 4 in 10
-     campaigns end in Outcome C. That is an acceptable result: it leaves the gate exactly where the user left it.
-   - **Every outcome is a proposal.** Nothing in this rule adopts a gate change, a convention, or a
-     reclassification; the user decides on the proposal, with the campaign directory as its evidence.
-5. **M7.** M7 design work proceeds; M7 acceptance receives no exemption: every required `make test` keeps its actual
-   verdict and a timing-2 red stays red. M7's fixtures add no *concurrent* load during Probe P (the timing file runs
-   in its own Vitest process, third in the `&&` chain), but they lengthen the main partition that precedes it —
-   one more reason the campaign runs as `make test`. At the recorded rate, M7's close gate has roughly a one-in-five
-   chance of a permanent timing-2 red; the resolution path for that red is this campaign's outcome going to the user,
-   not a rerun.
+   - **C1 (landed `e040175`, reviewed in the M7-entry round, fix `4909ba8`):** the family error names each rejected
+     probe with its p-value, Holm threshold and rank (`ProbeFamilyError.details`, frozen); the gated family test
+     calls `assertProbeFamily` directly so the full message reaches the JSON report; source pin.
+   - **C2 (approved through the full ladder: Sol paper review → Astra implementation → Astra + Claude review):**
+     1. **D10 wording amendment, scoped:** "the six probes of `host.timing.browser.test.ts`" becomes "the six
+        probes named in `PROBE_NAMES` in `host.timing.browser.test.ts`; further probes in that file are diagnostic:
+        reported in the sidecar, never part of the family, never an acceptance criterion through their statistical
+        outcome". D10's time limits (180 s per test, ≤ 10 min for the partition) are **kept**; the implementer
+        reports the measured C2 cost on the reference machine and **stops for a decision if it cannot fit**.
+     2. **Raw-series sidecar** `.vitest/timing-2-probes.json`, written atomically **on failing runs as well as
+        passing runs**: for every gated probe, twin and control the full `ProbePResult` (`aSamplesMs`, `bSamplesMs`,
+        `differencesMs`, p-value, z, effect size, median difference, both p95s), the family verdict with the full
+        `ProbeFamilyError.details` when it rejects, and a **completeness record**: every expected entry is present
+        with `status: 'measured'`, or present with `status: 'missing' | 'error'` and the reason. **A missing or
+        incomplete diagnostic is recorded as such and is never mistaken for a quiet probe.**
+     3. **Twins of the two tripwire probes, diagnostic:** for `tripwire-match-vs-no-match` (synthetic, batched) and
+        `tripwire-real-click-match-vs-no-match` (real Chromium), an **A/A twin** (both arms `CANARY`) and a
+        **sham-A/B twin** (two *different* non-matching payloads of identical length and character-class shape, so
+        content alternates pair by pair without the tripwire branch alternating). Same `pairs`, `warmup` and
+        per-test timeout as the siblings, placed immediately after them. **"Reported, not gated" resolved:** a twin's
+        test asserts only that the twin ran to completion (500 pairs, finite statistics, entry written) — a
+        structural absence-detection criterion; it asserts **nothing** about the twin's p-value or hard clause.
+        Twin hard-clause outcomes are recorded in the sidecar as diagnostics. Every existing assertion on the six
+        gated probes and the existing controls is preserved unchanged.
+     4. **Injected-bias controls, specified per probe; sensitivity is not assumed to transfer:**
+        - *Synthetic batched control (existing, gated, unchanged):* `spinForMicroseconds(2)` after **each call** of
+          the 64-call `runTripwireBatch`, i.e. 2 µs per call × 64 calls = **128 µs per timed sample**, on arm B
+          only; must be rejected by the family machinery (`assertProbeFamily` over the single-probe family) —
+          this existing assertion stays.
+        - *Real-click control (new, diagnostic):* the real-click tripwire path with one `spinForMicroseconds(X)`
+          **per timed sample** (one spin after each `fill_from_vault` call on arm B; no batching), at two declared
+          magnitudes **X = 250 µs and X = 1,000 µs**, each its own probe, each recorded in the sidecar with its
+          p-value and whether the single-probe family would have rejected it. Reported, not gated: whether the
+          real-click path detects a per-sample bias of that size is a campaign measurement, not an assumption.
+          If the implementer's development runs show the 1,000 µs control failing to reject three times running,
+          **stop for a decision** before delivery.
+        - The length-proportional sensitivity floor probe (existing) stays and its value is written to the sidecar.
+     5. Cost: the implementer measures the whole partition three times on the reference machine and reports
+        wall time per new probe; the packet is delivered only if the partition stays ≤ 10 min, else it stops.
+3. **One pre-registered campaign, authorized: 20 started `make test` runs after C2 is implemented and reviewed.**
+   - **Frozen before run 1, by commit SHA cited in the campaign directory:** the candidate tree, the analysis
+     script, the host conditions, the exclusion predicate, and the decision rule below.
+   - **Every started run counts toward the 20.** No replacements, no extensions, no restart of the campaign to
+     improve the result. Every report is preserved, including failures and excluded runs.
+   - **Run as the gate is run:** `make test` in the main checkout (the timing partition starts after the
+     saturated main partition, as in every recorded observation), not the timing file alone.
+   - **Per-run capture, created before the run starts:** `run-NN/host-state.json` (load averages, the process
+     list, power source and thermal state where readable), the three partition reports, the sidecar, the exit
+     status, the commit SHA and dirty state, Node and Chromium versions, timestamps.
+   - **"Competing job", defined objectively before run 1:** at run start, any process in the captured list whose
+     command line matches the frozen predicate (Codex CLI or companion, `claude-review.mjs`, another `vitest`,
+     `node`/`make` from another checkout, Docker build or compose, a browser launched by anything but this run).
+     A run is **excluded** only when its `host-state.json` matches that predicate; the exclusion, its evidence and
+     the run's results are all reported. Excluded runs still count toward the 20 started.
+   - **Valid run:** not excluded, all three partitions produced reports, the sidecar is complete for the six
+     gated probes and the existing synthetic control, and the synthetic injected-bias control rejected. A run
+     that is red for a non-Probe-P reason is preserved and reported, and counts as started; its validity is
+     decided by the same predicate. **The actual valid denominator is reported; no "16 of 20" sentence is
+     applied when fewer than 20 are valid — thresholds below are stated as fractions of the valid count with the
+     count printed.**
+4. **Decision rule, fixed before the data; exhaustive.** Two separate reports:
+   - **(a) Actual gate outcomes:** for each started run, the `make test` verdict, the timing-2 partition verdict,
+     the family verdict with the full Holm details, and — for context only — the twins' and controls' recorded
+     results. This is the record of what the gate did; nothing in (b) reinterprets it.
+   - **(b) Matched per-probe diagnosis** over the **valid** runs (count `V`, printed), for each tripwire probe
+     *i*: `k_AB(i)` = valid runs with the A/B probe's p ≤ 0.01/6; `k_AA(i)`, `k_sham(i)` the same event for its
+     twins (identical bar, identical per-probe comparison); the primary sign series = the sign of the A/B probe's
+     `medianDiffMs` per run (zero counts for neither side; `z` and the other probe are secondary, reported only);
+     the real-click controls' rejection counts at 250 µs and 1,000 µs; the per-probe stationarity diagnostic
+     (slope of arm-A sample on pair index, with its interval) from the raw series.
+   - **Outcomes (evaluated in this order; the first that applies is reported, and every other applicable pattern
+     is reported alongside it):**
+     - **Insufficient:** `V < 15`. Inconclusive. No inference about calibration.
+     - **Diagnostic incompleteness:** any twin or control missing or errored in ≥ 2 valid runs. Inconclusive for
+       the affected probe; the incompleteness itself is the finding (a harness defect to fix before re-running
+       a *new* campaign, which would need new authorization).
+     - **Calibration concern:** `k_AA(i) ≥ 2` or `k_sham(i) ≥ 2` for any *i*. Proposal: a D10 amendment packet
+       changing the *statistic* for the affected probe(s) to one that respects the measured dependence (block
+       permutation on the interleaved pairs with the block length derived from the retained series, or a declared
+       false-rejection rate measured rather than assumed), keeping α, pairs and the hard clause.
+     - **Harness audit, then security investigation:** `k_AB(i) ≥ 2` with `k_AA(i) = k_sham(i) = 0` for that
+       probe. Proposal: first an Astra audit of the probe construction in the timing file (host accumulation,
+       setup asymmetry, warm-up order, the stationarity diagnostic); if the audit clears the harness, an Astra
+       investigation of the tripwire path in `src/supervisor`. A consistent primary sign (same sign in ≥ 80 % of
+       valid runs, count printed) strengthens this outcome but does not skip the audit.
+     - **Mixed:** `k_AB(i) ≥ 2` together with `k_AA(i) ≥ 1` or `k_sham(i) ≥ 1` but below the calibration bar, or
+       the two probes falling in different outcomes, or a real-click control that fails to reject at 1,000 µs.
+       Inconclusive; the pattern is reported in full; it is **not** evidence that the statistic is calibrated.
+     - **Quiet:** `k_AB(i) ≤ 1` for both probes and every twin quiet. Inconclusive; the gate and the 2026-09-08
+       deferral stand; the historical reds remain unresolved. **A quiet campaign does not prove the absence of a
+       timing channel, does not reclassify any historical red, and adopts no convention.**
+   - **Coexistence:** calibration concern and harness/security can both hold; both are reported; the audit and
+     investigation are proposed first, the amendment second.
+   - **Power, stated up front:** 20 started runs resolve counts, not percentages; they separate a ~20 % rate from
+     ~0 % but cannot separate 1 % from 5 %. Inconclusive is a likely and acceptable result.
+   - **Every outcome returns to the user as a proposal.** No automatic gate change, no historical-red
+     reclassification, no claim that a clean campaign proves no timing channel.
+5. **M7.** Fixture design and packet preparation proceed independently and immediately. The campaign runs, and its
+   findings go to the user, **before M7's first live cohort**; nothing here authorizes live-provider spend. M7
+   acceptance receives no exemption: every required `make test` keeps its actual verdict and a timing-2 red stays
+   red; M7's fixtures add no *concurrent* load during Probe P (the timing file runs in its own Vitest process) but
+   lengthen the main partition that precedes it — one more reason the campaign runs as `make test`.
 
 ## 3. What this does not decide
 
