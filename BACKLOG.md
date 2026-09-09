@@ -44,6 +44,19 @@ work in flight, the rest stay parked here (register "Final5 round"):
 - **[PARKED]** **Probe P per-call floor** — the batched tripwire probe measures a 64-call aggregate; nothing bounds a one-shot call. The sensitivity calibration reports `Infinity` on some machines; consider a longer ladder or a per-machine record.
 - **[READY — `rules.ts` split 2026-09-03 (`taintHelpers.ts`); an M6+ slice]** **Retention rule beyond shapes** — `localFileSodium.ts` argument-passing sinks (`console.*`, `fetch`, `process.stdout.write`, `throw`) are unseen; the rule is a shape allowlist by design (honest-claims sentence). Either a per-member occurrence list for that file or accept.
 
+## From the C2 / campaign-harness ladder (2026-09-09; M7 register)
+
+- **[Next session, Astra, gate change] Execution-side pin of the timing-2 test inventory.** The C2 pinned-source scan
+  bounds test registration to references of the statically imported vitest symbols and `vi.spyOn`; three review rounds
+  showed each source-side spelling can be evaded by the next (alias → equivalent spelling → `vi.importActual`), so the
+  claim was narrowed at the cap. The complementary control is execution-side: `scripts/test-execution.mjs` pins the
+  timing-2 JSON report's exact test-title inventory (26 titles after C2) so a registration by any spelling reds the
+  execution gate. Root-of-trust script change → Astra packet with self-test mutants and the digest refresh.
+- **[Declared limit] Twins are not phase-matched to their siblings (D-1).** The campaign report must say a quiet twin
+  beside a rejecting sibling is weaker evidence for "harness cleared" than the policy's Outcome text implies.
+- **[Declared limit] Campaign evidence is not authenticated against manual modification**; the documented operating
+  contract (freeze SHAs, per-candidate pointers, refusals directory) is part of the trust boundary.
+
 ## From the M6 close assessment (2026-09-09; `docs/project-assessment-2026-09-09.md`)
 
 - ~~**🔴 M6.1 remediation slice — receiptless-row canary authentication (`M6C-CODEX-P1-01`).**~~ **CLOSED 2026-09-09** — merged; see the M6 register entry "M6.1 receiptless-row canary authentication". Original text: A baseline run with no completion receipt has its

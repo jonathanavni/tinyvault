@@ -354,3 +354,28 @@ structurally and recomputed over the six measured gated p-values with a `family-
 reports require consistent integer counters. Residuals recorded: candidate pointers are ignored checkout-local state;
 campaign evidence is not authenticated against manual modification (the documented operating contract is part of the
 trust boundary); a precisely timed interruption of the pointer temp write can wedge recovery (availability only).
+
+**C2 — Sol R3 (cap, `review-c2-fix-sol-r3-report.md`): NEEDS-ATTENTION, 2 P1.** Criteria (b) map isolation and (c) no
+line changed outside pin code: PASS (every requested and extra spelling flips `mapReferencesResolved`; the three
+exceptions exact and positional). Criterion (a): `vi.importActual('vitest')` inside an `async` suite factory registers a
+test past all 32 predicates (three spellings). Criterion (d): the predicates accept a program with a semantic build
+error (only syntactic diagnostics were checked). **Owner disposition at the cap:** the registration-isolation invariant
+has now been beaten three rounds running (alias → equivalent spellings → alternate module provenance), so the claim is
+**narrowed** rather than patched again: the scan bounds registration to references of the statically imported vitest
+symbols and `vi.spyOn` with synchronous suite factories; registration through Vitest internals, globals or another
+module loader is outside the scan. A small cap-round owner correction (Astra, `packet-C2-cap-correction.md`) closes the
+two concrete P1s (semantic diagnostics required; `vi` restricted to `spyOn`; non-async factories with no factory-level
+`await`) and writes the narrowed claim into the code. **Follow-up recorded for the next session (BACKLOG):** the
+complementary control is execution-side, not source-side — pin the timing-2 JSON report's exact test-title inventory
+(26 titles) in `scripts/test-execution.mjs`, so any registration by any spelling reds the execution gate; that is a
+root-of-trust gate change (Astra, its own packet). Residual: `tsc --noEmit` in `make test` already guarantees the
+committed file compiles, so criterion (d) concerned mutant hygiene, not the gate on the committed tree.
+
+**Harness — cap-round correction delivered and committed:** entry `sequence` required; p-values in [0, 1]; Holm details
+validated (six gated names once each, rank = position, threshold = α/(6−rank+1) within 1e-12, non-decreasing p,
+`rejected` a non-empty prefix, p-values equal to the measured gated entries) and the verdict recomputed over the six
+measured p-values (`family-verdict-mismatch`); partition reports require four consistent non-negative integer counters.
+Owner-verified: 99/99, both boundary gates PASS. **Harness post-implementation loop closed at the cap (R1 → fix → R2 →
+fix → R3 → correction).** Residuals carried: pointers are ignored checkout-local state; evidence is not authenticated
+against manual edits (operating contract); a precisely timed interruption of the pointer temp write can wedge recovery
+(availability only, documented same-directory recovery).
