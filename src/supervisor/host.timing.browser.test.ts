@@ -1,5 +1,6 @@
 import { mkdir, readFile } from 'node:fs/promises';
 
+import ts from 'typescript';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { CredentialBackend } from '../backends/backend';
@@ -105,14 +106,16 @@ afterAll(async () => {
 });
 
 afterEach(({ task }) => {
-  const sequence = ++ledgerSequence;
-  try { ledger.push({ task, sequence }); }
-  catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    try { ledgerFailures.push({ task, sequence, message }); }
-    catch (failure) { console.error(failure); }
-    console.error(error);
-  }
+  try {
+    const sequence = ++ledgerSequence;
+    try { ledger.push({ task, sequence }); }
+    catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      try { ledgerFailures.push({ task, sequence, message }); }
+      catch (failure) { console.error(failure); }
+      console.error(error);
+    }
+  } catch (error) { try { console.error(error); } catch {} }
 });
 
 afterAll(async () => {
@@ -178,10 +181,10 @@ describe.sequential('H Probe P timing bounds', () => {
     expect(hasDirectFamilyGate(source)).toBe(true);
     expect(hasWrappedFamilyGate(source)).toBe(false);
     // Anchor on the executing statement (a whole line), not on this test's quoted fixture text.
-    const executingCall = /^(\s*)assertProbeFamily\(probeResults, \{ alpha: 0\.01, expected: PROBE_NAMES \}\);$/mu;
+    const executingCall = new RegExp('^(\\s*)assertProbeFamily\\(' + 'probe' + 'Results, \\{ alpha: 0\\.01, expected: PROBE_NAMES \\}\\);$', 'mu');
     expect(source.match(executingCall)).not.toBeNull();
     const wrapped = source.replace(executingCall, (_line, indent: string) => `${indent}${[
-      'expect(() => assertProbeFamily', '(probeResults, { alpha: 0.01, expected: PROBE_NAMES })).not.toThrow();',
+      'expect(() => assertProbeFamily', '(' + 'probe' + 'Results, { alpha: 0.01, expected: PROBE_NAMES })).not.toThrow();',
     ].join('')}`);
     expect(hasDirectFamilyGate(wrapped)).toBe(false);
     expect(hasWrappedFamilyGate(wrapped)).toBe(true);
@@ -382,9 +385,7 @@ describe.sequential('H Probe P timing bounds', () => {
       } catch {
         rejected.push(microseconds);
       }
-      floorResults.push({ microseconds, pValue: result.pValue, medianDiffMs: result.medianDiffMs,
-        singleProbeFamily: rejected.includes(microseconds) ? 'reject' : 'accept' });
-      sensitivityFloor = composeFloor(floorResults);
+      recordSensitivityFloor(microseconds, result, rejected.includes(microseconds));
       console.info(`probe-p-sensitivity-${microseconds}us: p=${result.pValue}`);
     }
     console.info(`probe-p-sensitivity-floor-us=${Math.min(...rejected)}`);
@@ -494,6 +495,14 @@ function recordDiagnostic(name: string, result: ProbePResult, rejection?: string
   } catch (error) { console.error(error); }
 }
 
+function recordSensitivityFloor(microseconds: number, result: ProbePResult, rejected: boolean): void {
+  try {
+    floorResults.push({ microseconds, pValue: result.pValue, medianDiffMs: result.medianDiffMs,
+      singleProbeFamily: rejected ? 'reject' : 'accept' });
+    sensitivityFloor = composeFloor(floorResults);
+  } catch (error) { try { console.error(error); } catch {} }
+}
+
 async function tripwireTimingProbe(payloadA: string, payloadB: string): Promise<ProbePResult> {
   const match = vi.spyOn(secretMatcher, 'firstMatchingSecretTransform');
   const mint = vi.spyOn(TripwireRun.prototype, 'mint');
@@ -597,25 +606,119 @@ function timingConstantText(source: string, name: string, ending: string): strin
   return source.match(new RegExp('^const ' + name + '[\\s\\S]*?^' + ending, 'mu'))?.[0] ?? '';
 }
 
+function timingSourceProbeSection(source: string): string {
+  const file = ts.createSourceFile('timing.ts', source, ts.ScriptTarget.Latest, true);
+  const sections = file.statements.filter((node) => ts.isExpressionStatement(node)
+    && ts.isCallExpression(node.expression) && node.expression.expression.getText(file) === 'describe.sequential'
+    && node.expression.arguments[0] && ts.isStringLiteral(node.expression.arguments[0])
+    && node.expression.arguments[0].text === 'H Probe P timing bounds');
+  if (sections.length !== 1) return '';
+  const section = sections[0]! as ts.ExpressionStatement & { expression: ts.CallExpression };
+  const callback = section.expression.arguments[1];
+  return callback && ts.isArrowFunction(callback) && ts.isBlock(callback.body) ? callback.body.getText(file) : '';
+}
+
+function timingSourceTestCases(source: string): { title: string; body: string }[] {
+  const file = ts.createSourceFile('timing.ts', source, ts.ScriptTarget.Latest, true);
+  const tests: { title: string; body: string }[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      let callee = node.expression;
+      while (ts.isPropertyAccessExpression(callee) || ts.isCallExpression(callee)) callee = callee.expression;
+      if (ts.isIdentifier(callee) && callee.text === 'it') {
+        const title = node.arguments[0]; const callback = node.arguments[1];
+        tests.push({
+          title: title && ts.isStringLiteral(title) ? title.text : '',
+          body: callback && ts.isArrowFunction(callback) && ts.isBlock(callback.body)
+            ? source.slice(callback.body.getStart(file) + 1, callback.body.end - 1) : '',
+        });
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return tests;
+}
+
+function timingSourceTitles(source: string): string[] {
+  return timingSourceTestCases(source).map(({ title }) => title);
+}
+
+function timingSourceNonDiagnosticTitles(): string[] {
+  return [
+    "pins same-constructor timing payloads against the bare-rotation mutant",
+    "kills secret-length-dependent fill latency after asserting exact result equality",
+    "kills secret-length-dependent mutex occupancy with an immediately queued control",
+    "kills a content-dependent reflection oracle with equal-length caller traffic",
+    "kills match-dependent tripwire timing through composeSupervisedHost",
+    "kills match-dependent tripwire timing on a real supervised browser fill call",
+    "kills content-dependent request-listener work on the real supervised click path",
+    "applies the Holm–Bonferroni family gate over the six probes",
+    "reports a path-specific 2us-per-call injected-bias control rejected by the family gate",
+    "reports the length-proportional fill-wrapper sensitivity floor",
+  ];
+}
+
+function timingSourceDiagnosticTitles(): string[] {
+  return [
+    "tripwire-match-vs-no-match-aa",
+    "tripwire-match-vs-no-match-sham",
+    "tripwire-real-click-match-vs-no-match-aa",
+    "tripwire-real-click-match-vs-no-match-sham",
+    "tripwire-real-click-bias-250us",
+    "tripwire-real-click-bias-1000us",
+  ];
+}
+
+function pinsDiagnosticTitles(source: string): boolean {
+  const section = timingSourceProbeSection(source);
+  const titles = timingSourceTitles(section);
+  const excluded = timingSourceNonDiagnosticTitles();
+  const expected = timingSourceDiagnosticTitles();
+  const diagnostics = titles.filter((title) => !excluded.includes(title));
+  return titles.length === excluded.length + expected.length
+    && new Set(titles).size === titles.length
+    && excluded.every((title) => titles.includes(title))
+    && diagnostics.length === expected.length && expected.every((title) => diagnostics.includes(title));
+}
+
 function timingDiagnosticBodies(source: string): Map<string, string> {
-  return new Map([...source.matchAll(/^  it\('([^']+)', async \(\) => \{([\s\S]*?)^  \}, 180_000\);/gmu)]
-    .filter(([, name]) => /-(?:aa|sham|250us|1000us)$/u.test(name!))
-    .map(([, name, body]) => [name!, body!]));
+  const section = timingSourceProbeSection(source);
+  const excluded = new Set(timingSourceNonDiagnosticTitles());
+  return new Map(timingSourceTestCases(section).filter(({ title }) => !excluded.has(title))
+    .map(({ title, body }) => [title, body]));
 }
 
 function pinsDiagnosticStatistics(source: string): boolean {
-  const allowed = new Set(['for', 'expect', 'toBe', 'not.toBe', 'toBeNull', 'Set', 'JSON.stringify',
-    'timingVaultResult', 'timingFillOutcome', 'secretMatcher.firstMatchingSecretTransform',
-    'tripwireTimingProbe', 'realClickTripwireTimingProbe', 'recordDiagnostic', 'assertFiniteProbeStatistics',
-    'diagnosticResults.has', 'spinForMicroseconds']);
+  const calls: Record<string, string> = {
+    "tripwire-match-vs-no-match-aa": "tripwireTimingProbe(CANARY, CANARY);",
+    "tripwire-match-vs-no-match-sham": "tripwireTimingProbe(NONMATCH, NONMATCH2);",
+    "tripwire-real-click-match-vs-no-match-aa": "realClickTripwireTimingProbe(CANARY, CANARY);",
+    "tripwire-real-click-match-vs-no-match-sham": "realClickTripwireTimingProbe(NONMATCH, NONMATCH2);",
+    "tripwire-real-click-bias-250us": "realClickTripwireTimingProbe(NONMATCH, NONMATCH, {\n      afterB: () => spinForMicroseconds(250),\n    });",
+    "tripwire-real-click-bias-1000us": "realClickTripwireTimingProbe(NONMATCH, NONMATCH, {\n      afterB: () => spinForMicroseconds(1000),\n    });",
+  };
+  const sham = [
+    "    expect(NONMATCH2).not.toBe(NONMATCH);",
+    "    expect(NONMATCH2).not.toBe(CANARY);",
+    "    for (const payload of [NONMATCH, NONMATCH2]) {",
+    "      for (const bytes of [JSON.stringify(timingVaultResult(payload)), JSON.stringify(timingFillOutcome(payload).result)]) {",
+    "        expect(secretMatcher.firstMatchingSecretTransform(bytes, CANARY, new Set(SECRET_TRANSFORM_NAMES))).toBeNull();",
+    "      }",
+    "    }",
+  ];
   const bodies = timingDiagnosticBodies(source);
-  return bodies.size === 6 && [...bodies].every(([name, body]) =>
-    body.includes(`const name = '${name}';`)
-    && body.includes('recordDiagnostic(name, result);')
-    && body.includes('assertFiniteProbeStatistics(result);')
-    && body.includes('expect(diagnosticResults.has(name)).toBe(true);')
-    && !/\b(?:pValue|medianDiffMs|effectSize|z|hardClause|singleProbeFamily)\b/u.test(body)
-    && [...body.matchAll(/\b([A-Za-z_]\w*(?:\.\w+)*)\s*\(/gu)].every(([, call]) => allowed.has(call!)));
+  return pinsDiagnosticTitles(source) && bodies.size === 6 && [...bodies].every(([name, body]) => {
+    const lines = [
+      `    const name = '${name}';`,
+      ...(name.endsWith('-sham') ? sham : []),
+      '    const result = await ' + calls[name],
+      '    recordDiagnostic(name, result);',
+      '    assertFiniteProbeStatistics(result);',
+      '    expect(' + 'diagnostic' + 'Results.has(name)).toBe(true);',
+    ];
+    return body === '\n' + lines.join('\n') + '\n  ';
+  });
 }
 
 function pinsDiagnosticConstruction(source: string): boolean {
@@ -639,8 +742,8 @@ function pinsProbeIsolation(source: string): Record<string, boolean> {
   const reporter = ['report', '('].join('');
   const calls = source.split('\n').map((line) => line.trim()).filter((line) => line.startsWith(reporter));
   const names = timingConstantText(source, 'PROBE_NAMES', '\\] as const;');
-  const write = ['probeResults', '.set('].join('');
-  const family = ['assertProbeFamily', '(probeResults,'].join('');
+  const write = ['probe' + 'Results', '.set('].join('');
+  const family = ['assertProbeFamily', '(' + 'probe' + 'Results' + ','].join('');
   const options = '{ alpha: 0.01, expected: PROBE_NAMES }';
   const diagnosticMap = ['diagnostic', 'Results'].join('');
   return {
@@ -654,10 +757,46 @@ function pinsProbeIsolation(source: string): Record<string, boolean> {
     gatedFamily: source.split(family).length - 1 === 1
       && source.split('\n').some((line) => line.trim() === family + ' ' + options + ');'),
     recomputedFamily: source.split('\n').some((line) => line.trim()
-      === 'assertProbeFamily(new Map(' + 'probeResults), ' + options + ');'),
+      === 'assertProbeFamily(new Map(' + 'probe' + 'Results' + '), ' + options + ');'),
     separateMaps: source.split('\n').every((line) => !line.includes(diagnosticMap)
-      || !/assertProbeFamily|probeResults/u.test(line)),
+      || !new RegExp('assertProbeFamily|' + 'probe' + 'Results', 'u').test(line)),
     diagnosticNamesExcluded: !/-(?:aa|sham|250us|1000us)'/u.test(names),
+  };
+}
+
+function pinsMapReferences(source: string): Record<string, boolean> {
+  const gateMap = 'probe' + 'Results';
+  const diagnosticMap = 'diagnostic' + 'Results';
+  const declarations = [
+    'const ' + gateMap + ' = new Map<string, ProbePResult>();',
+    'const ' + diagnosticMap + ' = new Map<string, DiagnosticResult>();',
+  ];
+  const sourceLines = source.split('\n');
+  const lines = sourceLines.map((line) => line.trim());
+  // User-authorized exemption: the pre-existing measurement helper remains byte-identical.
+  const existingCast = "    result: { ok: true, filled: [timingLabel(payload)] } as " + "unknown as FillOutcome['result'],";
+  const allowed = new Set([
+    ...declarations,
+    gateMap + '.clear();',
+    gateMap + '.set(name, result);',
+    'assertProbeFamily(' + gateMap + ', { alpha: 0.01, expected: PROBE_NAMES });',
+    'const biased = new Map(' + gateMap + ');',
+    'assertProbeFamily(new Map(' + gateMap + '), { alpha: 0.01, expected: PROBE_NAMES });',
+    diagnosticMap + '.set(name, { result, hardClause, singleProbeFamily });',
+    diagnosticMap + '.set(name, { ...' + diagnosticMap + ".get(name)!, singleProbeFamily: rejection ? 'reject' : 'accept' });",
+    'expect(' + diagnosticMap + '.has(name)).toBe(true);',
+    'ledger, ledgerFailures, ' + gateMap + ',',
+    diagnosticMap + ', floor: sensitivityFloor, family: timingFamily(),',
+  ]);
+  const identifiers = new RegExp('\\b(?:' + gateMap + '|' + diagnosticMap + ')\\b', 'u');
+  const alias = new RegExp('=\\s*(?:' + gateMap + '|' + diagnosticMap + ')\\b', 'u');
+  return {
+    mapDeclarations: declarations.every((declaration) => sourceLines.filter((line) => line === declaration).length === 1),
+    mapReferences: lines.every((line) => !identifiers.test(line) || allowed.has(line))
+      && lines.every((line) => !alias.test(line) || declarations.includes(line)),
+    unknownCastExemption: sourceLines.filter((line) => line.includes('as ' + 'unknown')).length === 1
+      && sourceLines.includes(existingCast)
+      && timingFunctionText(source, 'timingFillOutcome').split('\n').includes(existingCast),
   };
 }
 
@@ -676,11 +815,19 @@ function pinsTripwireHelpers(source: string): Record<string, boolean> {
       && real.split('fill_from_vault(').length - 1 === 2 && !real.includes('spyOn')
       && !/afterA|afterB|afterCall/u.test(synthetic),
     helperSampling: [synthetic, real].every((body) => body.includes('pairs: 500, warmup: 20,')),
-    gatedRealClick: source.split('\n').some((line) => line.trim()
-      === 'const result = await realClickTripwireTimingProbe(CANARY, NONMATCH);'),
+    gatedRealClick: pinsGatedTripwireCaller(source, 'realClickTripwireTimingProbe',
+      'kills match-dependent tripwire timing on a real supervised browser fill call'),
+    gatedSynthetic: pinsGatedTripwireCaller(source, 'tripwireTimingProbe',
+      'kills match-dependent tripwire timing through composeSupervisedHost'),
     nonmatch2: /^const NONMATCH2 = flatCopy\(rotateFinalCharacter\(NONMATCH\)\);$/mu.test(source)
       && !/const\s+NONMATCH2\s*=\s*rotateFinalCharacter\(NONMATCH\)/u.test(source),
   };
+}
+
+function pinsGatedTripwireCaller(source: string, helper: string, title: string): boolean {
+  const section = timingSourceProbeSection(source);
+  const body = timingSourceTestCases(section).find((test) => test.title === title)?.body ?? '';
+  return body.split('\n').includes('    const result = await ' + helper + '(CANARY, NONMATCH);');
 }
 
 function pinsEntryNames(source: string): boolean {
@@ -705,7 +852,17 @@ function pinsEntryNames(source: string): boolean {
 }
 
 function pinsTaskTitles(source: string): boolean {
-  return timingConstantText(source, "TASK_TITLE_TO_ENTRY", "\\};") === [
+  const entries = [...timingConstantText(source, 'TASK_TITLE_TO_ENTRY', '\\};')
+    .matchAll(/^  '([^']+)': '([^']+)',$/gmu)].map(([, title, name]) => [title!, name!] as const);
+  const names = [...timingConstantText(source, 'ENTRY_NAMES', '\\] as const;')
+    .matchAll(/^  '([^']+)',$/gmu)].map(([, name]) => name!);
+  const titles = timingSourceTitles(source);
+  const expected = timingSourceNonDiagnosticTitles().filter((title) => title.startsWith('kills ') || title.startsWith('reports '));
+  return entries.length === 8 && expected.length === 8
+    && entries.every(([title, name]) => expected.includes(title) && names.includes(name)
+      && titles.filter((actual) => actual === title).length === 1)
+    && expected.every((title) => entries.some(([key]) => key === title))
+    && timingConstantText(source, "TASK_TITLE_TO_ENTRY", "\\};") === [
     "const TASK_TITLE_TO_ENTRY: Readonly<Record<string, string>> = {",
     "  'kills secret-length-dependent fill latency after asserting exact result equality': 'fill-short-vs-long',",
     "  'kills secret-length-dependent mutex occupancy with an immediately queued control': 'queued-short-vs-long',",
@@ -755,7 +912,7 @@ function pinsRecordDiagnosticOutcomes(source: string): boolean {
     "  try {",
     "    assertProbeFamily(new Map([[name, result]]), { alpha: 0.01, expected: [name] });",
     "  } catch { singleProbeFamily = 'reject'; }",
-    "  diagnosticResults.set(name, { result, hardClause, singleProbeFamily });",
+    "  " + "diagnostic" + "Results" + ".set(name, { result, hardClause, singleProbeFamily });",
     "}",
   ].join('\n');
 }
@@ -766,21 +923,156 @@ function pinsRecordDiagnostic(source: string): boolean {
     "  try {",
     "    recordDiagnosticOutcomes(name, result);",
     "    if (rejection !== undefined) {",
-    "      diagnosticResults.set(name, { ...diagnosticResults.get(name)!, singleProbeFamily: rejection ? 'reject' : 'accept' });",
+    "      " + "diagnostic" + "Results" + ".set(name, { ..." + "diagnostic" + "Results" + ".get(name)!, singleProbeFamily: rejection ? 'reject' : 'accept' });",
     "    }",
     "  } catch (error) { console.error(error); }",
     "}",
   ].join('\n');
 }
 
+function pinsSyntheticHelperSource(source: string): boolean {
+  return timingFunctionText(source, "tripwireTimingProbe") === [
+    "async function tripwireTimingProbe(payloadA: string, payloadB: string): Promise<ProbePResult> {",
+    "  const match = vi.spyOn(secretMatcher, 'firstMatchingSecretTransform');",
+    "  const mint = vi.spyOn(TripwireRun.prototype, 'mint');",
+    "  const adjudicate = vi.spyOn(TripwireRun.prototype, 'adjudicate');",
+    "  const timedCallDeltas: number[][] = [];",
+    "  let hostA!: SupervisedHost; let hostB!: SupervisedHost;",
+    "  let currentHost: SupervisedHost | undefined;",
+    "  const bytesA = JSON.stringify(timingVaultResult(payloadA));",
+    "  const bytesB = JSON.stringify(timingVaultResult(payloadB));",
+    "  expect(bytesA.length).toBe(bytesB.length);",
+    "  expect(payloadB).toHaveLength(payloadA.length);",
+    "  expect(characterClassShape(payloadB)).toBe(characterClassShape(payloadA));",
+    "  const setupHost = (payload: string) => {",
+    "    currentHost?.drainEvidence(); currentHost?.finish();",
+    "    const service = timingService(payload);",
+    "    currentHost = composeSupervisedHost({",
+    "      fillService: service,",
+    "      sessions: new TimingSessions(),",
+    "      lease: new EvidenceLease(CANARY),",
+    "    });",
+    "    activeHosts.push(currentHost);",
+    "    return currentHost;",
+    "  };",
+    "  const timedToolCall = async (host: SupervisedHost) => {",
+    "    const before = [match.mock.calls.length, mint.mock.calls.length, adjudicate.mock.calls.length];",
+    "    await runTripwireBatch(host);",
+    "    timedCallDeltas.push([",
+    "      match.mock.calls.length - before[0]!,",
+    "      mint.mock.calls.length - before[1]!,",
+    "      adjudicate.mock.calls.length - before[2]!,",
+    "    ]);",
+    "  };",
+    "  const result = await runProbeP({",
+    "    pairs: 500, warmup: 20,",
+    "    setupA: () => { hostA = setupHost(payloadA); },",
+    "    setupB: () => { hostB = setupHost(payloadB); },",
+    "    a: () => timedToolCall(hostA),",
+    "    b: () => timedToolCall(hostB),",
+    "  });",
+    "  currentHost?.drainEvidence(); currentHost?.finish();",
+    "  expect(timedCallDeltas.length).toBeGreaterThan(0);",
+    "  expect(timedCallDeltas.every((delta) => delta.every((calls) => calls === 0))).toBe(true);",
+    "  return result;",
+    "}",
+  ].join('\n');
+}
+
+function pinsRealClickHelperSource(source: string): boolean {
+  return timingFunctionText(source, "realClickTripwireTimingProbe") === [
+    "async function realClickTripwireTimingProbe(",
+    "  payloadA: string, payloadB: string,",
+    "  { afterA = NO_HOOK, afterB = NO_HOOK }: { afterA?: () => void; afterB?: () => void } = {},",
+    "): Promise<ProbePResult> {",
+    "  const domain = createLockdownDomain();",
+    "  const sessions = createBrowserSessionHost({ newContext: () => browser.newContext(), ...domain });",
+    "  activeSessions.push(sessions);",
+    "  const controls = createBrowserControls(sessions);",
+    "  const session = await controls.browser_open_session();",
+    "  expect(await controls.browser_navigate({",
+    "    sessionId: session.sessionId, url: `${lab.primaryOrigin}/controls`,",
+    "  })).toEqual({ ok: true });",
+    "  let hostA!: SupervisedHost; let hostB!: SupervisedHost;",
+    "  let currentHost: SupervisedHost | undefined;",
+    "  const hostsToFinish: SupervisedHost[] = [];",
+    "  const resultA = JSON.stringify(timingFillOutcome(payloadA).result);",
+    "  const resultB = JSON.stringify(timingFillOutcome(payloadB).result);",
+    "  expect(resultA.length).toBe(resultB.length);",
+    "  expect(payloadB).toHaveLength(payloadA.length);",
+    "  expect(characterClassShape(payloadB)).toBe(characterClassShape(payloadA));",
+    "  const setupHost = (payload: string) => {",
+    "    // A/B arms remain symmetric: both finalize after the shared live producer closes, outside measurement.",
+    "    currentHost = composeSupervisedHost({",
+    "      fillService: browserClickTimingService(controls, session.sessionId, payload),",
+    "      sessions,",
+    "      lease: new EvidenceLease(CANARY),",
+    "    });",
+    "    activeHosts.push(currentHost);",
+    "    hostsToFinish.push(currentHost);",
+    "    return currentHost;",
+    "  };",
+    "  const request = {",
+    "    handle: 'vh_timing', sessionId: session.sessionId,",
+    "    fields: [{ role: 'password' as const, selector: '#password' }],",
+    "  };",
+    "  const result = await runProbeP({",
+    "    pairs: 500, warmup: 20,",
+    "    setupA: () => { hostA = setupHost(payloadA); },",
+    "    setupB: () => { hostB = setupHost(payloadB); },",
+    "    a: () => hostA.tools.fill_from_vault(request).then(afterA),",
+    "    b: () => hostB.tools.fill_from_vault(request).then(afterB),",
+    "  });",
+    "  await sessions.closeAll();",
+    "  for (const pending of hostsToFinish) {",
+    "    await pending.settleEvidence(); pending.drainEvidence(); pending.finish();",
+    "  }",
+    "  return result;",
+    "}",
+  ].join('\n');
+}
+
+function pinsFloorRecording(source: string): boolean {
+  return timingFunctionText(source, "recordSensitivityFloor") === [
+    "function recordSensitivityFloor(microseconds: number, result: ProbePResult, rejected: boolean): void {",
+    "  try {",
+    "    floorResults.push({ microseconds, pValue: result.pValue, medianDiffMs: result.medianDiffMs,",
+    "      singleProbeFamily: rejected ? 'reject' : 'accept' });",
+    "    sensitivityFloor = composeFloor(floorResults);",
+    "  } catch (error) { try { console.error(error); } catch {} }",
+    "}",
+  ].join('\n')
+    && source.split('\n').filter((line) => line === '      recordSensitivityFloor(microseconds, result, rejected.includes(microseconds));').length === 1;
+}
+
+function pinsLedgerRecording(source: string): boolean {
+  return source.match(/^afterEach\(\(\{ task \}\) => \{[\s\S]*?^\}\);/mu)?.[0] === [
+    "afterEach(({ task }) => {",
+    "  try {",
+    "    const sequence = ++ledgerSequence;",
+    "    try { ledger.push({ task, sequence }); }",
+    "    catch (error) {",
+    "      const message = error instanceof Error ? error.message : String(error);",
+    "      try { ledgerFailures.push({ task, sequence, message }); }",
+    "      catch (failure) { console.error(failure); }",
+    "      console.error(error);",
+    "    }",
+    "  } catch (error) { try { console.error(error); } catch {} }",
+    "});",
+  ].join('\n');
+}
+
 function timingSourceChecks(source: string): Record<string, boolean> {
   return {
-    ...pinsProbeIsolation(source), ...pinsTripwireHelpers(source),
+    ...pinsProbeIsolation(source), ...pinsTripwireHelpers(source), ...pinsMapReferences(source),
+    diagnosticTitles: pinsDiagnosticTitles(source),
+    syntheticHelperSource: pinsSyntheticHelperSource(source), realClickHelperSource: pinsRealClickHelperSource(source),
     entryNames: pinsEntryNames(source), taskTitles: pinsTaskTitles(source), probeNames: pinsProbeNames(source),
     diagnosticStatistics: pinsDiagnosticStatistics(source), diagnosticConstruction: pinsDiagnosticConstruction(source),
     finiteHelper: pinsAssertFiniteProbeStatistics(source), outcomesHelper: pinsRecordDiagnosticOutcomes(source),
     recordingHelper: pinsRecordDiagnostic(source),
     syntheticRecording: pinsSyntheticRecording(source),
+    floorRecording: pinsFloorRecording(source), ledgerRecording: pinsLedgerRecording(source),
   };
 }
 
@@ -794,17 +1086,17 @@ function pinsSyntheticRecording(source: string): boolean {
 
 function timingSourceMutations(source: string) {
   const reporter = ['report', '('].join('');
-  const family = ['assertProbeFamily', '(probeResults,'].join('');
+  const family = ['assertProbeFamily', '(' + 'probe' + 'Results' + ','].join('');
   const diagnostic = "  it('tripwire-match-vs-no-match-aa', async () => {";
   const options = '{ alpha: 0.01, expected: PROBE_NAMES }';
   const mutations: [string, string, string][] = [
     ['reportCalls', 'twin reported as gated', source.replace(reporter + "'fill-short-vs-long'", reporter + "'tripwire-match-vs-no-match-aa'")],
-    ['probeWrites', 'diagnostic writes gate map', source.replace(diagnostic, diagnostic + '\n    ' + ['probeResults', '.set(name, result);'].join(''))],
+    ['probeWrites', 'diagnostic writes gate map', source.replace(diagnostic, diagnostic + '\n    ' + ['probe' + 'Results', '.set(name, result);'].join(''))],
     ['gatedFamily', 'gate derives expected names', source.replace(family + ' ' + options, family + ' { alpha: 0.01, expected: [...map.keys()] }')],
-    ['recomputedFamily', 'recompute derives expected names', source.replace('assertProbeFamily(new Map(' + 'probeResults), ' + options,
-      'assertProbeFamily(new Map(' + 'probeResults), { alpha: 0.01, expected: [...map.keys()] }')],
-    ['separateMaps', 'diagnostics merged into gate', source.replace(family, 'assertProbeFamily(new Map([...probeResults, '
-      + '...diagnosticResults]),')],
+    ['recomputedFamily', 'recompute derives expected names', source.replace('assertProbeFamily(new Map(' + 'probe' + 'Results' + '), ' + options,
+      'assertProbeFamily(new Map(' + 'probe' + 'Results' + '), { alpha: 0.01, expected: [...map.keys()] }')],
+    ['separateMaps', 'diagnostics merged into gate', source.replace(family, 'assertProbeFamily(new Map([...' + 'probe' + 'Results' + ', '
+      + '...' + 'diagnostic' + 'Results' + ']),')],
     ['diagnosticNamesExcluded', 'twin inserted in family', source.replace('const PROBE_NAMES = [', "const PROBE_NAMES = [\n  'tripwire-match-vs-no-match-aa',")],
     ['probeNames', 'gated name removed', source.replace("  'fill-short-vs-long',", '')],
     ['entryNames', 'entry order swapped', source.replace("const ENTRY_NAMES = [\n  'fill-short-vs-long',\n  'queued-short-vs-long',",
@@ -831,7 +1123,82 @@ function timingSourceMutations(source: string) {
     mutations.push(['helperBoundary', token, source.replace('async function tripwireTimingProbe(payloadA: string, payloadB: string): Promise<ProbePResult> {',
       'async function tripwireTimingProbe(payloadA: string, payloadB: string): Promise<ProbePResult> {\n  ' + token)]);
   }
-  return [...mutations, ...timingConstructionMutations(source)];
+  return [...mutations, ...timingConstructionMutations(source), ...timingHardeningMutations(source)];
+}
+
+function timingHardeningMutations(source: string): [string, string, string][] {
+  const diagnostic = "  it('tripwire-match-vs-no-match-aa', async () => {";
+  const gateMap = 'probe' + 'Results';
+  const diagnosticMap = 'diagnostic' + 'Results';
+  const mutations: [string, string, string][] = [];
+  for (const statement of [
+    '{ const expect = assertProbeHardClause; expect(result); }',
+    'expect(result.p95BMs > result.p95AMs).toBe(true);',
+    'expect(result.aSamplesMs[0] > result.bSamplesMs[0]).toBe(true);',
+    '// expect(',
+  ]) mutations.push(['diagnosticStatistics', statement, source.replace(diagnostic, diagnostic + '\n    ' + statement)]);
+  mutations.push(['mapDeclarations', 'diagnostic map aliases the gated map through sharedResults', source.replace(
+    'const ' + diagnosticMap + ' = new Map<string, DiagnosticResult>();',
+    'const sharedResults = ' + gateMap + ';\nconst ' + diagnosticMap + ' = sharedResults as ' + 'unknown as Map<string, DiagnosticResult>;',
+  )]);
+  mutations.push(['mapReferences', 'helper aliases the gated map', source.replace(
+    '  const match = vi.spyOn(', '  const gate = ' + gateMap + ';\n  const match = vi.spyOn(',
+  )]);
+  mutations.push(['mapDeclarations', 'gated map declaration changed', source.replace(
+    'const ' + gateMap + ' = new Map<string, ProbePResult>();',
+    'const ' + gateMap + ' = new Map<string, ProbePResult>([]);',
+  )]);
+  mutations.push(['mapReferences', 'helper aliases the diagnostic map', source.replace(
+    '  const match = vi.spyOn(', '  const records = ' + diagnosticMap + ';\n  const match = vi.spyOn(',
+  )]);
+  mutations.push(['mapReferences', 'unlisted map reference without an assignment', source.replace(
+    '  const match = vi.spyOn(', '  consume(' + gateMap + ');\n  const match = vi.spyOn(',
+  )]);
+  mutations.push(['unknownCastExemption', 'second unknown cast outside the exemption', source + '\nconst cast = {} as ' + 'unknown;\n']);
+  const existingCast = "    result: { ok: true, filled: [timingLabel(payload)] } as " + "unknown as FillOutcome['result'],";
+  mutations.push(['unknownCastExemption', 'existing exempt line changed', source.replace(existingCast,
+    existingCast.replace('timingLabel(payload)', "timingLabel(payload + '')"))]);
+  mutations.push(['unknownCastExemption', 'existing exempt line duplicated', source + '\n' + existingCast + '\n']);
+  mutations.push(['unknownCastExemption', 'existing exempt line removed', source.replace(existingCast, '')]);
+  mutations.push(['diagnosticTitles', 'seventh diagnostic has an unrecognized suffix', source.replace(diagnostic,
+    "  it('tripwire-real-click-bias-2000us', async () => {\n"
+    + '    const result = await realClickTripwireTimingProbe(NONMATCH, NONMATCH);\n'
+    + '    expect(result.pValue).toBeLessThan(0.01);\n  }, 180_000);\n\n' + diagnostic)]);
+  mutations.push(['diagnosticTitles', 'seventh diagnostic is inline', source.replace(diagnostic,
+    "  void 0; it('another diagnostic', async () => {});\n" + diagnostic)]);
+  mutations.push(['diagnosticTitles', 'duplicate diagnostic title', source.replace(diagnostic,
+    "  it('tripwire-match-vs-no-match-aa', async () => {});\n" + diagnostic)]);
+  for (const [helper, pin] of [['tripwireTimingProbe', 'syntheticHelperSource'],
+    ['realClickTripwireTimingProbe', 'realClickHelperSource']] as const) {
+    for (const statement of ['if (payloadA === payloadB) expect(result.pValue).toBeGreaterThan(0.01);',
+      'const gate = ' + gateMap + "; gate.set('tripwire-match-vs-no-match', result);"]) {
+      const body = timingFunctionText(source, helper);
+      mutations.push([pin, helper + ': ' + statement, source.replace(body,
+        body.replace('  return result;', '  ' + statement + '\n  return result;'))]);
+    }
+  }
+  for (const args of ['NONMATCH, NONMATCH', 'CANARY, NONMATCH2', 'NONMATCH, CANARY']) {
+    mutations.push(['gatedSynthetic', 'synthetic gated arms: ' + args, source.replace(
+      '    const result = await tripwireTimingProbe(CANARY, NONMATCH);',
+      '    const result = await tripwireTimingProbe(' + args + ');',
+    )]);
+  }
+  mutations.push(['taskTitles', 'actual gated it title renamed', source.replace(
+    "  it('kills secret-length-dependent fill latency after asserting exact result equality',",
+    "  it('renamed gated probe',",
+  )]);
+  const floor = timingFunctionText(source, 'recordSensitivityFloor');
+  mutations.push(['floorRecording', 'floor recording catch removed', source.replace(floor,
+    floor.replace('  try {\n', '').replace('  } catch (error) { try { console.error(error); } catch {} }\n', ''))]);
+  mutations.push(['floorRecording', 'floor recording call omitted', source.replace(
+    '      recordSensitivityFloor(microseconds, result, rejected.includes(microseconds));', '',
+  )]);
+  const ledgerHook = source.match(/^afterEach\(\(\{ task \}\) => \{[\s\S]*?^\}\);/mu)?.[0] ?? '';
+  mutations.push(['ledgerRecording', 'ledger outer catch removed', source.replace(ledgerHook,
+    ledgerHook.replace('  try {\n', '').replace('  } catch (error) { try { console.error(error); } catch {} }\n', ''))]);
+  mutations.push(['ledgerRecording', 'ledger console outside guard', source.replace(ledgerHook,
+    ledgerHook.replace('\n});', '\n  console.error("unguarded");\n});'))]);
+  return mutations;
 }
 
 function timingConstructionMutations(source: string): [string, string, string][] {
@@ -843,7 +1210,7 @@ function timingConstructionMutations(source: string): [string, string, string][]
     ['syntheticRecording', 'synthetic raw recording omitted', source.replace('    recordDiagnostic(name, result, rejection);', '')],
     ['diagnosticStatistics', 'diagnostic recording omitted', source.replace('    recordDiagnostic(name, result);', '')],
     ['diagnosticStatistics', 'structural check omitted', source.replace('    assertFiniteProbeStatistics(result);', '')],
-    ['diagnosticStatistics', 'entry check omitted', source.replace('    expect(diagnosticResults.has(name)).toBe(true);', '')],
+    ['diagnosticStatistics', 'entry check omitted', source.replace('    expect(' + 'diagnostic' + 'Results' + '.has(name)).toBe(true);', '')],
     ['diagnosticStatistics', 'title and recording name differ', source.replace("    const name = 'tripwire-match-vs-no-match-aa';", "    const name = 'wrong-entry';")],
     ['diagnosticConstruction', 'sham uses empty transform set', source.replace('new Set(SECRET_TRANSFORM_NAMES)', 'new Set([])')],
   ];
@@ -869,12 +1236,12 @@ function hasPinnedTripwireBatch(source: string): boolean {
 }
 
 function hasDirectFamilyGate(source: string): boolean {
-  const direct = ['assertProbeFamily', '(probeResults, { alpha: 0.01, expected: PROBE_NAMES })', ';'].join('');
+  const direct = ['assertProbeFamily', '(' + 'probe' + 'Results' + ', { alpha: 0.01, expected: PROBE_NAMES })', ';'].join('');
   return source.split('\n').some((line) => line.trim() === direct);
 }
 
 function hasWrappedFamilyGate(source: string): boolean {
-  return source.includes(['expect(() => assertProbeFamily', '(probeResults'].join(''));
+  return source.includes(['expect(() => assertProbeFamily', '(' + 'probe' + 'Results'].join(''));
 }
 
 async function runTripwireBatch(host: SupervisedHost, afterCall: () => void = () => undefined): Promise<void> {

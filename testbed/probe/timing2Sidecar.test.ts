@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { assertProbeFamily, assertProbeHardClause, wilcoxonSignedRank, type ProbePResult } from './probeP';
 import { classifyFamilyError, composeFloor, composeTimingSidecar, readTimingCommit, writeTimingSidecar,
-  type DiagnosticResult, type LedgerRow, type LedgerFailure, type TimingTask } from './timing2Sidecar';
+  type DiagnosticResult, type FloorResult, type LedgerRow, type LedgerFailure, type TimingTask } from './timing2Sidecar';
 
 const SOURCE = readFileSync(new URL('../../src/supervisor/host.timing.browser.test.ts', import.meta.url), 'utf8');
 const NAMES = [
@@ -70,16 +70,17 @@ function fixtureInput() {
 function definitions(source = SOURCE, diagnosticResults = new Map<string, DiagnosticResult>()) {
   const file = ts.createSourceFile('timing.ts', source, ts.ScriptTarget.Latest, true);
   const selected = file.statements.filter((node) => ts.isFunctionDeclaration(node) && node.name
-    && /^(?:pins|timingSource|timingConstructionMutations|timingFunctionText|timingConstantText|timingDiagnosticBodies|recordDiagnostic|assertFiniteProbeStatistics)/u.test(node.name.text));
+    && /^(?:pins|timingSource|timingConstructionMutations|timingHardeningMutations|timingFunctionText|timingConstantText|timingDiagnosticBodies|recordDiagnostic|assertFiniteProbeStatistics)/u.test(node.name.text));
   const code = ts.transpileModule(selected.map((node) => node.getText(file)).join('\n'), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
   }).outputText;
-  return new Function('expect', 'assertProbeFamily', 'assertProbeHardClause', 'diagnosticResults', code
-    + '\nreturn { timingSourceChecks, timingSourceMutations, recordDiagnostic, recordDiagnosticOutcomes, assertFiniteProbeStatistics };')(
-    expect, assertProbeFamily, assertProbeHardClause, diagnosticResults,
+  return new Function('ts', 'expect', 'assertProbeFamily', 'assertProbeHardClause', 'diagnosticResults', code
+    + '\nreturn { timingSourceChecks, timingSourceMutations, timingHardeningMutations, recordDiagnostic, recordDiagnosticOutcomes, assertFiniteProbeStatistics };')(
+    ts, expect, assertProbeFamily, assertProbeHardClause, diagnosticResults,
   ) as {
     timingSourceChecks: (source: string) => Record<string, boolean>;
     timingSourceMutations: (source: string) => [string, string, string][];
+    timingHardeningMutations: (source: string) => [string, string, string][];
     recordDiagnostic: (name: string, result: ProbePResult, rejection?: string) => void;
     recordDiagnosticOutcomes: (name: string, result: ProbePResult) => void;
     assertFiniteProbeStatistics: (result: ProbePResult) => void;
@@ -101,6 +102,50 @@ function ledgerHook(ledger: LedgerRow[], ledgerFailures: LedgerFailure[], source
   return hook;
 }
 
+function floorRecorder(floorResults: FloorResult[], compose = composeFloor, source = SOURCE) {
+  const file = ts.createSourceFile('timing.ts', source, ts.ScriptTarget.Latest, true);
+  const declaration = file.statements.find((node) => ts.isFunctionDeclaration(node)
+    && node.name?.text === 'recordSensitivityFloor');
+  if (!declaration) throw new Error('Missing floor recorder');
+  const code = ts.transpileModule('let sensitivityFloor;\n' + declaration.getText(file), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  return new Function('floorResults', 'composeFloor', code
+    + '\nreturn { record: recordSensitivityFloor, read: () => sensitivityFloor };')(floorResults, compose) as {
+      record: (microseconds: number, result: ProbePResult, rejected: boolean) => void;
+      read: () => ReturnType<typeof composeFloor> | undefined;
+    };
+}
+
+function sourceComposition() {
+  const file = ts.createSourceFile('timing.ts', SOURCE, ts.ScriptTarget.Latest, true);
+  const titleToEntry: Record<string, string> = {};
+  const titles: string[] = [];
+  let names: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node) && node.name.getText(file) === 'TASK_TITLE_TO_ENTRY'
+      && node.initializer && ts.isObjectLiteralExpression(node.initializer)) {
+      for (const property of node.initializer.properties) {
+        if (!ts.isPropertyAssignment(property) || !ts.isStringLiteral(property.name)
+          || !ts.isStringLiteral(property.initializer)) throw new Error('Nonliteral title map');
+        titleToEntry[property.name.text] = property.initializer.text;
+      }
+    }
+    if (ts.isVariableDeclaration(node) && node.name.getText(file) === 'ENTRY_NAMES'
+      && node.initializer && ts.isAsExpression(node.initializer) && ts.isArrayLiteralExpression(node.initializer.expression)) {
+      names = node.initializer.expression.elements.map((element) => {
+        if (!ts.isStringLiteral(element)) throw new Error('Nonliteral entry');
+        return element.text;
+      });
+    }
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'it'
+      && node.arguments[0] && ts.isStringLiteral(node.arguments[0])) titles.push(node.arguments[0].text);
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return { names, titleToEntry, titles };
+}
+
 async function temporaryRoot() {
   const root = await fs.mkdtemp(join(tmpdir(), 'timing-2-sidecar-'));
   roots.push(root);
@@ -112,11 +157,18 @@ describe('timing-2 sidecar', () => {
     const functions = definitions();
     for (const [pin, passed] of Object.entries(functions.timingSourceChecks(SOURCE))) expect(passed, pin).toBe(true);
     const mutations = functions.timingSourceMutations(SOURCE);
-    expect(mutations).toHaveLength(33);
+    expect(new Set(mutations.map(([pin]) => pin))).toEqual(new Set(Object.keys(functions.timingSourceChecks(SOURCE))));
     for (const [pin, name, changed] of mutations) {
       expect(changed, name).not.toBe(SOURCE);
       expect(functions.timingSourceChecks(changed)[pin], name).toBe(false);
     }
+  });
+
+  it.each(definitions().timingHardeningMutations(SOURCE))('rejects fix-round mutant %s: %s', (pin, name, changed) => {
+    expect(changed, name).not.toBe(SOURCE);
+    const checks = definitions().timingSourceChecks(changed);
+    expect(Object.values(checks), name).toContain(false);
+    expect(checks[pin], name).toBe(false);
   });
 
   it('composes all completion states, preserves failed raw results, and dereferences final task state', () => {
@@ -138,6 +190,24 @@ describe('timing-2 sidecar', () => {
     expect(output.entries[1]).toMatchObject({ result: result(), sequence: 3,
       startedAt: '2026-09-09T12:00:00.020Z', endedAt: '2026-09-09T12:00:00.030Z', durationMs: 10 });
     expect(output.otherTests).toBe(1);
+  });
+
+  it('measures every gated entry using the real source title map and actual it titles', () => {
+    const { names, titleToEntry, titles } = sourceComposition();
+    expect(Object.keys(titleToEntry)).toHaveLength(8);
+    expect(Object.keys(titleToEntry).every((title) => titles.filter((actual) => actual === title).length === 1)).toBe(true);
+    expect(Object.values(titleToEntry).every((name) => names.includes(name))).toBe(true);
+    const data = { ...input(), names, titleToEntry,
+      ledger: titles.map((title, index) => ({ task: task(title), sequence: index + 1 })),
+      floor: composeFloor([]) };
+    for (const name of names.slice(0, 6)) data.probeResults.set(name, result());
+    data.diagnosticResults.set('tripwire-batched-injected-bias-control', {
+      result: result(), hardClause: 'pass', singleProbeFamily: 'reject',
+    });
+    const entries = composeTimingSidecar(data).entries;
+    expect(entries.slice(0, 8).map(({ status }) => status)).toEqual(Array(8).fill('measured'));
+    expect(entries.slice(0, 6).map(({ kind, sequence }) => ({ kind, sequence })))
+      .toEqual([2, 3, 4, 5, 6, 7].map((sequence) => ({ kind: 'gated', sequence })));
   });
 
   it('records the failed ledger task with its own sequence and leaves the next diagnostic measured', () => {
@@ -168,6 +238,19 @@ describe('timing-2 sidecar', () => {
     measured.result = { state: 'fail', errors: [{ message: 'later hook failed' }] };
     data.ledgerFailures.push({ task: measured, sequence: 1, message: 'stale sentinel' });
     expect(composeTimingSidecar(data).entries[0]).toMatchObject({ status: 'error', reason: 'later hook failed', result: result() });
+  });
+
+  it('keeps the actual ledger hook non-throwing when recording, error conversion, and console.error fail', () => {
+    const data = input(); const hook = ledgerHook(data.ledger, data.ledgerFailures);
+    vi.spyOn(console, 'error').mockImplementation(() => { throw new Error('console unavailable'); });
+    vi.spyOn(data.ledger, 'push').mockImplementation(() => { throw new Error('ledger unavailable'); });
+    const failed = task(NAMES[8]!);
+    expect(() => hook({ task: failed })).not.toThrow();
+    expect(data.ledgerFailures[0]).toMatchObject({ task: failed, sequence: 1 });
+    vi.spyOn(data.ledgerFailures, 'push').mockImplementation(() => { throw new Error('sentinel unavailable'); });
+    expect(() => hook({ task: task(NAMES[9]!) })).not.toThrow();
+    vi.mocked(data.ledger.push).mockImplementation(() => { throw { toString() { throw new Error('conversion unavailable'); } }; });
+    expect(() => hook({ task: task(NAMES[10]!) })).not.toThrow();
   });
 
   it('classifies the genuine non-exported family error and preserves details through JSON', () => {
@@ -224,6 +307,23 @@ describe('timing-2 sidecar', () => {
     expect(composeFloor([]).floorMicroseconds).toBeNull();
     expect(composeFloor([{ microseconds: 8, pValue: 0, medianDiffMs: 0.008, singleProbeFamily: 'reject' }]).floorMicroseconds).toBe(8);
     expect(JSON.stringify(quiet)).not.toContain('SamplesMs');
+  });
+
+  it('keeps the actual sensitivity-floor recorder non-throwing on push, composition, and logging failures', () => {
+    const rows: FloorResult[] = []; const recorder = floorRecorder(rows);
+    const measured = Object.freeze(result({ pValue: 0, medianDiffMs: 5 }));
+    recorder.record(4, measured, false); recorder.record(8, measured, true);
+    expect(recorder.read()).toEqual(composeFloor([
+      { microseconds: 4, pValue: 0, medianDiffMs: 5, singleProbeFamily: 'accept' },
+      { microseconds: 8, pValue: 0, medianDiffMs: 5, singleProbeFamily: 'reject' },
+    ]));
+    vi.spyOn(console, 'error').mockImplementation(() => { throw new Error('console unavailable'); });
+    vi.spyOn(rows, 'push').mockImplementation(() => { throw new Error('recording unavailable'); });
+    expect(() => recorder.record(16, measured, true)).not.toThrow();
+    expect(recorder.read()!.floorMicroseconds).toBe(8);
+    const brokenCompose = floorRecorder([], () => { throw new Error('composition unavailable'); });
+    expect(() => brokenCompose.record(4, measured, true)).not.toThrow();
+    expect(brokenCompose.read()).toBeUndefined();
   });
 
   it('overwrites a previous complete sidecar with an atomic beforeAll stub in the same directory', async () => {
