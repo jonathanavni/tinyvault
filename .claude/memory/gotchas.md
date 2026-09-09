@@ -459,3 +459,10 @@ Example:
   `['source-drift']` and the main partition goes red (timing partitions then never run). Seen 2026-09-09 during the M6
   close-out while applying assessment-driven docs fixes in parallel with the gate. Rule: apply every edit, *then* run
   the gate, and do nothing in the worktree until it exits; preserve the red, never delete it. (2026-09-09)
+
+- **Never put a file write and a Codex dispatch in the same background Bash command.** A `run_in_background` compound
+  command (`python3 - <<'EOF' … EOF; …; node codex-companion.mjs task …`) had its heredoc re-quoted by the harness
+  wrapper, a `${…}` inside the document text became a shell substitution, the write silently did not happen, and the
+  dispatch ran against the stale file — a full Sol round against the wrong packet version (2026-09-09, M6.1 R3; killed,
+  quarantined as `packet-sol-r3-INVALID-ran-against-v2.md`). `set -e` did not stop it. Rule: write in the foreground,
+  verify a marker (`head -1`, a `grep -c`), then dispatch in a separate background call. (2026-09-09)
