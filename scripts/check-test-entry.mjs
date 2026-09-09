@@ -10,12 +10,14 @@ import path from 'node:path';
 import { assertMode, cliOptions, equal, readJson, requireRule, runCli, walk } from './gate-common.mjs';
 import { checkConfig, FORBIDDEN_CONFIG_KEYS } from './test-config.mjs';
 import { EXPECTED_TEST_COMMANDS, EXPECTED_DOCKER_COMMANDS, REPORTS, DOCKER_REPORT,
-  START_FILE, DOCKER_START_FILE, EVAL_REPORT, EVAL_START_FILE, EXPECTED_EVAL_COMMAND } from './test-contract.mjs';
+  START_FILE, DOCKER_START_FILE, EVAL_REPORT, EVAL_START_FILE, EXPECTED_EVAL_COMMAND,
+  EXPECTED_BASELINE_COMMAND, EXPECTED_EVAL_STUB_COMMAND } from './test-contract.mjs';
 import { entrySelftest } from './test-entry.selftest.mjs';
 import { executionSelftest } from './test-execution.selftest.mjs';
 export { EXPECTED_TEST_COMMANDS } from './test-contract.mjs';
 export const ENTRY_RULES = Object.freeze(['lifecycle', 'test-tokens', 'test-commands', 'docker-commands',
-  'make-test', 'eval-commands', 'make-eval', 'eval-config', 'config-files', ...FORBIDDEN_CONFIG_KEYS.map((k) => `config-${k}`),
+  'make-test', 'eval-commands', 'make-eval', 'baseline-commands', 'make-baseline', 'eval-stub-commands',
+  'eval-config', 'config-files', ...FORBIDDEN_CONFIG_KEYS.map((k) => `config-${k}`),
   'config-shape', 'config-guard', 'config-exclude', 'docker-config', 'report-reset']);
 export function checkEntryDocuments({ scripts, makefile, configs }) {
   requireRule(scripts && !Object.hasOwn(scripts, 'pretest') && !Object.hasOwn(scripts, 'posttest'), 'lifecycle');
@@ -25,8 +27,12 @@ export function checkEntryDocuments({ scripts, makefile, configs }) {
     && !Object.hasOwn(scripts, 'pretest:docker') && !Object.hasOwn(scripts, 'posttest:docker'), 'docker-commands');
   requireRule(scripts.eval === EXPECTED_EVAL_COMMAND && !Object.hasOwn(scripts, 'preeval')
     && !Object.hasOwn(scripts, 'posteval'), 'eval-commands');
+  requireRule(scripts.baseline === EXPECTED_BASELINE_COMMAND && !Object.hasOwn(scripts, 'prebaseline')
+    && !Object.hasOwn(scripts, 'postbaseline'), 'baseline-commands');
+  requireRule(scripts['eval:stub'] === EXPECTED_EVAL_STUB_COMMAND && !Object.hasOwn(scripts, 'preeval:stub')
+    && !Object.hasOwn(scripts, 'posteval:stub'), 'eval-stub-commands');
   const lines = makefile.split(/\r?\n/);
-  for (const target of ['test', 'eval']) {
+  for (const target of ['test', 'eval', 'baseline']) {
     const targets = lines.map((s, i) => !s.startsWith('\t') && !s.trimStart().startsWith('#')
       && s.includes(':') && s.split(':')[0].trim().split(/\s+/).includes(target) ? i : -1).filter((i) => i >= 0);
     requireRule(targets.length === 1 && lines[targets[0]] === `${target}:`, `make-${target}`);

@@ -30,3 +30,5 @@ export const EVAL_TEST = 'testbed/runner.eval.test.ts';
 export const EVAL_REPORT = '.vitest/eval.json';
 export const EVAL_START_FILE = '.vitest/eval-start.json';
 export const EXPECTED_EVAL_COMMAND = 'node scripts/check-test-entry.mjs --eval && TINYVAULT_EVAL=1 vitest run --config vitest.eval.config.ts --reporter=verbose --reporter=json --outputFile.json=.vitest/eval.json && node scripts/check-test-execution.mjs --eval';
+export const EXPECTED_BASELINE_COMMAND = 'node scripts/check-test-entry.mjs --eval && TINYVAULT_PROFILE=real-baseline TINYVAULT_EVAL=1 vitest run --config vitest.eval.config.ts --reporter=verbose --reporter=json --outputFile.json=.vitest/eval.json && node scripts/check-test-execution.mjs --eval';
+export const EXPECTED_EVAL_STUB_COMMAND = 'node scripts/check-test-entry.mjs --eval && TINYVAULT_PROFILE=stub TINYVAULT_EVAL=1 vitest run --config vitest.eval.config.ts --reporter=verbose --reporter=json --outputFile.json=.vitest/eval.json && node scripts/check-test-execution.mjs --eval';
