@@ -2,6 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { competingJobs } from './predicate.mjs';
+
 const MODULE_FILE = decodeURIComponent(new URL(import.meta.url).pathname);
 
 export const PROBE_NAMES = [
@@ -158,14 +160,66 @@ function entriesViolation(entries) {
   return null;
 }
 
+function hasExactKeys(value, keys) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    && JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...keys].sort());
+}
+
+function rankedEntryViolation(entry) {
+  if (!hasExactKeys(entry, ['name', 'pValue', 'threshold', 'rank'])) return 'shape';
+  if (!PROBE_NAMES.includes(entry.name)) return 'name';
+  if (!Number.isFinite(entry.pValue) || entry.pValue < 0 || entry.pValue > 1) return 'p-value';
+  if (!Number.isFinite(entry.threshold)) return 'threshold';
+  if (!Number.isInteger(entry.rank) || entry.rank < 1) return 'rank';
+  return null;
+}
+
+function familyViolation(family) {
+  if (typeof family !== 'object' || family === null || Array.isArray(family)
+    || !FAMILY_VALUES.has(family.status)) return 'family-status';
+  if (family.status === 'not-evaluated' && typeof family.reason !== 'string') return 'family-reason';
+  if (family.status !== 'reject') return null;
+  const details = family.details;
+  if (typeof details !== 'object' || details === null || Array.isArray(details)) return 'family-details';
+  if (!hasExactKeys(details, ['alpha', 'rejected', 'ordered']) || !Number.isFinite(details.alpha)) {
+    return 'family-details-alpha';
+  }
+  if (!Array.isArray(details.rejected) || !Array.isArray(details.ordered)) return 'family-details-arrays';
+  for (const ranked of [...details.rejected, ...details.ordered]) {
+    const violation = rankedEntryViolation(ranked);
+    if (violation) return `family-details-ranked-${violation}`;
+  }
+  const ordered = new Set(details.ordered.map((ranked) => JSON.stringify(ranked)));
+  if (details.rejected.some((ranked) => !ordered.has(JSON.stringify(ranked)))) {
+    return 'family-details-rejected-subset';
+  }
+  return null;
+}
+
 function strictSidecarViolation(sidecar) {
+  const rootTypes = {
+    schema: (value) => typeof value === 'string',
+    complete: (value) => typeof value === 'boolean',
+    startedAt: (value) => typeof value === 'string',
+    writtenAt: (value) => typeof value === 'string',
+    partitionDurationMs: (value) => Number.isFinite(value),
+    otherTests: (value) => Number.isInteger(value) && value >= 0,
+    commit: (value) => value === null || typeof value === 'string',
+    node: (value) => typeof value === 'string',
+    chromium: (value) => typeof value === 'string',
+    pairs: (value) => typeof value === 'number',
+    warmup: (value) => typeof value === 'number',
+    alpha: (value) => typeof value === 'number',
+    entries: () => true,
+    family: () => true,
+  };
+  for (const [name, valid] of Object.entries(rootTypes)) {
+    if (!Object.hasOwn(sidecar, name) || !valid(sidecar[name])) return `root-field:${name}`;
+  }
   if (sidecar.pairs !== 500 || sidecar.warmup !== 20 || sidecar.alpha !== 0.01) return 'root-constants';
   const entries = entriesViolation(sidecar.entries);
   if (entries) return entries;
-  if (!FAMILY_VALUES.has(sidecar.family?.status)) return 'family-status';
-  if (sidecar.family.status === 'reject' && (typeof sidecar.family.details !== 'object'
-    || sidecar.family.details === null)) return 'family-details';
-  return null;
+  return familyViolation(sidecar.family);
 }
 
 function sidecarForRun(runDirectory, started) {
@@ -175,13 +229,14 @@ function sidecarForRun(runDirectory, started) {
   if (sidecar.complete !== true) {
     return { sidecar: null, reason: 'no-sidecar-for-this-run:incomplete' };
   }
+  const violation = strictSidecarViolation(sidecar);
+  if (violation) return { sidecar: null, reason: `sidecar-invalid:${violation}` };
   const written = Date.parse(sidecar.writtenAt);
   const runStarted = Date.parse(started?.startedAt);
   if (!Number.isFinite(written) || !Number.isFinite(runStarted) || written < runStarted) {
     return { sidecar: null, reason: 'no-sidecar-for-this-run:stale' };
   }
-  const violation = strictSidecarViolation(sidecar);
-  return violation ? { sidecar: null, reason: `sidecar-invalid:${violation}` } : { sidecar, reason: null };
+  return { sidecar, reason: null };
 }
 
 function validity(partitions, sidecarState, entries, excluded, predicateAvailable, runEvidence) {
@@ -215,6 +270,51 @@ function runEvidenceReasons(startedRecord, label, hostState, campaign) {
   return reasons;
 }
 
+function predicateForRun(hostState, recorded) {
+  const captureAvailable = hostState?.processCapture?.status === 'ok'
+    && Array.isArray(hostState?.processes) && hostState.processes.length > 0;
+  const metadataAvailable = Number.isInteger(recorded?.ownPid)
+    && typeof recorded?.checkoutRoot === 'string' && recorded.checkoutRoot !== '';
+  const recordedAvailable = recorded?.predicateEvidence === 'available'
+    && Array.isArray(recorded?.competing) && Array.isArray(recorded?.observed);
+  if (!captureAvailable || !metadataAvailable || !recordedAvailable) {
+    return { available: false, excluded: false, mismatch: false, competing: [] };
+  }
+  let recomputed;
+  try {
+    recomputed = competingJobs(hostState, {
+      ownPid: recorded.ownPid,
+      checkoutRoot: recorded.checkoutRoot,
+    });
+  } catch {
+    return { available: false, excluded: false, mismatch: false, competing: [] };
+  }
+  const metadataMismatch = hostState.ownPid !== recorded.ownPid
+    || hostState.checkoutRoot !== recorded.checkoutRoot;
+  const mismatch = metadataMismatch
+    || JSON.stringify(recomputed.competing) !== JSON.stringify(recorded.competing)
+    || JSON.stringify(recomputed.observed) !== JSON.stringify(recorded.observed);
+  return {
+    available: true,
+    excluded: recomputed.competing.length > 0,
+    mismatch,
+    competing: recomputed.competing,
+  };
+}
+
+function refusalContext(runDirectory) {
+  const directory = path.join(runDirectory, 'refusals');
+  if (!fs.existsSync(directory)) return { count: 0, reasons: [] };
+  const reasons = [];
+  const files = fs.readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.json')).map((entry) => entry.name).sort();
+  for (const file of files) {
+    const record = optionalJson(path.join(directory, file));
+    if (Array.isArray(record?.reasons)) reasons.push(...record.reasons.filter((reason) => typeof reason === 'string'));
+  }
+  return { count: files.length, reasons };
+}
+
 function analyzeRun(runDirectory, label, campaign) {
   const startedRecord = optionalJson(path.join(runDirectory, 'started.json'));
   const started = startedRecord !== null;
@@ -230,14 +330,15 @@ function analyzeRun(runDirectory, label, campaign) {
   const sidecarState = sidecarForRun(runDirectory, startedRecord);
   const sidecar = sidecarState.sidecar;
   const entries = sidecar ? Object.fromEntries(sidecar.entries.map((entry) => [entry.name, entry])) : {};
-  const predicateAvailable = competing?.predicateEvidence === 'available' && Array.isArray(competing?.competing);
-  const excluded = predicateAvailable && competing.competing.length > 0;
-  const check = validity(partitions, sidecarState, entries, excluded, predicateAvailable,
-    runEvidenceReasons(startedRecord, label, hostState, campaign));
+  const predicate = predicateForRun(hostState, competing);
+  const evidenceReasons = runEvidenceReasons(startedRecord, label, hostState, campaign);
+  if (predicate.mismatch) evidenceReasons.push('predicate-verdict-mismatch');
+  const check = validity(partitions, sidecarState, entries, predicate.excluded, predicate.available,
+    evidenceReasons);
   if (!ended) check.reasons.push('run-not-ended');
   return {
-    run: label, started, ended, exit, partitions, excluded,
-    competing: competing?.competing ?? [], valid: started && ended && check.valid,
+    run: label, started, ended, exit, partitions, excluded: predicate.excluded,
+    competing: predicate.competing, refusals: refusalContext(runDirectory), valid: started && ended && check.valid,
     invalidReasons: check.reasons, controlSource: check.controlSource,
     family: familyVerdict(sidecar), entries,
   };
@@ -354,8 +455,12 @@ export function outcomePatterns({ V, diagnoses, missingCounts, controls }) {
   };
 }
 
-export function analyzeCampaign(directory) {
+export function analyzeCampaign(directory, { allowPartial = false } = {}) {
   const campaign = readJson(path.join(directory, 'campaign.json'));
+  if (allowPartial && campaign.synthetic !== true) {
+    throw new Error('--allow-partial requires a synthetic --plan campaign');
+  }
+  if (!allowPartial && campaign.runs !== 20) throw new Error('analysis requires a 20-run campaign');
   if (!Array.isArray(campaign.labels)) throw new Error('campaign has no frozen label set');
   const expectedLabels = Array.from({ length: campaign.runs },
     (_, index) => `run-${String(index + 1).padStart(2, '0')}`);
@@ -365,6 +470,9 @@ export function analyzeCampaign(directory) {
   if (!Array.isArray(campaign.startedLabels) || new Set(campaign.startedLabels).size !== campaign.startedLabels.length
     || campaign.startedLabels.some((label) => !campaign.labels.includes(label))) {
     throw new Error('campaign started-label ledger is invalid');
+  }
+  if (!allowPartial && campaign.labels.some((label) => !campaign.startedLabels.includes(label))) {
+    throw new Error('analysis requires all 20 labels started');
   }
   for (const label of campaign.startedLabels) {
     if (!fs.existsSync(path.join(directory, label, 'started.json'))) {
@@ -400,7 +508,8 @@ function actualRows(report) {
     const make = run.exit ? `${run.exit.code ?? 'null'}/${run.exit.signal ?? 'none'}` : 'missing';
     const familyEvidence = JSON.stringify({ details: run.family.details, reason: run.family.reason ?? null });
     const reasons = run.invalidReasons.join(', ') || 'none';
-    return `| ${run.run} | ${run.ended} | ${make} | ${run.partitions.main.verdict}/${run.partitions.timing1.verdict}/${run.partitions.timing2.verdict} | ${run.family.verdict} | ${run.excluded} | ${run.valid} | ${reasons} | ${familyEvidence} |`;
+    const refusals = `${run.refusals.count}:${run.refusals.reasons.join(',') || 'none'}`;
+    return `| ${run.run} | ${run.ended} | ${make} | ${run.partitions.main.verdict}/${run.partitions.timing1.verdict}/${run.partitions.timing2.verdict} | ${run.family.verdict} | ${run.excluded} | ${run.valid} | ${reasons} | ${refusals} | ${familyEvidence} |`;
   });
 }
 
@@ -427,8 +536,8 @@ export function renderMarkdown(report) {
     'Diagnostic limitation: the twins run after the family gate and are not phase-matched to their siblings. A quiet twin beside a rejecting sibling is weaker evidence than a phase-matched null.', '',
     'Sham limitation: k_sham=0 with k_AB>=2 does not prove a branch-dependent channel; the sham removes only byte content equal to the canary.', '',
     '## (a) Actual gate outcomes', '',
-    '| Run | ended | make test code/signal | main/timing-1/timing-2 | family | excluded | valid | reasons | family details |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| Run | ended | make test code/signal | main/timing-1/timing-2 | family | excluded | valid | reasons | refusal attempts | family details |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
     ...actualRows(report), '',
     '## (b) Matched per-probe diagnosis', '',
   ];
@@ -443,16 +552,23 @@ export function renderMarkdown(report) {
 }
 
 function parseArguments(argv) {
-  if (argv.length !== 2 || argv[0] !== '--dir') throw new Error('usage: analyze.mjs --dir <campaign-dir>');
-  return path.resolve(argv[1]);
+  let directory = null;
+  let allowPartial = false;
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] === '--dir' && directory === null && argv[index + 1]) directory = path.resolve(argv[++index]);
+    else if (argv[index] === '--allow-partial' && !allowPartial) allowPartial = true;
+    else throw new Error('usage: analyze.mjs --dir <campaign-dir> [--allow-partial]');
+  }
+  if (directory === null) throw new Error('usage: analyze.mjs --dir <campaign-dir> [--allow-partial]');
+  return { directory, allowPartial };
 }
 
 export function main(argv = process.argv.slice(2)) {
-  const directory = parseArguments(argv);
+  const { directory, allowPartial } = parseArguments(argv);
   const jsonFile = path.join(directory, 'report.json');
   const markdownFile = path.join(directory, 'report.md');
   if (fs.existsSync(jsonFile) || fs.existsSync(markdownFile)) throw new Error('analysis output already exists');
-  const report = analyzeCampaign(directory);
+  const report = analyzeCampaign(directory, { allowPartial });
   fs.writeFileSync(jsonFile, `${JSON.stringify(report, null, 2)}\n`, { flag: 'wx' });
   fs.writeFileSync(markdownFile, renderMarkdown(report), { flag: 'wx' });
 }

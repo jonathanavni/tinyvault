@@ -44,10 +44,10 @@ export function harnessDigest(directory = TOOL_DIRECTORY) {
   return hash.digest('hex');
 }
 
-export function campaignIdentity({ candidate, harness, policyNote, runs, cooldownSeconds }) {
+export function campaignIdentity({ candidate, harness, policyNote, runs, cooldownSeconds, plan = false }) {
   return {
     schema: CAMPAIGN_SCHEMA, candidate, harness, policyNote, runs,
-    predicateVersion: PREDICATE_VERSION, cooldownSeconds,
+    predicateVersion: PREDICATE_VERSION, cooldownSeconds, synthetic: plan && runs !== 20,
     labels: Array.from({ length: runs }, (_, index) => `run-${String(index + 1).padStart(2, '0')}`),
   };
 }
@@ -108,22 +108,43 @@ function overwriteJson(file, value) {
   fs.renameSync(temporary, file);
 }
 
-function campaignComplete(pointer) {
+function campaignComplete(out) {
   try {
-    const campaign = JSON.parse(fs.readFileSync(path.join(pointer.out, 'campaign.json'), 'utf8'));
-    return campaign.labels.every((label) => fs.existsSync(path.join(pointer.out, label, 'ended.json')));
+    const campaign = JSON.parse(fs.readFileSync(path.join(out, 'campaign.json'), 'utf8'));
+    const labels = Array.from({ length: 20 }, (_, index) => `run-${String(index + 1).padStart(2, '0')}`);
+    return campaign.runs === 20 && JSON.stringify(campaign.labels) === JSON.stringify(labels)
+      && campaign.labels.every((label) => fs.existsSync(path.join(out, label, 'ended.json')));
   } catch {
     return false;
   }
 }
 
-function assertPointerAllows(pointerFile, candidate, out) {
-  if (!fs.existsSync(pointerFile)) return;
+function pointerFileFor(checkoutRoot, candidate) {
+  if (!/^[A-Za-z0-9._-]+$/u.test(candidate)) throw new Error('candidate is not safe for a pointer filename');
+  return path.join(checkoutRoot, '.vitest/probe-p-campaign/pointers', `${candidate}.json`);
+}
+
+function readPointer(pointerFile) {
   const pointer = JSON.parse(fs.readFileSync(pointerFile, 'utf8'));
-  if (pointer.candidate === candidate && path.resolve(pointer.out) !== path.resolve(out)
-    && !campaignComplete(pointer)) {
-    throw new Error(`candidate already has an incomplete campaign: ${pointer.out}`);
+  if (JSON.stringify(Object.keys(pointer).sort()) !== JSON.stringify(['createdAt', 'out'])
+    || typeof pointer.out !== 'string' || !Number.isFinite(Date.parse(pointer.createdAt))) {
+    throw new Error('candidate pointer is invalid');
   }
+  return pointer;
+}
+
+function writePointer(pointerFile, out, createdAt) {
+  fs.mkdirSync(path.dirname(pointerFile), { recursive: true });
+  overwriteJson(pointerFile, { out: path.resolve(out), createdAt });
+}
+
+function assertPointerAllows(pointerFile, out, { resume, newCampaign }) {
+  if (!fs.existsSync(pointerFile)) return;
+  const pointer = readPointer(pointerFile);
+  const sameDirectory = path.resolve(pointer.out) === path.resolve(out);
+  if (resume && sameDirectory) return;
+  if (!campaignComplete(pointer.out)) throw new Error(`candidate already has an incomplete campaign: ${pointer.out}`);
+  if (!newCampaign) throw new Error('completed campaign requires --new-campaign and new user authorization');
 }
 
 function assertStartedRunsPresent(out, campaign) {
@@ -145,25 +166,33 @@ function assertCampaignLedger(campaign) {
 }
 
 export function freezeCampaign({
-  out, runs, candidate, cooldownSeconds = 0, resume = false,
+  out, runs, candidate, cooldownSeconds = 0, resume = false, plan = false, newCampaign = false,
   checkoutRoot = CHECKOUT_ROOT, harnessDirectory = TOOL_DIRECTORY,
   policyFile = path.join(checkoutRoot, 'docs/probe-p-timing2-policy.md'),
 }) {
   if (!Number.isInteger(runs) || runs < 1) throw new Error('runs must be a positive integer');
   if (typeof candidate !== 'string' || candidate === '') throw new Error('candidate is required');
   if (!Number.isInteger(cooldownSeconds) || cooldownSeconds < 0) throw new Error('invalid cooldown');
+  if (newCampaign && resume) throw new Error('--new-campaign cannot be used with --resume');
   const relativeOut = path.relative(checkoutRoot, path.resolve(out));
   if (relativeOut === '' || (!relativeOut.startsWith(`..${path.sep}`) && !path.isAbsolute(relativeOut))) {
     throw new Error('campaign output directory must be outside the checkout');
   }
   const identity = campaignIdentity({
     candidate, harness: harnessDigest(harnessDirectory), policyNote: sha256(fs.readFileSync(policyFile)),
-    runs, cooldownSeconds,
+    runs, cooldownSeconds, plan,
   });
-  const pointerFile = path.join(checkoutRoot, '.vitest/probe-p-campaign.pointer');
-  if (runs === 20) assertPointerAllows(pointerFile, candidate, out);
-  fs.mkdirSync(out, { recursive: true });
+  const pointerFile = pointerFileFor(checkoutRoot, candidate);
   const campaignFile = path.join(out, 'campaign.json');
+  if (runs === 20 && !fs.existsSync(pointerFile) && fs.existsSync(campaignFile)) {
+    const claimed = JSON.parse(fs.readFileSync(campaignFile, 'utf8'));
+    assertResumeMatches(claimed, identity);
+    writePointer(pointerFile, out, claimed.createdAt);
+    if (!campaignComplete(out)) throw new Error(`candidate already has an incomplete campaign: ${path.resolve(out)}`);
+    if (!newCampaign) throw new Error('completed campaign requires --new-campaign and new user authorization');
+  }
+  if (runs === 20) assertPointerAllows(pointerFile, out, { resume, newCampaign });
+  fs.mkdirSync(out, { recursive: true });
   if (resume) {
     const existing = JSON.parse(fs.readFileSync(campaignFile, 'utf8'));
     assertResumeMatches(existing, identity);
@@ -175,16 +204,35 @@ export function freezeCampaign({
     writeJson(campaignFile, { ...identity, createdAt: new Date().toISOString(), startedLabels: [] });
   }
   if (runs === 20) {
-    fs.mkdirSync(path.dirname(pointerFile), { recursive: true });
-    overwriteJson(pointerFile, { candidate, out: path.resolve(out) });
+    const campaign = JSON.parse(fs.readFileSync(campaignFile, 'utf8'));
+    writePointer(pointerFile, out, campaign.createdAt);
   }
   return nextRunNumber(out, runs);
 }
 
 function refuseStart(directory, reasons, now) {
   fs.mkdirSync(directory, { recursive: true });
-  writeJson(path.join(directory, 'refused.json'), { refusedAt: now, reasons });
+  const refusals = path.join(directory, 'refusals');
+  fs.mkdirSync(refusals, { recursive: true });
+  const stem = now.replace(/[^A-Za-z0-9._-]/gu, '-');
+  let sequence = 0;
+  let file;
+  do {
+    const suffix = sequence === 0 ? '' : `-${sequence}`;
+    file = path.join(refusals, `${stem}${suffix}.json`);
+    sequence += 1;
+  } while (fs.existsSync(file));
+  writeJson(file, { refusedAt: now, reasons });
   throw new Error(`run start refused: ${reasons.join(', ')}`);
+}
+
+function containsOnlyRefusals(directory) {
+  if (!fs.existsSync(directory)) return true;
+  const entries = fs.readdirSync(directory, { withFileTypes: true });
+  if (entries.length === 0) return true;
+  if (entries.length !== 1 || entries[0].name !== 'refusals' || !entries[0].isDirectory()) return false;
+  return fs.readdirSync(path.join(directory, 'refusals'), { withFileTypes: true })
+    .every((entry) => entry.isFile() && entry.name.endsWith('.json'));
 }
 
 function startRefusalReasons(campaign, { candidate, status, harnessDirectory, policyFile }) {
@@ -210,12 +258,12 @@ export function startRun({
   if (campaign.startedLabels.includes(label) || fs.existsSync(path.join(actualDirectory, 'started.json'))) {
     throw new Error(`${label} was already started`);
   }
+  if (!containsOnlyRefusals(actualDirectory)) refuseStart(actualDirectory, ['run-directory-has-content'], now);
   const reasons = startRefusalReasons(campaign, {
     candidate, status, harnessDirectory, policyFile,
   });
   if (reasons.length > 0) refuseStart(actualDirectory, reasons, now);
   if (!fs.existsSync(actualDirectory)) fs.mkdirSync(actualDirectory);
-  if (fs.readdirSync(actualDirectory).length !== 0) throw new Error(`${label} is not empty`);
   overwriteJson(campaignFile, { ...campaign, startedLabels: [...campaign.startedLabels, label] });
   writeJson(path.join(actualDirectory, 'started.json'), { startedAt: now, run: label });
   fs.mkdirSync(path.join(actualDirectory, 'raw'));
@@ -292,10 +340,12 @@ export function finishRun({ out, run, exitCode, durationMs, checkoutRoot, now = 
 }
 
 function parseOptions(argv) {
-  const options = { resume: false, cooldownSeconds: 0 };
+  const options = { resume: false, plan: false, newCampaign: false, cooldownSeconds: 0 };
   for (let index = 0; index < argv.length; index += 1) {
     const key = argv[index];
     if (key === '--resume') options.resume = true;
+    else if (key === '--plan') options.plan = true;
+    else if (key === '--new-campaign') options.newCampaign = true;
     else if (key === '--cooldown-seconds') options.cooldownSeconds = Number(argv[++index]);
     else if (['--out', '--runs', '--candidate', '--git-status', '--run', '--own-pid', '--checkout-root', '--exit', '--duration-ms'].includes(key)) {
       const name = key.slice(2).replace(/-([a-z])/gu, (_, letter) => letter.toUpperCase());

@@ -8,6 +8,7 @@ out=""
 runs=""
 resume=0
 plan=0
+new_campaign=0
 cooldown_seconds=0
 
 while (($# > 0)); do
@@ -16,6 +17,7 @@ while (($# > 0)); do
     --runs) runs="${2:?missing --runs value}"; shift 2 ;;
     --resume) resume=1; shift ;;
     --plan) plan=1; shift ;;
+    --new-campaign) new_campaign=1; shift ;;
     --cooldown-seconds) cooldown_seconds="${2:?missing cooldown value}"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
@@ -34,6 +36,8 @@ status="$(git -C "$checkout_root" status --short --untracked-files=all)"
 candidate="$(git -C "$checkout_root" rev-parse HEAD)"
 freeze_args=(freeze --out "$out" --runs "$runs" --candidate "$candidate" --cooldown-seconds "$cooldown_seconds")
 ((resume == 0)) || freeze_args+=(--resume)
+((plan == 0)) || freeze_args+=(--plan)
+((new_campaign == 0)) || freeze_args+=(--new-campaign)
 next="$(node "$campaign_js" "${freeze_args[@]}")"
 [[ "$next" =~ ^[0-9]+$ ]] || { echo "freeze returned an invalid next run: $next" >&2; exit 1; }
 ((next >= 1 && next <= runs + 1)) || { echo "freeze returned an out-of-range run: $next" >&2; exit 1; }
@@ -79,7 +83,6 @@ while ((number <= runs)); do
   fi
   current_head="$(git -C "$checkout_root" rev-parse HEAD)"
   current_status="$(git -C "$checkout_root" status --short --untracked-files=all)"
-  mkdir "$run_dir"
   node "$campaign_js" start --out "$out" --run "$number" \
     --candidate "$current_head" --git-status "$current_status"
   capture_raw processes ps -axo pid,ppid,pcpu,etimes,command

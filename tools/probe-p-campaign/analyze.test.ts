@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   DIAGNOSTICS, PROBE_NAMES, SENSITIVITY_FLOOR, SYNTHETIC_CONTROL, TRIPWIRE_PROBES,
-  analyzeCampaign, main, outcomePatterns, renderMarkdown,
+  analyzeCampaign as analyzeCampaignStrict, main, outcomePatterns, renderMarkdown,
 } from './analyze.mjs';
 
 const temporaryDirectories: string[] = [];
@@ -64,13 +64,13 @@ function setMeasured(entries: Record<string, any>, name: string, pValue: number,
   entries[name] = { ...entries[name], status: 'measured', result: result(pValue, medianDiffMs) };
 }
 
-function makeDirectory() {
+function makeDirectory(runs = 20, synthetic = true) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'probe-p-campaign-test-'));
   temporaryDirectories.push(directory);
   writeJson(path.join(directory, 'campaign.json'), {
-    schema: 'probe-p-campaign/1', candidate: 'candidate', runs: 20,
-    labels: Array.from({ length: 20 }, (_, index) => `run-${String(index + 1).padStart(2, '0')}`),
-    startedLabels: [],
+    schema: 'probe-p-campaign/1', candidate: 'candidate', runs,
+    labels: Array.from({ length: runs }, (_, index) => `run-${String(index + 1).padStart(2, '0')}`),
+    startedLabels: [], synthetic,
   });
   return directory;
 }
@@ -80,7 +80,8 @@ type Configure = (entries: Record<string, any>, index: number) => void;
 function sidecar(entries: Record<string, any>) {
   return {
     schema: 'timing-2-probes/1', complete: true, startedAt: '2026-09-09T10:00:01Z',
-    writtenAt: '2026-09-09T10:10:00Z', pairs: 500, warmup: 20, alpha: 0.01,
+    writtenAt: '2026-09-09T10:10:00Z', partitionDurationMs: 600_000, otherTests: 12,
+    commit: null, node: 'v24.19.0', chromium: 'Chrome/140', pairs: 500, warmup: 20, alpha: 0.01,
     family: { status: 'accept' },
     entries: entryNames.map((name, index) => ({ name, sequence: index + 1, ...entries[name] })),
   };
@@ -93,12 +94,19 @@ function addRun(directory: string, index: number, configure: Configure = () => u
   writeJson(path.join(runDirectory, 'started.json'), { run: options.recordedRun ?? label, startedAt: '2026-09-09T10:00:00Z' });
   if (options.ended !== false) writeJson(path.join(runDirectory, 'ended.json'), {});
   writeJson(path.join(runDirectory, 'exit.json'), { code: options.exitCode ?? 0, signal: null, durationMs: 1 });
+  const ownProcess = { pid: 99, ppid: 1, pcpu: 0, etimes: 1, command: '/bin/bash run.sh' };
+  const competingProcess = { pid: 7, ppid: 1, pcpu: 2, etimes: 1, command: 'npx vitest run' };
   writeJson(path.join(runDirectory, 'host-state.json'), {
+    processCapture: { status: options.processStatus ?? 'ok', exit: 0, bytes: 10 },
+    processes: options.processes ?? (options.excluded ? [ownProcess, competingProcess] : [ownProcess]),
+    ownPid: 99, checkoutRoot: '/checkout',
     git: { head: options.head ?? 'candidate', dirty: options.dirty ?? false, status: options.status ?? '' },
   });
   writeJson(path.join(runDirectory, 'competing.json'), {
+    ownPid: options.ownPid ?? 99, checkoutRoot: options.checkoutRoot ?? '/checkout',
     predicateEvidence: options.predicateEvidence ?? 'available',
-    competing: options.excluded ? [{ pid: 7, command: 'vitest' }] : [], observed: [],
+    competing: options.recordedExcluded ?? options.excluded ? [competingProcess] : [],
+    observed: [ownProcess],
   });
   const report = { numFailedTests: 0, numTotalTests: 1, testResults: [] };
   for (const name of ['main.json', 'timing-1.json', 'timing-2.json']) writeJson(path.join(runDirectory, name), report);
@@ -116,6 +124,8 @@ function fixture(count: number, configure: Configure = () => undefined, options:
   for (let index = 1; index <= count; index += 1) addRun(directory, index, configure, options[index] ?? {});
   return directory;
 }
+
+const analyzeCampaign = (directory: string) => analyzeCampaignStrict(directory, { allowPartial: true });
 
 function mutateSidecar(directory: string, mutation: (value: any) => void) {
   const file = path.join(directory, 'run-01/timing-2-probes.json');
@@ -147,6 +157,34 @@ describe('campaign accounting', () => {
     expect(run.invalidReasons).toContain('predicate-evidence-unavailable');
   });
 
+  it('requires host-state evidence even when competing.json claims predicate availability', () => {
+    const directory = fixture(1);
+    fs.rmSync(path.join(directory, 'run-01/host-state.json'));
+    const run = analyzeCampaign(directory).actualGateOutcomes[0];
+    expect(run.valid).toBe(false);
+    expect(run.invalidReasons).toContain('host-state-missing');
+  });
+
+  it('requires a successful non-empty process capture despite recorded predicate evidence', () => {
+    const run = analyzeCampaign(fixture(1, undefined, { 1: { processStatus: 'failed' } }))
+      .actualGateOutcomes[0];
+    expect(run.valid).toBe(false);
+    expect(run.invalidReasons).toContain('predicate-evidence-unavailable');
+  });
+
+  it('requires a non-empty captured process list', () => {
+    const run = analyzeCampaign(fixture(1, undefined, { 1: { processes: [] } })).actualGateOutcomes[0];
+    expect(run.valid).toBe(false);
+    expect(run.invalidReasons).toContain('predicate-evidence-unavailable');
+  });
+
+  it('invalidates disagreement between the recorded and recomputed predicate verdicts', () => {
+    const run = analyzeCampaign(fixture(1, undefined, { 1: { recordedExcluded: true } }))
+      .actualGateOutcomes[0];
+    expect(run.valid).toBe(false);
+    expect(run.invalidReasons).toContain('predicate-verdict-mismatch');
+  });
+
   it.each([
     ['candidate-head-mismatch', { head: 'changed' }],
     ['dirty-checkout-at-start', { dirty: true, status: ' M harness' }],
@@ -168,6 +206,50 @@ describe('campaign accounting', () => {
     fs.rmSync(path.join(directory, 'run-01'), { recursive: true });
     expect(() => analyzeCampaign(directory)).toThrow('campaign is unresumable: missing started run run-01');
   });
+
+  it('refuses a prefix of 15 started runs and writes no report', () => {
+    const directory = fixture(15);
+    expect(() => analyzeCampaignStrict(directory)).toThrow('analysis requires all 20 labels started');
+    expect(() => main(['--dir', directory])).toThrow('analysis requires all 20 labels started');
+    expect(fs.existsSync(path.join(directory, 'report.json'))).toBe(false);
+    expect(fs.existsSync(path.join(directory, 'report.md'))).toBe(false);
+  });
+
+  it('analyzes 20 started runs with three interrupted runs as invalid', () => {
+    const directory = fixture(20, undefined, {
+      18: { ended: false }, 19: { ended: false }, 20: { ended: false },
+    });
+    const report = analyzeCampaignStrict(directory);
+    expect(report.counts).toEqual({ started: 20, excluded: 0, valid: 17 });
+    expect(report.actualGateOutcomes.slice(-3).every((run: any) =>
+      run.invalidReasons.includes('run-not-ended'))).toBe(true);
+  });
+
+  it('refuses a two-run campaign unless it is a synthetic plan analyzed explicitly as partial', () => {
+    const directory = makeDirectory(2, true);
+    addRun(directory, 1);
+    addRun(directory, 2);
+    expect(() => analyzeCampaignStrict(directory)).toThrow('analysis requires a 20-run campaign');
+    expect(analyzeCampaignStrict(directory, { allowPartial: true }).counts.started).toBe(2);
+    const nonPlan = makeDirectory(2, false);
+    addRun(nonPlan, 1);
+    addRun(nonPlan, 2);
+    expect(() => analyzeCampaignStrict(nonPlan, { allowPartial: true }))
+      .toThrow('--allow-partial requires a synthetic --plan campaign');
+  });
+
+  it('reports refusal attempts as context rather than runs', () => {
+    const directory = fixture(20);
+    const refusals = path.join(directory, 'run-01/refusals');
+    fs.mkdirSync(refusals);
+    writeJson(path.join(refusals, '2026-09-09T10-00-00-000Z.json'), {
+      refusedAt: '2026-09-09T10:00:00Z', reasons: ['checkout-dirty'],
+    });
+    const report = analyzeCampaignStrict(directory);
+    expect(report.counts.started).toBe(20);
+    expect(report.actualGateOutcomes[0].refusals)
+      .toEqual({ count: 1, reasons: ['checkout-dirty'] });
+  });
 });
 
 describe('strict rev 3.1 sidecar validation', () => {
@@ -176,6 +258,8 @@ describe('strict rev 3.1 sidecar validation', () => {
     ['incomplete', 'no-sidecar-for-this-run:incomplete', (value) => { value.complete = false; }],
     ['stale', 'no-sidecar-for-this-run:stale', (value) => { value.writtenAt = '2026-09-09T09:00:00Z'; }],
     ['root constants', 'sidecar-invalid:root-constants', (value) => { value.pairs = 499; }],
+    ['missing partition duration', 'sidecar-invalid:root-field:partitionDurationMs', (value) => { delete value.partitionDurationMs; }],
+    ['missing chromium', 'sidecar-invalid:root-field:chromium', (value) => { delete value.chromium; }],
     ['non-array entries', 'sidecar-invalid:entries-not-array', (value) => { value.entries = {}; }],
     ['duplicate name', `sidecar-invalid:duplicate-entry:${PROBE_NAMES[0]}`, (value) => { value.entries[1].name = PROBE_NAMES[0]; }],
     ['alias or missing name', 'sidecar-invalid:entry-names', (value) => { value.entries[0].name = 'alias'; }],
@@ -192,6 +276,25 @@ describe('strict rev 3.1 sidecar validation', () => {
     ['invalid real control fields', `sidecar-invalid:real-control-fields:${DIAGNOSTICS[TRIPWIRE_PROBES[1]].control250}`, (value) => { value.entries[12].biasMicroseconds = 251; }],
     ['invalid family status', 'sidecar-invalid:family-status', (value) => { value.family.status = 'quiet'; }],
     ['reject without details', 'sidecar-invalid:family-details', (value) => { value.family = { status: 'reject' }; }],
+    ['array family details', 'sidecar-invalid:family-details', (value) => { value.family = { status: 'reject', details: [] }; }],
+    ['empty family details', 'sidecar-invalid:family-details-alpha', (value) => { value.family = { status: 'reject', details: {} }; }],
+    ['non-gated rejected name', 'sidecar-invalid:family-details-ranked-name', (value) => {
+      value.family = { status: 'reject', details: {
+        alpha: 0.01,
+        rejected: [{ name: 'not-gated', pValue: 0.001, threshold: 0.001, rank: 1 }],
+        ordered: [{ name: 'not-gated', pValue: 0.001, threshold: 0.001, rank: 1 }],
+      } };
+    }],
+    ['zero rank', 'sidecar-invalid:family-details-ranked-rank', (value) => {
+      value.family = { status: 'reject', details: {
+        alpha: 0.01,
+        rejected: [{ name: PROBE_NAMES[0], pValue: 0.001, threshold: 0.001, rank: 0 }],
+        ordered: [{ name: PROBE_NAMES[0], pValue: 0.001, threshold: 0.001, rank: 0 }],
+      } };
+    }],
+    ['not-evaluated without reason', 'sidecar-invalid:family-reason', (value) => {
+      value.family = { status: 'not-evaluated' };
+    }],
   ];
 
   it.each(cases)('invalidates %s with a precise reason', (_name, reason, mutation) => {
@@ -240,10 +343,18 @@ describe('exhaustive outcomes', () => {
 
   it.each(branches)('writes report.md for the %s branch', (expected, count, configure) => {
     const directory = fixture(count, configure);
-    main(['--dir', directory]);
+    main(['--dir', directory, '--allow-partial']);
     const report = JSON.parse(fs.readFileSync(path.join(directory, 'report.json'), 'utf8'));
     expect(report.outcome.primary).toBe(expected);
     expect(fs.readFileSync(path.join(directory, 'report.md'), 'utf8')).toContain(`Primary: ${expected}.`);
+  });
+
+  it('regenerates report.md for a full 20-run quiet campaign', () => {
+    const directory = fixture(20);
+    main(['--dir', directory]);
+    const markdown = fs.readFileSync(path.join(directory, 'report.md'), 'utf8');
+    expect(markdown).toContain('Counts: started=20, excluded=0, valid V=20.');
+    expect(markdown).toContain('## Outcome\n\nPrimary: quiet.');
   });
 
   it('keeps insufficient primary when calibration also applies', () => {

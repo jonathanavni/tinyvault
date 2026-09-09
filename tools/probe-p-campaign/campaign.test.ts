@@ -27,8 +27,12 @@ function context(runs = 2, candidate = 'candidate') {
   fs.writeFileSync(path.join(harnessDirectory, 'one.mjs'), 'export const one = 1;\n');
   fs.writeFileSync(policyFile, 'frozen policy\n');
   const frozen = { checkoutRoot, harnessDirectory, policyFile };
-  freezeCampaign({ out, runs, candidate, ...frozen });
+  freezeCampaign({ out, runs, candidate, plan: runs !== 20, ...frozen });
   return { out, runs, candidate, ...frozen };
+}
+
+function pointerFile(campaign: ReturnType<typeof context>, candidate = campaign.candidate) {
+  return path.join(campaign.checkoutRoot, '.vitest/probe-p-campaign/pointers', `${candidate}.json`);
 }
 
 function begin(campaign: ReturnType<typeof context>, run: number) {
@@ -73,9 +77,10 @@ describe('campaign lifecycle', () => {
     const campaign = context();
     const frozen = JSON.parse(fs.readFileSync(path.join(campaign.out, 'campaign.json'), 'utf8'));
     expect(frozen).toMatchObject({ labels: ['run-01', 'run-02'], startedLabels: [] });
-    expect(fs.existsSync(path.join(campaign.checkoutRoot, '.vitest/probe-p-campaign.pointer'))).toBe(false);
+    expect(frozen.synthetic).toBe(true);
+    expect(fs.existsSync(pointerFile(campaign))).toBe(false);
     expect(freezeCampaign({ out: campaign.out, runs: 2, candidate: campaign.candidate,
-      resume: true, ...campaign })).toBe(1);
+      resume: true, plan: true, ...campaign })).toBe(1);
   });
 
   it('records a started label and refuses duplicate and out-of-range starts', () => {
@@ -99,7 +104,7 @@ describe('campaign lifecycle', () => {
     ['checkout-dirty', { status: '?? dirt' }, null],
     ['harness-sha-mismatch', {}, 'harness'],
     ['policy-sha-mismatch', {}, 'policy'],
-  ])('leaves refused.json and no started.json for %s', (reason, changes, mutation) => {
+  ])('appends a refusal and no started.json for %s', (reason, changes, mutation) => {
     const campaign = context();
     if (mutation === 'harness') fs.appendFileSync(path.join(campaign.harnessDirectory, 'one.mjs'), '// drift\n');
     if (mutation === 'policy') fs.appendFileSync(campaign.policyFile, 'drift\n');
@@ -107,7 +112,31 @@ describe('campaign lifecycle', () => {
     fs.mkdirSync(runDirectory);
     expect(() => startRun({ out: campaign.out, run: 1, candidate: campaign.candidate,
       ...campaign, ...changes })).toThrow(reason);
-    expect(fs.existsSync(path.join(runDirectory, 'refused.json'))).toBe(true);
+    const refusalFiles = fs.readdirSync(path.join(runDirectory, 'refusals'));
+    expect(refusalFiles).toHaveLength(1);
+    expect(JSON.parse(fs.readFileSync(path.join(runDirectory, 'refusals', refusalFiles[0]), 'utf8')).reasons)
+      .toContain(reason);
+    expect(fs.existsSync(path.join(runDirectory, 'started.json'))).toBe(false);
+  });
+
+  it('continues the same label after a refusal is fixed', () => {
+    const campaign = context();
+    const runDirectory = path.join(campaign.out, 'run-01');
+    expect(() => startRun({ out: campaign.out, run: 1, candidate: campaign.candidate,
+      status: '?? dirt', ...campaign })).toThrow('checkout-dirty');
+    const directory = startRun({ out: campaign.out, run: 1, candidate: campaign.candidate, ...campaign });
+    expect(directory).toBe(runDirectory);
+    expect(fs.existsSync(path.join(directory, 'started.json'))).toBe(true);
+    expect(fs.readdirSync(path.join(directory, 'refusals'))).toHaveLength(1);
+  });
+
+  it('refuses a run directory containing a stray file', () => {
+    const campaign = context();
+    const runDirectory = path.join(campaign.out, 'run-01');
+    fs.mkdirSync(runDirectory);
+    fs.writeFileSync(path.join(runDirectory, 'stray.txt'), 'stray\n');
+    expect(() => startRun({ out: campaign.out, run: 1, candidate: campaign.candidate, ...campaign }))
+      .toThrow('run-directory-has-content');
     expect(fs.existsSync(path.join(runDirectory, 'started.json'))).toBe(false);
   });
 
@@ -116,7 +145,7 @@ describe('campaign lifecycle', () => {
     begin(campaign, 1);
     fs.rmSync(path.join(campaign.out, 'run-01'), { recursive: true });
     expect(() => freezeCampaign({ out: campaign.out, runs: 2, candidate: campaign.candidate,
-      resume: true, ...campaign })).toThrow('campaign is unresumable: missing started run run-01');
+      resume: true, plan: true, ...campaign })).toThrow('campaign is unresumable: missing started run run-01');
   });
 
   it('refuses a second output directory for the same incomplete candidate', () => {
@@ -124,6 +153,47 @@ describe('campaign lifecycle', () => {
     const second = path.join(path.dirname(campaign.out), 'second-evidence');
     expect(() => freezeCampaign({ ...campaign, out: second, runs: 20, candidate: campaign.candidate }))
       .toThrow('candidate already has an incomplete campaign');
+  });
+
+  it('keeps independent candidate pointers when alternating A to B to A', () => {
+    const campaignA = context(20, 'A');
+    const outB = path.join(path.dirname(campaignA.out), 'evidence-B');
+    freezeCampaign({ ...campaignA, out: outB, runs: 20, candidate: 'B' });
+    expect(JSON.parse(fs.readFileSync(pointerFile(campaignA, 'A'), 'utf8')).out)
+      .toBe(path.resolve(campaignA.out));
+    expect(JSON.parse(fs.readFileSync(pointerFile(campaignA, 'B'), 'utf8')).out)
+      .toBe(path.resolve(outB));
+    const secondA = path.join(path.dirname(campaignA.out), 'evidence-A2');
+    expect(() => freezeCampaign({ ...campaignA, out: secondA, runs: 20, candidate: 'A' }))
+      .toThrow(`candidate already has an incomplete campaign: ${campaignA.out}`);
+  });
+
+  it('reclaims the same campaign after a crash between campaign.json and pointer', () => {
+    const campaign = context(20, 'A');
+    fs.rmSync(pointerFile(campaign));
+    expect(() => freezeCampaign({ ...campaign, runs: 20, candidate: 'A' }))
+      .toThrow(`candidate already has an incomplete campaign: ${campaign.out}`);
+    const pointer = JSON.parse(fs.readFileSync(pointerFile(campaign), 'utf8'));
+    expect(pointer).toEqual({
+      out: path.resolve(campaign.out),
+      createdAt: JSON.parse(fs.readFileSync(path.join(campaign.out, 'campaign.json'), 'utf8')).createdAt,
+    });
+  });
+
+  it('requires --new-campaign after completion before replacing a candidate pointer', () => {
+    const campaign = context(20, 'A');
+    const frozen = JSON.parse(fs.readFileSync(path.join(campaign.out, 'campaign.json'), 'utf8'));
+    for (const label of frozen.labels) {
+      const directory = path.join(campaign.out, label);
+      fs.mkdirSync(directory);
+      fs.writeFileSync(path.join(directory, 'ended.json'), '{}\n');
+    }
+    const next = path.join(path.dirname(campaign.out), 'authorized-next');
+    expect(() => freezeCampaign({ ...campaign, out: next, runs: 20, candidate: 'A' }))
+      .toThrow('completed campaign requires --new-campaign and new user authorization');
+    expect(freezeCampaign({ ...campaign, out: next, runs: 20, candidate: 'A', newCampaign: true }))
+      .toBe(1);
+    expect(JSON.parse(fs.readFileSync(pointerFile(campaign), 'utf8')).out).toBe(path.resolve(next));
   });
 
   it('finishes without replacing reports and records missing reports', () => {
@@ -151,7 +221,9 @@ describe('campaign lifecycle', () => {
     });
     writeHostState({ out: campaign.out, run: 1, ownPid: 99, checkoutRoot: campaign.checkoutRoot });
     const verdict = JSON.parse(fs.readFileSync(path.join(runDirectory, 'competing.json'), 'utf8'));
-    expect(verdict.predicateEvidence).toBe('available');
+    expect(verdict).toMatchObject({
+      predicateEvidence: 'available', ownPid: 99, checkoutRoot: campaign.checkoutRoot,
+    });
     expect(verdict.competing.map(({ pid }: { pid: number }) => pid)).toEqual([100]);
   });
 
