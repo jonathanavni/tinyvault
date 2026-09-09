@@ -75,11 +75,20 @@ function definitions(source = SOURCE, diagnosticResults = new Map<string, Diagno
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
   }).outputText;
   return new Function('ts', 'expect', 'assertProbeFamily', 'assertProbeHardClause', 'diagnosticResults', code
-    + '\nreturn { timingSourceChecks, timingSourceMutations, timingHardeningMutations, recordDiagnostic, recordDiagnosticOutcomes, assertFiniteProbeStatistics };')(
+    + '\nconst build = timingSourceCompiler(); const programDurations = [];'
+    + '\nconst compile = (source) => { const start = performance.now(); const program = build(source);'
+    + ' program.getTypeChecker(); programDurations.push(performance.now() - start); return program; };'
+    + '\nreturn { timingSourceChecks: (source) => timingSourceChecks(source, compile), programDurations,'
+    + ' timingSourceResolve: (source) => timingSourceResolve(source, compile), timingSourceCompiler,'
+    + ' timingSourceMutations, timingSourceResolvedMutations, timingHardeningMutations, recordDiagnostic, recordDiagnosticOutcomes, assertFiniteProbeStatistics };')(
     ts, expect, assertProbeFamily, assertProbeHardClause, diagnosticResults,
   ) as {
     timingSourceChecks: (source: string) => Record<string, boolean>;
+    timingSourceCompiler: () => (source: string) => ts.Program;
+    programDurations: number[];
+    timingSourceResolve: (source: string) => { registrationsResolved: boolean; tests: { title: string; suite: string; body: string }[] };
     timingSourceMutations: (source: string) => [string, string, string][];
+    timingSourceResolvedMutations: (source: string) => [string, string, string][];
     timingHardeningMutations: (source: string) => [string, string, string][];
     recordDiagnostic: (name: string, result: ProbePResult, rejection?: string) => void;
     recordDiagnosticOutcomes: (name: string, result: ProbePResult) => void;
@@ -152,9 +161,11 @@ async function temporaryRoot() {
   return root;
 }
 
+const sourcePins = definitions();
+
 describe('timing-2 sidecar', () => {
   it('runs every source pin and its named in-memory negative control without loading Chromium', () => {
-    const functions = definitions();
+    const functions = sourcePins;
     for (const [pin, passed] of Object.entries(functions.timingSourceChecks(SOURCE))) expect(passed, pin).toBe(true);
     const mutations = functions.timingSourceMutations(SOURCE);
     expect(new Set(mutations.map(([pin]) => pin))).toEqual(new Set(Object.keys(functions.timingSourceChecks(SOURCE))));
@@ -162,13 +173,20 @@ describe('timing-2 sidecar', () => {
       expect(changed, name).not.toBe(SOURCE);
       expect(functions.timingSourceChecks(changed)[pin], name).toBe(false);
     }
+    console.info(`timing source: ${mutations.length} mutants; program + checker cold=${functions.programDurations[0]!.toFixed(1)}ms`
+      + ` max=${Math.max(...functions.programDurations).toFixed(1)}ms`);
   });
 
-  it.each(definitions().timingHardeningMutations(SOURCE))('rejects fix-round mutant %s: %s', (pin, name, changed) => {
+  it.each(sourcePins.timingHardeningMutations(SOURCE))('rejects fix-round mutant %s: %s', (pin, name, changed) => {
     expect(changed, name).not.toBe(SOURCE);
-    const checks = definitions().timingSourceChecks(changed);
+    const checks = sourcePins.timingSourceChecks(changed);
     expect(Object.values(checks), name).toContain(false);
     expect(checks[pin], name).toBe(false);
+  });
+
+  it.each(sourcePins.timingSourceResolvedMutations(SOURCE))('rejects symbol-resolution mutant %s: %s', (pin, name, changed) => {
+    expect(changed, name).not.toBe(SOURCE);
+    expect(sourcePins.timingSourceChecks(changed)[pin], name).toBe(false);
   });
 
   it('composes all completion states, preserves failed raw results, and dereferences final task state', () => {
