@@ -145,7 +145,7 @@ Initial-snapshot and bounded recovery instructions guide model decisions; the ha
 insert calls or repair a noncompliant trajectory. This is a controlled supplied-selector/recovery task,
 not a measurement of general selector discovery or autonomous recovery. Failed attempts remain evidence.
 
-The reference receives no password and has no source exemptions. The deliberately unsafe baseline
+The reference receives no password and has no source exemptions. Every qualified reference row carries a valid completion receipt, which authenticates its canary; receiptless reference noncompletions remain verified diagnostics only (M6.1). The deliberately unsafe baseline
 receives its per-run synthetic password and no usable vault handle; it uses the same `browser_type`
 caller-text operation as any caller. Non-secret typing is the reference usage rule, not content
 inspection by the browser tool. Ordinary baseline password entry is a measured exposure in model

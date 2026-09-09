@@ -466,3 +466,9 @@ Example:
   dispatch ran against the stale file — a full Sol round against the wrong packet version (2026-09-09, M6.1 R3; killed,
   quarantined as `packet-sol-r3-INVALID-ran-against-v2.md`). `set -e` did not stop it. Rule: write in the foreground,
   verify a marker (`head -1`, a `grep -c`), then dispatch in a separate background call. (2026-09-09)
+
+- **Never archive `*.test.ts` copies under `artifacts/` — vitest's include glob picks up gitignored paths** (plain `.ts`/`.mjs`
+  archives are inert: tsconfig includes only `src/**` and `testbed/**`). Astra's M6.1 mutant evidence carried `base/testbed/parity/claims.test.ts`; copied into
+  `artifacts/review-evidence/…`, it ran as a fourth test file in the next vitest invocation and failed on an unresolvable
+  relative import (a full `make test` on that tree would have gone red too). Rename archived test copies with a
+  `.snapshot` suffix at archive time, and check `find artifacts -name '*.test.ts'` is empty before any gate. (2026-09-09)

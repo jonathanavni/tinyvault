@@ -98,10 +98,9 @@ Honesty matters more here than in most projects, because the deliverable *is* a 
   not prove zero.
 - The published artifacts are **evidence you can re-derive, not evidence you must trust**. Outcomes are
   recomputed offline from persisted events against a code-defined policy, the evidence is signed and
-  bound to its run, and the run inventory is checked — so a bug or an edit to the artifacts cannot quietly
-  turn a leaking **reference** run green. One declared gap is under remediation (M6.1, found by the
-  [M6 close assessment](docs/project-assessment-2026-09-09.md)): a baseline run that earned no completion receipt
-  has its canary authenticated only by that receipt, so an edited bundle could under-report *baseline* leaks. Every
-  recorded cohort's baseline rows completed with receipts, and the fix is owed before any bundle is published. What signing cannot establish is that events the fixture never saw were
+  bound to its run, and the run inventory is checked — so neither a bug nor an edit to the artifacts can
+  quietly turn a leaking run green (a baseline row's canary is authenticated against its fixture-signed bootstrap
+  as well as its receipt, so a row without a receipt cannot carry a decoy either — M6.1, closing the gap the
+  [M6 close assessment](docs/project-assessment-2026-09-09.md) found). What signing cannot establish is that events the fixture never saw were
   captured faithfully in the first place. So if you want to know whether these numbers are real, the
   strongest answer remains re-running the eval yourself rather than trusting a signature of ours.

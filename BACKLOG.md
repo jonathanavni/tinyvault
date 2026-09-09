@@ -46,8 +46,7 @@ work in flight, the rest stay parked here (register "Final5 round"):
 
 ## From the M6 close assessment (2026-09-09; `docs/project-assessment-2026-09-09.md`)
 
-- **🔴 M6.1 remediation slice (full ladder, Astra, security channel; before M7's first live cohort and before any published
-  bundle) — receiptless-row canary authentication (`M6C-CODEX-P1-01`).** A baseline run with no completion receipt has its
+- ~~**🔴 M6.1 remediation slice — receiptless-row canary authentication (`M6C-CODEX-P1-01`).**~~ **CLOSED 2026-09-09** — merged; see the M6 register entry "M6.1 receiptless-row canary authentication". Original text: A baseline run with no completion receipt has its
   canary authenticated only by that receipt (`testbed/completion.ts:93-101`, `testbed/checkers/offline.ts:467-470`), so an
   edited bundle can substitute a decoy canary, restate the row `secretLeaked:false`, and stay `qualified` (a sibling supplies the
   cell's positive control; baseline completion is not required). Shape: authenticate the canary against the fixture-signed
