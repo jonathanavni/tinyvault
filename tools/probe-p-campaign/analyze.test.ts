@@ -64,6 +64,22 @@ function setMeasured(entries: Record<string, any>, name: string, pValue: number,
   entries[name] = { ...entries[name], status: 'measured', result: result(pValue, medianDiffMs) };
 }
 
+function familyRecord(entries: Record<string, any>, alpha = 0.01) {
+  const ordered = PROBE_NAMES.map((name) => ({ name, pValue: entries[name].result.pValue }))
+    .sort((a, b) => a.pValue - b.pValue)
+    .map((entry, index) => ({
+      ...entry, threshold: alpha / (PROBE_NAMES.length - index), rank: index + 1,
+    }));
+  const rejected = [];
+  for (const entry of ordered) {
+    if (entry.pValue > entry.threshold) break;
+    rejected.push(entry);
+  }
+  return rejected.length === 0
+    ? { status: 'accept' }
+    : { status: 'reject', details: { alpha, rejected, ordered } };
+}
+
 function makeDirectory(runs = 20, synthetic = true) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'probe-p-campaign-test-'));
   temporaryDirectories.push(directory);
@@ -82,7 +98,7 @@ function sidecar(entries: Record<string, any>) {
     schema: 'timing-2-probes/1', complete: true, startedAt: '2026-09-09T10:00:01Z',
     writtenAt: '2026-09-09T10:10:00Z', partitionDurationMs: 600_000, otherTests: 12,
     commit: null, node: 'v24.19.0', chromium: 'Chrome/140', pairs: 500, warmup: 20, alpha: 0.01,
-    family: { status: 'accept' },
+    family: familyRecord(entries),
     entries: entryNames.map((name, index) => ({ name, sequence: index + 1, ...entries[name] })),
   };
 }
@@ -108,7 +124,9 @@ function addRun(directory: string, index: number, configure: Configure = () => u
     competing: options.recordedExcluded ?? options.excluded ? [competingProcess] : [],
     observed: [ownProcess],
   });
-  const report = { numFailedTests: 0, numTotalTests: 1, testResults: [] };
+  const report = {
+    numTotalTests: 1, numPassedTests: 1, numFailedTests: 0, numPendingTests: 0, testResults: [],
+  };
   for (const name of ['main.json', 'timing-1.json', 'timing-2.json']) writeJson(path.join(runDirectory, name), report);
   const entries = defaultEntries();
   configure(entries, index);
@@ -132,6 +150,24 @@ function mutateSidecar(directory: string, mutation: (value: any) => void) {
   const value = JSON.parse(fs.readFileSync(file, 'utf8'));
   mutation(value);
   writeJson(file, value);
+}
+
+function mutatePartition(directory: string, mutation: (value: any) => void) {
+  const file = path.join(directory, 'run-01/main.json');
+  const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+  mutation(value);
+  writeJson(file, value);
+}
+
+function setRejectFamily(value: any) {
+  value.entries[0].result.pValue = low;
+  const ordered = value.entries.slice(0, PROBE_NAMES.length)
+    .map((entry: any) => ({ name: entry.name, pValue: entry.result.pValue }))
+    .sort((a: any, b: any) => a.pValue - b.pValue)
+    .map((entry: any, index: number) => ({
+      ...entry, threshold: value.alpha / (PROBE_NAMES.length - index), rank: index + 1,
+    }));
+  value.family = { status: 'reject', details: { alpha: value.alpha, rejected: ordered.slice(0, 1), ordered } };
 }
 
 afterEach(() => {
@@ -250,6 +286,27 @@ describe('campaign accounting', () => {
     expect(report.actualGateOutcomes[0].refusals)
       .toEqual({ count: 1, reasons: ['checkout-dirty'] });
   });
+
+  it.each([
+    ['null counters', (value: any) => { value.numPassedTests = null; }],
+    ['missing counters', (value: any) => { delete value.numPendingTests; }],
+    ['non-numeric counters', (value: any) => { value.numFailedTests = '0'; }],
+    ['inconsistent totals', (value: any) => { value.numTotalTests = 2; }],
+  ])('invalidates a partition report with %s', (_name, mutation) => {
+    const directory = fixture(1);
+    mutatePartition(directory, mutation);
+    const run = analyzeCampaign(directory).actualGateOutcomes[0];
+    expect(run.partitions.main).toMatchObject({ present: false, verdict: 'malformed' });
+    expect(run.invalidReasons).toContain('partition-report-malformed:main');
+  });
+
+  it('invalidates a partition report that does not parse', () => {
+    const directory = fixture(1);
+    fs.writeFileSync(path.join(directory, 'run-01/main.json'), '{');
+    const run = analyzeCampaign(directory).actualGateOutcomes[0];
+    expect(run.partitions.main).toMatchObject({ present: false, verdict: 'malformed' });
+    expect(run.invalidReasons).toContain('partition-report-malformed:main');
+  });
 });
 
 describe('strict rev 3.1 sidecar validation', () => {
@@ -268,6 +325,10 @@ describe('strict rev 3.1 sidecar validation', () => {
     ['missing error reason', `sidecar-invalid:entry-reason:${PROBE_NAMES[0]}`, (value) => {
       value.entries[0] = { name: PROBE_NAMES[0], kind: 'gated', status: 'error' };
     }],
+    ['missing sequence', `sidecar-invalid:entry-sequence:${PROBE_NAMES[0]}`, (value) => { delete value.entries[0].sequence; }],
+    ['null sequence on measured entry', `sidecar-invalid:entry-sequence:${PROBE_NAMES[0]}`, (value) => { value.entries[0].sequence = null; }],
+    ['negative p-value', `sidecar-invalid:result-p-value:${PROBE_NAMES[0]}`, (value) => { value.entries[0].result.pValue = -0.1; }],
+    ['p-value above one', `sidecar-invalid:result-p-value:${PROBE_NAMES[0]}`, (value) => { value.entries[0].result.pValue = 1.5; }],
     ['non-finite result', `sidecar-invalid:result-finite-numbers:${PROBE_NAMES[0]}`, (value) => { value.entries[0].result.pValue = null; }],
     ['wrong sample length', `sidecar-invalid:result-sample-length:${PROBE_NAMES[0]}`, (value) => { value.entries[0].result.aSamplesMs.pop(); }],
     ['invalid sensitivity floor', `sidecar-invalid:floor-magnitudes:${SENSITIVITY_FLOOR}`, (value) => { value.entries[7].magnitudes = [4, 8, 16, 31]; }],
@@ -292,6 +353,53 @@ describe('strict rev 3.1 sidecar validation', () => {
         ordered: [{ name: PROBE_NAMES[0], pValue: 0.001, threshold: 0.001, rank: 0 }],
       } };
     }],
+    ['reject with no rejected entries', 'sidecar-invalid:family-details-rejected-empty', (value) => {
+      setRejectFamily(value);
+      value.family.details.rejected = [];
+    }],
+    ['reject with only five ordered names', 'sidecar-invalid:family-details-ordered-names', (value) => {
+      setRejectFamily(value);
+      value.family.details.ordered.pop();
+    }],
+    ['reject with a duplicate ordered name', 'sidecar-invalid:family-details-ordered-names', (value) => {
+      setRejectFamily(value);
+      value.family.details.ordered[5].name = value.family.details.ordered[4].name;
+    }],
+    ['reject with a wrong ordered rank', 'sidecar-invalid:family-details-ordered-rank', (value) => {
+      setRejectFamily(value);
+      value.family.details.ordered[1].rank = 3;
+    }],
+    ['reject with a wrong ordered threshold', 'sidecar-invalid:family-details-ordered-threshold', (value) => {
+      setRejectFamily(value);
+      value.family.details.ordered[1].threshold += 2e-12;
+    }],
+    ['reject with decreasing ordered p-values', 'sidecar-invalid:family-details-ordered-p-values', (value) => {
+      setRejectFamily(value);
+      const [first, second] = value.family.details.ordered;
+      first.pValue = 0.4;
+      second.pValue = 0.3;
+      value.family.details.rejected[0].pValue = 0.4;
+      value.entries.find((entry: any) => entry.name === first.name).result.pValue = 0.4;
+      value.entries.find((entry: any) => entry.name === second.name).result.pValue = 0.3;
+    }],
+    ['reject whose rejected list is not a prefix', 'sidecar-invalid:family-details-rejected-prefix', (value) => {
+      setRejectFamily(value);
+      value.family.details.rejected = [value.family.details.ordered[1]];
+    }],
+    ['accept inconsistent with measured p-values', 'sidecar-invalid:family-verdict-mismatch', (value) => {
+      value.entries[0].result.pValue = low;
+    }],
+    ['reject details disagree with measured entries', 'sidecar-invalid:family-details-p-value-mismatch', (value) => {
+      setRejectFamily(value);
+      value.family.details.rejected[0].pValue = 0.0015;
+      value.family.details.ordered[0].pValue = 0.0015;
+    }],
+    ['reject inconsistent with measured p-values', 'sidecar-invalid:family-verdict-mismatch', (value) => {
+      setRejectFamily(value);
+      value.entries[0].result.pValue = high;
+      value.family.details.rejected[0].pValue = high;
+      value.family.details.ordered[0].pValue = high;
+    }],
     ['not-evaluated without reason', 'sidecar-invalid:family-reason', (value) => {
       value.family = { status: 'not-evaluated' };
     }],
@@ -315,6 +423,18 @@ describe('strict rev 3.1 sidecar validation', () => {
       }
     });
     expect(analyzeCampaign(directory).outcome.primary).toBe('diagnostic-incompleteness');
+  });
+
+  it('accepts a null sequence only for a missing entry', () => {
+    const directory = fixture(1);
+    mutateSidecar(directory, (value) => {
+      const entry = value.entries.find((item: any) => item.name === DIAGNOSTICS[TRIPWIRE_PROBES[0]].aa);
+      entry.status = 'missing';
+      entry.reason = 'fixture';
+      entry.sequence = null;
+      delete entry.result;
+    });
+    expect(analyzeCampaign(directory).actualGateOutcomes[0].valid).toBe(true);
   });
 });
 

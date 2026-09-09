@@ -71,14 +71,24 @@ function optionalJson(file) {
 }
 
 function partition(runDirectory, name) {
-  const value = optionalJson(path.join(runDirectory, name));
-  if (!value) return { present: false, numFailedTests: null, numTotalTests: null, verdict: 'missing' };
-  const failed = Number(value.numFailedTests);
-  const total = Number(value.numTotalTests);
-  const usable = Number.isInteger(failed) && Number.isInteger(total);
+  const file = path.join(runDirectory, name);
+  if (!fs.existsSync(file)) {
+    return { present: false, numFailedTests: null, numTotalTests: null, verdict: 'missing' };
+  }
+  let value;
+  try { value = readJson(file); } catch {
+    return { present: false, numFailedTests: null, numTotalTests: null, verdict: 'malformed' };
+  }
+  const counters = ['numTotalTests', 'numPassedTests', 'numFailedTests', 'numPendingTests']
+    .map((counter) => value?.[counter]);
+  const usable = counters.every((counter) => Number.isInteger(counter) && counter >= 0)
+    && value.numTotalTests === value.numPassedTests + value.numFailedTests + value.numPendingTests;
+  if (!usable) {
+    return { present: false, numFailedTests: null, numTotalTests: null, verdict: 'malformed' };
+  }
   return {
-    present: true, numFailedTests: usable ? failed : null, numTotalTests: usable ? total : null,
-    verdict: usable ? failed === 0 ? 'pass' : 'fail' : 'unknown',
+    present: true, numFailedTests: value.numFailedTests, numTotalTests: value.numTotalTests,
+    verdict: value.numFailedTests === 0 ? 'pass' : 'fail',
   };
 }
 
@@ -105,6 +115,7 @@ function finiteArray(value, length) {
 function resultViolation(entry) {
   const result = entry?.result;
   if (!result || RESULT_NUMBERS.some((name) => !Number.isFinite(result[name]))) return 'result-finite-numbers';
+  if (result.pValue < 0 || result.pValue > 1) return 'result-p-value';
   if (RESULT_ARRAYS.some((name) => !finiteArray(result[name], 500))) return 'result-sample-length';
   return null;
 }
@@ -150,6 +161,8 @@ function entriesViolation(entries) {
     if (entry.kind !== kind) return `entry-kind:${name}`;
     if (!['measured', 'missing', 'error'].includes(entry.status)) return `entry-status:${name}`;
     if (entry.status !== 'measured' && typeof entry.reason !== 'string') return `entry-reason:${name}`;
+    if (!(Number.isInteger(entry.sequence) && entry.sequence > 0)
+      && !(entry.status === 'missing' && entry.sequence === null)) return `entry-sequence:${name}`;
     if (entry.status === 'measured') {
       const violation = name === SENSITIVITY_FLOOR ? floorViolation(entry) : resultViolation(entry);
       if (violation) return `${violation}:${name}`;
@@ -174,14 +187,33 @@ function rankedEntryViolation(entry) {
   return null;
 }
 
-function familyViolation(family) {
+function sameRankedEntry(left, right) {
+  return ['name', 'pValue', 'threshold', 'rank'].every((name) => left[name] === right[name]);
+}
+
+function holmVerdict(entries, alpha) {
+  if (PROBE_NAMES.some((name) => entries[name]?.status !== 'measured')) return null;
+  const ordered = PROBE_NAMES.map((name) => resultOf(entries[name])?.pValue).sort((a, b) => a - b);
+  let rejected = 0;
+  for (let index = 0; index < ordered.length; index += 1) {
+    if (ordered[index] > alpha / (ordered.length - index)) break;
+    rejected += 1;
+  }
+  return rejected > 0 ? 'reject' : 'accept';
+}
+
+function familyViolation(family, entries, alpha) {
   if (typeof family !== 'object' || family === null || Array.isArray(family)
     || !FAMILY_VALUES.has(family.status)) return 'family-status';
   if (family.status === 'not-evaluated' && typeof family.reason !== 'string') return 'family-reason';
+  if (family.status === 'accept') {
+    return holmVerdict(entries, alpha) === family.status ? null : 'family-verdict-mismatch';
+  }
   if (family.status !== 'reject') return null;
   const details = family.details;
   if (typeof details !== 'object' || details === null || Array.isArray(details)) return 'family-details';
-  if (!hasExactKeys(details, ['alpha', 'rejected', 'ordered']) || !Number.isFinite(details.alpha)) {
+  if (!hasExactKeys(details, ['alpha', 'rejected', 'ordered']) || !Number.isFinite(details.alpha)
+    || Math.abs(details.alpha - alpha) > 1e-12) {
     return 'family-details-alpha';
   }
   if (!Array.isArray(details.rejected) || !Array.isArray(details.ordered)) return 'family-details-arrays';
@@ -189,11 +221,33 @@ function familyViolation(family) {
     const violation = rankedEntryViolation(ranked);
     if (violation) return `family-details-ranked-${violation}`;
   }
-  const ordered = new Set(details.ordered.map((ranked) => JSON.stringify(ranked)));
-  if (details.rejected.some((ranked) => !ordered.has(JSON.stringify(ranked)))) {
-    return 'family-details-rejected-subset';
+  if (details.rejected.length === 0) return 'family-details-rejected-empty';
+  if (details.ordered.length !== PROBE_NAMES.length
+    || new Set(details.ordered.map((ranked) => ranked.name)).size !== PROBE_NAMES.length
+    || details.ordered.some((ranked) => !PROBE_NAMES.includes(ranked.name))) {
+    return 'family-details-ordered-names';
   }
-  return null;
+  for (let index = 0; index < details.ordered.length; index += 1) {
+    const ranked = details.ordered[index];
+    if (ranked.rank !== index + 1) return 'family-details-ordered-rank';
+    const threshold = alpha / (PROBE_NAMES.length - index);
+    if (Math.abs(ranked.threshold - threshold) > 1e-12) return 'family-details-ordered-threshold';
+    if (index > 0 && ranked.pValue < details.ordered[index - 1].pValue) {
+      return 'family-details-ordered-p-values';
+    }
+  }
+  if (details.rejected.length > details.ordered.length
+    || details.rejected.some((ranked, index) =>
+      !sameRankedEntry(ranked, details.ordered[index]))) {
+    return 'family-details-rejected-prefix';
+  }
+  for (const ranked of [...details.rejected, ...details.ordered]) {
+    if (ranked.pValue !== resultOf(entries[ranked.name])?.pValue) {
+      return 'family-details-p-value-mismatch';
+    }
+  }
+  const recomputed = holmVerdict(entries, alpha);
+  return recomputed === null || recomputed === family.status ? null : 'family-verdict-mismatch';
 }
 
 function strictSidecarViolation(sidecar) {
@@ -219,7 +273,8 @@ function strictSidecarViolation(sidecar) {
   if (sidecar.pairs !== 500 || sidecar.warmup !== 20 || sidecar.alpha !== 0.01) return 'root-constants';
   const entries = entriesViolation(sidecar.entries);
   if (entries) return entries;
-  return familyViolation(sidecar.family);
+  const entriesByName = Object.fromEntries(sidecar.entries.map((entry) => [entry.name, entry]));
+  return familyViolation(sidecar.family, entriesByName, sidecar.alpha);
 }
 
 function sidecarForRun(runDirectory, started) {
@@ -245,7 +300,8 @@ function validity(partitions, sidecarState, entries, excluded, predicateAvailabl
   if (excluded) reasons.push('competing-process');
   reasons.push(...runEvidence);
   for (const [name, report] of Object.entries(partitions)) {
-    if (!report.present) reasons.push(`missing-partition:${name}`);
+    if (report.verdict === 'malformed') reasons.push(`partition-report-malformed:${name}`);
+    else if (!report.present) reasons.push(`missing-partition:${name}`);
   }
   if (sidecarState.reason) reasons.push(sidecarState.reason);
   if (sidecarState.sidecar) {
