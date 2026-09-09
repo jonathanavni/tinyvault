@@ -1,4 +1,4 @@
-# C2 packet — Probe P diagnostics: raw-series sidecar, twins, per-probe injected-bias controls, scoped D10 wording (rev 3, 2026-09-09 — cap-round owner corrections)
+# C2 packet — Probe P diagnostics: raw-series sidecar, twins, per-probe injected-bias controls, scoped D10 wording (rev 3.1, 2026-09-09 — cap-round owner corrections + the ledger-sequence fix after Astra's STOP)
 
 Owner: Claude (continuity). Authorization: the user's 2026-09-09 adoption of
 [`docs/probe-p-timing2-policy.md`](probe-p-timing2-policy.md) v2.1 §2.2 (C2), the normative text; this packet is its
@@ -92,11 +92,14 @@ machine" is **unchanged** and read as timing-1 + timing-2 together.
   literal options `{ alpha: 0.01, expected: PROBE_NAMES }`); the recompute uses `new Map(probeResults)` with the
   byte-identical options; the identifier `diagnosticResults` never appears on the same line as `assertProbeFamily`
   or `probeResults`.
-- **Ledger, non-throwing, finalized in `afterAll`.** A root `afterEach(({ task }) => …)` does one thing inside a
-  try/catch: `ledger.push({ task, sequence: ledger.length + 1 })` — no assertion, no I/O, no serialization, no
-  `expect`; the catch does `ledgerFailures.push({ sequence: ledger.length + 1, message })` inside its own
-  try/catch and then `console.error`s (so a failed push leaves a sentinel; if even the sentinel push fails the
-  entry is composed as `missing: 'not reached'`). **Title → entry mapping, pinned:** every diagnostic `it` title is
+- **Ledger, non-throwing, finalized in `afterAll`.** A root `afterEach(({ task }) => …)` first takes
+  `const sequence = ++ledgerSequence` (a module-level monotonic counter, so a sequence number is consumed whether
+  or not the push succeeds — rev 3.1 correction after Astra's STOP: keying the sentinel by `ledger.length + 1`
+  collided with the next successful row), then inside a try/catch: `ledger.push({ task, sequence })` — no
+  assertion, no I/O, no serialization, no `expect`; the catch does `ledgerFailures.push({ task, sequence,
+  message })` (the sentinel **retains the task reference**) inside its own try/catch and then `console.error`s.
+  Composition matches a name first to `ledger` and then to `ledgerFailures` by `task`; if neither holds it, the
+  entry is `missing: 'not reached'`. **Title → entry mapping, pinned:** every diagnostic `it` title is
   its entry name verbatim; the six gated probes, the synthetic control and the sensitivity floor keep their current
   titles and are mapped by a file-scope literal `TASK_TITLE_TO_ENTRY` (the eight titles exactly as at `4909ba8`),
   pinned by the source test. `afterAll` dereferences each `task.result` (final by then) and composes

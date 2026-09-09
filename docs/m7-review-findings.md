@@ -304,3 +304,23 @@ recording fully non-throwing). One implementer question answered by the owner (k
 line). Owner-verified: tsc, 81/81, both boundary gates PASS; browser run 26/26, sidecar complete, 1,000 µs control
 rejects (stop-rule run 2 of 3, both rejections). Sol round-2 read-only review dispatched on the fix range; the three
 clean-clone `make test` cost gates follow on an idle host.
+
+**C2 fix round 1 — Sol R2 read-only review (`review-c2-fix-sol-r2-report.md`): NEEDS-ATTENTION, 2 P1.** Diff audit
+clean (six gated bodies, both helpers, `runTripwireBatch`, `report` byte-identical; only pin helpers and the two
+recorders changed; the `as unknown` exemption pinned to the exact pre-existing line); all 30 predicates true, all 61
+delivered mutants flip; the ten pinned non-diagnostic titles are the actual ten. The two P1s are the declared limit of
+text-shaped pins made concrete: (1) equivalent registrations bypass the scan — `const hiddenIt = it`, a
+template-literal title, a computed member `{ test: it }['test']`, a second `describe` of the same name; (2) map
+isolation bypassed by unicode-escaped identifiers plus a computed `set`. **Owner disposition: cap round (3 of 3)
+dispatched to Astra with P1 criteria up front — replace the load-bearing text pins with symbol-resolved scans over the
+file's AST (registration references and map-binding references by symbol identity), keeping the literal pins as cheap
+absence-detection; eleven named bypass mutants must flip. Anything found after that is a recorded residual.**
+
+**Harness — Sol R2 (`review-harness-sol-r2-report.md`): NEEDS-ATTENTION, 4 P1 / 1 P2; 6 of 8 round-1 items closed.**
+Open: analyzer trusts `predicateEvidence` without cross-checking the host capture; "strict" sidecar validation still
+accepts malformed family details and missing root fields; analysis may run before all 20 labels started; the pointer
+is a single overwritable slot across candidates; a legitimate per-run refusal strands the campaign. **Fix round 2
+dispatched (Sol, `packet-H-fix-r2.md`)**: recompute the predicate from `host-state.json` and require agreement; full
+rev 3.1 root/family/ranked-entry validation; analysis refuses until every one of the 20 labels has started;
+per-candidate pointers with fail-closed write order and an explicit `--new-campaign` flag; refusals appended under
+`run-NN/refusals/` and `start` re-entrant over a refusal-only directory.
