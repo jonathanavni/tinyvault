@@ -379,3 +379,15 @@ Owner-verified: 99/99, both boundary gates PASS. **Harness post-implementation l
 fix → R3 → correction).** Residuals carried: pointers are ignored checkout-local state; evidence is not authenticated
 against manual edits (operating contract); a precisely timed interruption of the pointer temp write can wedge recovery
 (availability only, documented same-directory recovery).
+
+**Integration gate run 1 — RED (recorded, never retried to green).** Clean clone `clone-c2` at integration head
+`24675f6` (= main `550e9b3` + harness `e252713` + C2 `0424d8d`), `make test` 18:00–18:06 CDT, main partition 3162 /
+3159 passed / **2 failed** / 1 expected skip; timing partitions not reached (`&&` chain). (1)
+`src/core/fillService.structure.test.ts` — `host.timing.browser.test.ts` must remain under 800 lines: **2,063** (734 at
+`4909ba8`; the C2 pin scanner ≈ 1,050 lines lives inside the certifying file). (2) `timing2Sidecar.test.ts` "runs every
+source pin … without loading Chromium" timed out at 7.3 s under the saturated main partition (default 5 s). Neither is a
+measurement defect; both are integration defects the worktree runs could not show (the worktree cannot run `make test`
+— the provenance symlink rule). Evidence `owner-gate-integration-run1-RED/`. **Integrator fix dispatched to Astra
+(`packet-C2-integration-fix.md`):** extract the scanner into `testbed/probe/timingSourcePins.ts`, move literals / hook
+bodies / payload fixtures out as pure moves only as far as needed (STOP if still ≥ 800), explicit 180 s timeout and
+program reuse for the re-execution test; then a Sol read-only pass on the moves and three fresh clean-clone gates.
