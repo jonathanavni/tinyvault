@@ -430,7 +430,13 @@ normal approximation with **tie-corrected variance `n(n+1)(2n+1)/24 − Σ(t³�
 **Effect size = matched-pairs rank-biserial `r = (W⁺ − W⁻)/(W⁺ + W⁻)`**. `medianDiffMs` = **median of all `d_i`**
 (zeros included). Reported per probe: `pValue`, `z`, `effectSize`, `medianDiffMs`, and **p95 of each condition**.
 Two clauses: **(1) per-probe hard failure** — `assertProbeHardClause(result)` throws when `|medianDiffMs| > 2`;
-**(2) family-wise gate** — the six probes of `host.timing.browser.test.ts` are one family; `assertProbeFamily(results,
+**(2) family-wise gate** — ~~the six probes of `host.timing.browser.test.ts` are one family~~
+(amended 2026-09-09, user-authorized via `docs/probe-p-timing2-policy.md` v2.1 §2.2, deviation D-3):
+the six probes named in `PROBE_NAMES` in `host.timing.browser.test.ts` are one family; further probes in
+that file are **diagnostic** — written to the sidecar, never part of the Holm family, never an acceptance criterion
+through their statistical outcome — **with one named exception: `tripwire-batched-injected-bias-control`, a positive
+control whose required single-probe rejection is deliberately an acceptance criterion, named here so no future probe
+inherits the exemption by analogy**; `assertProbeFamily(results,
 { alpha: 0.01 })` applies **Holm–Bonferroni** (sort `p` ascending; reject `p_(k)` iff `p_(k) ≤ α/(m − k + 1)` and every
 earlier hypothesis was rejected; stop at the first non-rejection), throws naming every rejected probe, and **also throws
 when the family does not contain exactly the six named probes** (a crashed or skipped probe cannot pass silently).

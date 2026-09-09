@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -16,6 +16,10 @@ import {
   runProbeP,
   type ProbePResult,
 } from '../../testbed/probe/probeP';
+import { classifyFamilyError, composeFloor, composeTimingSidecar, readTimingCommit,
+  writeTimingSidecar, writeIncompleteTimingSidecar, type DiagnosticResult, type FamilyVerdict,
+  type FloorResult, type LedgerRow, type LedgerFailure } from '../../testbed/probe/timing2Sidecar';
+import { SECRET_TRANSFORM_NAMES } from '../shared/secretTransforms';
 import { startControlsLab, type ControlsLab } from '../../testbed/fixtures/controls-lab';
 import { createLockdownDomain } from './lockdownDomain';
 import { EvidenceLease, composeSupervisedHost, createSupervisedHost, CAPTURE_FAILED_MESSAGE,
@@ -27,6 +31,8 @@ import { TripwireRun } from './tripwireSeam';
 // (C-F1 evidence: the literal-vs-concatenated pair produced a consistent ~1 ns bias on this ~2 µs op).
 const CANARY = flatCopy('TVC_timing_probe_7B32');
 const NONMATCH = flatCopy(rotateFinalCharacter(CANARY));
+const NONMATCH2 = flatCopy(rotateFinalCharacter(NONMATCH));
+const NO_HOOK = () => undefined;
 const TIMING_PREFIX = 'timing-prefix:';
 const TIMING_SUFFIX = ':timing-suffix';
 const TRIPWIRE_BATCH = 64;
@@ -38,6 +44,40 @@ const PROBE_NAMES = [
   'tripwire-real-click-match-vs-no-match',
   'real-listener-click',
 ] as const;
+const ENTRY_NAMES = [
+  'fill-short-vs-long',
+  'queued-short-vs-long',
+  'reflection-equal-length',
+  'tripwire-match-vs-no-match',
+  'tripwire-real-click-match-vs-no-match',
+  'real-listener-click',
+  'tripwire-batched-injected-bias-control',
+  'sensitivity-floor',
+  'tripwire-match-vs-no-match-aa',
+  'tripwire-match-vs-no-match-sham',
+  'tripwire-real-click-match-vs-no-match-aa',
+  'tripwire-real-click-match-vs-no-match-sham',
+  'tripwire-real-click-bias-250us',
+  'tripwire-real-click-bias-1000us',
+] as const;
+const TASK_TITLE_TO_ENTRY: Readonly<Record<string, string>> = {
+  'kills secret-length-dependent fill latency after asserting exact result equality': 'fill-short-vs-long',
+  'kills secret-length-dependent mutex occupancy with an immediately queued control': 'queued-short-vs-long',
+  'kills a content-dependent reflection oracle with equal-length caller traffic': 'reflection-equal-length',
+  'kills match-dependent tripwire timing through composeSupervisedHost': 'tripwire-match-vs-no-match',
+  'kills match-dependent tripwire timing on a real supervised browser fill call': 'tripwire-real-click-match-vs-no-match',
+  'kills content-dependent request-listener work on the real supervised click path': 'real-listener-click',
+  'reports a path-specific 2us-per-call injected-bias control rejected by the family gate': 'tripwire-batched-injected-bias-control',
+  'reports the length-proportional fill-wrapper sensitivity floor': 'sensitivity-floor',
+};
+const diagnosticResults = new Map<string, DiagnosticResult>();
+const ledger: LedgerRow[] = [];
+const ledgerFailures: LedgerFailure[] = [];
+let ledgerSequence = 0;
+let startedAt = '';
+const SIDECAR_PATH = '.vitest/timing-2-probes.json';
+const floorResults: FloorResult[] = [];
+let sensitivityFloor: ReturnType<typeof composeFloor> | undefined;
 const probeResults = new Map<string, ProbePResult>();
 let browser: Browser;
 let lab: ControlsLab;
@@ -45,6 +85,9 @@ let activeSessions: BrowserSessionHost[] = [];
 let activeHosts: SupervisedHost[] = [];
 
 beforeAll(async () => {
+  startedAt = new Date().toISOString();
+  await mkdir('.vitest', { recursive: true });
+  await writeTimingSidecar(SIDECAR_PATH, { schema: 'timing-2-probes/1', complete: false, startedAt });
   probeResults.clear();
   browser = await launchChromium();
   lab = await startControlsLab();
@@ -59,6 +102,30 @@ afterEach(async () => {
 afterAll(async () => {
   await lab?.close();
   await browser?.close();
+});
+
+afterEach(({ task }) => {
+  const sequence = ++ledgerSequence;
+  try { ledger.push({ task, sequence }); }
+  catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    try { ledgerFailures.push({ task, sequence, message }); }
+    catch (failure) { console.error(failure); }
+    console.error(error);
+  }
+});
+
+afterAll(async () => {
+  try {
+    const chromium = browser.version();
+    const record = composeTimingSidecar({
+      startedAt, writtenAt: new Date().toISOString(), commit: await readTimingCommit(process.cwd()),
+      node: process.version, chromium, names: ENTRY_NAMES, titleToEntry: TASK_TITLE_TO_ENTRY,
+      ledger, ledgerFailures, probeResults,
+      diagnosticResults, floor: sensitivityFloor, family: timingFamily(),
+    });
+    await writeTimingSidecar(SIDECAR_PATH, record);
+  } catch (error) { await writeIncompleteTimingSidecar(SIDECAR_PATH, startedAt, error); }
 });
 
 async function timedFillHarness() {
@@ -118,6 +185,11 @@ describe.sequential('H Probe P timing bounds', () => {
     ].join('')}`);
     expect(hasDirectFamilyGate(wrapped)).toBe(false);
     expect(hasWrappedFamilyGate(wrapped)).toBe(true);
+    for (const [pin, passed] of Object.entries(timingSourceChecks(source))) expect(passed, pin).toBe(true);
+    for (const [pin, mutant, changed] of timingSourceMutations(source)) {
+      expect(changed, mutant).not.toBe(source);
+      expect(timingSourceChecks(changed!)[pin!], mutant).toBe(false);
+    }
   });
   it('kills secret-length-dependent fill latency after asserting exact result equality', async () => {
     const setup = await timedFillHarness();
@@ -199,98 +271,15 @@ describe.sequential('H Probe P timing bounds', () => {
   }, 180_000);
 
   it('kills match-dependent tripwire timing through composeSupervisedHost', async () => {
-    const match = vi.spyOn(secretMatcher, 'firstMatchingSecretTransform');
-    const mint = vi.spyOn(TripwireRun.prototype, 'mint');
-    const adjudicate = vi.spyOn(TripwireRun.prototype, 'adjudicate');
-    const timedCallDeltas: number[][] = [];
-    let hostA!: SupervisedHost;
-    let hostB!: SupervisedHost;
-    let currentHost: SupervisedHost | undefined;
-    const bytesA = JSON.stringify(timingVaultResult(CANARY));
-    const bytesB = JSON.stringify(timingVaultResult(NONMATCH));
-    expect(bytesA.length).toBe(bytesB.length);
-    // Rotate one same-class character so both conditions use the same mixed-character construction.
-    expect(NONMATCH).toHaveLength(CANARY.length);
     expect(NONMATCH).not.toBe(CANARY);
-    expect(characterClassShape(NONMATCH)).toBe(characterClassShape(CANARY));
-    const setupHost = (payload: string) => {
-      currentHost?.drainEvidence(); currentHost?.finish();
-      const service = timingService(payload);
-      currentHost = composeSupervisedHost({
-        fillService: service,
-        sessions: new TimingSessions(),
-        lease: new EvidenceLease(CANARY),
-      });
-      activeHosts.push(currentHost);
-      return currentHost;
-    };
-    const timedToolCall = async (host: SupervisedHost) => {
-      const before = [match.mock.calls.length, mint.mock.calls.length, adjudicate.mock.calls.length];
-      await runTripwireBatch(host);
-      timedCallDeltas.push([
-        match.mock.calls.length - before[0]!,
-        mint.mock.calls.length - before[1]!,
-        adjudicate.mock.calls.length - before[2]!,
-      ]);
-    };
-    const result = await runProbeP({
-      pairs: 500,
-      warmup: 20,
-      setupA: () => { hostA = setupHost(CANARY); },
-      setupB: () => { hostB = setupHost(NONMATCH); },
-      a: () => timedToolCall(hostA),
-      b: () => timedToolCall(hostB),
-    });
-    currentHost?.drainEvidence(); currentHost?.finish();
-    expect(timedCallDeltas.length).toBeGreaterThan(0);
-    expect(timedCallDeltas.every((delta) => delta.every((calls) => calls === 0))).toBe(true);
+    const result = await tripwireTimingProbe(CANARY, NONMATCH);
     report('tripwire-match-vs-no-match', result);
     expect(() => assertProbeHardClause(result)).not.toThrow();
   }, 180_000);
 
   it('kills match-dependent tripwire timing on a real supervised browser fill call', async () => {
-    const domain = createLockdownDomain();
-    const sessions = createBrowserSessionHost({ newContext: () => browser.newContext(), ...domain });
-    activeSessions.push(sessions);
-    const controls = createBrowserControls(sessions);
-    const session = await controls.browser_open_session();
-    expect(await controls.browser_navigate({
-      sessionId: session.sessionId, url: `${lab.primaryOrigin}/controls`,
-    })).toEqual({ ok: true });
-    let hostA!: SupervisedHost;
-    let hostB!: SupervisedHost;
-    let currentHost: SupervisedHost | undefined;
-    const hostsToFinish: SupervisedHost[] = [];
-    const resultA = JSON.stringify(timingFillOutcome(CANARY).result);
-    const resultB = JSON.stringify(timingFillOutcome(NONMATCH).result);
-    expect(resultA.length).toBe(resultB.length);
-    const setupHost = (payload: string) => {
-      // A/B arms remain symmetric: both finalize after the shared live producer closes, outside measurement.
-      currentHost = composeSupervisedHost({
-        fillService: browserClickTimingService(controls, session.sessionId, payload),
-        sessions,
-        lease: new EvidenceLease(CANARY),
-      });
-      activeHosts.push(currentHost);
-      hostsToFinish.push(currentHost);
-      return currentHost;
-    };
-    const request = {
-      handle: 'vh_timing', sessionId: session.sessionId,
-      fields: [{ role: 'password' as const, selector: '#password' }],
-    };
-    const result = await runProbeP({
-      pairs: 500,
-      warmup: 20,
-      setupA: () => { hostA = setupHost(CANARY); },
-      setupB: () => { hostB = setupHost(NONMATCH); },
-      a: () => hostA.tools.fill_from_vault(request).then(() => undefined),
-      b: () => hostB.tools.fill_from_vault(request).then(() => undefined),
-    });
-    await sessions.closeAll();
-    for (const pending of hostsToFinish) {
-      await pending.settleEvidence(); pending.drainEvidence(); pending.finish();
-    }
+    expect(NONMATCH).not.toBe(CANARY);
+    const result = await realClickTripwireTimingProbe(CANARY, NONMATCH);
     report('tripwire-real-click-match-vs-no-match', result);
     expect(() => assertProbeHardClause(result)).not.toThrow();
   }, 180_000);
@@ -365,6 +354,7 @@ describe.sequential('H Probe P timing bounds', () => {
     } catch (error) {
       rejection = error instanceof Error ? error.message : String(error);
     }
+    recordDiagnostic(name, result, rejection);
     console.info(`${name}: p=${result.pValue} aggregateBiasUs=${2 * TRIPWIRE_BATCH} rejected=${rejection}`);
     expect(rejection).toBe(`Probe P family rejected: ${name} (p=${result.pValue} <= 0.01 at rank 1 of 1)`);
   }, 180_000);
@@ -392,11 +382,472 @@ describe.sequential('H Probe P timing bounds', () => {
       } catch {
         rejected.push(microseconds);
       }
+      floorResults.push({ microseconds, pValue: result.pValue, medianDiffMs: result.medianDiffMs,
+        singleProbeFamily: rejected.includes(microseconds) ? 'reject' : 'accept' });
+      sensitivityFloor = composeFloor(floorResults);
       console.info(`probe-p-sensitivity-${microseconds}us: p=${result.pValue}`);
     }
     console.info(`probe-p-sensitivity-floor-us=${Math.min(...rejected)}`);
   }, 180_000);
+  it('tripwire-match-vs-no-match-aa', async () => {
+    const name = 'tripwire-match-vs-no-match-aa';
+    const result = await tripwireTimingProbe(CANARY, CANARY);
+    recordDiagnostic(name, result);
+    assertFiniteProbeStatistics(result);
+    expect(diagnosticResults.has(name)).toBe(true);
+  }, 180_000);
+
+  it('tripwire-match-vs-no-match-sham', async () => {
+    const name = 'tripwire-match-vs-no-match-sham';
+    expect(NONMATCH2).not.toBe(NONMATCH);
+    expect(NONMATCH2).not.toBe(CANARY);
+    for (const payload of [NONMATCH, NONMATCH2]) {
+      for (const bytes of [JSON.stringify(timingVaultResult(payload)), JSON.stringify(timingFillOutcome(payload).result)]) {
+        expect(secretMatcher.firstMatchingSecretTransform(bytes, CANARY, new Set(SECRET_TRANSFORM_NAMES))).toBeNull();
+      }
+    }
+    const result = await tripwireTimingProbe(NONMATCH, NONMATCH2);
+    recordDiagnostic(name, result);
+    assertFiniteProbeStatistics(result);
+    expect(diagnosticResults.has(name)).toBe(true);
+  }, 180_000);
+
+  it('tripwire-real-click-match-vs-no-match-aa', async () => {
+    const name = 'tripwire-real-click-match-vs-no-match-aa';
+    const result = await realClickTripwireTimingProbe(CANARY, CANARY);
+    recordDiagnostic(name, result);
+    assertFiniteProbeStatistics(result);
+    expect(diagnosticResults.has(name)).toBe(true);
+  }, 180_000);
+
+  it('tripwire-real-click-match-vs-no-match-sham', async () => {
+    const name = 'tripwire-real-click-match-vs-no-match-sham';
+    expect(NONMATCH2).not.toBe(NONMATCH);
+    expect(NONMATCH2).not.toBe(CANARY);
+    for (const payload of [NONMATCH, NONMATCH2]) {
+      for (const bytes of [JSON.stringify(timingVaultResult(payload)), JSON.stringify(timingFillOutcome(payload).result)]) {
+        expect(secretMatcher.firstMatchingSecretTransform(bytes, CANARY, new Set(SECRET_TRANSFORM_NAMES))).toBeNull();
+      }
+    }
+    const result = await realClickTripwireTimingProbe(NONMATCH, NONMATCH2);
+    recordDiagnostic(name, result);
+    assertFiniteProbeStatistics(result);
+    expect(diagnosticResults.has(name)).toBe(true);
+  }, 180_000);
+
+  it('tripwire-real-click-bias-250us', async () => {
+    const name = 'tripwire-real-click-bias-250us';
+    const result = await realClickTripwireTimingProbe(NONMATCH, NONMATCH, {
+      afterB: () => spinForMicroseconds(250),
+    });
+    recordDiagnostic(name, result);
+    assertFiniteProbeStatistics(result);
+    expect(diagnosticResults.has(name)).toBe(true);
+  }, 180_000);
+
+  it('tripwire-real-click-bias-1000us', async () => {
+    const name = 'tripwire-real-click-bias-1000us';
+    const result = await realClickTripwireTimingProbe(NONMATCH, NONMATCH, {
+      afterB: () => spinForMicroseconds(1000),
+    });
+    recordDiagnostic(name, result);
+    assertFiniteProbeStatistics(result);
+    expect(diagnosticResults.has(name)).toBe(true);
+  }, 180_000);
+
 });
+
+
+function timingFamily(): FamilyVerdict {
+  try {
+    assertProbeFamily(new Map(probeResults), { alpha: 0.01, expected: PROBE_NAMES });
+    return { status: 'accept' };
+  } catch (error) { return classifyFamilyError(error); }
+}
+
+function assertFiniteProbeStatistics(result: ProbePResult): void {
+  for (const value of [result.pValue, result.z, result.effectSize, result.medianDiffMs, result.p95AMs, result.p95BMs]) {
+    expect(Number.isFinite(value)).toBe(true);
+  }
+  for (const samples of [result.aSamplesMs, result.bSamplesMs, result.differencesMs]) {
+    expect(samples.length === 500).toBe(true);
+    expect(samples.every(Number.isFinite)).toBe(true);
+  }
+}
+
+function recordDiagnosticOutcomes(name: string, result: ProbePResult): void {
+  let hardClause: 'pass' | 'fail' = 'pass';
+  let singleProbeFamily: 'accept' | 'reject' = 'accept';
+  try { assertProbeHardClause(result); } catch { hardClause = 'fail'; }
+  try {
+    assertProbeFamily(new Map([[name, result]]), { alpha: 0.01, expected: [name] });
+  } catch { singleProbeFamily = 'reject'; }
+  diagnosticResults.set(name, { result, hardClause, singleProbeFamily });
+}
+
+function recordDiagnostic(name: string, result: ProbePResult, rejection?: string): void {
+  try {
+    recordDiagnosticOutcomes(name, result);
+    if (rejection !== undefined) {
+      diagnosticResults.set(name, { ...diagnosticResults.get(name)!, singleProbeFamily: rejection ? 'reject' : 'accept' });
+    }
+  } catch (error) { console.error(error); }
+}
+
+async function tripwireTimingProbe(payloadA: string, payloadB: string): Promise<ProbePResult> {
+  const match = vi.spyOn(secretMatcher, 'firstMatchingSecretTransform');
+  const mint = vi.spyOn(TripwireRun.prototype, 'mint');
+  const adjudicate = vi.spyOn(TripwireRun.prototype, 'adjudicate');
+  const timedCallDeltas: number[][] = [];
+  let hostA!: SupervisedHost; let hostB!: SupervisedHost;
+  let currentHost: SupervisedHost | undefined;
+  const bytesA = JSON.stringify(timingVaultResult(payloadA));
+  const bytesB = JSON.stringify(timingVaultResult(payloadB));
+  expect(bytesA.length).toBe(bytesB.length);
+  expect(payloadB).toHaveLength(payloadA.length);
+  expect(characterClassShape(payloadB)).toBe(characterClassShape(payloadA));
+  const setupHost = (payload: string) => {
+    currentHost?.drainEvidence(); currentHost?.finish();
+    const service = timingService(payload);
+    currentHost = composeSupervisedHost({
+      fillService: service,
+      sessions: new TimingSessions(),
+      lease: new EvidenceLease(CANARY),
+    });
+    activeHosts.push(currentHost);
+    return currentHost;
+  };
+  const timedToolCall = async (host: SupervisedHost) => {
+    const before = [match.mock.calls.length, mint.mock.calls.length, adjudicate.mock.calls.length];
+    await runTripwireBatch(host);
+    timedCallDeltas.push([
+      match.mock.calls.length - before[0]!,
+      mint.mock.calls.length - before[1]!,
+      adjudicate.mock.calls.length - before[2]!,
+    ]);
+  };
+  const result = await runProbeP({
+    pairs: 500, warmup: 20,
+    setupA: () => { hostA = setupHost(payloadA); },
+    setupB: () => { hostB = setupHost(payloadB); },
+    a: () => timedToolCall(hostA),
+    b: () => timedToolCall(hostB),
+  });
+  currentHost?.drainEvidence(); currentHost?.finish();
+  expect(timedCallDeltas.length).toBeGreaterThan(0);
+  expect(timedCallDeltas.every((delta) => delta.every((calls) => calls === 0))).toBe(true);
+  return result;
+}
+
+async function realClickTripwireTimingProbe(
+  payloadA: string, payloadB: string,
+  { afterA = NO_HOOK, afterB = NO_HOOK }: { afterA?: () => void; afterB?: () => void } = {},
+): Promise<ProbePResult> {
+  const domain = createLockdownDomain();
+  const sessions = createBrowserSessionHost({ newContext: () => browser.newContext(), ...domain });
+  activeSessions.push(sessions);
+  const controls = createBrowserControls(sessions);
+  const session = await controls.browser_open_session();
+  expect(await controls.browser_navigate({
+    sessionId: session.sessionId, url: `${lab.primaryOrigin}/controls`,
+  })).toEqual({ ok: true });
+  let hostA!: SupervisedHost; let hostB!: SupervisedHost;
+  let currentHost: SupervisedHost | undefined;
+  const hostsToFinish: SupervisedHost[] = [];
+  const resultA = JSON.stringify(timingFillOutcome(payloadA).result);
+  const resultB = JSON.stringify(timingFillOutcome(payloadB).result);
+  expect(resultA.length).toBe(resultB.length);
+  expect(payloadB).toHaveLength(payloadA.length);
+  expect(characterClassShape(payloadB)).toBe(characterClassShape(payloadA));
+  const setupHost = (payload: string) => {
+    // A/B arms remain symmetric: both finalize after the shared live producer closes, outside measurement.
+    currentHost = composeSupervisedHost({
+      fillService: browserClickTimingService(controls, session.sessionId, payload),
+      sessions,
+      lease: new EvidenceLease(CANARY),
+    });
+    activeHosts.push(currentHost);
+    hostsToFinish.push(currentHost);
+    return currentHost;
+  };
+  const request = {
+    handle: 'vh_timing', sessionId: session.sessionId,
+    fields: [{ role: 'password' as const, selector: '#password' }],
+  };
+  const result = await runProbeP({
+    pairs: 500, warmup: 20,
+    setupA: () => { hostA = setupHost(payloadA); },
+    setupB: () => { hostB = setupHost(payloadB); },
+    a: () => hostA.tools.fill_from_vault(request).then(afterA),
+    b: () => hostB.tools.fill_from_vault(request).then(afterB),
+  });
+  await sessions.closeAll();
+  for (const pending of hostsToFinish) {
+    await pending.settleEvidence(); pending.drainEvidence(); pending.finish();
+  }
+  return result;
+}
+
+
+function timingFunctionText(source: string, name: string): string {
+  return source.match(new RegExp('^(?:async )?function ' + name + '\\([\\s\\S]*?^\\}', 'mu'))?.[0] ?? '';
+}
+
+function timingConstantText(source: string, name: string, ending: string): string {
+  return source.match(new RegExp('^const ' + name + '[\\s\\S]*?^' + ending, 'mu'))?.[0] ?? '';
+}
+
+function timingDiagnosticBodies(source: string): Map<string, string> {
+  return new Map([...source.matchAll(/^  it\('([^']+)', async \(\) => \{([\s\S]*?)^  \}, 180_000\);/gmu)]
+    .filter(([, name]) => /-(?:aa|sham|250us|1000us)$/u.test(name!))
+    .map(([, name, body]) => [name!, body!]));
+}
+
+function pinsDiagnosticStatistics(source: string): boolean {
+  const allowed = new Set(['for', 'expect', 'toBe', 'not.toBe', 'toBeNull', 'Set', 'JSON.stringify',
+    'timingVaultResult', 'timingFillOutcome', 'secretMatcher.firstMatchingSecretTransform',
+    'tripwireTimingProbe', 'realClickTripwireTimingProbe', 'recordDiagnostic', 'assertFiniteProbeStatistics',
+    'diagnosticResults.has', 'spinForMicroseconds']);
+  const bodies = timingDiagnosticBodies(source);
+  return bodies.size === 6 && [...bodies].every(([name, body]) =>
+    body.includes(`const name = '${name}';`)
+    && body.includes('recordDiagnostic(name, result);')
+    && body.includes('assertFiniteProbeStatistics(result);')
+    && body.includes('expect(diagnosticResults.has(name)).toBe(true);')
+    && !/\b(?:pValue|medianDiffMs|effectSize|z|hardClause|singleProbeFamily)\b/u.test(body)
+    && [...body.matchAll(/\b([A-Za-z_]\w*(?:\.\w+)*)\s*\(/gu)].every(([, call]) => allowed.has(call!)));
+}
+
+function pinsDiagnosticConstruction(source: string): boolean {
+  const bodies = timingDiagnosticBodies(source);
+  return ['tripwire-match-vs-no-match', 'tripwire-real-click-match-vs-no-match'].every((sibling) => {
+    const helper = sibling.includes('real-click') ? 'realClickTripwireTimingProbe' : 'tripwireTimingProbe';
+    const aa = bodies.get(sibling + '-aa') ?? ''; const sham = bodies.get(sibling + '-sham') ?? '';
+    return aa.includes(`await ${helper}(CANARY, CANARY);`)
+      && sham.includes(`await ${helper}(NONMATCH, NONMATCH2);`)
+      && sham.includes('expect(NONMATCH2).not.toBe(NONMATCH);')
+      && sham.includes('expect(NONMATCH2).not.toBe(CANARY);')
+      && sham.includes('for (const payload of [NONMATCH, NONMATCH2])')
+      && sham.includes('[JSON.stringify(timingVaultResult(payload)), JSON.stringify(timingFillOutcome(payload).result)]')
+      && sham.includes('expect(secretMatcher.firstMatchingSecretTransform(bytes, CANARY, new Set(SECRET_TRANSFORM_NAMES))).toBeNull();');
+  }) && [250, 1000].every((bias) => (bodies.get(`tripwire-real-click-bias-${bias}us`) ?? '').includes(
+    `await realClickTripwireTimingProbe(NONMATCH, NONMATCH, {\n      afterB: () => spinForMicroseconds(${bias}),\n    });`,
+  ));
+}
+
+function pinsProbeIsolation(source: string): Record<string, boolean> {
+  const reporter = ['report', '('].join('');
+  const calls = source.split('\n').map((line) => line.trim()).filter((line) => line.startsWith(reporter));
+  const names = timingConstantText(source, 'PROBE_NAMES', '\\] as const;');
+  const write = ['probeResults', '.set('].join('');
+  const family = ['assertProbeFamily', '(probeResults,'].join('');
+  const options = '{ alpha: 0.01, expected: PROBE_NAMES }';
+  const diagnosticMap = ['diagnostic', 'Results'].join('');
+  return {
+    reportCalls: source.split(reporter).length - 1 === 7 && calls.length === 6
+      && calls.every((line) => {
+        const name = line.match(new RegExp("^report" + "\\('([^']+)', result\\);$", 'u'))?.[1];
+        return name !== undefined && names.includes(`'${name}'`);
+      }),
+    probeWrites: source.split(write).length - 1 === 1
+      && timingFunctionText(source, 'report').includes(write),
+    gatedFamily: source.split(family).length - 1 === 1
+      && source.split('\n').some((line) => line.trim() === family + ' ' + options + ');'),
+    recomputedFamily: source.split('\n').some((line) => line.trim()
+      === 'assertProbeFamily(new Map(' + 'probeResults), ' + options + ');'),
+    separateMaps: source.split('\n').every((line) => !line.includes(diagnosticMap)
+      || !/assertProbeFamily|probeResults/u.test(line)),
+    diagnosticNamesExcluded: !/-(?:aa|sham|250us|1000us)'/u.test(names),
+  };
+}
+
+function pinsTripwireHelpers(source: string): Record<string, boolean> {
+  const synthetic = timingFunctionText(source, 'tripwireTimingProbe');
+  const real = timingFunctionText(source, 'realClickTripwireTimingProbe');
+  return {
+    helperBoundary: [synthetic, real].every((body) => body.length > 0
+      && !/\b(?:assertProbeHardClause|assertProbeFamily|catch|gated|throw)\b/u.test(body)),
+    realWrapper: real.includes('a: () => hostA.tools.fill_from_vault(request).then(afterA),')
+      && real.includes('b: () => hostB.tools.fill_from_vault(request).then(afterB),')
+      && real.includes('{ afterA = NO_HOOK, afterB = NO_HOOK }')
+      && /^const NO_HOOK = \(\) => undefined;$/mu.test(source)
+      && !/then\(\(\) =>/u.test(real),
+    helperCalls: synthetic.split('runTripwireBatch(').length - 1 === 1
+      && real.split('fill_from_vault(').length - 1 === 2 && !real.includes('spyOn')
+      && !/afterA|afterB|afterCall/u.test(synthetic),
+    helperSampling: [synthetic, real].every((body) => body.includes('pairs: 500, warmup: 20,')),
+    gatedRealClick: source.split('\n').some((line) => line.trim()
+      === 'const result = await realClickTripwireTimingProbe(CANARY, NONMATCH);'),
+    nonmatch2: /^const NONMATCH2 = flatCopy\(rotateFinalCharacter\(NONMATCH\)\);$/mu.test(source)
+      && !/const\s+NONMATCH2\s*=\s*rotateFinalCharacter\(NONMATCH\)/u.test(source),
+  };
+}
+
+function pinsEntryNames(source: string): boolean {
+  return timingConstantText(source, "ENTRY_NAMES", "\\] as const;") === [
+    "const ENTRY_NAMES = [",
+    "  'fill-short-vs-long',",
+    "  'queued-short-vs-long',",
+    "  'reflection-equal-length',",
+    "  'tripwire-match-vs-no-match',",
+    "  'tripwire-real-click-match-vs-no-match',",
+    "  'real-listener-click',",
+    "  'tripwire-batched-injected-bias-control',",
+    "  'sensitivity-floor',",
+    "  'tripwire-match-vs-no-match-aa',",
+    "  'tripwire-match-vs-no-match-sham',",
+    "  'tripwire-real-click-match-vs-no-match-aa',",
+    "  'tripwire-real-click-match-vs-no-match-sham',",
+    "  'tripwire-real-click-bias-250us',",
+    "  'tripwire-real-click-bias-1000us',",
+    "] as const;",
+  ].join('\n');
+}
+
+function pinsTaskTitles(source: string): boolean {
+  return timingConstantText(source, "TASK_TITLE_TO_ENTRY", "\\};") === [
+    "const TASK_TITLE_TO_ENTRY: Readonly<Record<string, string>> = {",
+    "  'kills secret-length-dependent fill latency after asserting exact result equality': 'fill-short-vs-long',",
+    "  'kills secret-length-dependent mutex occupancy with an immediately queued control': 'queued-short-vs-long',",
+    "  'kills a content-dependent reflection oracle with equal-length caller traffic': 'reflection-equal-length',",
+    "  'kills match-dependent tripwire timing through composeSupervisedHost': 'tripwire-match-vs-no-match',",
+    "  'kills match-dependent tripwire timing on a real supervised browser fill call': 'tripwire-real-click-match-vs-no-match',",
+    "  'kills content-dependent request-listener work on the real supervised click path': 'real-listener-click',",
+    "  'reports a path-specific 2us-per-call injected-bias control rejected by the family gate': 'tripwire-batched-injected-bias-control',",
+    "  'reports the length-proportional fill-wrapper sensitivity floor': 'sensitivity-floor',",
+    "};",
+  ].join('\n');
+}
+
+function pinsProbeNames(source: string): boolean {
+  return timingConstantText(source, "PROBE_NAMES", "\\] as const;") === [
+    "const PROBE_NAMES = [",
+    "  'fill-short-vs-long',",
+    "  'queued-short-vs-long',",
+    "  'reflection-equal-length',",
+    "  'tripwire-match-vs-no-match',",
+    "  'tripwire-real-click-match-vs-no-match',",
+    "  'real-listener-click',",
+    "] as const;",
+  ].join('\n');
+}
+
+function pinsAssertFiniteProbeStatistics(source: string): boolean {
+  return timingFunctionText(source, "assertFiniteProbeStatistics") === [
+    "function assertFiniteProbeStatistics(result: ProbePResult): void {",
+    "  for (const value of [result.pValue, result.z, result.effectSize, result.medianDiffMs, result.p95AMs, result.p95BMs]) {",
+    "    expect(Number.isFinite(value)).toBe(true);",
+    "  }",
+    "  for (const samples of [result.aSamplesMs, result.bSamplesMs, result.differencesMs]) {",
+    "    expect(samples.length === 500).toBe(true);",
+    "    expect(samples.every(Number.isFinite)).toBe(true);",
+    "  }",
+    "}",
+  ].join('\n');
+}
+
+function pinsRecordDiagnosticOutcomes(source: string): boolean {
+  return timingFunctionText(source, "recordDiagnosticOutcomes") === [
+    "function recordDiagnosticOutcomes(name: string, result: ProbePResult): void {",
+    "  let hardClause: 'pass' | 'fail' = 'pass';",
+    "  let singleProbeFamily: 'accept' | 'reject' = 'accept';",
+    "  try { assertProbeHardClause(result); } catch { hardClause = 'fail'; }",
+    "  try {",
+    "    assertProbeFamily(new Map([[name, result]]), { alpha: 0.01, expected: [name] });",
+    "  } catch { singleProbeFamily = 'reject'; }",
+    "  diagnosticResults.set(name, { result, hardClause, singleProbeFamily });",
+    "}",
+  ].join('\n');
+}
+
+function pinsRecordDiagnostic(source: string): boolean {
+  return timingFunctionText(source, "recordDiagnostic") === [
+    "function recordDiagnostic(name: string, result: ProbePResult, rejection?: string): void {",
+    "  try {",
+    "    recordDiagnosticOutcomes(name, result);",
+    "    if (rejection !== undefined) {",
+    "      diagnosticResults.set(name, { ...diagnosticResults.get(name)!, singleProbeFamily: rejection ? 'reject' : 'accept' });",
+    "    }",
+    "  } catch (error) { console.error(error); }",
+    "}",
+  ].join('\n');
+}
+
+function timingSourceChecks(source: string): Record<string, boolean> {
+  return {
+    ...pinsProbeIsolation(source), ...pinsTripwireHelpers(source),
+    entryNames: pinsEntryNames(source), taskTitles: pinsTaskTitles(source), probeNames: pinsProbeNames(source),
+    diagnosticStatistics: pinsDiagnosticStatistics(source), diagnosticConstruction: pinsDiagnosticConstruction(source),
+    finiteHelper: pinsAssertFiniteProbeStatistics(source), outcomesHelper: pinsRecordDiagnosticOutcomes(source),
+    recordingHelper: pinsRecordDiagnostic(source),
+    syntheticRecording: pinsSyntheticRecording(source),
+  };
+}
+
+function pinsSyntheticRecording(source: string): boolean {
+  const body = source.match(/^  it\('reports a path-specific[\s\S]*?^  \}, 180_000\);/mu)?.[0] ?? '';
+  return body.includes(['    }', '    recordDiagnostic(name, result, rejection);',
+    '    console.info(`${name}: p=${result.pValue} aggregateBiasUs=${2 * TRIPWIRE_BATCH} rejected=${rejection}`);',
+    '    expect(rejection).toBe(`Probe P family rejected: ${name} (p=${result.pValue} <= 0.01 at rank 1 of 1)`);',
+  ].join('\n'));
+}
+
+function timingSourceMutations(source: string) {
+  const reporter = ['report', '('].join('');
+  const family = ['assertProbeFamily', '(probeResults,'].join('');
+  const diagnostic = "  it('tripwire-match-vs-no-match-aa', async () => {";
+  const options = '{ alpha: 0.01, expected: PROBE_NAMES }';
+  const mutations: [string, string, string][] = [
+    ['reportCalls', 'twin reported as gated', source.replace(reporter + "'fill-short-vs-long'", reporter + "'tripwire-match-vs-no-match-aa'")],
+    ['probeWrites', 'diagnostic writes gate map', source.replace(diagnostic, diagnostic + '\n    ' + ['probeResults', '.set(name, result);'].join(''))],
+    ['gatedFamily', 'gate derives expected names', source.replace(family + ' ' + options, family + ' { alpha: 0.01, expected: [...map.keys()] }')],
+    ['recomputedFamily', 'recompute derives expected names', source.replace('assertProbeFamily(new Map(' + 'probeResults), ' + options,
+      'assertProbeFamily(new Map(' + 'probeResults), { alpha: 0.01, expected: [...map.keys()] }')],
+    ['separateMaps', 'diagnostics merged into gate', source.replace(family, 'assertProbeFamily(new Map([...probeResults, '
+      + '...diagnosticResults]),')],
+    ['diagnosticNamesExcluded', 'twin inserted in family', source.replace('const PROBE_NAMES = [', "const PROBE_NAMES = [\n  'tripwire-match-vs-no-match-aa',")],
+    ['probeNames', 'gated name removed', source.replace("  'fill-short-vs-long',", '')],
+    ['entryNames', 'entry order swapped', source.replace("const ENTRY_NAMES = [\n  'fill-short-vs-long',\n  'queued-short-vs-long',",
+      "const ENTRY_NAMES = [\n  'queued-short-vs-long',\n  'fill-short-vs-long',")],
+    ['taskTitles', 'gated title changed', source.replace("  'kills secret-length-dependent fill latency after asserting exact result equality':", "  'wrong title':")],
+    ['nonmatch2', 'bare rotation', source.replace(/^const NONMATCH2 = .*;$/mu,
+      ['const NONMATCH2 = ', 'rotateFinalCharacter(NONMATCH);'].join(''))],
+    ['diagnosticConstruction', 'sham arm B duplicates A', source.replace('await tripwireTimingProbe(NONMATCH, NONMATCH2);', 'await tripwireTimingProbe(NONMATCH, NONMATCH);')],
+    ['realWrapper', 'extra promise hook layer', source.replace('.then(afterB),', '.then(() => afterB()),')],
+    ['realWrapper', 'arm B loses hook', source.replace('.then(afterB),', '.then(NO_HOOK),')],
+    ['helperCalls', 'second synthetic batch', source.replace('await runTripwireBatch(host);', 'await runTripwireBatch(host); await runTripwireBatch(host);')],
+    ['finiteHelper', 'finite helper adds threshold', source.replace('function assertFiniteProbeStatistics(result: ProbePResult): void {',
+      'function assertFiniteProbeStatistics(result: ProbePResult): void {\n  expect(result.pValue).toBeGreaterThan(0.01);')],
+    ['recordingHelper', 'recording catch removed', source.replace(timingFunctionText(source, 'recordDiagnostic'),
+      'function recordDiagnostic(name: string, result: ProbePResult): void {\n  recordDiagnosticOutcomes(name, result);\n}')],
+    ['outcomesHelper', 'outcome catch removed', source.replace("try { assertProbeHardClause(result); } catch { hardClause = 'fail'; }", 'assertProbeHardClause(result);')],
+  ];
+  for (const statement of ['expect(result.pValue > 0.01).toBe(true);', 'assertAnotherStatistic(result);',
+    "expect(result.hardClause).toBe('pass');", "expect(result.singleProbeFamily).toBe('accept');"]) {
+    mutations.push(['diagnosticStatistics', statement, source.replace(diagnostic, diagnostic + '\n    ' + statement)
+      + '\nfunction assertAnotherStatistic(result: ProbePResult) { expect(result.pValue).toBeGreaterThan(0.01); }']);
+  }
+  for (const token of ['assertProbeHardClause(result);', 'assertProbeFamily(new Map(), { expected: [] });', 'try {} catch {}']) {
+    mutations.push(['helperBoundary', token, source.replace('async function tripwireTimingProbe(payloadA: string, payloadB: string): Promise<ProbePResult> {',
+      'async function tripwireTimingProbe(payloadA: string, payloadB: string): Promise<ProbePResult> {\n  ' + token)]);
+  }
+  return [...mutations, ...timingConstructionMutations(source)];
+}
+
+function timingConstructionMutations(source: string): [string, string, string][] {
+  return [
+    ['helperSampling', '499 pairs', source.replace('pairs: 500, warmup: 20,', 'pairs: 499, warmup: 20,')],
+    ['helperSampling', '19 warmups', source.replace('pairs: 500, warmup: 20,', 'pairs: 500, warmup: 19,')],
+    ['gatedRealClick', 'gated caller adds bias', source.replace('await realClickTripwireTimingProbe(CANARY, NONMATCH);',
+      'await realClickTripwireTimingProbe(CANARY, NONMATCH, { afterB: () => spinForMicroseconds(2) });')],
+    ['syntheticRecording', 'synthetic raw recording omitted', source.replace('    recordDiagnostic(name, result, rejection);', '')],
+    ['diagnosticStatistics', 'diagnostic recording omitted', source.replace('    recordDiagnostic(name, result);', '')],
+    ['diagnosticStatistics', 'structural check omitted', source.replace('    assertFiniteProbeStatistics(result);', '')],
+    ['diagnosticStatistics', 'entry check omitted', source.replace('    expect(diagnosticResults.has(name)).toBe(true);', '')],
+    ['diagnosticStatistics', 'title and recording name differ', source.replace("    const name = 'tripwire-match-vs-no-match-aa';", "    const name = 'wrong-entry';")],
+    ['diagnosticConstruction', 'sham uses empty transform set', source.replace('new Set(SECRET_TRANSFORM_NAMES)', 'new Set([])')],
+  ];
+}
 
 function timingLabel(payload: string): string {
   const shaped = `${TIMING_PREFIX}${payload}${TIMING_SUFFIX}`;
