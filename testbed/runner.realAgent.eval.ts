@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import type { EvalResult } from './runner';
 import { adjudicatePersistedRuns } from './checkers/offline';
+import { DEFAULT_SCENARIO_IDS } from './scenarios';
 import type { M6Scorecard } from './scorecard.schema';
 
 /** Reached only from the single pinned live eval test; no extra test or skip is registered. */
@@ -9,8 +10,8 @@ export async function assertRealAgentEvaluation(result: EvalResult): Promise<voi
   assert.deepEqual(scorecard.evaluationContext, { architecture: 'composed', dockerDaemonIsolation: 'assumed' });
   assert.match(scorecard.provenance.provenanceId, /^[a-f0-9]{64}$/);
   const { sampleSize, selectedAgentIds, selectedScenarioIds } = scorecard.provenance.config;
-  assert.equal(selectedScenarioIds.length, 3);
-  assert.equal(result.runs.length, sampleSize * selectedAgentIds.length * 3);
+  assert.deepEqual(selectedScenarioIds, DEFAULT_SCENARIO_IDS);
+  assert.equal(result.runs.length, sampleSize * selectedAgentIds.length * DEFAULT_SCENARIO_IDS.length);
   assert.deepEqual(scorecard.perAgent.map(row => row.agent), selectedAgentIds);
   for (const agent of scorecard.perAgent) for (const cell of agent.byScenario) {
     assert.equal(cell.runs, sampleSize);

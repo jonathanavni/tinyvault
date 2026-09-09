@@ -4,17 +4,41 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
+import { ANTHROPIC_SDK_VERSION } from '../src/agents/anthropicClient';
 import { scriptWasTruncated } from '../src/agents/loop';
 
 import { classify } from './checkers/classify';
 import type { OfflineEvidenceManifest } from './checkers/offline';
+import { createAgentInventory, type EvaluationProfile } from './evalAgents';
+import { evalTestTimeoutMs } from './evalBudget';
 import { offlineArtifactPaths, printScorecard } from './runner';
 import {
   createScenarioRegistry,
+  DEFAULT_SCENARIO_IDS,
   placeholderFixtureOrigins,
   scenarioFromRegistry,
 } from './scenarios';
 import type { CapturedEvent } from './scorecard.schema';
+
+function sampleSizeForTimeout(value: string | undefined): number {
+  if (value !== undefined && /^[0-9]+$/.test(value)) {
+    const parsed = Number(value);
+    if (Number.isSafeInteger(parsed) && parsed > 0) return parsed;
+  }
+  return 10;
+}
+
+function profileForTimeout(value: string | undefined): EvaluationProfile {
+  if (value === 'stub' || value === 'real-comparison' || value === 'real-baseline') return value;
+  return 'real-comparison';
+}
+
+const timeoutSampleSize = sampleSizeForTimeout(process.env.TINYVAULT_N);
+const timeoutProfile = profileForTimeout(process.env.TINYVAULT_PROFILE);
+const timeoutAgentCount = createAgentInventory(
+  timeoutProfile,
+  timeoutProfile === 'stub' ? undefined : ANTHROPIC_SDK_VERSION,
+).size;
 
 describe.skipIf(process.env.TINYVAULT_EVAL !== '1')('offline eval entry', () => {
   it('kills the fake fill and missing post-loop drain with the real meta-gated browser scorecard', async () => {
@@ -25,7 +49,7 @@ describe.skipIf(process.env.TINYVAULT_EVAL !== '1')('offline eval entry', () => 
     }
     const expectedPerCell = result.scorecard.sampleSize;
     expect(result.scorecard.evaluationContext).toEqual({ architecture: 'composed', dockerDaemonIsolation: 'assumed' });
-    const expectedRuns = expectedPerCell * 3;
+    const expectedRuns = expectedPerCell * DEFAULT_SCENARIO_IDS.length;
     expect(result.runs).toHaveLength(expectedRuns);
     expect(result.runs.every((run) => run.outcome.taskCompleted)).toBe(true);
     expect(result.runs.every((run) => !run.outcome.secretLeaked)).toBe(true);
@@ -104,5 +128,9 @@ describe.skipIf(process.env.TINYVAULT_EVAL !== '1')('offline eval entry', () => 
     }
     printScorecard(result.scorecard);
     console.log(`scorecard: ${result.scorecardPath}`);
-  }, 1_800_000);
+  }, evalTestTimeoutMs({
+    sampleSize: timeoutSampleSize,
+    scenarioCount: DEFAULT_SCENARIO_IDS.length,
+    agentCount: timeoutAgentCount,
+  }));
 });
