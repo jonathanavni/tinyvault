@@ -41,6 +41,12 @@ const GOLDEN = JSON.parse(readFileSync(
   'utf8',
 )) as GoldenFile;
 const FAMILY_NAMES = Object.freeze(Object.keys(GOLDEN.holm[0]!.pValues));
+const GOLDEN_FAMILY_MESSAGES = Object.freeze([
+  'Probe P family rejected: fill-short-vs-long (p=0.0009 <= 0.0016666666666666668 at rank 1 of 6)',
+  'Probe P family rejected: fill-short-vs-long (p=0.0009 <= 0.0016666666666666668 at rank 1 of 6), '
+    + 'queued-short-vs-long (p=0.0015 <= 0.002 at rank 2 of 6), '
+    + 'reflection-equal-length (p=0.0021 <= 0.0025 at rank 3 of 6)',
+]);
 
 /*
  * D10 mutant map (the quoted text is the named assertion below):
@@ -113,10 +119,13 @@ describe('probe P paired statistic', () => {
 });
 
 describe('probe P Holm-Bonferroni family gate', () => {
-  it.each(GOLDEN.holm)('rejects exactly the pinned Holm vector %#', (vector) => {
+  it.each(GOLDEN.holm.map((vector, index) => ({
+    vector,
+    expectedMessage: GOLDEN_FAMILY_MESSAGES[index]!,
+  })))('rejects exactly the pinned Holm vector %#', ({ vector, expectedMessage }) => {
     const entries = Object.entries(vector.pValues).map(([name, pValue]) => ({ name, pValue }));
     const message = familyError(entries, { alpha: vector.alpha, expected: Object.keys(vector.pValues) });
-    expect(message).toBe(`Probe P family rejected: ${vector.rejected.join(', ')}`);
+    expect(message).toBe(expectedMessage);
     vector.thresholdsInOrder?.forEach((threshold, index) => {
       expectWithin1e9(vector.alpha / (entries.length - index), threshold);
     });
@@ -126,7 +135,34 @@ describe('probe P Holm-Bonferroni family gate', () => {
     const vector = GOLDEN.holm[0]!;
     const entries = Object.entries(vector.pValues).map(([name, pValue]) => ({ name, pValue }));
     expect(familyError(entries, { expected: Object.keys(vector.pValues) }))
-      .toBe(`Probe P family rejected: ${vector.rejected.join(', ')}`);
+      .toBe(GOLDEN_FAMILY_MESSAGES[0]);
+  });
+
+  it('attaches alpha and ranked Holm details to a family rejection', () => {
+    const vector = GOLDEN.holm[0]!;
+    const entries = Object.entries(vector.pValues).map(([name, pValue]) => ({ name, pValue }));
+    expect(familyFailure(entries, { alpha: vector.alpha, expected: Object.keys(vector.pValues) }))
+      .toMatchObject({
+        name: 'ProbeFamilyError',
+        details: {
+          alpha: 0.01,
+          rejected: [
+            { name: 'fill-short-vs-long', pValue: 0.0009,
+              threshold: 0.0016666666666666668, rank: 1 },
+          ],
+          ordered: [
+            { name: 'fill-short-vs-long', pValue: 0.0009,
+              threshold: 0.0016666666666666668, rank: 1 },
+            { name: 'queued-short-vs-long', pValue: 0.003, threshold: 0.002, rank: 2 },
+            { name: 'reflection-equal-length', pValue: 0.004, threshold: 0.0025, rank: 3 },
+            { name: 'tripwire-match-vs-no-match', pValue: 0.02,
+              threshold: 0.0033333333333333335, rank: 4 },
+            { name: 'tripwire-real-click-match-vs-no-match', pValue: 0.2,
+              threshold: 0.005, rank: 5 },
+            { name: 'real-listener-click', pValue: 0.9, threshold: 0.01, rank: 6 },
+          ],
+        },
+      });
   });
 
   it('passes a seeded identical-condition null control for all six probes', () => {
@@ -153,7 +189,7 @@ describe('probe P Holm-Bonferroni family gate', () => {
     expect(familyError(new Map([['biased-operation', result]]), {
       alpha: 0.01,
       expected: ['biased-operation'],
-    })).toBe('Probe P family rejected: biased-operation');
+    })).toBe(`Probe P family rejected: biased-operation (p=${result.pValue} <= 0.01 at rank 1 of 1)`);
   });
 
   it('still rejects the real-timing +0.25 ms spin-loop control at 500 pairs', async () => {
@@ -167,7 +203,7 @@ describe('probe P Holm-Bonferroni family gate', () => {
     expect(familyError(new Map([['biased-operation', result]]), {
       alpha: 0.01,
       expected: ['biased-operation'],
-    })).toBe('Probe P family rejected: biased-operation');
+    })).toBe(`Probe P family rejected: biased-operation (p=${result.pValue} <= 0.01 at rank 1 of 1)`);
   });
 
   it.each([
@@ -176,7 +212,7 @@ describe('probe P Holm-Bonferroni family gate', () => {
   ] as const)('rejects one p %s alpha/6', (_name, pValue) => {
     const results = familyMap({ [FAMILY_NAMES[0]!]: pValue });
     expect(familyError(results, { alpha: 0.01, expected: FAMILY_NAMES }))
-      .toBe(`Probe P family rejected: ${FAMILY_NAMES[0]}`);
+      .toBe(familyMessage([{ name: FAMILY_NAMES[0]!, pValue, threshold: 0.01 / 6, rank: 1 }], 6));
   });
 
   it.each(Array.from({ length: 6 }, (_, index) => index))(
@@ -187,7 +223,9 @@ describe('probe P Holm-Bonferroni family gate', () => {
         probeResult(index <= step ? 0.01 / (6 - index) : 1),
       ]));
       expect(familyError(atBoundary, { alpha: 0.01, expected: FAMILY_NAMES }))
-        .toBe(`Probe P family rejected: ${FAMILY_NAMES.slice(0, step + 1).join(', ')}`);
+        .toBe(familyMessage(FAMILY_NAMES.slice(0, step + 1).map((name, index) => ({
+          name, pValue: 0.01 / (6 - index), threshold: 0.01 / (6 - index), rank: index + 1,
+        })), 6));
 
       const justAbove = new Map(FAMILY_NAMES.map((name, index) => [
         name,
@@ -196,7 +234,9 @@ describe('probe P Holm-Bonferroni family gate', () => {
       ]));
       const expected = step === 0
         ? undefined
-        : `Probe P family rejected: ${FAMILY_NAMES.slice(0, step).join(', ')}`;
+        : familyMessage(FAMILY_NAMES.slice(0, step).map((name, index) => ({
+          name, pValue: 0.01 / (6 - index), threshold: 0.01 / (6 - index), rank: index + 1,
+        })), 6);
       expect(familyError(justAbove, { alpha: 0.01, expected: FAMILY_NAMES })).toBe(expected);
     },
   );
@@ -287,13 +327,28 @@ function familyError(
   results: Parameters<typeof assertProbeFamily>[0],
   options: Parameters<typeof assertProbeFamily>[1],
 ): string | undefined {
+  return familyFailure(results, options)?.message;
+}
+
+function familyFailure(
+  results: Parameters<typeof assertProbeFamily>[0],
+  options: Parameters<typeof assertProbeFamily>[1],
+): Error | undefined {
   try {
     assertProbeFamily(results, options);
     return undefined;
   } catch (error) {
     if (!(error instanceof Error)) throw error;
-    return error.message;
+    return error;
   }
+}
+
+function familyMessage(
+  rejected: readonly Readonly<{ name: string; pValue: number; threshold: number; rank: number }>[],
+  total: number,
+): string {
+  return `Probe P family rejected: ${rejected.map(({ name, pValue, threshold, rank }) =>
+    `${name} (p=${pValue} <= ${threshold} at rank ${rank} of ${total})`).join(', ')}`;
 }
 
 function familyMap(overrides: Readonly<Record<string, number>>): Map<string, ProbePResult> {
