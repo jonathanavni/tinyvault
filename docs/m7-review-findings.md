@@ -324,3 +324,33 @@ dispatched (Sol, `packet-H-fix-r2.md`)**: recompute the predicate from `host-sta
 rev 3.1 root/family/ranked-entry validation; analysis refuses until every one of the 20 labels has started;
 per-candidate pointers with fail-closed write order and an explicit `--new-campaign` flag; refusals appended under
 `run-NN/refusals/` and `start` re-entrant over a refusal-only directory.
+
+**Harness fix round 2 delivered and committed (`429b80c`, +429/−59 over `0dad855`):** all four P1 and the P2 of Sol R2
+closed with tests — the analyzer requires valid non-empty process evidence and recomputes the frozen predicate from
+`host-state.json` (`predicate-verdict-mismatch` on disagreement); full rev 3.1 root, typed Holm `details` and
+ranked-entry validation (gated names, p in [0,1], positive ranks, `rejected ⊆ ordered`); analysis refuses unless all
+20 frozen labels have started (`--allow-partial` only for synthetic `--plan` records; the runner never passes it);
+per-candidate `{ out, createdAt }` pointers written after `campaign.json` with fail-closed recovery and an explicit
+`--new-campaign` flag the README ties to new user authorization; refusals appended under `run-NN/refusals/`, a
+refusal-only directory resumable, stray content refused, refusal counts reported as context. Owner-verified: 79/79,
+both boundary gates PASS, `bash -n` clean, no capability imports. Sol round 3 (cap) dispatched with P1 criteria up front.
+
+**C2 fix round 2 (cap) delivered and committed on the branch:** the load-bearing text pins replaced by
+TypeScript-checker-resolved scans — every reference to vitest's `it`/`test`/`describe`/hooks must be a direct
+literal-titled registration at its pinned position (three exact positional exceptions approved by the owner during the
+round: the lifecycle `it.each`, the lifecycle `afterEach`, the family test's pre-existing `const biased = new
+Map(probeResults)`), and every reference to the two map bindings must be an enumerated usage site; aliases, computed
+members, template titles, a second describe, unicode-escaped identifiers, destructuring, element access and
+`Reflect.get` flip a predicate. 32 predicates, 123 named mutants, program + checker 271 ms, main-partition re-execution
+8.2 s. Owner-verified: tsc; 143/143; both boundary gates PASS; `git diff 35ed844..` removes no line outside pin code;
+browser run 26/26, sidecar complete, pin test 4.4 s in-browser; **the 1,000 µs control rejected in all three owner
+runs (run 1, fix-1 run, fix-2 run) — the stop rule is not triggered.** Sol round 3 (cap) dispatched with P1 criteria.
+
+**Harness Sol R3 (cap, `review-harness-sol-r3-report.md`): NEEDS-ATTENTION — 4 of 5 round-2 items closed; R2-P1-2
+still open** (validator admits a missing `sequence`, out-of-range p-values, `rejected: []` under status reject, and Holm
+details inconsistent with the measured entries) plus a P2 (partition counters coerced). **Cap-round owner correction
+dispatched (`packet-H-cap-correction.md`)**: entry `sequence` required, p-values in [0, 1], Holm details validated
+structurally and recomputed over the six measured gated p-values with a `family-verdict-mismatch` reason, partition
+reports require consistent integer counters. Residuals recorded: candidate pointers are ignored checkout-local state;
+campaign evidence is not authenticated against manual modification (the documented operating contract is part of the
+trust boundary); a precisely timed interruption of the pointer temp write can wedge recovery (availability only).
