@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { EXPECTED_TEST_COMMANDS, EXPECTED_DOCKER_COMMANDS, REPORTS, DOCKER_REPORT, START_FILE, EVAL_REPORT, EVAL_START_FILE, EXPECTED_EVAL_COMMAND } from './test-contract.mjs';
+import { EXPECTED_TEST_COMMANDS, EXPECTED_DOCKER_COMMANDS, REPORTS, DOCKER_REPORT, START_FILE, EVAL_REPORT, EVAL_START_FILE,
+  EXPECTED_EVAL_COMMAND, EXPECTED_BASELINE_COMMAND, EXPECTED_EVAL_STUB_COMMAND } from './test-contract.mjs';
 // Independent rule inventory: equality in both directions is checked by rootOfTrust.test.ts too.
 export const ENTRY_MUTANTS = [
   ['lifecycle', (d) => { d.scripts.pretest = 'echo bypass'; }],
@@ -10,7 +11,10 @@ export const ENTRY_MUTANTS = [
   ['test-commands', (d) => { d.scripts.test = d.scripts.test.split(' && ').slice(1).join(' && '); }],
   ['docker-commands', (d) => { d.scripts['test:docker'] += ' --passWithNoTests'; }],
   ['eval-commands', (d) => { d.scripts.eval = d.scripts.eval.split(' && ').slice(1).join(' && '); }],
+  ['baseline-commands', (d) => { d.scripts.baseline = d.scripts.baseline.split(' && ').slice(1).join(' && '); }],
+  ['eval-stub-commands', (d) => { d.scripts['eval:stub'] = d.scripts['eval:stub'].split(' && ').slice(1).join(' && '); }],
   ['make-eval', (d) => { d.makefile += 'eval:\n\tnpm run eval\n'; }],
+  ['make-baseline', (d) => { d.makefile += 'baseline:\n\tnpm run baseline\n'; }],
   ['eval-config', (d) => { d.configs['vitest.eval.config.ts'] = d.configs['vitest.eval.config.ts'].replace('runner.eval.test.ts', 'runner.test.ts'); }],
   ['make-test', (d) => { d.makefile = 'test: bypass\n\tnpm run test\n'; }],
   ['config-files', (d) => { d.configs['nested/vite.config.cjs'] = 'module.exports = {}'; }],
@@ -23,8 +27,9 @@ export const ENTRY_MUTANTS = [
 ];
 export const ENTRY_MUTANT_CODES = [...ENTRY_MUTANTS.map(([code]) => code), 'report-reset'];
 export function entryFixture() {
-  return { scripts: { test: EXPECTED_TEST_COMMANDS.join(' && '), 'test:docker': EXPECTED_DOCKER_COMMANDS.join(' && '), eval: EXPECTED_EVAL_COMMAND },
-    makefile: 'test:\n\tnpm run test\n\neval:\n\tnpm run eval\n', configs: {
+  return { scripts: { test: EXPECTED_TEST_COMMANDS.join(' && '), 'test:docker': EXPECTED_DOCKER_COMMANDS.join(' && '),
+    eval: EXPECTED_EVAL_COMMAND, baseline: EXPECTED_BASELINE_COMMAND, 'eval:stub': EXPECTED_EVAL_STUB_COMMAND },
+    makefile: 'test:\n\tnpm run test\n\neval:\n\tnpm run eval\n\nbaseline:\n\tnpm run baseline\n', configs: {
       'vitest.config.ts': "import { configDefaults } from 'vitest/config'; export default { test: { setupFiles: ['./testbed/docker/no-docker.setup.ts'], exclude: [...configDefaults.exclude, 'testbed/docker/composed.docker.test.ts'] } };",
       'vitest.eval.config.ts': "export default { test: { include: ['testbed/runner.eval.test.ts'] } };",
       'vitest.docker.config.ts': "export default { test: { include: ['testbed/docker/composed.docker.test.ts'] } };",
@@ -47,10 +52,15 @@ export function entrySelftest(check, reset, rules) {
     const document = entryFixture(); document.makefile = makefile;
     assert.throws(() => check(document), { message: 'make-test' });
   }
-  for (const key of ['preeval', 'posteval']) {
+  for (const [key, code] of [['preeval', 'eval-commands'], ['posteval', 'eval-commands'],
+    ['prebaseline', 'baseline-commands'], ['postbaseline', 'baseline-commands'],
+    ['preeval:stub', 'eval-stub-commands'], ['posteval:stub', 'eval-stub-commands']]) {
     const d = entryFixture(); d.scripts[key] = 'echo bypass';
-    assert.throws(() => check(d), { message: 'eval-commands' });
+    assert.throws(() => check(d), { message: code });
   }
+  const extendedBaseline = entryFixture();
+  extendedBaseline.makefile = extendedBaseline.makefile.replace('\tnpm run baseline\n', '\tnpm run baseline\n\techo bypass\n');
+  assert.throws(() => check(extendedBaseline), { message: 'make-baseline' });
   const removedAudit = entryFixture(); removedAudit.scripts.eval = removedAudit.scripts.eval.split(' && ').slice(0, -1).join(' && ');
   assert.throws(() => check(removedAudit), { message: 'eval-commands' });
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tinyvault-entry-'));

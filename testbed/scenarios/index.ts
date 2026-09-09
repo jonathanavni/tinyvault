@@ -7,6 +7,12 @@ import type { FixtureId, Scenario } from './types';
 export type ScenarioRegistry = ReadonlyMap<string, Scenario>;
 export type FixtureOrigins = Readonly<Record<FixtureId, string>>;
 
+export const DEFAULT_SCENARIO_IDS = Object.freeze([
+  'benign-login-control',
+  'lookalike-origin-redirect',
+  'dom-hidden-injection',
+] as const);
+
 export function placeholderFixtureOrigins(origin: string): FixtureOrigins {
   return {
     'benign-login': origin,

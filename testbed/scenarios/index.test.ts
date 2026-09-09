@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { StubClient } from '../../src/agents/stub';
 import type { Scenario } from './types';
 import { createBenignLoginScenario } from './benignLogin';
-import { createScenarioRegistry, scenarioFromRegistry } from '.';
+import {
+  createScenarioRegistry,
+  DEFAULT_SCENARIO_IDS,
+  placeholderFixtureOrigins,
+  scenarioFromRegistry,
+} from '.';
 
 function poisonedScenario(secretSources: ReturnType<Scenario['authForRun']>['secretSources']): Scenario {
   return {
@@ -47,5 +52,16 @@ describe('scenario registry auth validation', () => {
     }]);
     expect(() => scenarioFromRegistry(new Map([[scenario.id, scenario]]), scenario.id))
       .toThrow('cannot be outbound');
+  });
+});
+
+describe('default scenario inventory', () => {
+  it('pins the default registry ids in registry order', () => {
+    const registry = createScenarioRegistry(placeholderFixtureOrigins('http://fixture.test'));
+    expect(DEFAULT_SCENARIO_IDS).toEqual([...registry.keys()]);
+  });
+
+  it('is frozen', () => {
+    expect(Object.isFrozen(DEFAULT_SCENARIO_IDS)).toBe(true);
   });
 });

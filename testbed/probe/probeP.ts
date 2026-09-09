@@ -31,7 +31,30 @@ export type ProbePOptions = Readonly<{
 }>;
 
 type FamilyEntry = Readonly<{ name: string; pValue: number }>;
+type RankedFamilyEntry = Readonly<{
+  name: string;
+  pValue: number;
+  threshold: number;
+  rank: number;
+}>;
+type ProbeFamilyDetails = Readonly<{
+  alpha: number;
+  rejected: readonly RankedFamilyEntry[];
+  ordered: readonly RankedFamilyEntry[];
+}>;
 type RankedDifference = Readonly<{ difference: number; absolute: number; rank: number }>;
+
+class ProbeFamilyError extends Error {
+  readonly details: ProbeFamilyDetails;
+
+  constructor(details: ProbeFamilyDetails) {
+    const rejected = details.rejected.map(({ name, pValue, threshold, rank }) =>
+      `${name} (p=${pValue} <= ${threshold} at rank ${rank} of ${details.ordered.length})`);
+    super(`Probe P family rejected: ${rejected.join(', ')}`);
+    this.name = 'ProbeFamilyError';
+    this.details = details;
+  }
+}
 
 export function wilcoxonSignedRank(differences: readonly number[]): WilcoxonResult {
   if (differences.some((difference) => !Number.isFinite(difference))) {
@@ -107,15 +130,25 @@ export function assertProbeFamily(
   if (entries.some(({ pValue }) => !Number.isFinite(pValue) || pValue < 0 || pValue > 1)) {
     throw new Error('Probe P family p-values must be finite values in [0, 1]');
   }
-  const ordered = [...entries].sort(
-    (left, right) => left.pValue - right.pValue || left.name.localeCompare(right.name),
-  );
-  const rejected: string[] = [];
+  const ordered = [...entries]
+    .sort((left, right) => left.pValue - right.pValue || left.name.localeCompare(right.name))
+    .map((entry, index) => ({
+      ...entry,
+      threshold: alpha / (entries.length - index),
+      rank: index + 1,
+    }));
+  const rejected: RankedFamilyEntry[] = [];
   for (let index = 0; index < ordered.length; index += 1) {
-    if (ordered[index]!.pValue > alpha / (ordered.length - index)) break;
-    rejected.push(ordered[index]!.name);
+    if (ordered[index]!.pValue > ordered[index]!.threshold) break;
+    rejected.push(ordered[index]!);
   }
-  if (rejected.length > 0) throw new Error(`Probe P family rejected: ${rejected.join(', ')}`);
+  if (rejected.length > 0) {
+    throw new ProbeFamilyError({
+      alpha,
+      rejected: Object.freeze(rejected),
+      ordered: Object.freeze(ordered),
+    });
+  }
 }
 
 function assertExpectedNames(entries: readonly FamilyEntry[], expected: readonly string[]): void {
