@@ -214,3 +214,93 @@ allowlisted; P2-6 `TASK_TITLE_TO_ENTRY` literal for the eight existing titles, d
 P2-7 best-effort direct-write fallback on atomic-write failure. Sol's residuals carried: syntactic pins can be
 aliased around (declared); process termination leaves an incomplete artifact (declared). **Paper ladder closed at
 the cap; rev 3 dispatched to Astra with D-1..D-4 pending the user's acceptance before merge.**
+
+## Campaign harness (packet H) — delivery, review and fix round 1 (2026-09-09, owner claude)
+
+Scope: `tools/probe-p-campaign/**` on `codex/probe-p-campaign-harness` (Sol worker). The worker **stopped correctly**
+at a gate boundary: the Docker-invocation gate scans every root and rejects `node:child_process` outside its exact
+allowlist, so a JavaScript runner could not spawn `make test`. Owner resolution without a gate change: every spawn
+moves into one bash script (`run.sh`), every JavaScript module stays pure (fs/path/crypto/os). Delivery `2ef2ffa`
+owner-verified: 25/25 Node tests, both boundary gates PASS, `bash -n` clean, no capability import under `tools/`.
+Read-only Sol review (`review-harness-sol-report.md`): NEEDS-ATTENTION, 6 P1 / 2 P2 — the "node/make from another
+checkout" clause unimplemented (`checkoutRoot` unused); a failed `ps` capture graded as no competitors; lax sidecar
+validation (aliases, duplicates, four-sample fixtures accepted); freeze not re-verified per run; run-set
+immutability gaps (deleted directory replaceable, second `--out` restarts, out-of-range `start`, analysis over any
+two-digit directory); a "≥ 80 %" threshold printed; coexistence proposal order; Chromium identity missing from the
+per-run capture. All accepted → **fix round 1** dispatched to the worker (`packet-H-fix-r1.md`) with per-finding
+tests and mutants; disposition follows on delivery.
+
+## C2 implementation — Astra delivery and owner acceptance runs (2026-09-09, owner claude)
+
+Astra (`gpt-6-astra`, `codex/probe-p-c2`, base `ca43cd9`) stopped once on a genuine contract defect in rev 3 (the
+ledger-failure sentinel keyed by `ledger.length + 1` collided with the next row) → owner correction rev 3.1 (monotonic
+counter; sentinel retains the task) → delivery `77b5414` (timing file +545/−88; `timing2Sidecar.ts` 188 lines + 12
+tests; `spin.ts` + 3 tests; committed fixture sidecar; D10 annotated per §2.1). Worker-reported: 50 Node tests, 33
+in-memory source mutations, 26 file-edit mutants, 2 D10 wording mutants, all restored byte-exact; static comparison
+against `4909ba8` (four unextracted gated tests, family gate, lifecycle section byte-identical; the synthetic control
+differs by its one recording statement; counts 7/1/1). **Owner verification:** tsc clean; 50/50; both boundary gates
+PASS (151 production modules). **Owner browser runs** (worktree, Chromium 151.0.7922.34):
+- **Run 1** (`c2-run1-*`): 26/26; sidecar `complete: true`, all 14 entries `measured` with 500-sample arms, `family
+  accept`, `otherTests 12`; twins quiet (`singleProbeFamily accept` ×4); real-click controls **reject at 250 µs
+  (p ≈ 3.3e-11, median +0.26 ms) and 1,000 µs (p = 0, median +0.98 ms)** — the stop rule is not triggered (run 1 of
+  3); partition 231 s (+66 s over `4909ba8`: two real-click twins ≈ 17.4 s each, two controls ≈ 17.5 s each,
+  synthetic twins < 0.4 s).
+- **M1** (A3 + ledger): one gated p forced to 0 in `report`, one ledger push forced to throw → the family test reds
+  with `ProbeFamilyError: Probe P family rejected: reflection-equal-length (p=0 <= 0.0016… at rank 1 of 6)` (full
+  message in the JSON report); sidecar `complete: true`, `family.reject` with full `details`; the forced entry is
+  `error/ledger-failed` **with its raw result**; no other test affected.
+- **M2** (A4 + A9 + synthetic control): a twin forced to throw → its entry `error: forced twin crash`, only that test
+  red (plus the pinned-source test, which correctly rejects the mutated body); a twin forced to `pValue 0 / median 5`
+  → `measured`, `hardClause fail`, `singleProbeFamily reject`, **no red**; the synthetic control's assertion forced red
+  → red with the original message and its raw result (n = 500) still in the sidecar; `family accept`.
+All mutants restored (`git status` clean). **A2, A3, A4, A9 demonstrated; A5 owner diff review done (matches the
+contract: gated bodies reduced to helper call + original `report`/hard-clause lines; helpers carry invariants, spies,
+finalization; `.then(NO_HOOK)` the only timed-window token change); A6–A8 by pins and gates.** Remaining before
+merge: A1 + §2.7 cost on three clean-clone `make test` runs (owner), the two blind code reviews (Astra adversarial +
+Opus security/QA, dispatched on `ca43cd9..77b5414`), and the user's acceptance of D-1..D-4.
+
+**C2 code review — Astra R1 (`review-c2-impl-astra-r1.md`): NEEDS-ATTENTION, 1 P1 / 1 P2, seven "checked and found
+sound" (A5 equivalence against `4909ba8` incl. the four byte-identical unextracted bodies; sidecar lifecycle and ledger;
+family recomputation with literal options; twins/controls/D-1; sidecar module and fixture; no new spawn/skip; D10 text).**
+P1: the diagnostic-body statistic scan allows an alias — `{ const expect = assertProbeHardClause; expect(result); }`
+passes all 21 predicates and 33 mutation checks while adding a statistical acceptance criterion. P2: the two-map pin does
+not establish map identity — `const sharedResults = probeResults; const diagnosticResults = sharedResults as unknown as
+Map<…>` passes and would contaminate the recomputation. Both accepted as round-1 fixes (pins hardened to literal
+statement allowlists for diagnostic bodies and exact declaration pins + alias/cast bans for the maps), folded with the
+Opus channel's findings into one fix round.
+
+**C2 code review — Opus 5 security/QA R1 (`review-c2-impl-opus-r1.md`): NEEDS-ATTENTION, 0 P1 / 5 P2 / 3 P3; A5 and
+every lifecycle question sound; security angle: no path by which a red means less, a real channel is routed into a
+diagnostic, or the sidecar argues a red away; the twins' constants cannot perturb the gated payload construction.**
+P2s are all pin-narrowness in the same family as Astra's alias findings: the statistic identifier list omits the
+latency fields (`p95AMs`, `p95BMs`, `aSamplesMs`, `bSamplesMs`, `differencesMs`); the scan is suffix-scoped so a
+seventh diagnostic under another name is unscanned; the two helpers sit outside every scan and outside the
+alias-reachable two-map rule; the synthetic gated caller line is unpinned where the real-click one is; the title map is
+pinned against a copy of itself so a renamed gated title composes as "not reached" while carrying its raw result.
+P3s: floor recording not wrapped; one unguarded statement in the ledger hook; `commit` null in worktree runs (by
+design — the campaign's `host-state.json` is the SHA authority). **Fix round 1 (Astra, `packet-C2-fix-r1.md`):**
+literal statement allowlists for every diagnostic body; exact map declarations with alias/cast bans and an enumerated
+line allowlist for both identifiers; "diagnostic" defined as every `it` in the H describe outside the eleven pinned
+titles; both helper bodies byte-pinned; the synthetic gated caller line pinned; the title map checked against the
+parsed `it` titles; floor recording and the ledger hook made fully non-throwing. No gated measurement code changes.
+
+**Harness fix round 1 delivered and committed (`0dad855`, +675/−176 over `2ef2ffa`).** All six P1 and both P2 of the Sol
+review closed with tests: other-checkout `node`/`make` predicate clause (`checkoutRoot` used); `processCapture`
+status → `predicateEvidence: unavailable` invalidates the run; strict rev 3.1 sidecar validation (constants, the exact
+14-entry sequence and kinds, 500-value arrays, finite statistics, floor/control fields, family shape); per-run
+re-verification of HEAD, cleanliness, harness and policy digests with `refused.json` on refusal; immutable run set
+(`labels`, `startedLabels`, pointer file, out-of-range/duplicate refusals, deleted evidence makes the campaign
+unresumable, unexpected directories reported and ignored); sign threshold printed as `n of V (⌈0.8·V⌉ = k)`;
+coexistence proposals ordered audit-first; Chromium identity captured per run. Owner-verified: 58/58, both boundary
+gates PASS, `bash -n` clean, no capability import under `tools/`. Awaiting a Sol read-only round 2 before merge.
+
+**C2 fix round 1 (Astra) delivered and committed on the branch:** 30 predicates / 61 named mutants (literal
+statement allowlists for every diagnostic body incl. the `expect`-alias, latency-field and comment mutants; exact map
+declarations with alias/cast bans and an enumerated reference allowlist, the pre-existing `timingFillOutcome`
+`as unknown` cast exempted by exact line; diagnostics defined as every `it` in the H describe outside the ten pinned
+non-diagnostic titles — the packet said eleven, the enumerated list is ten, corrected; both helper bodies byte-pinned;
+the synthetic gated caller line pinned; the title map checked against the parsed `it` titles; floor and ledger
+recording fully non-throwing). One implementer question answered by the owner (keep the helper untouched; exempt the
+line). Owner-verified: tsc, 81/81, both boundary gates PASS; browser run 26/26, sidecar complete, 1,000 µs control
+rejects (stop-rule run 2 of 3, both rejections). Sol round-2 read-only review dispatched on the fix range; the three
+clean-clone `make test` cost gates follow on an idle host.
