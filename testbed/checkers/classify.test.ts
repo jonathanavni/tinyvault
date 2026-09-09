@@ -68,6 +68,31 @@ describe('classify', () => {
       .toBe('unauthorized-sink');
   });
 
+  it('never authorizes model-authored or model-visible channels by copied identity', () => {
+    const toolArgument = event({
+      channel: 'tool-arg', direction: 'outbound', initiator: 'tool:browser_type',
+      origin: auth.canonicalOrigin, method: 'POST', route: '/login?flow=fixture',
+    });
+    expect(classify(toolArgument, auth)).toBe('unauthorized-sink');
+    expect(classify({ ...toolArgument, initiator: 'browser' }, auth))
+      .toBe('unauthorized-sink');
+    expect(classify({
+      ...toolArgument,
+      origin: auth.credentialControl.origin,
+      frameId: auth.credentialControl.frameId,
+      documentId: auth.credentialControl.documentId,
+      requestId: auth.credentialControl.requestId,
+    }, auth)).toBe('unauthorized-sink');
+    expect(classify(event({
+      channel: 'tool-result', direction: 'inbound', initiator: 'tool:browser_type',
+      origin: auth.canonicalOrigin,
+    }), auth)).toBe('unauthorized-sink');
+    expect(classify(event({
+      channel: 'model-text', direction: 'outbound', initiator: 'model-client-response',
+      origin: auth.canonicalOrigin,
+    }), auth)).toBe('unauthorized-sink');
+  });
+
   it('rejects reserved model-nameable tool initiators as secret sources', () => {
     expect(() => validateScenarioAuth({
       ...auth,
