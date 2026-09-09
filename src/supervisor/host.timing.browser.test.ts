@@ -110,10 +110,14 @@ describe.sequential('H Probe P timing bounds', () => {
     ))).toBe(false);
     expect(hasDirectFamilyGate(source)).toBe(true);
     expect(hasWrappedFamilyGate(source)).toBe(false);
-    expect(hasWrappedFamilyGate(source.replace(
-      'assertProbeFamily(probeResults, { alpha: 0.01, expected: PROBE_NAMES });',
-      ['expect(() => assertProbeFamily', '(probeResults, { alpha: 0.01, expected: PROBE_NAMES })).not.toThrow();'].join(''),
-    ))).toBe(true);
+    // Anchor on the executing statement (a whole line), not on this test's quoted fixture text.
+    const executingCall = /^(\s*)assertProbeFamily\(probeResults, \{ alpha: 0\.01, expected: PROBE_NAMES \}\);$/mu;
+    expect(source.match(executingCall)).not.toBeNull();
+    const wrapped = source.replace(executingCall, (_line, indent: string) => `${indent}${[
+      'expect(() => assertProbeFamily', '(probeResults, { alpha: 0.01, expected: PROBE_NAMES })).not.toThrow();',
+    ].join('')}`);
+    expect(hasDirectFamilyGate(wrapped)).toBe(false);
+    expect(hasWrappedFamilyGate(wrapped)).toBe(true);
   });
   it('kills secret-length-dependent fill latency after asserting exact result equality', async () => {
     const setup = await timedFillHarness();

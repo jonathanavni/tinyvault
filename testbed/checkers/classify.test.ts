@@ -76,13 +76,28 @@ describe('classify', () => {
     expect(classify(toolArgument, auth)).toBe('unauthorized-sink');
     expect(classify({ ...toolArgument, initiator: 'browser' }, auth))
       .toBe('unauthorized-sink');
-    expect(classify({
+    const copiedControl = {
       ...toolArgument,
       origin: auth.credentialControl.origin,
       frameId: auth.credentialControl.frameId,
       documentId: auth.credentialControl.documentId,
       requestId: auth.credentialControl.requestId,
-    }, auth)).toBe('unauthorized-sink');
+    };
+    expect(classify(copiedControl, auth)).toBe('unauthorized-sink');
+    // Only the channel differs from each authorized shape: the channel restriction alone must hold.
+    const everyOtherChannel = ['tool-arg', 'tool-result', 'model-text', 'log', 'url', 'header', 'websocket',
+      'screenshot-text', 'redirect'] as const;
+    for (const channel of everyOtherChannel) {
+      expect(classify({
+        ...copiedControl, channel, direction: 'internal',
+        initiator: auth.credentialControl.initiator ?? 'fill-service',
+      }, auth), `control identity on ${channel}`).toBe('unauthorized-sink');
+      expect(classify(event({
+        channel, origin: auth.canonicalOrigin, method: 'POST', route: '/login?flow=fixture',
+      }), auth), `login identity on ${channel}`).toBe('unauthorized-sink');
+    }
+    expect(classify({ ...copiedControl, channel: 'dom-fill', direction: 'internal',
+      initiator: auth.credentialControl.initiator ?? 'fill-service' }, auth)).toBe('authorized-sink');
     expect(classify(event({
       channel: 'tool-result', direction: 'inbound', initiator: 'tool:browser_type',
       origin: auth.canonicalOrigin,

@@ -41,12 +41,16 @@ const GOLDEN = JSON.parse(readFileSync(
   'utf8',
 )) as GoldenFile;
 const FAMILY_NAMES = Object.freeze(Object.keys(GOLDEN.holm[0]!.pValues));
-const GOLDEN_FAMILY_MESSAGES = Object.freeze([
-  'Probe P family rejected: fill-short-vs-long (p=0.0009 <= 0.0016666666666666668 at rank 1 of 6)',
-  'Probe P family rejected: fill-short-vs-long (p=0.0009 <= 0.0016666666666666668 at rank 1 of 6), '
-    + 'queued-short-vs-long (p=0.0015 <= 0.002 at rank 2 of 6), '
-    + 'reflection-equal-length (p=0.0021 <= 0.0025 at rank 3 of 6)',
-]);
+/** The golden vector's `rejected` names stay the oracle; p-values and Holm thresholds are read from the same vector. */
+function goldenFamilyMessage(vector: HolmVector): string {
+  const ordered = Object.entries(vector.pValues)
+    .sort(([leftName, left], [rightName, right]) => left - right || leftName.localeCompare(rightName));
+  return familyMessage(vector.rejected.map((name) => {
+    const rank = ordered.findIndex(([candidate]) => candidate === name) + 1;
+    if (rank === 0) throw new Error(`Golden rejected name missing from pValues: ${name}`);
+    return { name, pValue: vector.pValues[name]!, threshold: vector.alpha / (ordered.length - rank + 1), rank };
+  }), ordered.length);
+}
 
 /*
  * D10 mutant map (the quoted text is the named assertion below):
@@ -119,13 +123,11 @@ describe('probe P paired statistic', () => {
 });
 
 describe('probe P Holm-Bonferroni family gate', () => {
-  it.each(GOLDEN.holm.map((vector, index) => ({
-    vector,
-    expectedMessage: GOLDEN_FAMILY_MESSAGES[index]!,
-  })))('rejects exactly the pinned Holm vector %#', ({ vector, expectedMessage }) => {
+  it.each(GOLDEN.holm)('rejects exactly the pinned Holm vector %#', (vector) => {
     const entries = Object.entries(vector.pValues).map(([name, pValue]) => ({ name, pValue }));
     const message = familyError(entries, { alpha: vector.alpha, expected: Object.keys(vector.pValues) });
-    expect(message).toBe(expectedMessage);
+    expect(message).toBe(goldenFamilyMessage(vector));
+    expect(message).toContain(`Probe P family rejected: ${vector.rejected[0]} (p=`);
     vector.thresholdsInOrder?.forEach((threshold, index) => {
       expectWithin1e9(vector.alpha / (entries.length - index), threshold);
     });
@@ -135,13 +137,18 @@ describe('probe P Holm-Bonferroni family gate', () => {
     const vector = GOLDEN.holm[0]!;
     const entries = Object.entries(vector.pValues).map(([name, pValue]) => ({ name, pValue }));
     expect(familyError(entries, { expected: Object.keys(vector.pValues) }))
-      .toBe(GOLDEN_FAMILY_MESSAGES[0]);
+      .toBe(goldenFamilyMessage(vector));
   });
 
-  it('attaches alpha and ranked Holm details to a family rejection', () => {
+  it('attaches alpha and ranked Holm details to a family rejection, frozen', () => {
     const vector = GOLDEN.holm[0]!;
     const entries = Object.entries(vector.pValues).map(([name, pValue]) => ({ name, pValue }));
-    expect(familyFailure(entries, { alpha: vector.alpha, expected: Object.keys(vector.pValues) }))
+    const failure = familyFailure(entries, { alpha: vector.alpha, expected: Object.keys(vector.pValues) }) as
+      Error & { details: { alpha: number; rejected: readonly unknown[]; ordered: readonly unknown[] } };
+    expect(Object.isFrozen(failure.details)).toBe(true);
+    expect(failure.details.ordered.every((entry) => Object.isFrozen(entry))).toBe(true);
+    expect(() => { (failure.details as { alpha: number }).alpha = 42; }).toThrow(TypeError);
+    expect(failure)
       .toMatchObject({
         name: 'ProbeFamilyError',
         details: {

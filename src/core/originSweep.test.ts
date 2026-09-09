@@ -4,8 +4,8 @@ import { validateBareOrigin } from './originGuard';
 import { sweepOrigins } from './originSweep';
 
 describe('origin sweep', () => {
-  it('finds no UTS-46 collapse or collision through U+2FFF', () => {
-    const result = sweepOrigins({ max: 0x2fff, validate: validateBareOrigin });
+  it('finds no UTS-46 collapse or collision through U+33FF (the CLI default range)', () => {
+    const result = sweepOrigins({ max: 0x33ff, validate: validateBareOrigin });
     const counts = `accepted=${result.accepted}, distinct=${result.distinct}`;
     expect(result.collapses, counts).toBe(0);
     expect(result.collisions, counts).toBe(0);

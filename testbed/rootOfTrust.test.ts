@@ -19,7 +19,7 @@ const PINS: Record<string, string> = {
   'scripts/check-compose.mjs': '4ac5a900d02b846b9eab26ab9c0a76a99f6cc8e21879188847808693046fcf2a',
   'scripts/check-dependency-boundary.mjs': 'd3daa64172bb50b1d72f11048d50678e2e439e64225662fab84da04aaebb4437',
   'scripts/check-docker-invocation.mjs': '5d67b214f5cbc31db626161693efa084735ad874e1f094b04b5703238f42ceb3',
-  'scripts/check-test-entry.mjs': 'f1a04455c31be62f5104eeb8addca775e2a9b525f80cb9eb19eba8cc37797c71',
+  'scripts/check-test-entry.mjs': 'c40b74992538ab70390c3c915b574ea784524bb3cc68e99464d5b67ebfe38e61',
   'scripts/check-test-execution.mjs': 'e9cd5d2f9ee243e156cb0006ec1d0aea3fa09f49ebcc334eeb235ec00e932edb',
   // ROOT_PINS_END
 };

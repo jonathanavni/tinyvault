@@ -15,6 +15,7 @@ export const ENTRY_MUTANTS = [
   ['eval-stub-commands', (d) => { d.scripts['eval:stub'] = d.scripts['eval:stub'].split(' && ').slice(1).join(' && '); }],
   ['make-eval', (d) => { d.makefile += 'eval:\n\tnpm run eval\n'; }],
   ['make-baseline', (d) => { d.makefile += 'baseline:\n\tnpm run baseline\n'; }],
+  ['make-eval-stub', (d) => { d.makefile = d.makefile.replace('\tnpm run eval:stub\n', '\tnpm run eval:stub\n\techo bypass\n'); }],
   ['eval-config', (d) => { d.configs['vitest.eval.config.ts'] = d.configs['vitest.eval.config.ts'].replace('runner.eval.test.ts', 'runner.test.ts'); }],
   ['make-test', (d) => { d.makefile = 'test: bypass\n\tnpm run test\n'; }],
   ['config-files', (d) => { d.configs['nested/vite.config.cjs'] = 'module.exports = {}'; }],
@@ -29,7 +30,7 @@ export const ENTRY_MUTANT_CODES = [...ENTRY_MUTANTS.map(([code]) => code), 'repo
 export function entryFixture() {
   return { scripts: { test: EXPECTED_TEST_COMMANDS.join(' && '), 'test:docker': EXPECTED_DOCKER_COMMANDS.join(' && '),
     eval: EXPECTED_EVAL_COMMAND, baseline: EXPECTED_BASELINE_COMMAND, 'eval:stub': EXPECTED_EVAL_STUB_COMMAND },
-    makefile: 'test:\n\tnpm run test\n\neval:\n\tnpm run eval\n\nbaseline:\n\tnpm run baseline\n', configs: {
+    makefile: 'test:\n\tnpm run test\n\neval:\n\tnpm run eval\n\nbaseline:\n\tnpm run baseline\n\neval-stub:\n\tnpm run eval:stub\n', configs: {
       'vitest.config.ts': "import { configDefaults } from 'vitest/config'; export default { test: { setupFiles: ['./testbed/docker/no-docker.setup.ts'], exclude: [...configDefaults.exclude, 'testbed/docker/composed.docker.test.ts'] } };",
       'vitest.eval.config.ts': "export default { test: { include: ['testbed/runner.eval.test.ts'] } };",
       'vitest.docker.config.ts': "export default { test: { include: ['testbed/docker/composed.docker.test.ts'] } };",
@@ -61,6 +62,14 @@ export function entrySelftest(check, reset, rules) {
   const extendedBaseline = entryFixture();
   extendedBaseline.makefile = extendedBaseline.makefile.replace('\tnpm run baseline\n', '\tnpm run baseline\n\techo bypass\n');
   assert.throws(() => check(extendedBaseline), { message: 'make-baseline' });
+  for (const [target, code] of [['baseline', 'make-baseline'], ['eval-stub', 'make-eval-stub']]) {
+    const withPrerequisite = entryFixture();
+    withPrerequisite.makefile = withPrerequisite.makefile.replace(`${target}:\n`, `${target}: dep\n`);
+    assert.throws(() => check(withPrerequisite), { message: code });
+    const missing = entryFixture();
+    missing.makefile = missing.makefile.replace(new RegExp(`${target}:\\n\\tnpm run [a-z:]+\\n`), '');
+    assert.throws(() => check(missing), { message: code });
+  }
   const removedAudit = entryFixture(); removedAudit.scripts.eval = removedAudit.scripts.eval.split(' && ').slice(0, -1).join(' && ');
   assert.throws(() => check(removedAudit), { message: 'eval-commands' });
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tinyvault-entry-'));

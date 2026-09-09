@@ -132,7 +132,7 @@ export function assertProbeFamily(
   }
   const ordered = [...entries]
     .sort((left, right) => left.pValue - right.pValue || left.name.localeCompare(right.name))
-    .map((entry, index) => ({
+    .map((entry, index) => Object.freeze({
       ...entry,
       threshold: alpha / (entries.length - index),
       rank: index + 1,
@@ -143,11 +143,11 @@ export function assertProbeFamily(
     rejected.push(ordered[index]!);
   }
   if (rejected.length > 0) {
-    throw new ProbeFamilyError({
+    throw new ProbeFamilyError(Object.freeze({
       alpha,
       rejected: Object.freeze(rejected),
       ordered: Object.freeze(ordered),
-    });
+    }));
   }
 }
 

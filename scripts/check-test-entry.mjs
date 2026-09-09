@@ -16,7 +16,7 @@ import { entrySelftest } from './test-entry.selftest.mjs';
 import { executionSelftest } from './test-execution.selftest.mjs';
 export { EXPECTED_TEST_COMMANDS } from './test-contract.mjs';
 export const ENTRY_RULES = Object.freeze(['lifecycle', 'test-tokens', 'test-commands', 'docker-commands',
-  'make-test', 'eval-commands', 'make-eval', 'baseline-commands', 'make-baseline', 'eval-stub-commands',
+  'make-test', 'eval-commands', 'make-eval', 'baseline-commands', 'make-baseline', 'eval-stub-commands', 'make-eval-stub',
   'eval-config', 'config-files', ...FORBIDDEN_CONFIG_KEYS.map((k) => `config-${k}`),
   'config-shape', 'config-guard', 'config-exclude', 'docker-config', 'report-reset']);
 export function checkEntryDocuments({ scripts, makefile, configs }) {
@@ -32,7 +32,7 @@ export function checkEntryDocuments({ scripts, makefile, configs }) {
   requireRule(scripts['eval:stub'] === EXPECTED_EVAL_STUB_COMMAND && !Object.hasOwn(scripts, 'preeval:stub')
     && !Object.hasOwn(scripts, 'posteval:stub'), 'eval-stub-commands');
   const lines = makefile.split(/\r?\n/);
-  for (const target of ['test', 'eval', 'baseline']) {
+  for (const target of ['test', 'eval', 'baseline', 'eval-stub']) {
     const targets = lines.map((s, i) => !s.startsWith('\t') && !s.trimStart().startsWith('#')
       && s.includes(':') && s.split(':')[0].trim().split(/\s+/).includes(target) ? i : -1).filter((i) => i >= 0);
     requireRule(targets.length === 1 && lines[targets[0]] === `${target}:`, `make-${target}`);
@@ -41,7 +41,7 @@ export function checkEntryDocuments({ scripts, makefile, configs }) {
       if (line && !/^\s|#/.test(line)) break;
       if (line.trim() && !line.startsWith('#')) recipe.push(line);
     }
-    requireRule(equal(recipe, [`\tnpm run ${target}`]), `make-${target}`);
+    requireRule(equal(recipe, [`\tnpm run ${target === 'eval-stub' ? 'eval:stub' : target}`]), `make-${target}`);
   }
   requireRule(equal(Object.keys(configs).sort(), ['vitest.config.ts', 'vitest.docker.config.ts', 'vitest.eval.config.ts']), 'config-files');
   checkConfig(configs['vitest.config.ts']);

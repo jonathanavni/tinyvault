@@ -35,7 +35,7 @@ export type OriginSweepResult = Readonly<{
   collisionExamples: readonly CollisionExample[];
 }>;
 
-const DEFAULT_TEMPLATES: readonly OriginSweepTemplate[] = [
+export const DEFAULT_TEMPLATES: readonly OriginSweepTemplate[] = [
   { build: (c) => `https://exa${c}mple.com`, target: 'https://example.com' },
   { build: (c) => `https://${c}example.com`, target: 'https://example.com' },
   { build: (c) => `https://example${c}com`, target: 'https://example.com' },

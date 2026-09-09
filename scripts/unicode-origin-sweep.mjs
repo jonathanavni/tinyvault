@@ -19,7 +19,7 @@
  * Exit 0 = no collapse. Exit 1 = collapse found (prints offenders).
  */
 import { validateBareOrigin } from '../src/core/originGuard.ts';
-import { sweepOrigins } from '../src/core/originSweep.ts';
+import { DEFAULT_TEMPLATES, sweepOrigins } from '../src/core/originSweep.ts';
 
 const args = process.argv.slice(2);
 const full = args.includes('--full');
@@ -29,7 +29,7 @@ const MAX = full ? 0x10ffff : (maxArg !== -1 ? Number(args[maxArg + 1]) : 0x33ff
 const result = sweepOrigins({ max: MAX, validate: validateBareOrigin });
 
 console.log(`range      : U+0020..U+${MAX.toString(16).toUpperCase()}`);
-console.log(`scanned    : ${result.scanned} inputs across 5 templates`);
+console.log(`scanned    : ${result.scanned} inputs across ${DEFAULT_TEMPLATES.length} templates`);
 console.log(`accepted   : ${result.accepted}`);
 console.log(`distinct   : ${result.distinct} origins`);
 console.log(`COLLAPSES  : ${result.collapses}`);
