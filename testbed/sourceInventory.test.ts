@@ -1,3 +1,4 @@
+import { expectPilot } from './pilot.testkit';
 import { expect, it } from 'vitest';
 import { enumerateSource } from './sourceInventory';
 import { captureSourceIdentity } from './evaluationProvenance';
@@ -19,7 +20,7 @@ import { afterEach, vi } from 'vitest';
 import * as composed from './docker/composedFixtures';
 import { s5ComposedHarness } from './runner.testkit';
 import { runEvalEntry } from './evalEntry';
-import type { M6Scorecard } from './scorecard.schema';
+
 import { UnqualifiedComparisonError } from './runner';
 vi.mock('./docker/composedFixtures', async original => ({ ...await original<typeof composed>(), startComposedFixtureSet: vi.fn() }));
 afterEach(() => vi.restoreAllMocks());
@@ -36,19 +37,23 @@ it('E1 one-byte root instruction edit changes every reference binding through th
   await mkdir(join(scratch, 'artifacts'), { recursive: true });
   await writeFile(join(scratch, 'artifacts', 'excluded.txt'), 'generated');
   const inventory = await enumerateSource(scratch);
-  vi.spyOn(console, 'log').mockImplementation(() => {});
+  const stdout = vi.spyOn(console, 'log').mockImplementation(() => {});
+  vi.spyOn(console, 'error').mockImplementation(() => {});
   const run = async () => {
     const h = await s5ComposedHarness(join(scratch, 'artifacts', 'eval'));
     h.options.sourceRoot = scratch;
-    vi.mocked(composed.startComposedFixtureSet).mockImplementation(h.startComposed);
-    return runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options);
+    let directory = '';
+    vi.mocked(composed.startComposedFixtureSet).mockImplementation(input => { directory = input.artifactRoot; return h.startComposed(input); });
+    return expectPilot(runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options), () => directory, stdout);
   };
-  const before = (await run()).scorecard as M6Scorecard;
+  const before = await run();
   expect(before.provenance.source.inventory.some(row => row.path === 'new-source-input.txt')).toBe(true);
   expect(before.provenance.source.inventory.some(row => row.path === 'artifacts/excluded.txt')).toBe(false);
   expect(before.provenance.source.dirty).toBe(true);
+  expect(before.provenance.inputs.agentPromptSha256ById['naive-baseline'])
+    .toBe('62ba8ba466139d3a40f591fec9f3454b4590d87960bcf434542e4b58dbcbb2a3');
   await writeFile(join(scratch, 'SKILL.md'), `${await readFile(join(scratch, 'SKILL.md'), 'utf8')}\n`);
-  const after = (await run()).scorecard as M6Scorecard;
+  const after = await run();
   expect(after.provenance.source.filesSha256).not.toBe(before.provenance.source.filesSha256);
   expect(after.provenance.inputs.skillSha256).not.toBe(before.provenance.inputs.skillSha256);
   expect(after.provenance.inputs.agentPromptSha256ById['tinyvault-ref']).not.toBe(before.provenance.inputs.agentPromptSha256ById['tinyvault-ref']);
@@ -56,7 +61,8 @@ it('E1 one-byte root instruction edit changes every reference binding through th
   expect(after.provenance.provenanceId).not.toBe(before.provenance.provenanceId);
   expect(after.provenance.source.inventory.some(row => row.path === 'new-source-input.txt')).toBe(true);
   const h = await s5ComposedHarness(join(scratch, 'artifacts', 'eval')); h.options.sourceRoot = scratch;
-  vi.mocked(composed.startComposedFixtureSet).mockImplementation(h.startComposed);
+  let driftDirectory = '';
+  vi.mocked(composed.startComposedFixtureSet).mockImplementation(input => { driftDirectory = input.artifactRoot; return h.startComposed(input); });
   const delegate = h.options.providerFetch; let changed = false;
   h.options.providerFetch = async (...args) => {
     if (!changed) { changed = true; await writeFile(join(scratch, 'new-source-input.txt'), 'changed during execution'); }
@@ -64,6 +70,8 @@ it('E1 one-byte root instruction edit changes every reference binding through th
   };
   vi.spyOn(console, 'error').mockImplementation(() => {});
   await expect(runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options)).rejects.toBeInstanceOf(UnqualifiedComparisonError);
+  expect(JSON.parse(await readFile(join(driftDirectory, 'qualification.json'), 'utf8')).reasons).toEqual(['source-drift']);
+  await expect(readFile(join(driftDirectory, 'scorecard.json'))).rejects.toThrow();
 }, 60_000);
 
 it('F9 hashes runtime declarations without scraping source text', async () => {

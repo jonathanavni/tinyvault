@@ -95,3 +95,36 @@ it('F4 production eval caller passes no arguments', async () => {
   const source = await readFile(new URL('./runner.eval.test.ts', import.meta.url), 'utf8');
   expect(source.match(/runEvalEntry\s*\([^)]*\)/gu)).toEqual(['runEvalEntry()']);
 });
+
+it('AM13 real N=1 CLI exits nonzero with the exact pilot reason and no scorecard', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'tinyvault-am13-cli-'));
+  const repo = process.cwd(), loader = join(root, 'loader.mjs');
+  // Substitute only the composed fixture constructor; entry, SDK, runner, adjudicator and finalizer are real.
+  await writeFile(loader, `import {registerHooks,createRequire} from 'node:module';
+import {readFileSync,existsSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+const ts=createRequire(${JSON.stringify(resolve(repo, 'package.json'))})('typescript');
+registerHooks({resolve(s,c,next){try{return next(s,c)}catch(e){if(!s.startsWith('.')&&!s.startsWith('/'))throw e;const u=new URL(s,c.parentURL);for(const suffix of ['.ts','/index.ts']){const candidate=new URL(u.href+suffix);if(existsSync(fileURLToPath(candidate)))return next(candidate.href,c)}throw e}},load(u,c,next){if(!u.endsWith('.ts'))return next(u,c);let source=readFileSync(fileURLToPath(u),'utf8');if(u.endsWith('/testbed/docker/composedFixtures.ts')){source=source.replace('export async function startComposedFixtureSet(', 'async function unusedComposedFixtureSet(');source+='\\nexport const startComposedFixtureSet = (...args) => globalThis.__am13StartComposed(...args);';}return {format:'module',shortCircuit:true,source:ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText}}});`);
+  const entry = join(root, 'entry.mjs');
+  await writeFile(entry, `import ${JSON.stringify(pathToFileURL(resolve(repo, 'testbed/docker/no-docker.setup.ts')).href)};
+const {s5ComposedHarness}=await import(${JSON.stringify(pathToFileURL(resolve(repo, 'testbed/runner.testkit.ts')).href)});
+const {runEvalEntry}=await import(${JSON.stringify(pathToFileURL(resolve(repo, 'testbed/evalEntry.ts')).href)});
+const h=await s5ComposedHarness(${JSON.stringify(join(root, 'artifacts'))});
+globalThis.__am13StartComposed=h.startComposed;
+await runEvalEntry(process.env,h.options);
+`);
+  const child = spawnSync(process.execPath, ['--import', loader, entry], {
+    cwd: repo, env: { ...process.env, TINYVAULT_PROFILE: 'real-comparison', TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-cli-key' },
+    shell: false, timeout: 30_000, maxBuffer: 1024 * 1024, encoding: 'utf8',
+  });
+  expect(child.error).toBeUndefined(); expect(child.signal).toBeNull();
+  expect(child.status).not.toBe(0); expect(child.stdout).toBe('');
+  expect(child.stderr).toContain('UnqualifiedComparisonError');
+  const { readdir, access } = await import('node:fs/promises');
+  const directory = join(root, 'artifacts', (await readdir(join(root, 'artifacts')))[0]);
+  const qualification = JSON.parse(await readFile(join(directory, 'qualification.json'), 'utf8'));
+  expect(qualification.status).toBe('unqualified'); expect(qualification.reasons).toEqual(['pilot-not-qualification']);
+  expect(JSON.parse(await readFile(join(directory, 'diagnostic.json'), 'utf8')).verifiedRuns).toHaveLength(6);
+  expect(JSON.parse(await readFile(join(directory, 'runs.json'), 'utf8'))).toHaveLength(6);
+  await expect(access(join(directory, 'scorecard.json'))).rejects.toThrow();
+}, 40_000);

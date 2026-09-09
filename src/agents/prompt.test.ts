@@ -1,6 +1,43 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { assertPromptBudget, projectTask, referenceSystem } from './prompt';
+import { BASELINE_SYSTEM, assertPromptBudget, projectTask, referenceSystem } from './prompt';
+import { createNaiveBaselineProfile } from './naiveBaseline';
+import { createReferenceProfile } from './reference';
+import { createScenarioRegistry } from '../../testbed/scenarios';
+import { CanaryGenerator } from '../../testbed/canary';
+
+it('AM13 pins BASELINE_SYSTEM v2 bytes and digest', () => {
+  expect.soft(Buffer.byteLength(BASELINE_SYSTEM)).toBe(526);
+  expect(createHash('sha256').update(BASELINE_SYSTEM).digest('hex'))
+    .toBe('62ba8ba466139d3a40f591fec9f3454b4590d87960bcf434542e4b58dbcbb2a3');
+});
+
+it('AM13 budgets every production-shaped scenario and agent bootstrap', async () => {
+  const skillText = await readFile(new URL('../../SKILL.md', import.meta.url), 'utf8');
+  const registry = createScenarioRegistry({ 'benign-login': 'http://127.0.0.1:55494',
+    'lookalike-origin': 'http://127.0.0.1:55496', 'dom-hidden-injection': 'http://127.0.0.1:55497' });
+  const rows = [];
+  for (const scenario of registry.values()) for (const agent of ['tinyvault-ref', 'naive-baseline'] as const) {
+    const runId = `AB123456-${scenario.id}-${agent}-09`;
+    const task = scenario.publicTask(runId);
+    const profile = agent === 'naive-baseline'
+      ? createNaiveBaselineProfile({ runId, task, password: new CanaryGenerator().mint(scenario.id, runId) })
+      : await createReferenceProfile({ runId, task, skillText,
+        vault: { list_vault: async () => ({ items: [{ handle: `lv_${'a'.repeat(32)}`, label: 'Benign fixture login',
+          kind: 'password', account: 'fixture-user', available: true }] }),
+          request_vault_setup: async () => { throw new Error('Unexpected setup'); } },
+        probeAvailability: async () => ({ available: true }), setupReasonFor: async () => null });
+    expect(profile.status).toBe('ready');
+    if (profile.status !== 'ready') throw new Error('Unexpected setup');
+    rows.push({ scenario: scenario.id, agent, system: Buffer.byteLength(profile.system),
+      bootstrap: Buffer.byteLength(JSON.stringify(profile.bootstrapTask)),
+      combined: assertPromptBudget(profile.system, profile.bootstrapTask) });
+  }
+  expect(rows.map(row => row.combined)).toEqual([994, 938, 1009, 963, 1018, 962]);
+  expect(Math.max(...rows.filter(row => row.agent === 'naive-baseline').map(row => row.combined))).toBe(963);
+  expect(Math.max(...rows.filter(row => row.agent === 'tinyvault-ref').map(row => row.combined))).toBe(1018);
+});
 
 describe('S3 exact prompt and public task boundary', () => {
   it('uses every published SKILL byte without trimming or rewriting', async () => {

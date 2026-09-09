@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { EvaluationTerminatedError, isEvaluationTerminated } from './evidenceOversize';
 import { ComposedConstructionError } from './docker/exec';
 import { executionErrorDetails } from './realAgentRun';
@@ -206,7 +207,7 @@ export async function runEval(options: EvalOptions = {}): Promise<EvalResult> {
       if (reasons.length) return rejectComparison(artifactDirectory, diagnostic, trust.m6Provenance!, reasons);
       try {
         const result = await finalizeEvaluation(artifactDirectory, sampleSize, diagnostic.verifiedRuns, context,
-          options.generatedAt, trust.scenarioRegistry, coverage, agents, trust.m6Provenance);
+          options.generatedAt, trust.scenarioRegistry, coverage, agents, trust.m6Provenance, diagnostic);
         for (const limitation of new Set((trust.captureQualifications ?? []).flatMap(row => row.limitations))) console.log(limitation);
         return { ...result, offlineInput };
       } catch (error) {
@@ -389,7 +390,7 @@ export async function finalizeEvaluation(
   generatedAt: string | undefined,
   scenarioRegistry?: ScenarioRegistry,
   captureCoverage: Scorecard['captureCoverage'] = [],
-  agents = AGENT_CONFIGS, provenance?: EvaluationProvenance,
+  agents = AGENT_CONFIGS, provenance?: EvaluationProvenance, diagnostic?: OfflineDiagnosticReport,
 ): Promise<EvalResult> {
   assertValidEvaluationContext(evaluationContext);
   assertRunInventory(runs, sampleSize, scenarioRegistry, agents);
@@ -398,6 +399,10 @@ export async function finalizeEvaluation(
   assertScorecardMetadata(scorecard);
   if (provenance) {
     enforceLiveFire(runs, scorecard, agents); assertEvalPass(scorecard, agents);
+    if (!diagnostic) throw new Error('Missing real evaluation diagnostic');
+    if (!isDeepStrictEqual(diagnostic.verifiedRuns, runs)) throw new Error('Real evaluation diagnostic does not match runs');
+    await writeFile(resolve(artifactDirectory, 'runs.json'), `${JSON.stringify(runs, null, 2)}\n`);
+    if (sampleSize !== 10) return rejectComparison(artifactDirectory, diagnostic, provenance, ['pilot-not-qualification']);
     const qualification: ComparisonQualification = { status: 'qualified', provenanceId: provenance.provenanceId };
     await writeFile(resolve(artifactDirectory, 'qualification.json'), `${JSON.stringify(qualification)}\n`, { mode: 0o600 });
     printScorecard(scorecard);
@@ -405,7 +410,7 @@ export async function finalizeEvaluation(
   const scorecardPath = resolve(artifactDirectory, 'scorecard.json');
   await Promise.all([
     writeFile(scorecardPath, `${JSON.stringify(scorecard, null, 2)}\n`),
-    writeFile(resolve(artifactDirectory, 'runs.json'), `${JSON.stringify(runs, null, 2)}\n`),
+    ...(!provenance ? [writeFile(resolve(artifactDirectory, 'runs.json'), `${JSON.stringify(runs, null, 2)}\n`)] : []),
   ]);
   if (!provenance) { enforceLiveFire(runs, scorecard, agents); assertEvalPass(scorecard, agents); }
   return { scorecard, runs, scorecardPath };
