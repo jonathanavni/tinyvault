@@ -44,6 +44,41 @@ work in flight, the rest stay parked here (register "Final5 round"):
 - **[PARKED]** **Probe P per-call floor** — the batched tripwire probe measures a 64-call aggregate; nothing bounds a one-shot call. The sensitivity calibration reports `Infinity` on some machines; consider a longer ladder or a per-machine record.
 - **[READY — `rules.ts` split 2026-09-03 (`taintHelpers.ts`); an M6+ slice]** **Retention rule beyond shapes** — `localFileSodium.ts` argument-passing sinks (`console.*`, `fetch`, `process.stdout.write`, `throw`) are unseen; the rule is a shape allowlist by design (honest-claims sentence). Either a per-member occurrence list for that file or accept.
 
+## From the M6 close assessment (2026-09-09; `docs/project-assessment-2026-09-09.md`)
+
+- **🔴 M6.1 remediation slice (full ladder, Astra, security channel; before M7's first live cohort and before any published
+  bundle) — receiptless-row canary authentication (`M6C-CODEX-P1-01`).** A baseline run with no completion receipt has its
+  canary authenticated only by that receipt (`testbed/completion.ts:93-101`, `testbed/checkers/offline.ts:467-470`), so an
+  edited bundle can substitute a decoy canary, restate the row `secretLeaked:false`, and stay `qualified` (a sibling supplies the
+  cell's positive control; baseline completion is not required). Shape: authenticate the canary against the fixture-signed
+  `sdk-request-context` bootstrap that `assertAttestedExecution` already parses; composed publication mutant (receipt removed +
+  canary substituted + outcome restated; sibling intact; signed events unchanged; both real profiles) paired with a legitimate
+  receiptless baseline admission. Recorded cohorts unaffected (all baseline rows completed with receipts). README claim narrowed
+  meanwhile.
+- **[M7 entry input] Eval-test timeout derived from the selected inventory.** `testbed/runner.eval.test.ts:107` pins
+  `1_800_000` ms; at the observed ~19 s/run, 5 scenarios × 2 agents × 10 ≈ 32 min exceeds it (fail-closed, but it would burn an
+  authorized cohort on a harness bound). Derive from `sampleSize × |scenarios|` with the arithmetic recorded (QA P3-05).
+- **[M7 entry input] `testbed/runner.realAgent.eval.ts:12-13` hard-codes three scenarios**; extending the inventory is a
+  deliberate gate change, together with per-fixture capture applicability, exposure checks, recovery recipes, positive controls
+  and adversarial admission cases (Codex rec. 3). Requalify prompt and capture budgets for longer M7 recipes/traces
+  (`src/agents/prompt.ts:14-17`; Codex rec. 4).
+- **[M7 fixture target] Drive a declared limit rather than another origin/DOM variant:** a chunked/streamed exfil body
+  (`P-LIM-CHUNKED`, `src/supervisor/bodyCorrelation.ts:61-77`) or the console budget (`CONSOLE_EVENT_LIMIT = 1000`,
+  `src/supervisor/evidenceLease.ts:24`), converting "declared" into "measured" (security rec. 4).
+- **[Sol test-only packets] (a)** one negative classification test: a `tool-arg` event carrying the canonical `origin` still
+  classifies `unauthorized-sink` (`src/agents/loop.ts:498-506` copies model-supplied `origin`/`route`/`method` before
+  `validateToolCall`; inert today via `testbed/checkers/classify.ts:39-68`, unpinned); **(b)** a bounded UTS-46 sweep in the default
+  gate (`scripts/unicode-origin-sweep.mjs --max 0x2FFF`, ~30 s) so a new collapse class outside `src/core/originGuard.test.ts`'s
+  enumerated set is caught (security gap 2); **(c)** extend `scripts/check-test-entry.mjs`'s grammar gate to `baseline` (the entry
+  the E8 baseline cohort ran through; digest-only today, QA gap 4).
+- **[Release path, before M10]** cold-path re-adjudication: ship a bundle a third party can re-adjudicate (keys + E5 qualifications
+  distributed) or narrow the README further (S5 (8)); promote the persisted `diagnostic.json`↔`runs.json` binding to a production
+  check (AM13 (1)); `runEvalEntry` positive allowlist (AM13 (3)); break `src/agents/prompt.ts` → `testbed` imports before packaging
+  (Codex); `SKILL.md` is a measured input — expanding it for humans re-opens E8 (QA rec. 6); decide the Probe P timing-2 policy
+  before M7 doubles fixture load.
+- **[Graduated residuals]** S4 (1) bounded trusted-backend contract (M9 adapter step); S4 (9) unload/keepalive (already listed
+  above); AM12 §14 (1) decoder-budget rescale amendment with benchmark evidence; AM13 §9 (1) trusted attempt ledger.
+
 ## M6 items from the M5 last rounds (register C-B2f2, C-B3)
 
 - **Unload-initiated requests (M5-C7, B2f2-S1).** `pagehide`/`visibilitychange` sendBeacon or keepalive fetch during navigation

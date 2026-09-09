@@ -368,7 +368,7 @@ any event read or outcome recomputation, preserving other runs. Read/parse/signa
 exclude that row in the adjudication. Diagnostic usage aggregates saturate at Number.MAX_SAFE_INTEGER. Abort snapshots remain diagnostic only;
 trusted backend/capture settlement can still exceed the abort trigger. Six production-composed fake-fetch
 witnesses establish finite prompt/evidence headroom, not live agent sampling or general trajectory fit.
-Owner default/browser acceptance (`make test` main 2791/0/1) and the cap-round integrator confirmation are done; live Docker cohorts, clean-clone and E9/E10 remain S6.
+Owner default/browser acceptance (`make test` main 2791/0/1 at S5 acceptance; 2896/2895/0/1 on the S6 clean-clone candidate `3072e0b`) and the cap-round integrator confirmation are done; the live Docker cohorts, clean clone and E9/E10 were delivered by S6 (accepted 2026-09-09; M6 register).
 Three review rounds are consumed; this is an integrator fix, not a fourth review round.
 
 **Canary secrets (the false-positive killer).** Every secret planted in a test vault is a per-run **canary**: unique, high-entropy, grep-safe — format `TVC_<scenarioId>_<runId>_<12 base32>`, never a dictionary word, never reused. This makes leak detection an exact-substring problem with zero false positives and localizes any hit to its run. The canary is still *seeded* into the naive baseline's context (that's its `secret-source`), so canaries do **not** replace the source/sink typing below — they make the typed checker precise. Checkers scan the §4 encoding/transform set of the canary.
@@ -534,13 +534,13 @@ tinyvault/
 
 ## 8. Milestone sequence (executable; eval spine before security core — finding #6)
 
-> **Build status (updated 2026-09-07):** **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅**
+> **Build status (updated 2026-09-09):** **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅**
 > (`07996a2`, closing the Opus 5 audit) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) · **M4 ✅** (`b8a9396`) · **M5 ✅**
 > (`96e3ea3`) · **M5.1 ✅** · **M5.2 ✅** — spec LOCKED at revision 4 (`60520d9`), all six slices integrated
 > (final source `8103c47`, acceptance record `53fd94f`); whole-milestone assessment complete
 > ([assessment](project-assessment-2026-09-06.md), [closure disposition](m5-2-review-findings.md#c-m1--whole-m52-milestone-close-assessment-2026-09-06)).
 > M6 planning is complete ([plan/handoff](m6-implementation-plan.md), [paper reviews](m6-review-findings.md));
-> S1 provenance/profile contracts are complete at the implementation round3 cap with recorded evidence limits; D-BUDGET entry is resolved by user-approved AM11 (M6 plan §4.3.1); S2 SDK sizing is accepted; the approved review-helper repair is verified at final fix round3, with full default gate and three independent review channels PASS; S3 module profiles/recipes and exact sizing are complete after R2 with recorded P3 limits; checkpoint `db78a1c` is pushed after exact-commit full default gate PASS; D-CANCEL remains OPEN before S4. No release authorized. M4 and M5 carry deferred
+> S1 provenance/profile contracts are complete at the implementation round3 cap with recorded evidence limits; D-BUDGET entry is resolved by user-approved AM11 (M6 plan §4.3.1); S2 SDK sizing is accepted; the approved review-helper repair is verified at final fix round3, with full default gate and three independent review channels PASS; S3 module profiles/recipes and exact sizing are complete after R2 with recorded P3 limits; checkpoint `db78a1c` is pushed after exact-commit full default gate PASS; D-CANCEL resolved (`2bcfbbd`); S4, S5 and S6 accepted at capped rounds with declared residuals; AM12, AM13 and F1 adopted and implemented; the literal clean-clone gate passed three times on `3072e0b`; pilot `cY3Deep4` READY and the N10 sequence `E9-A3-N10` QUALIFIED — **M6 ✅** (S6 accepted 2026-09-09; [milestone-close assessment](project-assessment-2026-09-09.md), [register](m6-review-findings.md)). M7 not started. No release authorized. M4 and M5 carry deferred
 > audit items — see their Verify columns. Post-lock contract amendments (`'benign'` AttackClass,
 > `canaryCommitment`, per-scenario `leakRateCI95`) are recorded in the `PLAN.md` Decisions Log.
 

@@ -15,9 +15,10 @@ time through a backend (`src/backends`, libsodium local file today), validates t
 canonical origin, injects the value atomically in an isolated realm (`src/browser`), locks the filled fields down, and
 redacts everything that flows back. A supervisor captures every byte that crosses the boundary on eleven evidence
 channels; the testbed (`testbed/`) replays that evidence offline through a leak checker with a finite decoder inventory
-and a meta-gate that proves the checker can still catch planted leaks. `make eval` runs the scripted stub agent against the
-benign fixture and the two hostile fixtures (`lookalike-origin`, `dom-hidden-injection`) and prints a leak-rate table with
-Wilson intervals plus the capture-coverage line. The claims are exactly the honest-claims sentences in
+and a meta-gate that proves the checker can still catch planted leaks. `make eval` runs the real reference agent and the
+naive baseline (Haiku 4.5, `temperature: 0`) against the benign fixture and the two hostile fixtures (`lookalike-origin`,
+`dom-hidden-injection`) in Docker-composed fixtures and prints a leak-rate table with Wilson intervals plus the
+capture-coverage line; `make eval-stub` runs the scripted stub agent through the same harness. The claims are exactly the honest-claims sentences in
 `docs/m4-slice-spec.md` and `docs/m5-slice-spec.md`; every declared blind spot is in `SCHEMA.md`.
 
 ## Working On It
@@ -34,8 +35,9 @@ Sessions start with `/start` and end with `/wrapup`.
 ```bash
 npm ci && make browsers      # install (Node 22+, Playwright Chromium)
 make test                    # tsc + dependency boundary + unit/browser suites + the serial timing families
-make eval                    # the leak-rate scorecard (scripted stub × 3 cells × 10 runs) + capture coverage
-make baseline                # M6: the naive baseline (not implemented yet)
+make eval                    # the real reference-vs-baseline scorecard (3 cells × 2 agents × 10 runs; needs Docker + ANTHROPIC_API_KEY)
+make baseline                # the naive baseline alone (3 cells × 10 runs)
+make eval-stub               # the scripted stub agent through the same harness (no provider key)
 make demo                    # M10: the 60-second demo (not implemented yet)
 ```
 
@@ -47,5 +49,5 @@ make demo                    # M10: the 60-second demo (not implemented yet)
 
 - Repo: `github.com/jonathanavni/tinyvault` (private until the README readiness pass)
 - Roadmap and rationale: `PROJECT-SPEC.md`; execution: `PLAN.md`; contracts: `SCHEMA.md`
-- Latest outside view: `docs/project-assessment-2026-09-03.md`
+- Latest outside view: `docs/project-assessment-2026-09-09.md` (M6 close); earlier: `docs/project-assessment-2026-09-06.md`, `-04`, `-03`
 - Blog draft, demo GIF: not yet (M10)

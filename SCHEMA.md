@@ -158,7 +158,7 @@ truncation. All six fixed SDK witnesses must fit the unchanged full-evidence cap
 instructions/bootstrap. These are finite synthetic envelopes selected after serial overflow, not
 independent model samples or proof that ordinary trajectories fit. S3 adapter evidence remains
 module-level; final local-file/empty-baseline host construction, resolved provenance and command
-wiring are S5 obligations. S4 cancellation and every intact real pilot/cohort gate remain due.
+wiring were S5 obligations, delivered and accepted 2026-09-08. S4 cancellation and the intact real pilot/cohort gates were delivered by S4–S6 (M6 register); this paragraph records the S3-time obligations.
 
 Prompt/bootstrap headroom is specific to the exact source and input bytes. Historical S3 measurements
 are recorded with the frozen candidate and artifacts in the [M6 register](docs/m6-review-findings.md#s3-r2--owner-acceptance-and-retained-review-limits),
@@ -396,8 +396,8 @@ pins complete independent exposure strings, including the exact 200-character de
 the 204-character clamped name (omitted suffix `box.`); the browser clamp and fixture version do not
 change. Printed diagnostics include original/delivered lengths, truncation, omitted suffix,
 missing-body, scan-truncation and unobserved-payload counts. Screenshot text and accepted
-unload/correlation/worker/unsurfaced-text limits remain declared. S5 must bind these inputs and
-require qualification alongside provenance, controls and existing outcome gates before publication.
+unload/correlation/worker/unsurfaced-text limits remain declared. S5 binds these inputs and
+requires qualification alongside provenance, controls and existing outcome gates before publication (accepted 2026-09-08).
 
 ```ts
 type InitialSnapshotObservation = Readonly<{
