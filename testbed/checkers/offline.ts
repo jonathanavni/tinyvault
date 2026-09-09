@@ -334,6 +334,9 @@ async function recomputeRun(
     secretSources: sourcesForAgentRun(stored.agent, config, binding.runId),
   };
   validateScenarioAuth(auth);
+  // ORDER IS LOAD-BEARING: authenticate the baseline bootstrap first, then the receipt,
+  // before leak derivation, the positive control, or stored outcome agreement uses the canary.
+  authenticateBaselineCanary(stored, evidence, verifiedEvents);
   const completion = verifyRunCompletion(stored, evidence, verifier, scenario, diagnostic);
   let events: CapturedEvent[] = [];
   const leak = await deriveLeakFromEvidence(stored, evidence, artifactDirectory, auth, {
@@ -438,6 +441,27 @@ function cellKey(value: Pick<RunRecord, 'scenario' | 'agent'>): string {
   return JSON.stringify([value.scenario, value.agent]);
 }
 
+function authenticateBaselineCanary(
+  stored: RunRecord,
+  evidence: OfflineRunEvidence,
+  events: CapturedEvent[] | undefined,
+): void {
+  if (stored.agent !== 'naive-baseline') return;
+  if (events === undefined) throw new Error('Missing verified events snapshot for a baseline row');
+  // Real-profile admission has already bound this run identity to the manifest and receipt binding.
+  const runId = (evidence as M6OfflineRunEvidence).runId;
+  const candidates = events.filter(event => event.channel === 'model-text' && event.direction === 'internal'
+    && event.documentId === runId && event.requestId === 'bootstrap'
+    && (event.initiator === 'baseline-bootstrap' || event.initiator === 'reference-bootstrap'));
+  const reject = () => new OfflineValidationError('signature-mismatch',
+    `Canary not authenticated by the signed bootstrap for ${formatRun(stored)}`);
+  if (candidates.length !== 1) throw reject();
+  let bootstrap: unknown;
+  try { bootstrap = JSON.parse(candidates[0].bytes); } catch { throw reject(); }
+  if (!(isRecord(bootstrap) && typeof bootstrap.password === 'string' && bootstrap.password.length > 0
+    && bootstrap.password === evidence.canary)) throw reject();
+}
+
 function verifyRunCompletion(
   stored: RunRecord,
   evidence: OfflineRunEvidence,
@@ -445,10 +469,10 @@ function verifyRunCompletion(
   scenario: Scenario,
   diagnostic = false,
 ): CompletionVerification {
-  // ORDER IS LOAD-BEARING. Authenticate the canary against the fixture-signed commitment BEFORE
+  // ORDER IS LOAD-BEARING. After baseline bootstrap authentication, authenticate the fixture-signed commitment BEFORE
   // anything uses it as a search target. Every check below (the positive control, leakScan) is
   // only meaningful if we are searching for the canary the run actually used — so a swapped/decoy
-  // canary must be diagnosed as a commitment mismatch, not as a downstream symptom of it.
+  // canary must be diagnosed as an authentication mismatch, not as a downstream symptom of it.
   const completion = verifier.verifyPersisted(stored.completionReceipt, {
     ...evidence.completionBinding,
     fixtureId: scenario.fixtureId,

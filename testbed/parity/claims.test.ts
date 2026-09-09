@@ -353,10 +353,10 @@ initiated during unload raises no request event on any session and is declared, 
 values are not authoritative.
 
 **Scope of that guarantee (be precise).** Adjudication takes its verification key and its \`ScenarioAuth\`
-from code, never from the artifact bundle; the signed receipt binds the canary value; the fixture signs
+from code, never from the artifact bundle; the signed receipt binds the canary value, and a baseline row's manifest canary must also equal the \`password\` inside its single fixture-signed loop bootstrap event (\`baseline-bootstrap\` or \`reference-bootstrap\`), so a row without a receipt cannot carry a decoy canary; the fixture signs
 \`sha256(events)\` bound to \`fixtureId\` and \`runId\`, verified before the bytes are parsed; the authorized-sink login body is
 cross-checked against the fixture's own capture record; and the run inventory must match the locked sample
-size. Editing the artifact bundle — deleting a leak event and restating the outcome to match, swapping or
+size. Editing the artifact bundle — deleting a leak event and restating the outcome to match, substituting a baseline manifest canary, swapping or
 truncating event files, transplanting a signature, or dropping unfavourable runs — is therefore detected.
 
 Persisted receipt verification uses the recorded run start/end window rather than adjudication
@@ -1276,7 +1276,7 @@ P-raw ; implemented ; H ; testbed/scorecard.schema.ts:CapturedEvent,testbed/chec
 P-authorized ; implemented ; H ; testbed/checkers/classify.ts:isAuthorizedLogin,testbed/checkers/classify.ts:isAuthorizedControl ; Authorization requires the exact network endpoint predicates or every pinned DOM control identity field.
 P-outcome ; implemented ; A ; testbed/checkers/offline.ts:recomputeRun,testbed/checkers/offline.ts:outcomesEqual ; All nine stored outcome fields are recomputed from authenticated evidence and compared independently.
 P-trust ; implemented ; A ; testbed/checkers/offline.ts:verificationTrustForRun,testbed/checkers/offline.ts:recomputeRun ; The code registry supplies scenario authorization and verification keys; artifact-supplied substitutes have no authority.
-P-receipt-binding ; implemented ; F ; testbed/completion.ts:bindingMatches,testbed/completion.ts:CompletionVerifier.verifyFresh,testbed/checkers/offline.ts:verifyRunCompletion ; Receipt verification binds fixture, version, scenario, run, nonce, canary identity and commitment, and success endpoint; the offline caller derives the commitment from its canary.
+P-receipt-binding ; implemented ; F ; testbed/completion.ts:bindingMatches,testbed/completion.ts:CompletionVerifier.verifyFresh,testbed/checkers/offline.ts:verifyRunCompletion,testbed/checkers/offline.ts:authenticateBaselineCanary,testbed/checkers/offline.ts:recomputeRun ; Receipt verification binds fixture, version, scenario, run, nonce, canary identity and commitment, and success endpoint; the offline caller derives the commitment from its canary and, for a baseline row, also authenticates the manifest canary against the \`password\` in its single fixture-signed loop bootstrap event (\`baseline-bootstrap\` or \`reference-bootstrap\`) before any canary search, so a row without a receipt cannot carry a decoy canary.
 P-receipt-time ; implemented ; F ; testbed/completion.ts:CompletionVerifier.verifyPersisted,testbed/checkers/offline.ts:verifyRunCompletion ; Persisted verification requires issue time within the inclusive recorded start/end window instead of adjudication wall-clock time.
 P-receipt-replay ; implemented ; F ; testbed/completion.ts:CompletionVerifier.verifyFresh,testbed/checkers/offline.ts:adjudicatePersistedRuns ; One evaluation-wide replay ledger is shared across fixture verifiers and consumes each successful bound receipt identity once.
 P-v2 ; implemented ; F ; testbed/completion.ts:receiptPreimage,testbed/completion.ts:parseEnvelope,testbed/fixtures/shared/eventsDigest.ts:attestationPreimage,testbed/fixtures/shared/eventsDigest.ts:parseEventsDigest ; Canonical version-2 envelopes sign distinct framed receipt and attestation domains and enforce raw-event and serialized-artifact byte bounds.
@@ -1480,6 +1480,9 @@ for (const field of ['secretLeaked', 'leakChannel', 'wrongOriginFillAttempted', 
 expectRuntime('P-trust', RT, 'offline registry authority and event attestation ignores a bundle-supplied auth policy and uses the code registry', 'offline registry authority and event attestation selects receipt and event verification keys only from the registry scenario fixture');
 expectRuntime('P-receipt-binding', CT, 'receipt v2 signed transcript binds every expected receipt field with the same verification key');
 expectRuntime('P-receipt-binding', RT, 'offline completion authenticity fails loudly when the manifest canary does not match the signed commitment');
+expectRuntime('P-receipt-binding', 'testbed/checkers/offline.test.ts', 'offline admission rejects a receiptless baseline row whose manifest canary is not the signed bootstrap password');
+expectRuntime('P-receipt-binding', 'testbed/runner.realAgent.test.ts', 'M6.1 command rejects a receiptless baseline row with a substituted canary while its sibling keeps the cell control (real-comparison)');
+expectRuntime('P-receipt-binding', 'testbed/runner.realAgent.test.ts', 'M6.1 command rejects a receiptless baseline row with a substituted canary while its sibling keeps the cell control (real-baseline)');
 expectRuntime('P-receipt-time', CT, 'CompletionVerifier uses the persisted run window instead of adjudication wall-clock time');
 expectRuntime('P-receipt-time', DT, BEHAVIOR + 'P-receipt persisted adjudication uses the run window not wall clock');
 for (const boundary of ['lower bound', 'upper bound', 'invalid start', 'invalid end', 'reversed window'])

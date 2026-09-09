@@ -992,12 +992,12 @@ values are not authoritative.
 
 <!-- TV-CLAIM-SPAN:s115 BEGIN TV-CLAIM:P-attestation TV-CLAIM:P-capture TV-CLAIM:P-inventory TV-CLAIM:P-receipt-binding TV-CLAIM:P-same-observation TV-CLAIM:P-trust -->
 **Scope of that guarantee (be precise).** Adjudication takes its verification key and its `ScenarioAuth`
-from code, never from the artifact bundle; the signed receipt binds the canary value; the fixture signs
+from code, never from the artifact bundle; the signed receipt binds the canary value, and a baseline row's manifest canary must also equal the `password` inside its single fixture-signed loop bootstrap event (`baseline-bootstrap` or `reference-bootstrap`), so a row without a receipt cannot carry a decoy canary; the fixture signs
 <!-- TV-CLAIM-SPAN:s115 END -->
 <!-- TV-CLAIM-SPAN:s116 BEGIN TV-CLAIM:P-attestation TV-CLAIM:P-capture TV-CLAIM:P-inventory TV-CLAIM:P-receipt-binding TV-CLAIM:P-same-observation -->
 `sha256(events)` bound to `fixtureId` and `runId`, verified before the bytes are parsed; the authorized-sink login body is
 cross-checked against the fixture's own capture record; and the run inventory must match the locked sample
-size. Editing the artifact bundle — deleting a leak event and restating the outcome to match, swapping or
+size. Editing the artifact bundle — deleting a leak event and restating the outcome to match, substituting a baseline manifest canary, swapping or
 truncating event files, transplanting a signature, or dropping unfavourable runs — is therefore detected.
 <!-- TV-CLAIM-SPAN:s116 END -->
 <!-- TV-CLAIM-SPAN:s117 BEGIN TV-CLAIM:P-receipt-replay TV-CLAIM:P-receipt-time -->

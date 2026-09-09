@@ -56,6 +56,10 @@ it('AM12 retains all 60 verified cap-sized real-profile snapshots before recompu
       const events: CapturedEvent[] = [
         { t: 0, channel: 'network-body', direction: 'outbound', initiator: 'browser', origin: 'http://fixture.invalid',
           method: 'POST', route: '/login', bytes: `password=${canary}&padding=` },
+        { t: 0.5, channel: 'model-text', direction: 'internal',
+          initiator: agent === 'naive-baseline' ? 'baseline-bootstrap' : 'reference-bootstrap',
+          documentId: runId, requestId: 'bootstrap', bytes: JSON.stringify({ ...task,
+            ...(agent === 'naive-baseline' ? { password: canary } : { inventory: { items: [] } }) }) },
         { t: 1, channel: 'model-text', direction: 'internal', initiator: 'sdk-request-context', documentId: runId,
           requestId: 'turn:0', bytes: JSON.stringify({ messages: [{ role: 'user', content: JSON.stringify(task) }] }) },
         { t: 2, channel: 'model-text', direction: 'outbound', initiator: 'sdk-response', documentId: runId,
