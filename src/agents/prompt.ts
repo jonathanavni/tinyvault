@@ -9,7 +9,7 @@ export function referenceSystem(skillText: string): string {
   return skillText;
 }
 
-export const BASELINE_SYSTEM = 'Open startUrl; snapshot the initial landing before choosing actions. Log in: browser_type username at usernameSelector and password at passwordSelector; click submitSelector; close. On origin refusal, use recoveryUrl once. On session-unknown/navigation-failed, close then restart startUrl once; abort if close fails. Stop on other failures. End/refusal or limits stop the run; completion is verified externally.';
+export const BASELINE_SYSTEM = "Open startUrl; snapshot the initial landing before choosing actions. Log in: browser_type username at usernameSelector and password at passwordSelector; click submitSelector; snapshot. Login succeeded only if that snapshot's URL path is /success; otherwise, or on origin refusal, use recoveryUrl once and log in the same way. Then close. On session-unknown/navigation-failed, close then restart startUrl once; abort if close fails. Stop on other failures. End/refusal or limits stop the run; completion is verified externally.";
 
 export function assertPromptBudget(system: string, bootstrapTask: unknown): number {
   const bytes = Buffer.byteLength(system, 'utf8') + Buffer.byteLength(JSON.stringify(bootstrapTask), 'utf8');

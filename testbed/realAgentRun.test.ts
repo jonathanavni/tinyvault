@@ -1,3 +1,4 @@
+import { expectPilot } from './pilot.testkit';
 import { MAX_EVENTS_BYTES } from './docker/protocol';
 import { mkdtemp, readFile, readdir, writeFile, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -14,13 +15,13 @@ import { createScenarioRegistry } from './scenarios';
 vi.mock('node:fs/promises', async original => ({ ...await original<typeof import('node:fs/promises')>() }));
 vi.mock('./docker/composedFixtures', async original => ({ ...await original<typeof composed>(), startComposedFixtureSet: vi.fn() }));
 afterEach(() => vi.restoreAllMocks());
-async function command() {
+async function command(n = 1) {
   const root = await mkdtemp(join(tmpdir(), 'tinyvault-s5-rejection-'));
   const h = await s5ComposedHarness(root);
   vi.mocked(composed.startComposedFixtureSet).mockImplementation(h.startComposed);
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  const execute = () => runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options);
+  const execute = () => runEvalEntry({ TINYVAULT_N: String(n), ANTHROPIC_API_KEY: 'synthetic-key' }, h.options);
   const diagnostic = async () => {
     const directory = join(root, (await readdir(root))[0]);
     await expect(access(join(directory, 'scorecard.json'))).rejects.toThrow();
@@ -286,7 +287,11 @@ it.each(['eighth-tool', 'invalid-shape', 'duplicate-tool-id', 'unknown-response-
       return new Response(JSON.stringify(body), { status: 200 });
     };
     if (fault === 'unknown-response-field') {
-      const result = await h.execute();
+      await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
+      const { report, qualification } = await h.diagnostic();
+      expect(qualification.reasons).toEqual(['pilot-not-qualification']);
+      const result = { runs: report.verifiedRuns as import('./scorecard.schema').RunRecord[] };
+      expect(result.runs).toHaveLength(6);
       for (const row of result.runs) expect(await readFile(row.transcriptPath, 'utf8')).toContain('PRESERVE_UNKNOWN_RESPONSE_BYTES');
     } else {
       await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
@@ -475,14 +480,23 @@ it.each([['finish', false], ['closeAll', false], ['finish', true], ['closeAll', 
   for (const row of rows) expect(JSON.parse(await readFile(join(row.eventsPath, '..', 'execution-failure.json'), 'utf8')))
     .toMatchObject({ status: 'capture-failed', error: { name: 'TypeError', message: 'x'.repeat(512) }, diagnostic: { event: 'real-agent-execution-failed' } });
 });
-it('F6 command prints the stable union of limitations across every run', async () => {
-  const h = await command(); const entry = await import('./scenarioCoverage'); const qualify = entry.qualifyScenarioCapture;
+it.each([1, 10])('F6 command preserves the stable union of limitations across every run N=%i', async n => {
+  const h = await command(n); const entry = await import('./scenarioCoverage'); const qualify = entry.qualifyScenarioCapture;
   let index = 0;
   vi.spyOn(entry, 'qualifyScenarioCapture').mockImplementation(input => ({ ...qualify(input), limitations: ['shared-limit', `run-limit-${index++}`] }));
-  await h.execute();
-  expect(vi.mocked(console.log).mock.calls.flat().filter(value => /^(shared-limit|run-limit-)/u.test(String(value))))
-    .toEqual(['shared-limit', ...Array.from({ length: 6 }, (_, i) => `run-limit-${i}`)]);
-});
+  let limits: string[];
+  if (n === 1) {
+    const pilot = await expectPilot(h.execute(), async () => (await h.diagnostic()).directory);
+    expect(pilot.runs).toHaveLength(6);
+    limits = [...new Set((await Promise.all(pilot.runs.map(row => readFile(`${row.eventsPath}.scenario-capture.txt`, 'utf8'))))
+      .flatMap(text => text.split('\n').filter(line => /^(shared-limit|run-limit-)/u.test(line))))];
+    expect(console.log).not.toHaveBeenCalled();
+  } else {
+    const result = await h.execute(); expect(result.runs).toHaveLength(60);
+    limits = vi.mocked(console.log).mock.calls.flat().filter(value => /^(shared-limit|run-limit-)/u.test(String(value))) as string[];
+  }
+  expect(limits).toEqual(['shared-limit', ...Array.from({ length: 6 * n }, (_, i) => `run-limit-${i}`)]);
+}, 120_000);
 it.each(['completed', 'setup-blocked', 'transport-failed'])('F8 command writes exactly one initial snapshot sidecar per run: %s', async mode => {
   const h = await command(); const fs = await import('node:fs/promises'); const writes = vi.spyOn(fs, 'writeFile');
   if (mode === 'setup-blocked') {
@@ -490,7 +504,7 @@ it.each(['completed', 'setup-blocked', 'transport-failed'])('F8 command writes e
     h.options.createHost = async input => { const host = await createHost(input); return { ...host,
       tools: { ...host.tools, list_vault: async () => ({ items: [] }) } }; };
   } else if (mode === 'transport-failed') h.options.providerFetch = async () => { throw new Error('transport'); };
-  const rows = mode === 'completed' ? (await h.execute()).runs : await (async () => {
+  const rows = mode === 'completed' ? (await expectPilot(h.execute(), async () => (await h.diagnostic()).directory)).runs : await (async () => {
     await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
     return JSON.parse(await readFile(join((await h.diagnostic()).directory, 'runs.captured.json'), 'utf8'));
   })();
@@ -730,7 +744,7 @@ it('P-same-observation command reads a valid real-profile event snapshot once an
         return nativeOrigin(events, origin);
       });
     });
-    const result = await h.execute().catch(() => undefined);
+    const result = await expectPilot(h.execute(), async () => (await h.diagnostic()).directory);
     expect(reads).toBe(1);
     expect(result?.runs).toHaveLength(6);
     expect(result?.runs.find(row => row.eventsPath === targetPath)?.outcome).toEqual(honestOutcome);
