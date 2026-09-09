@@ -1,9 +1,36 @@
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import { assertProbeHardClause, type ProbePResult } from './probeP';
 
+const ENTRY_NAMES = [
+  'fill-short-vs-long',
+  'queued-short-vs-long',
+  'reflection-equal-length',
+  'tripwire-match-vs-no-match',
+  'tripwire-real-click-match-vs-no-match',
+  'real-listener-click',
+  'tripwire-batched-injected-bias-control',
+  'sensitivity-floor',
+  'tripwire-match-vs-no-match-aa',
+  'tripwire-match-vs-no-match-sham',
+  'tripwire-real-click-match-vs-no-match-aa',
+  'tripwire-real-click-match-vs-no-match-sham',
+  'tripwire-real-click-bias-250us',
+  'tripwire-real-click-bias-1000us',
+] as const;
+const TASK_TITLE_TO_ENTRY: Readonly<Record<string, string>> = {
+  'kills secret-length-dependent fill latency after asserting exact result equality': 'fill-short-vs-long',
+  'kills secret-length-dependent mutex occupancy with an immediately queued control': 'queued-short-vs-long',
+  'kills a content-dependent reflection oracle with equal-length caller traffic': 'reflection-equal-length',
+  'kills match-dependent tripwire timing through composeSupervisedHost': 'tripwire-match-vs-no-match',
+  'kills match-dependent tripwire timing on a real supervised browser fill call': 'tripwire-real-click-match-vs-no-match',
+  'kills content-dependent request-listener work on the real supervised click path': 'real-listener-click',
+  'reports a path-specific 2us-per-call injected-bias control rejected by the family gate': 'tripwire-batched-injected-bias-control',
+  'reports the length-proportional fill-wrapper sensitivity floor': 'sensitivity-floor',
+};
 export type TimingTask = {
   name: string;
   result?: { state: string; startTime?: number; duration?: number; errors?: readonly { message?: string }[] };
@@ -185,4 +212,29 @@ export async function writeIncompleteTimingSidecar(path: string, startedAt: stri
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+export { ENTRY_NAMES, TASK_TITLE_TO_ENTRY };
+
+export async function startTimingSidecar(SIDECAR_PATH: string, startedAt: string): Promise<void> {
+  await mkdir('.vitest', { recursive: true });
+  await writeTimingSidecar(SIDECAR_PATH, { schema: 'timing-2-probes/1', complete: false, startedAt });
+}
+
+export async function finishTimingSidecar(
+  SIDECAR_PATH: string, startedAt: string, browser: { version(): string },
+  ledger: LedgerRow[], ledgerFailures: LedgerFailure[], probeResults: Map<string, ProbePResult>,
+  diagnosticResults: Map<string, DiagnosticResult>, sensitivityFloor: ReturnType<typeof composeFloor> | undefined,
+  timingFamily: () => FamilyVerdict,
+): Promise<void> {
+  try {
+    const chromium = browser.version();
+    const record = composeTimingSidecar({
+      startedAt, writtenAt: new Date().toISOString(), commit: await readTimingCommit(process.cwd()),
+      node: process.version, chromium, names: ENTRY_NAMES, titleToEntry: TASK_TITLE_TO_ENTRY,
+      ledger, ledgerFailures, probeResults,
+      diagnosticResults, floor: sensitivityFloor, family: timingFamily(),
+    });
+    await writeTimingSidecar(SIDECAR_PATH, record);
+  } catch (error) { await writeIncompleteTimingSidecar(SIDECAR_PATH, startedAt, error); }
 }
