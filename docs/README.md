@@ -120,7 +120,7 @@ Active planning docs:
   finalization and stop-before-next-run; three-round pre-implementation paper cap, Astra implementation, three-round
   post-implementation ladder; **landed** `a666b13` with ten declared residuals.
 - `m6-am13-pilot-qualification-amendment.md` — M6-AM13 (DRAFT v4, **NOT ADOPTED**; paper cap reached 2026-09-08): pilot readiness vs. N10 outcome qualification (real-path N=10 gate, Shape A/B), the one-time pilot-progression and post-failure exceptions, and the O2′ baseline recovery instruction (`/success` path check). Awaiting the user's §7 decisions.
-- `m6-f1-asserted-origin-schema-packet.md` — F1 (v3): `assertedOrigin` format description in the model-facing tool schema; AM11 declaration bytes re-frozen; example must not be a fixed fixture origin.
+- `m6-f1-asserted-origin-schema-packet.md` — F1 (v3): `assertedOrigin` format description in the model-facing tool schema; AM11 declaration bytes re-frozen; example must not be a fixed fixture origin. Implemented and ACCEPTED, merged `dd669ba` (see `m6-review-findings.md`).
 - `m6-am12-implementation-packet.md` — Astra implementation handoff for the adopted M6-AM12 (values, five bridge scalar bounds,
   item-3 flips, certifying witness, Docker exact-cap gate, P-v2 claim-row packet, plan §4.3 text). Sequenced after the
   oversize diagnostic packet. Sol pre-implementation review done (three rounds); implemented and merged `623a8b7`.
