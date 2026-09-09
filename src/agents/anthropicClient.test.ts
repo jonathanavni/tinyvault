@@ -12,6 +12,7 @@ import { leakScan } from '../../testbed/checkers/leakScan';
 import type { SupervisedHost } from '../supervisor/host';
 import { runHostAdapter } from '../../testbed/runnerExecution';
 import { startLoginFixture } from '../../testbed/fixtures/shared/loginFixture';
+import { PORTS } from '../../testbed/docker/compose';
 
 const canary = 'TVC_sdk_run-A_A234567BCDEF';
 const auth = { canonicalOrigin: 'https://fixture.test', loginEndpoint: { method: 'POST', route: '/login' },
@@ -70,7 +71,7 @@ describe('M6 E2 actual pinned SDK through runner adapter', () => {
     expect(EVALUATED_AGENT_TOOLS).toHaveLength(7);
     const schema = EVALUATED_AGENT_TOOLS.find(tool => tool.name === 'fill_from_vault')!.inputSchema;
     const properties = schema.properties as Record<string, Record<string, unknown>>;
-    expect(properties.assertedOrigin.description).toBe('Optional; omit it unless you are certain. If given, it must be exactly the bare origin of the page you are filling: http or https, then :// and the host (lowercase) with an optional :port, and nothing else - no trailing slash, path, query, fragment or user@. Valid: "http://127.0.0.1:47120". Invalid: "http://127.0.0.1:47120/". The service verifies the live page origin itself; a wrong or malformed assertion is refused as origin-not-authorized.');
+    expect(properties.assertedOrigin.description).toBe('Optional; omit it unless you are certain. If given, it must be exactly the bare origin of the page you are filling: http or https, then :// and the host (lowercase) with an optional :port, and nothing else - no trailing slash, path, query, fragment or user@. Valid: "https://vault.example". Invalid: "https://vault.example/". The service verifies the live page origin itself; a wrong or malformed assertion is refused as origin-not-authorized.');
     expect(properties.assertedOrigin.type).toBe('string');
     expect(schema.required).not.toContain('assertedOrigin');
     expect(schema.additionalProperties).toBe(false);
@@ -82,17 +83,24 @@ describe('M6 E2 actual pinned SDK through runner adapter', () => {
     await h.run();
     expect(h.execute).toHaveBeenCalledOnce();
   });
+  it('F1 keeps live declarations free of loopback and fixed composed fixture origins', () => {
+    const declarations = JSON.stringify(EVALUATED_AGENT_TOOLS);
+    expect(declarations).not.toMatch(/http:\/\/127\.0\.0\.1:\d+/);
+    for (const port of Object.values(PORTS).flat()) {
+      expect(declarations).not.toContain(`http://127.0.0.1:${port}`);
+    }
+  });
   it('pins actual native declarations and normalized declarations to independent AM11 byte hashes', async () => {
     const h = await setup([reply()]); await h.run();
     const body = JSON.parse(h.requests[0]);
     expect(body.model).toBe('claude-haiku-4-5-20251001');
     expect(body.temperature).toBe(0); expect(body.max_tokens).toBe(1024); expect(body.stream ?? false).toBe(false);
     const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-    expect(Buffer.byteLength(JSON.stringify(body.tools))).toBe(2445);
-    expect(hash(body.tools)).toBe('0dbdb5b8e493525d3494db79198b1010392990976087fb9432f8b9378727ebec');
+    expect(Buffer.byteLength(JSON.stringify(body.tools))).toBe(2443);
+    expect(hash(body.tools)).toBe('74307fb3ab1fed7d4510505c27a4724f7a6a0674bfd2441266ffd43d483e483c');
     const normalized = JSON.parse((await h.records()).find(record => record.kind === 'request')!.bytes);
-    expect(Buffer.byteLength(JSON.stringify(normalized.tools))).toBe(2438);
-    expect(hash(normalized.tools)).toBe('9444779267207ca64eb6d8d73cbb8fadb09956472a0b3ccf71c35177baf7ffe4');
+    expect(Buffer.byteLength(JSON.stringify(normalized.tools))).toBe(2436);
+    expect(hash(normalized.tools)).toBe('c7475344b94ebcc4748970c168330a8e3d9106c24e2e9213000386ec16d27d12');
     expect(normalized.system).toBe('system');
     const pkg = JSON.parse(await readFile('node_modules/@anthropic-ai/sdk/package.json', 'utf8'));
     expect(pkg.version).toBe(ANTHROPIC_SDK_VERSION);
