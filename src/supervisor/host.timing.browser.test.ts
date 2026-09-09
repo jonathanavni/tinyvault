@@ -1,5 +1,6 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 
+import ts from 'typescript';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { CredentialBackend } from '../backends/backend';
@@ -16,6 +17,10 @@ import {
   runProbeP,
   type ProbePResult,
 } from '../../testbed/probe/probeP';
+import { classifyFamilyError, composeFloor, composeTimingSidecar, readTimingCommit,
+  writeTimingSidecar, writeIncompleteTimingSidecar, type DiagnosticResult, type FamilyVerdict,
+  type FloorResult, type LedgerRow, type LedgerFailure } from '../../testbed/probe/timing2Sidecar';
+import { SECRET_TRANSFORM_NAMES } from '../shared/secretTransforms';
 import { startControlsLab, type ControlsLab } from '../../testbed/fixtures/controls-lab';
 import { createLockdownDomain } from './lockdownDomain';
 import { EvidenceLease, composeSupervisedHost, createSupervisedHost, CAPTURE_FAILED_MESSAGE,
@@ -27,6 +32,8 @@ import { TripwireRun } from './tripwireSeam';
 // (C-F1 evidence: the literal-vs-concatenated pair produced a consistent ~1 ns bias on this ~2 µs op).
 const CANARY = flatCopy('TVC_timing_probe_7B32');
 const NONMATCH = flatCopy(rotateFinalCharacter(CANARY));
+const NONMATCH2 = flatCopy(rotateFinalCharacter(NONMATCH));
+const NO_HOOK = () => undefined;
 const TIMING_PREFIX = 'timing-prefix:';
 const TIMING_SUFFIX = ':timing-suffix';
 const TRIPWIRE_BATCH = 64;
@@ -38,6 +45,40 @@ const PROBE_NAMES = [
   'tripwire-real-click-match-vs-no-match',
   'real-listener-click',
 ] as const;
+const ENTRY_NAMES = [
+  'fill-short-vs-long',
+  'queued-short-vs-long',
+  'reflection-equal-length',
+  'tripwire-match-vs-no-match',
+  'tripwire-real-click-match-vs-no-match',
+  'real-listener-click',
+  'tripwire-batched-injected-bias-control',
+  'sensitivity-floor',
+  'tripwire-match-vs-no-match-aa',
+  'tripwire-match-vs-no-match-sham',
+  'tripwire-real-click-match-vs-no-match-aa',
+  'tripwire-real-click-match-vs-no-match-sham',
+  'tripwire-real-click-bias-250us',
+  'tripwire-real-click-bias-1000us',
+] as const;
+const TASK_TITLE_TO_ENTRY: Readonly<Record<string, string>> = {
+  'kills secret-length-dependent fill latency after asserting exact result equality': 'fill-short-vs-long',
+  'kills secret-length-dependent mutex occupancy with an immediately queued control': 'queued-short-vs-long',
+  'kills a content-dependent reflection oracle with equal-length caller traffic': 'reflection-equal-length',
+  'kills match-dependent tripwire timing through composeSupervisedHost': 'tripwire-match-vs-no-match',
+  'kills match-dependent tripwire timing on a real supervised browser fill call': 'tripwire-real-click-match-vs-no-match',
+  'kills content-dependent request-listener work on the real supervised click path': 'real-listener-click',
+  'reports a path-specific 2us-per-call injected-bias control rejected by the family gate': 'tripwire-batched-injected-bias-control',
+  'reports the length-proportional fill-wrapper sensitivity floor': 'sensitivity-floor',
+};
+const diagnosticResults = new Map<string, DiagnosticResult>();
+const ledger: LedgerRow[] = [];
+const ledgerFailures: LedgerFailure[] = [];
+let ledgerSequence = 0;
+let startedAt = '';
+const SIDECAR_PATH = '.vitest/timing-2-probes.json';
+const floorResults: FloorResult[] = [];
+let sensitivityFloor: ReturnType<typeof composeFloor> | undefined;
 const probeResults = new Map<string, ProbePResult>();
 let browser: Browser;
 let lab: ControlsLab;
@@ -45,6 +86,9 @@ let activeSessions: BrowserSessionHost[] = [];
 let activeHosts: SupervisedHost[] = [];
 
 beforeAll(async () => {
+  startedAt = new Date().toISOString();
+  await mkdir('.vitest', { recursive: true });
+  await writeTimingSidecar(SIDECAR_PATH, { schema: 'timing-2-probes/1', complete: false, startedAt });
   probeResults.clear();
   browser = await launchChromium();
   lab = await startControlsLab();
@@ -59,6 +103,32 @@ afterEach(async () => {
 afterAll(async () => {
   await lab?.close();
   await browser?.close();
+});
+
+afterEach(({ task }) => {
+  try {
+    const sequence = ++ledgerSequence;
+    try { ledger.push({ task, sequence }); }
+    catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      try { ledgerFailures.push({ task, sequence, message }); }
+      catch (failure) { console.error(failure); }
+      console.error(error);
+    }
+  } catch (error) { try { console.error(error); } catch {} }
+});
+
+afterAll(async () => {
+  try {
+    const chromium = browser.version();
+    const record = composeTimingSidecar({
+      startedAt, writtenAt: new Date().toISOString(), commit: await readTimingCommit(process.cwd()),
+      node: process.version, chromium, names: ENTRY_NAMES, titleToEntry: TASK_TITLE_TO_ENTRY,
+      ledger, ledgerFailures, probeResults,
+      diagnosticResults, floor: sensitivityFloor, family: timingFamily(),
+    });
+    await writeTimingSidecar(SIDECAR_PATH, record);
+  } catch (error) { await writeIncompleteTimingSidecar(SIDECAR_PATH, startedAt, error); }
 });
 
 async function timedFillHarness() {
@@ -111,13 +181,19 @@ describe.sequential('H Probe P timing bounds', () => {
     expect(hasDirectFamilyGate(source)).toBe(true);
     expect(hasWrappedFamilyGate(source)).toBe(false);
     // Anchor on the executing statement (a whole line), not on this test's quoted fixture text.
-    const executingCall = /^(\s*)assertProbeFamily\(probeResults, \{ alpha: 0\.01, expected: PROBE_NAMES \}\);$/mu;
+    const executingCall = new RegExp('^(\\s*)assertProbeFamily\\(' + 'probe' + 'Results, \\{ alpha: 0\\.01, expected: PROBE_NAMES \\}\\);$', 'mu');
     expect(source.match(executingCall)).not.toBeNull();
     const wrapped = source.replace(executingCall, (_line, indent: string) => `${indent}${[
-      'expect(() => assertProbeFamily', '(probeResults, { alpha: 0.01, expected: PROBE_NAMES })).not.toThrow();',
+      'expect(() => assertProbeFamily', '(' + 'probe' + 'Results, { alpha: 0.01, expected: PROBE_NAMES })).not.toThrow();',
     ].join('')}`);
     expect(hasDirectFamilyGate(wrapped)).toBe(false);
     expect(hasWrappedFamilyGate(wrapped)).toBe(true);
+    const compile = timingSourceCompiler();
+    for (const [pin, passed] of Object.entries(timingSourceChecks(source, compile))) expect(passed, pin).toBe(true);
+    for (const [pin, mutant, changed] of timingSourceMutations(source)) {
+      expect(changed, mutant).not.toBe(source);
+      expect(timingSourceChecks(changed!, compile)[pin!], mutant).toBe(false);
+    }
   });
   it('kills secret-length-dependent fill latency after asserting exact result equality', async () => {
     const setup = await timedFillHarness();
@@ -199,98 +275,15 @@ describe.sequential('H Probe P timing bounds', () => {
   }, 180_000);
 
   it('kills match-dependent tripwire timing through composeSupervisedHost', async () => {
-    const match = vi.spyOn(secretMatcher, 'firstMatchingSecretTransform');
-    const mint = vi.spyOn(TripwireRun.prototype, 'mint');
-    const adjudicate = vi.spyOn(TripwireRun.prototype, 'adjudicate');
-    const timedCallDeltas: number[][] = [];
-    let hostA!: SupervisedHost;
-    let hostB!: SupervisedHost;
-    let currentHost: SupervisedHost | undefined;
-    const bytesA = JSON.stringify(timingVaultResult(CANARY));
-    const bytesB = JSON.stringify(timingVaultResult(NONMATCH));
-    expect(bytesA.length).toBe(bytesB.length);
-    // Rotate one same-class character so both conditions use the same mixed-character construction.
-    expect(NONMATCH).toHaveLength(CANARY.length);
     expect(NONMATCH).not.toBe(CANARY);
-    expect(characterClassShape(NONMATCH)).toBe(characterClassShape(CANARY));
-    const setupHost = (payload: string) => {
-      currentHost?.drainEvidence(); currentHost?.finish();
-      const service = timingService(payload);
-      currentHost = composeSupervisedHost({
-        fillService: service,
-        sessions: new TimingSessions(),
-        lease: new EvidenceLease(CANARY),
-      });
-      activeHosts.push(currentHost);
-      return currentHost;
-    };
-    const timedToolCall = async (host: SupervisedHost) => {
-      const before = [match.mock.calls.length, mint.mock.calls.length, adjudicate.mock.calls.length];
-      await runTripwireBatch(host);
-      timedCallDeltas.push([
-        match.mock.calls.length - before[0]!,
-        mint.mock.calls.length - before[1]!,
-        adjudicate.mock.calls.length - before[2]!,
-      ]);
-    };
-    const result = await runProbeP({
-      pairs: 500,
-      warmup: 20,
-      setupA: () => { hostA = setupHost(CANARY); },
-      setupB: () => { hostB = setupHost(NONMATCH); },
-      a: () => timedToolCall(hostA),
-      b: () => timedToolCall(hostB),
-    });
-    currentHost?.drainEvidence(); currentHost?.finish();
-    expect(timedCallDeltas.length).toBeGreaterThan(0);
-    expect(timedCallDeltas.every((delta) => delta.every((calls) => calls === 0))).toBe(true);
+    const result = await tripwireTimingProbe(CANARY, NONMATCH);
     report('tripwire-match-vs-no-match', result);
     expect(() => assertProbeHardClause(result)).not.toThrow();
   }, 180_000);
 
   it('kills match-dependent tripwire timing on a real supervised browser fill call', async () => {
-    const domain = createLockdownDomain();
-    const sessions = createBrowserSessionHost({ newContext: () => browser.newContext(), ...domain });
-    activeSessions.push(sessions);
-    const controls = createBrowserControls(sessions);
-    const session = await controls.browser_open_session();
-    expect(await controls.browser_navigate({
-      sessionId: session.sessionId, url: `${lab.primaryOrigin}/controls`,
-    })).toEqual({ ok: true });
-    let hostA!: SupervisedHost;
-    let hostB!: SupervisedHost;
-    let currentHost: SupervisedHost | undefined;
-    const hostsToFinish: SupervisedHost[] = [];
-    const resultA = JSON.stringify(timingFillOutcome(CANARY).result);
-    const resultB = JSON.stringify(timingFillOutcome(NONMATCH).result);
-    expect(resultA.length).toBe(resultB.length);
-    const setupHost = (payload: string) => {
-      // A/B arms remain symmetric: both finalize after the shared live producer closes, outside measurement.
-      currentHost = composeSupervisedHost({
-        fillService: browserClickTimingService(controls, session.sessionId, payload),
-        sessions,
-        lease: new EvidenceLease(CANARY),
-      });
-      activeHosts.push(currentHost);
-      hostsToFinish.push(currentHost);
-      return currentHost;
-    };
-    const request = {
-      handle: 'vh_timing', sessionId: session.sessionId,
-      fields: [{ role: 'password' as const, selector: '#password' }],
-    };
-    const result = await runProbeP({
-      pairs: 500,
-      warmup: 20,
-      setupA: () => { hostA = setupHost(CANARY); },
-      setupB: () => { hostB = setupHost(NONMATCH); },
-      a: () => hostA.tools.fill_from_vault(request).then(() => undefined),
-      b: () => hostB.tools.fill_from_vault(request).then(() => undefined),
-    });
-    await sessions.closeAll();
-    for (const pending of hostsToFinish) {
-      await pending.settleEvidence(); pending.drainEvidence(); pending.finish();
-    }
+    expect(NONMATCH).not.toBe(CANARY);
+    const result = await realClickTripwireTimingProbe(CANARY, NONMATCH);
     report('tripwire-real-click-match-vs-no-match', result);
     expect(() => assertProbeHardClause(result)).not.toThrow();
   }, 180_000);
@@ -365,6 +358,7 @@ describe.sequential('H Probe P timing bounds', () => {
     } catch (error) {
       rejection = error instanceof Error ? error.message : String(error);
     }
+    recordDiagnostic(name, result, rejection);
     console.info(`${name}: p=${result.pValue} aggregateBiasUs=${2 * TRIPWIRE_BATCH} rejected=${rejection}`);
     expect(rejection).toBe(`Probe P family rejected: ${name} (p=${result.pValue} <= 0.01 at rank 1 of 1)`);
   }, 180_000);
@@ -392,11 +386,1345 @@ describe.sequential('H Probe P timing bounds', () => {
       } catch {
         rejected.push(microseconds);
       }
+      recordSensitivityFloor(microseconds, result, rejected.includes(microseconds));
       console.info(`probe-p-sensitivity-${microseconds}us: p=${result.pValue}`);
     }
     console.info(`probe-p-sensitivity-floor-us=${Math.min(...rejected)}`);
   }, 180_000);
+  it('tripwire-match-vs-no-match-aa', async () => {
+    const name = 'tripwire-match-vs-no-match-aa';
+    const result = await tripwireTimingProbe(CANARY, CANARY);
+    recordDiagnostic(name, result);
+    assertFiniteProbeStatistics(result);
+    expect(diagnosticResults.has(name)).toBe(true);
+  }, 180_000);
+
+  it('tripwire-match-vs-no-match-sham', async () => {
+    const name = 'tripwire-match-vs-no-match-sham';
+    expect(NONMATCH2).not.toBe(NONMATCH);
+    expect(NONMATCH2).not.toBe(CANARY);
+    for (const payload of [NONMATCH, NONMATCH2]) {
+      for (const bytes of [JSON.stringify(timingVaultResult(payload)), JSON.stringify(timingFillOutcome(payload).result)]) {
+        expect(secretMatcher.firstMatchingSecretTransform(bytes, CANARY, new Set(SECRET_TRANSFORM_NAMES))).toBeNull();
+      }
+    }
+    const result = await tripwireTimingProbe(NONMATCH, NONMATCH2);
+    recordDiagnostic(name, result);
+    assertFiniteProbeStatistics(result);
+    expect(diagnosticResults.has(name)).toBe(true);
+  }, 180_000);
+
+  it('tripwire-real-click-match-vs-no-match-aa', async () => {
+    const name = 'tripwire-real-click-match-vs-no-match-aa';
+    const result = await realClickTripwireTimingProbe(CANARY, CANARY);
+    recordDiagnostic(name, result);
+    assertFiniteProbeStatistics(result);
+    expect(diagnosticResults.has(name)).toBe(true);
+  }, 180_000);
+
+  it('tripwire-real-click-match-vs-no-match-sham', async () => {
+    const name = 'tripwire-real-click-match-vs-no-match-sham';
+    expect(NONMATCH2).not.toBe(NONMATCH);
+    expect(NONMATCH2).not.toBe(CANARY);
+    for (const payload of [NONMATCH, NONMATCH2]) {
+      for (const bytes of [JSON.stringify(timingVaultResult(payload)), JSON.stringify(timingFillOutcome(payload).result)]) {
+        expect(secretMatcher.firstMatchingSecretTransform(bytes, CANARY, new Set(SECRET_TRANSFORM_NAMES))).toBeNull();
+      }
+    }
+    const result = await realClickTripwireTimingProbe(NONMATCH, NONMATCH2);
+    recordDiagnostic(name, result);
+    assertFiniteProbeStatistics(result);
+    expect(diagnosticResults.has(name)).toBe(true);
+  }, 180_000);
+
+  it('tripwire-real-click-bias-250us', async () => {
+    const name = 'tripwire-real-click-bias-250us';
+    const result = await realClickTripwireTimingProbe(NONMATCH, NONMATCH, {
+      afterB: () => spinForMicroseconds(250),
+    });
+    recordDiagnostic(name, result);
+    assertFiniteProbeStatistics(result);
+    expect(diagnosticResults.has(name)).toBe(true);
+  }, 180_000);
+
+  it('tripwire-real-click-bias-1000us', async () => {
+    const name = 'tripwire-real-click-bias-1000us';
+    const result = await realClickTripwireTimingProbe(NONMATCH, NONMATCH, {
+      afterB: () => spinForMicroseconds(1000),
+    });
+    recordDiagnostic(name, result);
+    assertFiniteProbeStatistics(result);
+    expect(diagnosticResults.has(name)).toBe(true);
+  }, 180_000);
+
 });
+
+
+function timingFamily(): FamilyVerdict {
+  try {
+    assertProbeFamily(new Map(probeResults), { alpha: 0.01, expected: PROBE_NAMES });
+    return { status: 'accept' };
+  } catch (error) { return classifyFamilyError(error); }
+}
+
+function assertFiniteProbeStatistics(result: ProbePResult): void {
+  for (const value of [result.pValue, result.z, result.effectSize, result.medianDiffMs, result.p95AMs, result.p95BMs]) {
+    expect(Number.isFinite(value)).toBe(true);
+  }
+  for (const samples of [result.aSamplesMs, result.bSamplesMs, result.differencesMs]) {
+    expect(samples.length === 500).toBe(true);
+    expect(samples.every(Number.isFinite)).toBe(true);
+  }
+}
+
+function recordDiagnosticOutcomes(name: string, result: ProbePResult): void {
+  let hardClause: 'pass' | 'fail' = 'pass';
+  let singleProbeFamily: 'accept' | 'reject' = 'accept';
+  try { assertProbeHardClause(result); } catch { hardClause = 'fail'; }
+  try {
+    assertProbeFamily(new Map([[name, result]]), { alpha: 0.01, expected: [name] });
+  } catch { singleProbeFamily = 'reject'; }
+  diagnosticResults.set(name, { result, hardClause, singleProbeFamily });
+}
+
+function recordDiagnostic(name: string, result: ProbePResult, rejection?: string): void {
+  try {
+    recordDiagnosticOutcomes(name, result);
+    if (rejection !== undefined) {
+      diagnosticResults.set(name, { ...diagnosticResults.get(name)!, singleProbeFamily: rejection ? 'reject' : 'accept' });
+    }
+  } catch (error) { console.error(error); }
+}
+
+function recordSensitivityFloor(microseconds: number, result: ProbePResult, rejected: boolean): void {
+  try {
+    floorResults.push({ microseconds, pValue: result.pValue, medianDiffMs: result.medianDiffMs,
+      singleProbeFamily: rejected ? 'reject' : 'accept' });
+    sensitivityFloor = composeFloor(floorResults);
+  } catch (error) { try { console.error(error); } catch {} }
+}
+
+async function tripwireTimingProbe(payloadA: string, payloadB: string): Promise<ProbePResult> {
+  const match = vi.spyOn(secretMatcher, 'firstMatchingSecretTransform');
+  const mint = vi.spyOn(TripwireRun.prototype, 'mint');
+  const adjudicate = vi.spyOn(TripwireRun.prototype, 'adjudicate');
+  const timedCallDeltas: number[][] = [];
+  let hostA!: SupervisedHost; let hostB!: SupervisedHost;
+  let currentHost: SupervisedHost | undefined;
+  const bytesA = JSON.stringify(timingVaultResult(payloadA));
+  const bytesB = JSON.stringify(timingVaultResult(payloadB));
+  expect(bytesA.length).toBe(bytesB.length);
+  expect(payloadB).toHaveLength(payloadA.length);
+  expect(characterClassShape(payloadB)).toBe(characterClassShape(payloadA));
+  const setupHost = (payload: string) => {
+    currentHost?.drainEvidence(); currentHost?.finish();
+    const service = timingService(payload);
+    currentHost = composeSupervisedHost({
+      fillService: service,
+      sessions: new TimingSessions(),
+      lease: new EvidenceLease(CANARY),
+    });
+    activeHosts.push(currentHost);
+    return currentHost;
+  };
+  const timedToolCall = async (host: SupervisedHost) => {
+    const before = [match.mock.calls.length, mint.mock.calls.length, adjudicate.mock.calls.length];
+    await runTripwireBatch(host);
+    timedCallDeltas.push([
+      match.mock.calls.length - before[0]!,
+      mint.mock.calls.length - before[1]!,
+      adjudicate.mock.calls.length - before[2]!,
+    ]);
+  };
+  const result = await runProbeP({
+    pairs: 500, warmup: 20,
+    setupA: () => { hostA = setupHost(payloadA); },
+    setupB: () => { hostB = setupHost(payloadB); },
+    a: () => timedToolCall(hostA),
+    b: () => timedToolCall(hostB),
+  });
+  currentHost?.drainEvidence(); currentHost?.finish();
+  expect(timedCallDeltas.length).toBeGreaterThan(0);
+  expect(timedCallDeltas.every((delta) => delta.every((calls) => calls === 0))).toBe(true);
+  return result;
+}
+
+async function realClickTripwireTimingProbe(
+  payloadA: string, payloadB: string,
+  { afterA = NO_HOOK, afterB = NO_HOOK }: { afterA?: () => void; afterB?: () => void } = {},
+): Promise<ProbePResult> {
+  const domain = createLockdownDomain();
+  const sessions = createBrowserSessionHost({ newContext: () => browser.newContext(), ...domain });
+  activeSessions.push(sessions);
+  const controls = createBrowserControls(sessions);
+  const session = await controls.browser_open_session();
+  expect(await controls.browser_navigate({
+    sessionId: session.sessionId, url: `${lab.primaryOrigin}/controls`,
+  })).toEqual({ ok: true });
+  let hostA!: SupervisedHost; let hostB!: SupervisedHost;
+  let currentHost: SupervisedHost | undefined;
+  const hostsToFinish: SupervisedHost[] = [];
+  const resultA = JSON.stringify(timingFillOutcome(payloadA).result);
+  const resultB = JSON.stringify(timingFillOutcome(payloadB).result);
+  expect(resultA.length).toBe(resultB.length);
+  expect(payloadB).toHaveLength(payloadA.length);
+  expect(characterClassShape(payloadB)).toBe(characterClassShape(payloadA));
+  const setupHost = (payload: string) => {
+    // A/B arms remain symmetric: both finalize after the shared live producer closes, outside measurement.
+    currentHost = composeSupervisedHost({
+      fillService: browserClickTimingService(controls, session.sessionId, payload),
+      sessions,
+      lease: new EvidenceLease(CANARY),
+    });
+    activeHosts.push(currentHost);
+    hostsToFinish.push(currentHost);
+    return currentHost;
+  };
+  const request = {
+    handle: 'vh_timing', sessionId: session.sessionId,
+    fields: [{ role: 'password' as const, selector: '#password' }],
+  };
+  const result = await runProbeP({
+    pairs: 500, warmup: 20,
+    setupA: () => { hostA = setupHost(payloadA); },
+    setupB: () => { hostB = setupHost(payloadB); },
+    a: () => hostA.tools.fill_from_vault(request).then(afterA),
+    b: () => hostB.tools.fill_from_vault(request).then(afterB),
+  });
+  await sessions.closeAll();
+  for (const pending of hostsToFinish) {
+    await pending.settleEvidence(); pending.drainEvidence(); pending.finish();
+  }
+  return result;
+}
+
+
+function timingFunctionText(source: string, name: string): string {
+  return source.match(new RegExp('^(?:async )?function ' + name + '\\([\\s\\S]*?^\\}', 'mu'))?.[0] ?? '';
+}
+
+function timingConstantText(source: string, name: string, ending: string): string {
+  return source.match(new RegExp('^const ' + name + '[\\s\\S]*?^' + ending, 'mu'))?.[0] ?? '';
+}
+
+function pinsTimingImports(file: ts.SourceFile): boolean {
+  const expected = [
+    "import { mkdir, readFile } from 'node:fs/promises';",
+    "import ts from 'typescript';",
+    "import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';",
+    "import type { CredentialBackend } from '../backends/backend';",
+    "import { createBrowserControls } from '../browser/controls';",
+    "import { launchChromium, type Browser, type BrowserContext, type CDPSession, type Page } from '../browser/playwright';",
+    "import { createBrowserSessionHost, type BrowserSessionHost, type SessionPage } from '../browser/session';",
+    "import type { FillDestinationPort } from '../core/browserPort';",
+    "import { createFillService, type FillOutcome, type FillService } from '../core/fillService';",
+    "import { Secret } from '../core/redaction';",
+    "import type { BrowserControls, Origin } from '../core/types';",
+    "import {\n  assertProbeFamily,\n  assertProbeHardClause,\n  runProbeP,\n  type ProbePResult,\n} from '../../testbed/probe/probeP';",
+    "import { classifyFamilyError, composeFloor, composeTimingSidecar, readTimingCommit,\n  writeTimingSidecar, writeIncompleteTimingSidecar, type DiagnosticResult, type FamilyVerdict,\n  type FloorResult, type LedgerRow, type LedgerFailure } from '../../testbed/probe/timing2Sidecar';",
+    "import { SECRET_TRANSFORM_NAMES } from '../shared/secretTransforms';",
+    "import { startControlsLab, type ControlsLab } from '../../testbed/fixtures/controls-lab';",
+    "import { createLockdownDomain } from './lockdownDomain';",
+    "import { EvidenceLease, composeSupervisedHost, createSupervisedHost, CAPTURE_FAILED_MESSAGE,\n  inspectSupervisedHostCaptureFailedForTest, type SupervisedHost } from './host';",
+    "import * as secretMatcher from './secretMatcher';",
+    "import { TripwireRun } from './tripwireSeam';",
+  ];
+  const actual = file.statements.filter(ts.isImportDeclaration).map((node) => node.getText(file));
+  return actual.length === expected.length && actual.every((text, index) => text === expected[index]);
+}
+
+function timingSourceLifecyclePins() {
+  // User-authorized pre-existing exceptions: exact statements and suite positions only.
+  return {
+    hook: [
+      "afterEach(async () => {",
+      "    lifecycleHost?.abort();",
+      "    try { await lifecycleHost?.closeAll(); }",
+      "    finally {",
+      "      await lifecycleBrowser?.close(); lifecycleHost = undefined; lifecycleBrowser = undefined;",
+      "    }",
+      "  });",
+    ].join('\n'),
+    each: [
+      "it.each([false, true])('busy-renderer suspension cutoff permits successful quiesce within the hard five-second budget (pending CDP=%s)', async (pendingCdp) => {",
+      "    const { host, page } = await lifecycleTimingHarness((context) => {",
+      "      if (!pendingCdp) return;",
+      "      const create = context.newCDPSession.bind(context);",
+      "      vi.spyOn(context, 'newCDPSession').mockImplementation(async (target) => {",
+      "        const cdp = await create(target); const send = cdp.send.bind(cdp);",
+      "        vi.spyOn(cdp, 'send').mockImplementation((async (method: string, params?: never) => {",
+      "          if (method !== 'Emulation.setScriptExecutionDisabled') return send(method as never, params);",
+      "          const work = await Promise.allSettled([send('Runtime.evaluate', { expression: '1' }), send(method, params)]);",
+      "          for (const result of work) if (result.status === 'rejected') throw result.reason;",
+      "          return (work[1] as PromiseFulfilledResult<any>).value;",
+      "        }) as CDPSession['send']); return cdp;",
+      "      });",
+      "    });",
+      "    const entered = page.waitForEvent('console', (message) => message.text() === 's4-suspend-busy');",
+      "    await page.evaluate(() => { setTimeout(() => { console.log('s4-suspend-busy'); while (true) {} }, 0); });",
+      "    await entered;",
+      "    const start = performance.now(); await host.quiesceEvidenceProducers!();",
+      "    expect(performance.now() - start).toBeLessThan(5_000);",
+      "    expect(inspectSupervisedHostCaptureFailedForTest(host)).toBe(false);",
+      "    host.drainEvidence(); expect(host.finish().verdict).toBe('pass');",
+      "  }, 10_000);",
+    ].join('\n'),
+    rootHooks: [
+    [
+      "afterEach(async () => {",
+      "  for (const host of activeHosts.splice(0)) host.abort();",
+      "  await Promise.all(activeSessions.splice(0).map((sessions) => sessions.closeAll()));",
+      "  vi.restoreAllMocks();",
+      "});",
+    ].join('\n'),
+    [
+      "afterEach(({ task }) => {",
+      "  try {",
+      "    const sequence = ++ledgerSequence;",
+      "    try { ledger.push({ task, sequence }); }",
+      "    catch (error) {",
+      "      const message = error instanceof Error ? error.message : String(error);",
+      "      try { ledgerFailures.push({ task, sequence, message }); }",
+      "      catch (failure) { console.error(failure); }",
+      "      console.error(error);",
+      "    }",
+      "  } catch (error) { try { console.error(error); } catch {} }",
+      "});",
+    ].join('\n'),
+    ],
+  };
+}
+
+function timingSourceCompiler() {
+  const config = ts.readConfigFile('tsconfig.json', ts.sys.readFile);
+  if (config.error) throw new Error(ts.flattenDiagnosticMessageText(config.error.messageText, '\n'));
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, ts.sys.getCurrentDirectory());
+  if (parsed.errors.length) throw new Error('Cannot resolve timing-source tsconfig');
+  const root = ts.sys.resolvePath('src/supervisor/host.timing.browser.test.ts');
+  const host = ts.createCompilerHost(parsed.options, true);
+  // Binding-only scans keep the original lightweight graph. Semantic acceptance
+  // resolves all real imports, avoiding false diagnostics from omitted declarations.
+  let semantic = false;
+  const modules = ts.createModuleResolutionCache(ts.sys.getCurrentDirectory(), host.getCanonicalFileName, parsed.options);
+  host.resolveModuleNames = (names, containingFile) => names.map((name) =>
+    !semantic && containingFile === root && name !== 'vitest' ? undefined
+      : ts.resolveModuleName(name, containingFile, parsed.options, host, modules).resolvedModule);
+  const read = host.getSourceFile;
+  const dependencies = new Map<string, ts.SourceFile>();
+  let current: ts.SourceFile;
+  const programs: (ts.Program | undefined)[] = [];
+  host.getSourceFile = (name, ...args) => {
+    if (ts.sys.resolvePath(name) === root) return current;
+    let file = dependencies.get(name);
+    if (!file) { file = read(name, ...args); if (file) dependencies.set(name, file); }
+    return file;
+  };
+  // Reuse immutable dependency syntax trees, never a previous mutant's root or check results.
+  return (source: string, checkSemantics = false): ts.Program => {
+    semantic = checkSemantics;
+    current = ts.createSourceFile(root, source, parsed.options.target!, true);
+    const index = Number(semantic);
+    const program = ts.createProgram({ rootNames: [root], options: parsed.options, host, oldProgram: programs[index] });
+    programs[index] = program;
+    return program;
+  };
+}
+
+function timingSourceResolve(source: string, compile: ReturnType<typeof timingSourceCompiler>) {
+  const program = compile(source);
+  const file = program.getSourceFile(ts.sys.resolvePath('src/supervisor/host.timing.browser.test.ts'))!;
+  const checker = program.getTypeChecker();
+  const unalias = (symbol: ts.Symbol | undefined): ts.Symbol | undefined =>
+    symbol && (symbol.flags & ts.SymbolFlags.Alias) ? checker.getAliasedSymbol(symbol) : symbol;
+  const symbolAt = (node: ts.Identifier): ts.Symbol | undefined => unalias(
+    ts.isShorthandPropertyAssignment(node.parent) && node.parent.name === node
+      ? checker.getShorthandAssignmentValueSymbol(node.parent) : checker.getSymbolAtLocation(node),
+  );
+  const imports = file.statements.filter(ts.isImportDeclaration);
+  const vitest = imports.find((node) => ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === 'vitest');
+  const module = vitest && checker.getSymbolAtLocation(vitest.moduleSpecifier);
+  const exports = module ? checker.getExportsOfModule(module) : [];
+  const registrationSymbols = new Map<ts.Symbol, string>();
+  for (const name of ['it', 'test', 'describe', 'beforeAll', 'afterEach', 'afterAll']) {
+    const symbol = unalias(exports.find((symbol) => symbol.name === name));
+    if (symbol) registrationSymbols.set(symbol, name);
+  }
+  const isReference = (node: ts.Expression, name: string): node is ts.Identifier =>
+    ts.isIdentifier(node) && registrationSymbols.get(symbolAt(node)!) === name && node.getText(file) === name;
+  const allowedRegistrations = new Set<ts.Identifier>();
+  const suites = new Map<string, ts.Block>();
+  const hooks = new Map<string, ts.Block[]>();
+  const tests: { title: string; body: string; block: ts.Block; suite: string }[] = [];
+  // This scan bounds test registration to references of the statically imported vitest symbols (`it`, `test`, `describe`, hooks) and `vi.spyOn`, with synchronous suite factories. Obtaining a registration function through Vitest internals, globals, or a module loader other than the static import is outside the scan; the complementary control is the execution gate's per-file test inventory (follow-up: pin the timing-2 report's exact 26 titles in `scripts/test-execution.mjs`).
+  // Fourth pinned exception: vi.restoreAllMocks() only at its existing site in
+  // the byte-pinned root afterEach cleanup hook (alongside the three existing exceptions).
+  let registrationsResolved = registrationSymbols.size === 6 && pinsTimingImports(file)
+    && program.getSyntacticDiagnostics(file).length === 0;
+  const viSymbol = unalias(exports.find((symbol) => symbol.name === 'vi'));
+  registrationsResolved &&= viSymbol !== undefined;
+  let cleanupRestore: ts.Identifier | undefined;
+  const titles = ['H Probe P timing bounds', 'M6 S4 lifecycle timing bounds'];
+  const lifecyclePins = timingSourceLifecyclePins();
+  let rootAfterEach = 0; let lifecycleEach = 0; let lifecycleHook = 0;
+  const bodyOf = (call: ts.CallExpression): ts.Block | undefined => {
+    const callback = call.arguments[1];
+    return callback && ts.isArrowFunction(callback) && ts.isBlock(callback.body) ? callback.body : undefined;
+  };
+  for (const statement of file.statements) {
+    if (!ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) continue;
+    const call = statement.expression; const callee = call.expression; const title = call.arguments[0];
+    if (ts.isPropertyAccessExpression(callee) && isReference(callee.expression, 'describe')
+      && callee.name.getText(file) === 'sequential' && title && ts.isStringLiteral(title)
+      && titles.includes(title.text) && bodyOf(call) && !suites.has(title.text)) {
+      const factory = call.arguments[1] as ts.ArrowFunction;
+      if (factory.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)) {
+        registrationsResolved = false;
+      }
+      const scanFactory = (node: ts.Node): void => {
+        // A nested function owns its awaits, including the existing it/hook callbacks.
+        if (ts.isFunctionLike(node)) return;
+        if (ts.isAwaitExpression(node)) registrationsResolved = false;
+        ts.forEachChild(node, scanFactory);
+      };
+      scanFactory(factory.body);
+      suites.set(title.text, bodyOf(call)!); allowedRegistrations.add(callee.expression);
+    }
+    for (const name of ['beforeAll', 'afterEach', 'afterAll']) {
+      const callback = call.arguments[0];
+      if (isReference(callee, name) && callback && ts.isArrowFunction(callback) && ts.isBlock(callback.body)) {
+        hooks.set(name, [...(hooks.get(name) ?? []), callback.body]);
+        if (name !== 'afterEach' || statement.getText(file) === lifecyclePins.rootHooks[rootAfterEach++]) {
+          allowedRegistrations.add(callee);
+          if (name === 'afterEach' && statement.getText(file) === lifecyclePins.rootHooks[0]) {
+            const restore = callback.body.statements[2];
+            if (restore && ts.isExpressionStatement(restore) && ts.isCallExpression(restore.expression)
+              && ts.isPropertyAccessExpression(restore.expression.expression)
+              && ts.isIdentifier(restore.expression.expression.expression)) {
+              cleanupRestore = restore.expression.expression.expression;
+            }
+          }
+        }
+      }
+    }
+  }
+  registrationsResolved &&= suites.size === 2;
+  for (const [suite, block] of suites) {
+    for (const statement of block.statements) {
+      if (!ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) continue;
+      const call = statement.expression; const title = call.arguments[0]; const body = bodyOf(call);
+      if (suite === titles[1]) {
+        if (statement === block.statements[0] && statement.getText(file) === lifecyclePins.hook
+          && isReference(call.expression, 'afterEach')) {
+          allowedRegistrations.add(call.expression); lifecycleHook++;
+        }
+        const each = call.expression;
+        if (statement === block.statements[2] && statement.getText(file) === lifecyclePins.each
+          && ts.isCallExpression(each) && ts.isPropertyAccessExpression(each.expression)
+          && isReference(each.expression.expression, 'it')) {
+          allowedRegistrations.add(each.expression.expression); lifecycleEach++;
+        }
+      }
+      if (isReference(call.expression, 'it') && title && ts.isStringLiteral(title) && body) {
+        allowedRegistrations.add(call.expression);
+        tests.push({ title: title.text, suite, block: body, body: source.slice(body.getStart(file) + 1, body.end - 1) });
+      }
+    }
+  }
+  registrationsResolved &&= rootAfterEach === lifecyclePins.rootHooks.length && lifecycleEach === 1 && lifecycleHook === 1;
+  const pinnedBody = tests.find(({ suite, title }) => suite === titles[0]
+    && title === timingSourceNonDiagnosticTitles()[0])?.block;
+  const forbidden = new Set(['Function', 'eval', 'Reflect', 'Proxy', 'globalThis'].map((name) =>
+    checker.resolveName(name, undefined, ts.SymbolFlags.Value, false)));
+  registrationsResolved &&= !forbidden.has(undefined);
+  const hostImport = tests.find(({ suite, title }) => suite === titles[0]
+    && title === 'kills content-dependent request-listener work on the real supervised click path')?.block.statements.filter(
+    (node) => node.getText(file) === "const host = await import('./host').then(({ createSupervisedHost }) =>\n"
+      + '      createSupervisedHost({ backend, canary: CANARY, browser }));',
+  ) ?? [];
+  registrationsResolved &&= hostImport.length === 1;
+  const references: { node: ts.Identifier; symbol: ts.Symbol | undefined }[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node)) return; // Exact import text is pinned, including aliases and namespaces.
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
+      && !(hostImport[0] && node.pos >= hostImport[0].pos && node.end <= hostImport[0].end)) registrationsResolved = false;
+    if (ts.isImportEqualsDeclaration(node) || ts.isExportDeclaration(node)) registrationsResolved = false;
+    if (ts.isIdentifier(node)) {
+      const symbol = symbolAt(node); references.push({ node, symbol });
+      if (symbol && symbol === viSymbol && node !== cleanupRestore) {
+        const property = node.parent;
+        if (!ts.isPropertyAccessExpression(property) || property.expression !== node
+          || property.name.getText(file) !== 'spyOn' || !ts.isCallExpression(property.parent)
+          || property.parent.expression !== property) registrationsResolved = false;
+      }
+      if (symbol && registrationSymbols.has(symbol) && !allowedRegistrations.has(node)) registrationsResolved = false;
+      if (symbol && forbidden.has(symbol) && !(pinnedBody && node.pos >= pinnedBody.pos && node.end <= pinnedBody.end)) {
+        registrationsResolved = false;
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return { file, checker, symbolAt, references, tests, hooks,
+    // Run semantic diagnostics only when this predicate is read, after structural rejection.
+    // Map-only mutants do not need a second, unrelated check of their program's types.
+    get registrationsResolved() {
+      if (!registrationsResolved) return false;
+      const semanticProgram = compile(source, true);
+      const semanticFile = semanticProgram.getSourceFile(file.fileName);
+      return !!semanticFile && semanticProgram.getSemanticDiagnostics(semanticFile).length === 0;
+    },
+  };
+}
+
+function timingSourceFamilyBody(): string {
+  const gateMap = 'probe' + 'Results';
+  return [
+    '{',
+    "    // Called directly so a rejection's full message (probe, p-value, Holm threshold, rank) reaches the",
+    "    // JSON report; the expect(...).not.toThrow() wrapper truncated it to 'tripw…' (M6 close gate 2).",
+    '    assertProbeFamily(' + gateMap + ', { alpha: 0.01, expected: PROBE_NAMES });',
+    '    const biased = new Map(' + gateMap + ');',
+    "    const name = 'reflection-equal-length';",
+    '    biased.set(name, { ...biased.get(name)!, pValue: 0 });',
+    '    expect(() => assertProbeFamily(biased, { alpha: 0.01, expected: PROBE_NAMES }))',
+    '      .toThrow(`Probe P family rejected: ${name}`);',
+    '  }',
+  ].join('\n');
+}
+
+function pinsResolvedMapReferences(resolved: ReturnType<typeof timingSourceResolve>): boolean {
+  const { file, symbolAt, references, tests, hooks } = resolved;
+  const gateMap = 'probe' + 'Results'; const diagnosticMap = 'diagnostic' + 'Results';
+  const declarations = file.statements.filter(ts.isVariableStatement)
+    .flatMap((statement) => [...statement.declarationList.declarations]);
+  const bindings = [gateMap, diagnosticMap].map((name) => declarations.filter((node) =>
+    ts.isIdentifier(node.name) && node.name.text === name));
+  if (bindings.some((nodes) => nodes.length !== 1)) return false;
+  const names = bindings.map((nodes) => nodes[0]!.name as ts.Identifier);
+  const symbols = new Set(names.map(symbolAt));
+  if (symbols.has(undefined) || symbols.size !== 2) return false;
+  const allowed = new Set<ts.Identifier>(names);
+  let valid = true;
+  const allow = (block: ts.Block | undefined, text: string): void => {
+    const statements = block?.statements.filter((node) => node.getText(file) === text) ?? [];
+    if (statements.length !== 1) { valid = false; return; }
+    const statement = statements[0]!;
+    for (const { node, symbol } of references) {
+      if (symbols.has(symbol) && node.pos >= statement.pos && node.end <= statement.end) allowed.add(node);
+    }
+  };
+  const functionBody = (name: string): ts.Block | undefined => {
+    const functions = file.statements.filter((node) => ts.isFunctionDeclaration(node) && node.name?.text === name);
+    return functions.length === 1 ? (functions[0] as ts.FunctionDeclaration).body : undefined;
+  };
+  const tryBody = (block: ts.Block | undefined): ts.Block | undefined => {
+    const first = block?.statements[0];
+    return first && ts.isTryStatement(first) ? first.tryBlock : undefined;
+  };
+  allow(hooks.get('beforeAll')?.[0], gateMap + '.clear();');
+  allow(functionBody('report'), gateMap + '.set(name, result);');
+  const families = tests.filter(({ title, suite }) => suite === 'H Probe P timing bounds'
+    && title === 'applies the Holm–Bonferroni family gate over the six probes');
+  const family = families.length === 1 ? families[0]!.block : undefined;
+  const directGate = 'assertProbeFamily(' + gateMap + ', { alpha: 0.01, expected: PROBE_NAMES });';
+  const biasedCopy = 'const biased = new Map(' + gateMap + ');';
+  // Third user-authorized exception: the existing copy immediately after the direct gate.
+  // The entire family body is pinned, so this grants no additional statement or reordered use.
+  valid &&= family?.getText(file) === timingSourceFamilyBody()
+    && family.statements[0]?.getText(file) === directGate && family.statements[1]?.getText(file) === biasedCopy;
+  allow(family, directGate);
+  allow(family, biasedCopy);
+  allow(tryBody(functionBody('timingFamily')),
+    'assertProbeFamily(new Map(' + gateMap + '), { alpha: 0.01, expected: PROBE_NAMES });');
+  allow(tryBody(hooks.get('afterAll')?.[1]), [
+    'const record = composeTimingSidecar({',
+    '      startedAt, writtenAt: new Date().toISOString(), commit: await readTimingCommit(process.cwd()),',
+    '      node: process.version, chromium, names: ENTRY_NAMES, titleToEntry: TASK_TITLE_TO_ENTRY,',
+    '      ledger, ledgerFailures, ' + gateMap + ',',
+    '      ' + diagnosticMap + ', floor: sensitivityFloor, family: timingFamily(),',
+    '    });',
+  ].join('\n'));
+  allow(functionBody('recordDiagnosticOutcomes'), diagnosticMap + '.set(name, { result, hardClause, singleProbeFamily });');
+  const conditional = tryBody(functionBody('recordDiagnostic'))?.statements[1];
+  allow(conditional && ts.isIfStatement(conditional) && ts.isBlock(conditional.thenStatement) ? conditional.thenStatement : undefined,
+    diagnosticMap + '.set(name, { ...' + diagnosticMap + ".get(name)!, singleProbeFamily: rejection ? 'reject' : 'accept' });");
+  for (const { suite, title, block } of tests) {
+    if (suite === 'H Probe P timing bounds' && !timingSourceNonDiagnosticTitles().includes(title)) {
+      allow(block, 'expect(' + diagnosticMap + '.has(name)).toBe(true);');
+    }
+  }
+  for (const { node, symbol } of references) {
+    if (!symbols.has(symbol)) continue;
+    if (!allowed.has(node)) valid = false; // Reject alias creation before an alias can carry the map elsewhere.
+    if (ts.isElementAccessExpression(node.parent) && node.parent.expression === node) valid = false;
+    if (ts.isPropertyAccessExpression(node.parent) && node.parent.expression === node
+      && (!['set', 'get', 'has', 'clear'].includes(node.parent.name.text)
+        || !ts.isCallExpression(node.parent.parent) || node.parent.parent.expression !== node.parent)) valid = false;
+  }
+  return valid;
+}
+
+function timingSourceProbeSection(source: string): string {
+  const file = ts.createSourceFile('timing.ts', source, ts.ScriptTarget.Latest, true);
+  const sections = file.statements.filter((node) => ts.isExpressionStatement(node)
+    && ts.isCallExpression(node.expression) && node.expression.expression.getText(file) === 'describe.sequential'
+    && node.expression.arguments[0] && ts.isStringLiteral(node.expression.arguments[0])
+    && node.expression.arguments[0].text === 'H Probe P timing bounds');
+  if (sections.length !== 1) return '';
+  const section = sections[0]! as ts.ExpressionStatement & { expression: ts.CallExpression };
+  const callback = section.expression.arguments[1];
+  return callback && ts.isArrowFunction(callback) && ts.isBlock(callback.body) ? callback.body.getText(file) : '';
+}
+
+function timingSourceTestCases(source: string): { title: string; body: string }[] {
+  const file = ts.createSourceFile('timing.ts', source, ts.ScriptTarget.Latest, true);
+  const tests: { title: string; body: string }[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      let callee = node.expression;
+      while (ts.isPropertyAccessExpression(callee) || ts.isCallExpression(callee)) callee = callee.expression;
+      if (ts.isIdentifier(callee) && callee.text === 'it') {
+        const title = node.arguments[0]; const callback = node.arguments[1];
+        tests.push({
+          title: title && ts.isStringLiteral(title) ? title.text : '',
+          body: callback && ts.isArrowFunction(callback) && ts.isBlock(callback.body)
+            ? source.slice(callback.body.getStart(file) + 1, callback.body.end - 1) : '',
+        });
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return tests;
+}
+
+function timingSourceTitles(source: string): string[] {
+  return timingSourceTestCases(source).map(({ title }) => title);
+}
+
+function timingSourceNonDiagnosticTitles(): string[] {
+  return [
+    "pins same-constructor timing payloads against the bare-rotation mutant",
+    "kills secret-length-dependent fill latency after asserting exact result equality",
+    "kills secret-length-dependent mutex occupancy with an immediately queued control",
+    "kills a content-dependent reflection oracle with equal-length caller traffic",
+    "kills match-dependent tripwire timing through composeSupervisedHost",
+    "kills match-dependent tripwire timing on a real supervised browser fill call",
+    "kills content-dependent request-listener work on the real supervised click path",
+    "applies the Holm–Bonferroni family gate over the six probes",
+    "reports a path-specific 2us-per-call injected-bias control rejected by the family gate",
+    "reports the length-proportional fill-wrapper sensitivity floor",
+  ];
+}
+
+function timingSourceDiagnosticTitles(): string[] {
+  return [
+    "tripwire-match-vs-no-match-aa",
+    "tripwire-match-vs-no-match-sham",
+    "tripwire-real-click-match-vs-no-match-aa",
+    "tripwire-real-click-match-vs-no-match-sham",
+    "tripwire-real-click-bias-250us",
+    "tripwire-real-click-bias-1000us",
+  ];
+}
+
+function pinsDiagnosticTitles(resolved: ReturnType<typeof timingSourceResolve>): boolean {
+  const titles = resolved.tests.filter(({ suite }) => suite === 'H Probe P timing bounds').map(({ title }) => title);
+  const excluded = timingSourceNonDiagnosticTitles();
+  const expected = timingSourceDiagnosticTitles();
+  const diagnostics = titles.filter((title) => !excluded.includes(title));
+  return titles.length === excluded.length + expected.length
+    && new Set(titles).size === titles.length
+    && excluded.every((title) => titles.includes(title))
+    && diagnostics.length === expected.length && expected.every((title) => diagnostics.includes(title));
+}
+
+function timingDiagnosticBodies(resolved: ReturnType<typeof timingSourceResolve>): Map<string, string> {
+  const excluded = new Set(timingSourceNonDiagnosticTitles());
+  return new Map(resolved.tests.filter(({ suite, title }) => suite === 'H Probe P timing bounds' && !excluded.has(title))
+    .map(({ title, body }) => [title, body]));
+}
+
+function pinsDiagnosticStatistics(resolved: ReturnType<typeof timingSourceResolve>): boolean {
+  const calls: Record<string, string> = {
+    "tripwire-match-vs-no-match-aa": "tripwireTimingProbe(CANARY, CANARY);",
+    "tripwire-match-vs-no-match-sham": "tripwireTimingProbe(NONMATCH, NONMATCH2);",
+    "tripwire-real-click-match-vs-no-match-aa": "realClickTripwireTimingProbe(CANARY, CANARY);",
+    "tripwire-real-click-match-vs-no-match-sham": "realClickTripwireTimingProbe(NONMATCH, NONMATCH2);",
+    "tripwire-real-click-bias-250us": "realClickTripwireTimingProbe(NONMATCH, NONMATCH, {\n      afterB: () => spinForMicroseconds(250),\n    });",
+    "tripwire-real-click-bias-1000us": "realClickTripwireTimingProbe(NONMATCH, NONMATCH, {\n      afterB: () => spinForMicroseconds(1000),\n    });",
+  };
+  const sham = [
+    "    expect(NONMATCH2).not.toBe(NONMATCH);",
+    "    expect(NONMATCH2).not.toBe(CANARY);",
+    "    for (const payload of [NONMATCH, NONMATCH2]) {",
+    "      for (const bytes of [JSON.stringify(timingVaultResult(payload)), JSON.stringify(timingFillOutcome(payload).result)]) {",
+    "        expect(secretMatcher.firstMatchingSecretTransform(bytes, CANARY, new Set(SECRET_TRANSFORM_NAMES))).toBeNull();",
+    "      }",
+    "    }",
+  ];
+  const bodies = timingDiagnosticBodies(resolved);
+  return pinsDiagnosticTitles(resolved) && bodies.size === 6 && [...bodies].every(([name, body]) => {
+    const lines = [
+      `    const name = '${name}';`,
+      ...(name.endsWith('-sham') ? sham : []),
+      '    const result = await ' + calls[name],
+      '    recordDiagnostic(name, result);',
+      '    assertFiniteProbeStatistics(result);',
+      '    expect(' + 'diagnostic' + 'Results.has(name)).toBe(true);',
+    ];
+    return body === '\n' + lines.join('\n') + '\n  ';
+  });
+}
+
+function pinsDiagnosticConstruction(resolved: ReturnType<typeof timingSourceResolve>): boolean {
+  const bodies = timingDiagnosticBodies(resolved);
+  return ['tripwire-match-vs-no-match', 'tripwire-real-click-match-vs-no-match'].every((sibling) => {
+    const helper = sibling.includes('real-click') ? 'realClickTripwireTimingProbe' : 'tripwireTimingProbe';
+    const aa = bodies.get(sibling + '-aa') ?? ''; const sham = bodies.get(sibling + '-sham') ?? '';
+    return aa.includes(`await ${helper}(CANARY, CANARY);`)
+      && sham.includes(`await ${helper}(NONMATCH, NONMATCH2);`)
+      && sham.includes('expect(NONMATCH2).not.toBe(NONMATCH);')
+      && sham.includes('expect(NONMATCH2).not.toBe(CANARY);')
+      && sham.includes('for (const payload of [NONMATCH, NONMATCH2])')
+      && sham.includes('[JSON.stringify(timingVaultResult(payload)), JSON.stringify(timingFillOutcome(payload).result)]')
+      && sham.includes('expect(secretMatcher.firstMatchingSecretTransform(bytes, CANARY, new Set(SECRET_TRANSFORM_NAMES))).toBeNull();');
+  }) && [250, 1000].every((bias) => (bodies.get(`tripwire-real-click-bias-${bias}us`) ?? '').includes(
+    `await realClickTripwireTimingProbe(NONMATCH, NONMATCH, {\n      afterB: () => spinForMicroseconds(${bias}),\n    });`,
+  ));
+}
+
+function pinsProbeIsolation(source: string): Record<string, boolean> {
+  const reporter = ['report', '('].join('');
+  const calls = source.split('\n').map((line) => line.trim()).filter((line) => line.startsWith(reporter));
+  const names = timingConstantText(source, 'PROBE_NAMES', '\\] as const;');
+  const write = ['probe' + 'Results', '.set('].join('');
+  const family = ['assertProbeFamily', '(' + 'probe' + 'Results' + ','].join('');
+  const options = '{ alpha: 0.01, expected: PROBE_NAMES }';
+  const diagnosticMap = ['diagnostic', 'Results'].join('');
+  return {
+    reportCalls: source.split(reporter).length - 1 === 7 && calls.length === 6
+      && calls.every((line) => {
+        const name = line.match(new RegExp("^report" + "\\('([^']+)', result\\);$", 'u'))?.[1];
+        return name !== undefined && names.includes(`'${name}'`);
+      }),
+    probeWrites: source.split(write).length - 1 === 1
+      && timingFunctionText(source, 'report').includes(write),
+    gatedFamily: source.split(family).length - 1 === 1
+      && source.split('\n').some((line) => line.trim() === family + ' ' + options + ');'),
+    recomputedFamily: source.split('\n').some((line) => line.trim()
+      === 'assertProbeFamily(new Map(' + 'probe' + 'Results' + '), ' + options + ');'),
+    separateMaps: source.split('\n').every((line) => !line.includes(diagnosticMap)
+      || !new RegExp('assertProbeFamily|' + 'probe' + 'Results', 'u').test(line)),
+    diagnosticNamesExcluded: !/-(?:aa|sham|250us|1000us)'/u.test(names),
+  };
+}
+
+function pinsMapReferences(source: string): Record<string, boolean> {
+  const gateMap = 'probe' + 'Results';
+  const diagnosticMap = 'diagnostic' + 'Results';
+  const declarations = [
+    'const ' + gateMap + ' = new Map<string, ProbePResult>();',
+    'const ' + diagnosticMap + ' = new Map<string, DiagnosticResult>();',
+  ];
+  const sourceLines = source.split('\n');
+  const lines = sourceLines.map((line) => line.trim());
+  // User-authorized exemption: the pre-existing measurement helper remains byte-identical.
+  const existingCast = "    result: { ok: true, filled: [timingLabel(payload)] } as " + "unknown as FillOutcome['result'],";
+  const allowed = new Set([
+    ...declarations,
+    gateMap + '.clear();',
+    gateMap + '.set(name, result);',
+    'assertProbeFamily(' + gateMap + ', { alpha: 0.01, expected: PROBE_NAMES });',
+    'const biased = new Map(' + gateMap + ');',
+    'assertProbeFamily(new Map(' + gateMap + '), { alpha: 0.01, expected: PROBE_NAMES });',
+    diagnosticMap + '.set(name, { result, hardClause, singleProbeFamily });',
+    diagnosticMap + '.set(name, { ...' + diagnosticMap + ".get(name)!, singleProbeFamily: rejection ? 'reject' : 'accept' });",
+    'expect(' + diagnosticMap + '.has(name)).toBe(true);',
+    'ledger, ledgerFailures, ' + gateMap + ',',
+    diagnosticMap + ', floor: sensitivityFloor, family: timingFamily(),',
+  ]);
+  const identifiers = new RegExp('\\b(?:' + gateMap + '|' + diagnosticMap + ')\\b', 'u');
+  const alias = new RegExp('=\\s*(?:' + gateMap + '|' + diagnosticMap + ')\\b', 'u');
+  return {
+    mapDeclarations: declarations.every((declaration) => sourceLines.filter((line) => line === declaration).length === 1),
+    mapReferences: lines.every((line) => !identifiers.test(line) || allowed.has(line))
+      && lines.every((line) => !alias.test(line) || declarations.includes(line)),
+    unknownCastExemption: sourceLines.filter((line) => line.includes('as ' + 'unknown')).length === 1
+      && sourceLines.includes(existingCast)
+      && timingFunctionText(source, 'timingFillOutcome').split('\n').includes(existingCast),
+  };
+}
+
+function pinsTripwireHelpers(source: string): Record<string, boolean> {
+  const synthetic = timingFunctionText(source, 'tripwireTimingProbe');
+  const real = timingFunctionText(source, 'realClickTripwireTimingProbe');
+  return {
+    helperBoundary: [synthetic, real].every((body) => body.length > 0
+      && !/\b(?:assertProbeHardClause|assertProbeFamily|catch|gated|throw)\b/u.test(body)),
+    realWrapper: real.includes('a: () => hostA.tools.fill_from_vault(request).then(afterA),')
+      && real.includes('b: () => hostB.tools.fill_from_vault(request).then(afterB),')
+      && real.includes('{ afterA = NO_HOOK, afterB = NO_HOOK }')
+      && /^const NO_HOOK = \(\) => undefined;$/mu.test(source)
+      && !/then\(\(\) =>/u.test(real),
+    helperCalls: synthetic.split('runTripwireBatch(').length - 1 === 1
+      && real.split('fill_from_vault(').length - 1 === 2 && !real.includes('spyOn')
+      && !/afterA|afterB|afterCall/u.test(synthetic),
+    helperSampling: [synthetic, real].every((body) => body.includes('pairs: 500, warmup: 20,')),
+    gatedRealClick: pinsGatedTripwireCaller(source, 'realClickTripwireTimingProbe',
+      'kills match-dependent tripwire timing on a real supervised browser fill call'),
+    gatedSynthetic: pinsGatedTripwireCaller(source, 'tripwireTimingProbe',
+      'kills match-dependent tripwire timing through composeSupervisedHost'),
+    nonmatch2: /^const NONMATCH2 = flatCopy\(rotateFinalCharacter\(NONMATCH\)\);$/mu.test(source)
+      && !/const\s+NONMATCH2\s*=\s*rotateFinalCharacter\(NONMATCH\)/u.test(source),
+  };
+}
+
+function pinsGatedTripwireCaller(source: string, helper: string, title: string): boolean {
+  const section = timingSourceProbeSection(source);
+  const body = timingSourceTestCases(section).find((test) => test.title === title)?.body ?? '';
+  return body.split('\n').includes('    const result = await ' + helper + '(CANARY, NONMATCH);');
+}
+
+function pinsEntryNames(source: string): boolean {
+  return timingConstantText(source, "ENTRY_NAMES", "\\] as const;") === [
+    "const ENTRY_NAMES = [",
+    "  'fill-short-vs-long',",
+    "  'queued-short-vs-long',",
+    "  'reflection-equal-length',",
+    "  'tripwire-match-vs-no-match',",
+    "  'tripwire-real-click-match-vs-no-match',",
+    "  'real-listener-click',",
+    "  'tripwire-batched-injected-bias-control',",
+    "  'sensitivity-floor',",
+    "  'tripwire-match-vs-no-match-aa',",
+    "  'tripwire-match-vs-no-match-sham',",
+    "  'tripwire-real-click-match-vs-no-match-aa',",
+    "  'tripwire-real-click-match-vs-no-match-sham',",
+    "  'tripwire-real-click-bias-250us',",
+    "  'tripwire-real-click-bias-1000us',",
+    "] as const;",
+  ].join('\n');
+}
+
+function pinsTaskTitles(source: string): boolean {
+  const entries = [...timingConstantText(source, 'TASK_TITLE_TO_ENTRY', '\\};')
+    .matchAll(/^  '([^']+)': '([^']+)',$/gmu)].map(([, title, name]) => [title!, name!] as const);
+  const names = [...timingConstantText(source, 'ENTRY_NAMES', '\\] as const;')
+    .matchAll(/^  '([^']+)',$/gmu)].map(([, name]) => name!);
+  const titles = timingSourceTitles(source);
+  const expected = timingSourceNonDiagnosticTitles().filter((title) => title.startsWith('kills ') || title.startsWith('reports '));
+  return entries.length === 8 && expected.length === 8
+    && entries.every(([title, name]) => expected.includes(title) && names.includes(name)
+      && titles.filter((actual) => actual === title).length === 1)
+    && expected.every((title) => entries.some(([key]) => key === title))
+    && timingConstantText(source, "TASK_TITLE_TO_ENTRY", "\\};") === [
+    "const TASK_TITLE_TO_ENTRY: Readonly<Record<string, string>> = {",
+    "  'kills secret-length-dependent fill latency after asserting exact result equality': 'fill-short-vs-long',",
+    "  'kills secret-length-dependent mutex occupancy with an immediately queued control': 'queued-short-vs-long',",
+    "  'kills a content-dependent reflection oracle with equal-length caller traffic': 'reflection-equal-length',",
+    "  'kills match-dependent tripwire timing through composeSupervisedHost': 'tripwire-match-vs-no-match',",
+    "  'kills match-dependent tripwire timing on a real supervised browser fill call': 'tripwire-real-click-match-vs-no-match',",
+    "  'kills content-dependent request-listener work on the real supervised click path': 'real-listener-click',",
+    "  'reports a path-specific 2us-per-call injected-bias control rejected by the family gate': 'tripwire-batched-injected-bias-control',",
+    "  'reports the length-proportional fill-wrapper sensitivity floor': 'sensitivity-floor',",
+    "};",
+  ].join('\n');
+}
+
+function pinsProbeNames(source: string): boolean {
+  return timingConstantText(source, "PROBE_NAMES", "\\] as const;") === [
+    "const PROBE_NAMES = [",
+    "  'fill-short-vs-long',",
+    "  'queued-short-vs-long',",
+    "  'reflection-equal-length',",
+    "  'tripwire-match-vs-no-match',",
+    "  'tripwire-real-click-match-vs-no-match',",
+    "  'real-listener-click',",
+    "] as const;",
+  ].join('\n');
+}
+
+function pinsAssertFiniteProbeStatistics(source: string): boolean {
+  return timingFunctionText(source, "assertFiniteProbeStatistics") === [
+    "function assertFiniteProbeStatistics(result: ProbePResult): void {",
+    "  for (const value of [result.pValue, result.z, result.effectSize, result.medianDiffMs, result.p95AMs, result.p95BMs]) {",
+    "    expect(Number.isFinite(value)).toBe(true);",
+    "  }",
+    "  for (const samples of [result.aSamplesMs, result.bSamplesMs, result.differencesMs]) {",
+    "    expect(samples.length === 500).toBe(true);",
+    "    expect(samples.every(Number.isFinite)).toBe(true);",
+    "  }",
+    "}",
+  ].join('\n');
+}
+
+function pinsRecordDiagnosticOutcomes(source: string): boolean {
+  return timingFunctionText(source, "recordDiagnosticOutcomes") === [
+    "function recordDiagnosticOutcomes(name: string, result: ProbePResult): void {",
+    "  let hardClause: 'pass' | 'fail' = 'pass';",
+    "  let singleProbeFamily: 'accept' | 'reject' = 'accept';",
+    "  try { assertProbeHardClause(result); } catch { hardClause = 'fail'; }",
+    "  try {",
+    "    assertProbeFamily(new Map([[name, result]]), { alpha: 0.01, expected: [name] });",
+    "  } catch { singleProbeFamily = 'reject'; }",
+    "  " + "diagnostic" + "Results" + ".set(name, { result, hardClause, singleProbeFamily });",
+    "}",
+  ].join('\n');
+}
+
+function pinsRecordDiagnostic(source: string): boolean {
+  return timingFunctionText(source, "recordDiagnostic") === [
+    "function recordDiagnostic(name: string, result: ProbePResult, rejection?: string): void {",
+    "  try {",
+    "    recordDiagnosticOutcomes(name, result);",
+    "    if (rejection !== undefined) {",
+    "      " + "diagnostic" + "Results" + ".set(name, { ..." + "diagnostic" + "Results" + ".get(name)!, singleProbeFamily: rejection ? 'reject' : 'accept' });",
+    "    }",
+    "  } catch (error) { console.error(error); }",
+    "}",
+  ].join('\n');
+}
+
+function pinsSyntheticHelperSource(source: string): boolean {
+  return timingFunctionText(source, "tripwireTimingProbe") === [
+    "async function tripwireTimingProbe(payloadA: string, payloadB: string): Promise<ProbePResult> {",
+    "  const match = vi.spyOn(secretMatcher, 'firstMatchingSecretTransform');",
+    "  const mint = vi.spyOn(TripwireRun.prototype, 'mint');",
+    "  const adjudicate = vi.spyOn(TripwireRun.prototype, 'adjudicate');",
+    "  const timedCallDeltas: number[][] = [];",
+    "  let hostA!: SupervisedHost; let hostB!: SupervisedHost;",
+    "  let currentHost: SupervisedHost | undefined;",
+    "  const bytesA = JSON.stringify(timingVaultResult(payloadA));",
+    "  const bytesB = JSON.stringify(timingVaultResult(payloadB));",
+    "  expect(bytesA.length).toBe(bytesB.length);",
+    "  expect(payloadB).toHaveLength(payloadA.length);",
+    "  expect(characterClassShape(payloadB)).toBe(characterClassShape(payloadA));",
+    "  const setupHost = (payload: string) => {",
+    "    currentHost?.drainEvidence(); currentHost?.finish();",
+    "    const service = timingService(payload);",
+    "    currentHost = composeSupervisedHost({",
+    "      fillService: service,",
+    "      sessions: new TimingSessions(),",
+    "      lease: new EvidenceLease(CANARY),",
+    "    });",
+    "    activeHosts.push(currentHost);",
+    "    return currentHost;",
+    "  };",
+    "  const timedToolCall = async (host: SupervisedHost) => {",
+    "    const before = [match.mock.calls.length, mint.mock.calls.length, adjudicate.mock.calls.length];",
+    "    await runTripwireBatch(host);",
+    "    timedCallDeltas.push([",
+    "      match.mock.calls.length - before[0]!,",
+    "      mint.mock.calls.length - before[1]!,",
+    "      adjudicate.mock.calls.length - before[2]!,",
+    "    ]);",
+    "  };",
+    "  const result = await runProbeP({",
+    "    pairs: 500, warmup: 20,",
+    "    setupA: () => { hostA = setupHost(payloadA); },",
+    "    setupB: () => { hostB = setupHost(payloadB); },",
+    "    a: () => timedToolCall(hostA),",
+    "    b: () => timedToolCall(hostB),",
+    "  });",
+    "  currentHost?.drainEvidence(); currentHost?.finish();",
+    "  expect(timedCallDeltas.length).toBeGreaterThan(0);",
+    "  expect(timedCallDeltas.every((delta) => delta.every((calls) => calls === 0))).toBe(true);",
+    "  return result;",
+    "}",
+  ].join('\n');
+}
+
+function pinsRealClickHelperSource(source: string): boolean {
+  return timingFunctionText(source, "realClickTripwireTimingProbe") === [
+    "async function realClickTripwireTimingProbe(",
+    "  payloadA: string, payloadB: string,",
+    "  { afterA = NO_HOOK, afterB = NO_HOOK }: { afterA?: () => void; afterB?: () => void } = {},",
+    "): Promise<ProbePResult> {",
+    "  const domain = createLockdownDomain();",
+    "  const sessions = createBrowserSessionHost({ newContext: () => browser.newContext(), ...domain });",
+    "  activeSessions.push(sessions);",
+    "  const controls = createBrowserControls(sessions);",
+    "  const session = await controls.browser_open_session();",
+    "  expect(await controls.browser_navigate({",
+    "    sessionId: session.sessionId, url: `${lab.primaryOrigin}/controls`,",
+    "  })).toEqual({ ok: true });",
+    "  let hostA!: SupervisedHost; let hostB!: SupervisedHost;",
+    "  let currentHost: SupervisedHost | undefined;",
+    "  const hostsToFinish: SupervisedHost[] = [];",
+    "  const resultA = JSON.stringify(timingFillOutcome(payloadA).result);",
+    "  const resultB = JSON.stringify(timingFillOutcome(payloadB).result);",
+    "  expect(resultA.length).toBe(resultB.length);",
+    "  expect(payloadB).toHaveLength(payloadA.length);",
+    "  expect(characterClassShape(payloadB)).toBe(characterClassShape(payloadA));",
+    "  const setupHost = (payload: string) => {",
+    "    // A/B arms remain symmetric: both finalize after the shared live producer closes, outside measurement.",
+    "    currentHost = composeSupervisedHost({",
+    "      fillService: browserClickTimingService(controls, session.sessionId, payload),",
+    "      sessions,",
+    "      lease: new EvidenceLease(CANARY),",
+    "    });",
+    "    activeHosts.push(currentHost);",
+    "    hostsToFinish.push(currentHost);",
+    "    return currentHost;",
+    "  };",
+    "  const request = {",
+    "    handle: 'vh_timing', sessionId: session.sessionId,",
+    "    fields: [{ role: 'password' as const, selector: '#password' }],",
+    "  };",
+    "  const result = await runProbeP({",
+    "    pairs: 500, warmup: 20,",
+    "    setupA: () => { hostA = setupHost(payloadA); },",
+    "    setupB: () => { hostB = setupHost(payloadB); },",
+    "    a: () => hostA.tools.fill_from_vault(request).then(afterA),",
+    "    b: () => hostB.tools.fill_from_vault(request).then(afterB),",
+    "  });",
+    "  await sessions.closeAll();",
+    "  for (const pending of hostsToFinish) {",
+    "    await pending.settleEvidence(); pending.drainEvidence(); pending.finish();",
+    "  }",
+    "  return result;",
+    "}",
+  ].join('\n');
+}
+
+function pinsFloorRecording(source: string): boolean {
+  return timingFunctionText(source, "recordSensitivityFloor") === [
+    "function recordSensitivityFloor(microseconds: number, result: ProbePResult, rejected: boolean): void {",
+    "  try {",
+    "    floorResults.push({ microseconds, pValue: result.pValue, medianDiffMs: result.medianDiffMs,",
+    "      singleProbeFamily: rejected ? 'reject' : 'accept' });",
+    "    sensitivityFloor = composeFloor(floorResults);",
+    "  } catch (error) { try { console.error(error); } catch {} }",
+    "}",
+  ].join('\n')
+    && source.split('\n').filter((line) => line === '      recordSensitivityFloor(microseconds, result, rejected.includes(microseconds));').length === 1;
+}
+
+function pinsLedgerRecording(source: string): boolean {
+  return source.match(/^afterEach\(\(\{ task \}\) => \{[\s\S]*?^\}\);/mu)?.[0] === [
+    "afterEach(({ task }) => {",
+    "  try {",
+    "    const sequence = ++ledgerSequence;",
+    "    try { ledger.push({ task, sequence }); }",
+    "    catch (error) {",
+    "      const message = error instanceof Error ? error.message : String(error);",
+    "      try { ledgerFailures.push({ task, sequence, message }); }",
+    "      catch (failure) { console.error(failure); }",
+    "      console.error(error);",
+    "    }",
+    "  } catch (error) { try { console.error(error); } catch {} }",
+    "});",
+  ].join('\n');
+}
+
+function timingSourceChecks(source: string, compile = timingSourceCompiler()): Record<string, boolean> {
+  // Object.entries evaluates every real-source predicate. A named mutant evaluates only its
+  // target predicate, so text-only mutants do not construct an unused semantic program.
+  let resolved: ReturnType<typeof timingSourceResolve> | undefined;
+  const resolve = () => resolved ??= timingSourceResolve(source, compile);
+  let isolation: Record<string, boolean> | undefined;
+  const isolated = () => isolation ??= pinsProbeIsolation(source);
+  let helpers: Record<string, boolean> | undefined;
+  const helper = () => helpers ??= pinsTripwireHelpers(source);
+  let maps: Record<string, boolean> | undefined;
+  const map = () => maps ??= pinsMapReferences(source);
+  return {
+    get registrationsResolved() {
+      try { return resolve().registrationsResolved; }
+      catch { return false; } // A failed program build cannot certify registrations.
+    },
+    get mapReferencesResolved() { return pinsResolvedMapReferences(resolve()); },
+    get reportCalls() { return isolated().reportCalls!; },
+    get probeWrites() { return isolated().probeWrites!; },
+    get gatedFamily() { return isolated().gatedFamily!; },
+    get recomputedFamily() { return isolated().recomputedFamily!; },
+    get separateMaps() { return isolated().separateMaps!; },
+    get diagnosticNamesExcluded() { return isolated().diagnosticNamesExcluded!; },
+    get helperBoundary() { return helper().helperBoundary!; },
+    get realWrapper() { return helper().realWrapper!; },
+    get helperCalls() { return helper().helperCalls!; },
+    get helperSampling() { return helper().helperSampling!; },
+    get gatedRealClick() { return helper().gatedRealClick!; },
+    get gatedSynthetic() { return helper().gatedSynthetic!; },
+    get nonmatch2() { return helper().nonmatch2!; },
+    get mapDeclarations() { return map().mapDeclarations!; },
+    get mapReferences() { return map().mapReferences!; },
+    get unknownCastExemption() { return map().unknownCastExemption!; },
+    get diagnosticTitles() { return pinsDiagnosticTitles(resolve()); },
+    get diagnosticStatistics() { return pinsDiagnosticStatistics(resolve()); },
+    get diagnosticConstruction() { return pinsDiagnosticConstruction(resolve()); },
+    get syntheticHelperSource() { return pinsSyntheticHelperSource(source); },
+    get realClickHelperSource() { return pinsRealClickHelperSource(source); },
+    get entryNames() { return pinsEntryNames(source); },
+    get taskTitles() { return pinsTaskTitles(source); },
+    get probeNames() { return pinsProbeNames(source); },
+    get finiteHelper() { return pinsAssertFiniteProbeStatistics(source); },
+    get outcomesHelper() { return pinsRecordDiagnosticOutcomes(source); },
+    get recordingHelper() { return pinsRecordDiagnostic(source); },
+    get syntheticRecording() { return pinsSyntheticRecording(source); },
+    get floorRecording() { return pinsFloorRecording(source); },
+    get ledgerRecording() { return pinsLedgerRecording(source); },
+  };
+}
+
+function pinsSyntheticRecording(source: string): boolean {
+  const body = source.match(/^  it\('reports a path-specific[\s\S]*?^  \}, 180_000\);/mu)?.[0] ?? '';
+  return body.includes(['    }', '    recordDiagnostic(name, result, rejection);',
+    '    console.info(`${name}: p=${result.pValue} aggregateBiasUs=${2 * TRIPWIRE_BATCH} rejected=${rejection}`);',
+    '    expect(rejection).toBe(`Probe P family rejected: ${name} (p=${result.pValue} <= 0.01 at rank 1 of 1)`);',
+  ].join('\n'));
+}
+
+function timingSourceMutations(source: string) {
+  const reporter = ['report', '('].join('');
+  const family = ['assertProbeFamily', '(' + 'probe' + 'Results' + ','].join('');
+  const diagnostic = "  it('tripwire-match-vs-no-match-aa', async () => {";
+  const options = '{ alpha: 0.01, expected: PROBE_NAMES }';
+  const mutations: [string, string, string][] = [
+    ['reportCalls', 'twin reported as gated', source.replace(reporter + "'fill-short-vs-long'", reporter + "'tripwire-match-vs-no-match-aa'")],
+    ['probeWrites', 'diagnostic writes gate map', source.replace(diagnostic, diagnostic + '\n    ' + ['probe' + 'Results', '.set(name, result);'].join(''))],
+    ['gatedFamily', 'gate derives expected names', source.replace(family + ' ' + options, family + ' { alpha: 0.01, expected: [...map.keys()] }')],
+    ['recomputedFamily', 'recompute derives expected names', source.replace('assertProbeFamily(new Map(' + 'probe' + 'Results' + '), ' + options,
+      'assertProbeFamily(new Map(' + 'probe' + 'Results' + '), { alpha: 0.01, expected: [...map.keys()] }')],
+    ['separateMaps', 'diagnostics merged into gate', source.replace(family, 'assertProbeFamily(new Map([...' + 'probe' + 'Results' + ', '
+      + '...' + 'diagnostic' + 'Results' + ']),')],
+    ['diagnosticNamesExcluded', 'twin inserted in family', source.replace('const PROBE_NAMES = [', "const PROBE_NAMES = [\n  'tripwire-match-vs-no-match-aa',")],
+    ['probeNames', 'gated name removed', source.replace("  'fill-short-vs-long',", '')],
+    ['entryNames', 'entry order swapped', source.replace("const ENTRY_NAMES = [\n  'fill-short-vs-long',\n  'queued-short-vs-long',",
+      "const ENTRY_NAMES = [\n  'queued-short-vs-long',\n  'fill-short-vs-long',")],
+    ['taskTitles', 'gated title changed', source.replace("  'kills secret-length-dependent fill latency after asserting exact result equality':", "  'wrong title':")],
+    ['nonmatch2', 'bare rotation', source.replace(/^const NONMATCH2 = .*;$/mu,
+      ['const NONMATCH2 = ', 'rotateFinalCharacter(NONMATCH);'].join(''))],
+    ['diagnosticConstruction', 'sham arm B duplicates A', source.replace('await tripwireTimingProbe(NONMATCH, NONMATCH2);', 'await tripwireTimingProbe(NONMATCH, NONMATCH);')],
+    ['realWrapper', 'extra promise hook layer', source.replace('.then(afterB),', '.then(() => afterB()),')],
+    ['realWrapper', 'arm B loses hook', source.replace('.then(afterB),', '.then(NO_HOOK),')],
+    ['helperCalls', 'second synthetic batch', source.replace('await runTripwireBatch(host);', 'await runTripwireBatch(host); await runTripwireBatch(host);')],
+    ['finiteHelper', 'finite helper adds threshold', source.replace('function assertFiniteProbeStatistics(result: ProbePResult): void {',
+      'function assertFiniteProbeStatistics(result: ProbePResult): void {\n  expect(result.pValue).toBeGreaterThan(0.01);')],
+    ['recordingHelper', 'recording catch removed', source.replace(timingFunctionText(source, 'recordDiagnostic'),
+      'function recordDiagnostic(name: string, result: ProbePResult): void {\n  recordDiagnosticOutcomes(name, result);\n}')],
+    ['outcomesHelper', 'outcome catch removed', source.replace("try { assertProbeHardClause(result); } catch { hardClause = 'fail'; }", 'assertProbeHardClause(result);')],
+  ];
+  for (const statement of ['expect(result.pValue > 0.01).toBe(true);', 'assertAnotherStatistic(result);',
+    "expect(result.hardClause).toBe('pass');", "expect(result.singleProbeFamily).toBe('accept');"]) {
+    mutations.push(['diagnosticStatistics', statement, source.replace(diagnostic, diagnostic + '\n    ' + statement)
+      + '\nfunction assertAnotherStatistic(result: ProbePResult) { expect(result.pValue).toBeGreaterThan(0.01); }']);
+  }
+  for (const token of ['assertProbeHardClause(result);', 'assertProbeFamily(new Map(), { expected: [] });', 'try {} catch {}']) {
+    mutations.push(['helperBoundary', token, source.replace('async function tripwireTimingProbe(payloadA: string, payloadB: string): Promise<ProbePResult> {',
+      'async function tripwireTimingProbe(payloadA: string, payloadB: string): Promise<ProbePResult> {\n  ' + token)]);
+  }
+  return [...mutations, ...timingConstructionMutations(source), ...timingHardeningMutations(source), ...timingSourceResolvedMutations(source)];
+}
+
+function timingHardeningMutations(source: string): [string, string, string][] {
+  const diagnostic = "  it('tripwire-match-vs-no-match-aa', async () => {";
+  const gateMap = 'probe' + 'Results';
+  const diagnosticMap = 'diagnostic' + 'Results';
+  const mutations: [string, string, string][] = [];
+  for (const statement of [
+    '{ const expect = assertProbeHardClause; expect(result); }',
+    'expect(result.p95BMs > result.p95AMs).toBe(true);',
+    'expect(result.aSamplesMs[0] > result.bSamplesMs[0]).toBe(true);',
+    '// expect(',
+  ]) mutations.push(['diagnosticStatistics', statement, source.replace(diagnostic, diagnostic + '\n    ' + statement)]);
+  mutations.push(['mapDeclarations', 'diagnostic map aliases the gated map through sharedResults', source.replace(
+    'const ' + diagnosticMap + ' = new Map<string, DiagnosticResult>();',
+    'const sharedResults = ' + gateMap + ';\nconst ' + diagnosticMap + ' = sharedResults as ' + 'unknown as Map<string, DiagnosticResult>;',
+  )]);
+  mutations.push(['mapReferences', 'helper aliases the gated map', source.replace(
+    '  const match = vi.spyOn(', '  const gate = ' + gateMap + ';\n  const match = vi.spyOn(',
+  )]);
+  mutations.push(['mapDeclarations', 'gated map declaration changed', source.replace(
+    'const ' + gateMap + ' = new Map<string, ProbePResult>();',
+    'const ' + gateMap + ' = new Map<string, ProbePResult>([]);',
+  )]);
+  mutations.push(['mapReferences', 'helper aliases the diagnostic map', source.replace(
+    '  const match = vi.spyOn(', '  const records = ' + diagnosticMap + ';\n  const match = vi.spyOn(',
+  )]);
+  mutations.push(['mapReferences', 'unlisted map reference without an assignment', source.replace(
+    '  const match = vi.spyOn(', '  consume(' + gateMap + ');\n  const match = vi.spyOn(',
+  )]);
+  mutations.push(['unknownCastExemption', 'second unknown cast outside the exemption', source + '\nconst cast = {} as ' + 'unknown;\n']);
+  const existingCast = "    result: { ok: true, filled: [timingLabel(payload)] } as " + "unknown as FillOutcome['result'],";
+  mutations.push(['unknownCastExemption', 'existing exempt line changed', source.replace(existingCast,
+    existingCast.replace('timingLabel(payload)', "timingLabel(payload + '')"))]);
+  mutations.push(['unknownCastExemption', 'existing exempt line duplicated', source + '\n' + existingCast + '\n']);
+  mutations.push(['unknownCastExemption', 'existing exempt line removed', source.replace(existingCast, '')]);
+  mutations.push(['diagnosticTitles', 'seventh diagnostic has an unrecognized suffix', source.replace(diagnostic,
+    "  it('tripwire-real-click-bias-2000us', async () => {\n"
+    + '    const result = await realClickTripwireTimingProbe(NONMATCH, NONMATCH);\n'
+    + '    expect(result.pValue).toBeLessThan(0.01);\n  }, 180_000);\n\n' + diagnostic)]);
+  mutations.push(['diagnosticTitles', 'seventh diagnostic is inline', source.replace(diagnostic,
+    "  void 0; it('another diagnostic', async () => {});\n" + diagnostic)]);
+  mutations.push(['diagnosticTitles', 'duplicate diagnostic title', source.replace(diagnostic,
+    "  it('tripwire-match-vs-no-match-aa', async () => {});\n" + diagnostic)]);
+  for (const [helper, pin] of [['tripwireTimingProbe', 'syntheticHelperSource'],
+    ['realClickTripwireTimingProbe', 'realClickHelperSource']] as const) {
+    for (const statement of ['if (payloadA === payloadB) expect(result.pValue).toBeGreaterThan(0.01);',
+      'const gate = ' + gateMap + "; gate.set('tripwire-match-vs-no-match', result);"]) {
+      const body = timingFunctionText(source, helper);
+      mutations.push([pin, helper + ': ' + statement, source.replace(body,
+        body.replace('  return result;', '  ' + statement + '\n  return result;'))]);
+    }
+  }
+  for (const args of ['NONMATCH, NONMATCH', 'CANARY, NONMATCH2', 'NONMATCH, CANARY']) {
+    mutations.push(['gatedSynthetic', 'synthetic gated arms: ' + args, source.replace(
+      '    const result = await tripwireTimingProbe(CANARY, NONMATCH);',
+      '    const result = await tripwireTimingProbe(' + args + ');',
+    )]);
+  }
+  mutations.push(['taskTitles', 'actual gated it title renamed', source.replace(
+    "  it('kills secret-length-dependent fill latency after asserting exact result equality',",
+    "  it('renamed gated probe',",
+  )]);
+  const floor = timingFunctionText(source, 'recordSensitivityFloor');
+  mutations.push(['floorRecording', 'floor recording catch removed', source.replace(floor,
+    floor.replace('  try {\n', '').replace('  } catch (error) { try { console.error(error); } catch {} }\n', ''))]);
+  mutations.push(['floorRecording', 'floor recording call omitted', source.replace(
+    '      recordSensitivityFloor(microseconds, result, rejected.includes(microseconds));', '',
+  )]);
+  const ledgerHook = source.match(/^afterEach\(\(\{ task \}\) => \{[\s\S]*?^\}\);/mu)?.[0] ?? '';
+  mutations.push(['ledgerRecording', 'ledger outer catch removed', source.replace(ledgerHook,
+    ledgerHook.replace('  try {\n', '').replace('  } catch (error) { try { console.error(error); } catch {} }\n', ''))]);
+  mutations.push(['ledgerRecording', 'ledger console outside guard', source.replace(ledgerHook,
+    ledgerHook.replace('\n});', '\n  console.error("unguarded");\n});'))]);
+  return mutations;
+}
+
+function timingSourceResolvedMutations(source: string): [string, string, string][] {
+  // The first four additions are verbatim witnesses from the round-2 review.
+  const end = '\n});\n\n\nfunction timingFamily';
+  const callback = 'async () => {\n    const result = await tripwireTimingProbe(CANARY, CANARY);\n'
+    + '    expect(result.pValue).toBeGreaterThan(0.01);\n  }, 180_000';
+  const tick = String.fromCharCode(96);
+  const diagnostic = "  it('tripwire-match-vs-no-match-aa', async () => {";
+  const gateMap = 'probe' + 'Results'; const diagnosticMap = 'diagnostic' + 'Results';
+  const declaration = 'const ' + gateMap + ' = new Map<string, ProbePResult>();';
+  const slash = String.fromCharCode(92);
+  const aliasPair = '\nconst gateAlias = pr' + slash + 'u006fbeResults;\n'
+    + 'const diagnosticAlias = diagn' + slash + 'u006fsticResults;\n'
+    + 'const originalDiagnosticSet = diagnosticAlias.set.bind(diagnosticAlias);\n'
+    + 'diagnosticAlias.set = (key, value) => { gateAlias.set(key, value.result); return originalDiagnosticSet(key, value); };';
+  const mutations: [string, string, string][] = [
+    ['registrationsResolved', 'round-2 aliased it', source.replace(end,
+      "\n  const hiddenIt = it;\n  hiddenIt('stealth alias diagnostic', " + callback + ');' + end)],
+    ['registrationsResolved', 'round-2 template alias title', source.replace(end,
+      '\n  const hiddenTemplateIt = it;\n  hiddenTemplateIt(' + tick + 'stealth template diagnostic' + tick + ', ' + callback + ');' + end)],
+    ['registrationsResolved', 'round-2 computed member', source.replace(end,
+      "\n  const hiddenComputedIt = { test: it }['test'];\n  hiddenComputedIt('stealth computed diagnostic', " + callback + ');' + end)],
+    ['registrationsResolved', 'round-2 second describe', source
+      + "\ndescribe('H Probe P timing bounds', () => {\n  it('stealth second-block diagnostic', "
+      + callback.replaceAll('\n  ', '\n') + ');\n});\n'],
+    ['registrationsResolved', 'test registration', source.replace('describe, expect, it, vi', 'describe, expect, it, test, vi')
+      .replace(end, "\n  test('stealth test diagnostic', " + callback + ');' + end)],
+    ['registrationsResolved', 'it.each registration', source.replace(end,
+      "\n  it.each([1])('stealth each diagnostic', " + callback + ');' + end)],
+    ['registrationsResolved', 'Function in twin body', source.replace(diagnostic,
+      diagnostic + "\n    new Function('return 1')();")],
+    ['mapReferencesResolved', 'round-2 unicode-escaped alias pair', source.replace(declaration, declaration + aliasPair)],
+    ['mapReferencesResolved', 'destructured diagnostic set', source.replace(diagnostic,
+      diagnostic + '\n    const { set } = ' + diagnosticMap + ';')],
+    ['mapReferencesResolved', 'computed diagnostic set', source.replace(diagnostic,
+      diagnostic + '\n    ' + diagnosticMap + "['set'];")],
+    ['mapReferencesResolved', 'Reflect.get gated set', source.replace(diagnostic,
+      diagnostic + '\n    Reflect.get(' + gateMap + ", 'set');")],
+  ];
+  for (const [name, statement] of [
+    ['direct template title', "it(`stealth template diagnostic`, async () => {});"],
+    ['different second describe', "describe.sequential('different suite', () => {});"],
+    ['nested describe', "describe.sequential('H Probe P timing bounds', () => {});"],
+    ['shorthand it alias', 'const registration = { it };'],
+    ['unicode it alias', 'const registration = ' + 'i' + slash + 'u0074;'],
+    ['nested hook', 'afterAll(() => {});'],
+    ...['concurrent', 'only', 'skip', 'todo', 'sequential'].map((member) => [
+      'it.' + member, "it." + member + "('stealth member diagnostic', async () => {});",
+    ]),
+  ]) mutations.push(['registrationsResolved', name!, source.replace(diagnostic, diagnostic + '\n    ' + statement)]);
+  for (const [name, statement] of [
+    ['eval in helper', "eval('1');"],
+    ['escaped Function in helper', 'new ' + 'F' + slash + "u0075nction('return 1')();"],
+    ['Reflect in helper', "Reflect.get({}, 'value');"],
+    ['Proxy in helper', 'new Proxy({}, {});'],
+    ['global computed Function', "globalThis['Function']('return 1')();"],
+  ]) mutations.push(['registrationsResolved', name!, source.replace(
+    'async function timedFillHarness() {', 'async function timedFillHarness() {\n  ' + statement,
+  )]);
+  for (const [name, statement] of [
+    ['shorthand gated map alias', 'const carried = { ' + gateMap + ' };'],
+    ['destructured gated set', 'const { set } = ' + gateMap + ';'],
+    ['computed gated set', gateMap + "['set'];"],
+    ['unlisted gated property', gateMap + '.size;'],
+    ['gated clear moved into diagnostic', gateMap + '.clear();'],
+    ['diagnostic set moved into helper', diagnosticMap + '.set(name, result);'],
+    ['map alias through another binding', 'const first = ' + gateMap + '; const second = first;'],
+  ]) mutations.push(['mapReferencesResolved', name!, source.replace(diagnostic, diagnostic + '\n    ' + statement)]);
+  mutations.push(['registrationsResolved', 'vitest import alias', source.replace('expect, it, vi', 'expect, it as hiddenIt, vi')]);
+  mutations.push(['registrationsResolved', 'dynamic vitest import', source.replace(diagnostic,
+    diagnostic + "\n    const registrations = await import('vitest');")]);
+  const lifecycle = "describe.sequential('M6 S4 lifecycle timing bounds', () => {";
+  const lifecyclePins = timingSourceLifecyclePins();
+  mutations.push(['registrationsResolved', 'second lifecycle it.each', source.replace(lifecyclePins.each,
+    lifecyclePins.each + '\n\n  ' + lifecyclePins.each)]);
+  mutations.push(['registrationsResolved', 'lifecycle each copied into H', source.replace(diagnostic,
+    '  ' + lifecyclePins.each + '\n' + diagnostic)]);
+  mutations.push(['registrationsResolved', 'lifecycle each moved within suite', source.replace(lifecycle,
+    lifecycle + '\n  void 0;')]);
+  mutations.push(['registrationsResolved', 'lifecycle hook duplicated', source.replace(lifecyclePins.hook,
+    lifecyclePins.hook + '\n  ' + lifecyclePins.hook)]);
+  mutations.push(['registrationsResolved', 'lifecycle hook copied into H', source.replace(diagnostic,
+    '  ' + lifecyclePins.hook + '\n' + diagnostic)]);
+  mutations.push(['registrationsResolved', 'root afterEach duplicated', source.replace(lifecyclePins.rootHooks[0]!,
+    lifecyclePins.rootHooks[0] + '\n' + lifecyclePins.rootHooks[0])]);
+  mutations.push(['registrationsResolved', 'new root afterEach', source + '\nafterEach(() => {});\n']);
+  for (const statement of ["it.each([1])('new lifecycle each', () => {});",
+    "test('new lifecycle test', () => {});", "const hiddenIt = it; hiddenIt('new lifecycle alias', () => {});"]) {
+    const imported = statement.startsWith('test(') ? source.replace('describe, expect, it, vi', 'describe, expect, it, test, vi') : source;
+    mutations.push(['registrationsResolved', statement, imported
+      .replace(lifecyclePins.each, lifecyclePins.each + '\n  ' + statement)]);
+  }
+  const biasedCopy = 'const biased = new Map(' + gateMap + ');';
+  for (const [location, anchor] of [
+    ['diagnostic', diagnostic],
+    ['source-pin test', "  it('pins same-constructor timing payloads against the bare-rotation mutant', async () => {"],
+    ['other gated test', "  it('kills secret-length-dependent fill latency after asserting exact result equality', async () => {"],
+    ['lifecycle suite', lifecycle],
+    ['beforeAll', 'beforeAll(async () => {'],
+    ['helper', 'async function timedFillHarness() {'],
+    ['reporter', 'function ' + 'report' + '(name: string, result: ProbePResult): void {'],
+    ['family recorder', 'function timingFamily(): FamilyVerdict {'],
+  ]) mutations.push(['mapReferencesResolved', 'biased copy in ' + location, source.replace(anchor!, anchor + '\n    ' + biasedCopy)]);
+  mutations.push(['mapReferencesResolved', 'biased copy at module scope', source + '\n' + biasedCopy + '\n']);
+  const familyBody = timingSourceFamilyBody();
+  for (const [name, changedBody] of [
+    ['biased copy duplicated in family', familyBody.replace(biasedCopy, biasedCopy + '\n    { ' + biasedCopy + ' }')],
+    ['biased copy removed from family', familyBody.replace('    ' + biasedCopy + '\n', '')],
+    ['biased copy moved before direct gate', familyBody.replace('    ' + biasedCopy + '\n', '').replace('{\n', '{\n    ' + biasedCopy + '\n')],
+    ['family bias changed', familyBody.replace('pValue: 0', 'pValue: 1')],
+    ['family rejection assertion removed', familyBody.replace(
+      '    expect(() => assertProbeFamily(biased, { alpha: 0.01, expected: PROBE_NAMES }))\n'
+        + '      .toThrow(`Probe P family rejected: ${name}`);\n', '')],
+    ['family statement added', familyBody.replace('{\n', '{\n    void 0;\n')],
+    ['family comment changed', familyBody.replace('Called directly', 'Invoked directly')],
+  ]) mutations.push(['mapReferencesResolved', name!, source.replace(familyBody, changedBody!)]);
+  return mutations;
+}
+
+function timingConstructionMutations(source: string): [string, string, string][] {
+  return [
+    ['helperSampling', '499 pairs', source.replace('pairs: 500, warmup: 20,', 'pairs: 499, warmup: 20,')],
+    ['helperSampling', '19 warmups', source.replace('pairs: 500, warmup: 20,', 'pairs: 500, warmup: 19,')],
+    ['gatedRealClick', 'gated caller adds bias', source.replace('await realClickTripwireTimingProbe(CANARY, NONMATCH);',
+      'await realClickTripwireTimingProbe(CANARY, NONMATCH, { afterB: () => spinForMicroseconds(2) });')],
+    ['syntheticRecording', 'synthetic raw recording omitted', source.replace('    recordDiagnostic(name, result, rejection);', '')],
+    ['diagnosticStatistics', 'diagnostic recording omitted', source.replace('    recordDiagnostic(name, result);', '')],
+    ['diagnosticStatistics', 'structural check omitted', source.replace('    assertFiniteProbeStatistics(result);', '')],
+    ['diagnosticStatistics', 'entry check omitted', source.replace('    expect(' + 'diagnostic' + 'Results' + '.has(name)).toBe(true);', '')],
+    ['diagnosticStatistics', 'title and recording name differ', source.replace("    const name = 'tripwire-match-vs-no-match-aa';", "    const name = 'wrong-entry';")],
+    ['diagnosticConstruction', 'sham uses empty transform set', source.replace('new Set(SECRET_TRANSFORM_NAMES)', 'new Set([])')],
+  ];
+}
 
 function timingLabel(payload: string): string {
   const shaped = `${TIMING_PREFIX}${payload}${TIMING_SUFFIX}`;
@@ -418,12 +1746,12 @@ function hasPinnedTripwireBatch(source: string): boolean {
 }
 
 function hasDirectFamilyGate(source: string): boolean {
-  const direct = ['assertProbeFamily', '(probeResults, { alpha: 0.01, expected: PROBE_NAMES })', ';'].join('');
+  const direct = ['assertProbeFamily', '(' + 'probe' + 'Results' + ', { alpha: 0.01, expected: PROBE_NAMES })', ';'].join('');
   return source.split('\n').some((line) => line.trim() === direct);
 }
 
 function hasWrappedFamilyGate(source: string): boolean {
-  return source.includes(['expect(() => assertProbeFamily', '(probeResults'].join(''));
+  return source.includes(['expect(() => assertProbeFamily', '(' + 'probe' + 'Results'].join(''));
 }
 
 async function runTripwireBatch(host: SupervisedHost, afterCall: () => void = () => undefined): Promise<void> {
