@@ -108,6 +108,12 @@ describe.sequential('H Probe P timing bounds', () => {
     expect(hasPinnedTripwireBatch(source.replace(
       /^const TRIPWIRE_BATCH = 64;$/mu, 'const TRIPWIRE_BATCH = 1;',
     ))).toBe(false);
+    expect(hasDirectFamilyGate(source)).toBe(true);
+    expect(hasWrappedFamilyGate(source)).toBe(false);
+    expect(hasWrappedFamilyGate(source.replace(
+      'assertProbeFamily(probeResults, { alpha: 0.01, expected: PROBE_NAMES });',
+      ['expect(() => assertProbeFamily', '(probeResults, { alpha: 0.01, expected: PROBE_NAMES })).not.toThrow();'].join(''),
+    ))).toBe(true);
   });
   it('kills secret-length-dependent fill latency after asserting exact result equality', async () => {
     const setup = await timedFillHarness();
@@ -315,7 +321,9 @@ describe.sequential('H Probe P timing bounds', () => {
   }, 180_000);
 
   it('applies the Holm–Bonferroni family gate over the six probes', () => {
-    expect(() => assertProbeFamily(probeResults, { alpha: 0.01, expected: PROBE_NAMES })).not.toThrow();
+    // Called directly so a rejection's full message (probe, p-value, Holm threshold, rank) reaches the
+    // JSON report; the expect(...).not.toThrow() wrapper truncated it to 'tripw…' (M6 close gate 2).
+    assertProbeFamily(probeResults, { alpha: 0.01, expected: PROBE_NAMES });
     const biased = new Map(probeResults);
     const name = 'reflection-equal-length';
     biased.set(name, { ...biased.get(name)!, pValue: 0 });
@@ -354,7 +362,7 @@ describe.sequential('H Probe P timing bounds', () => {
       rejection = error instanceof Error ? error.message : String(error);
     }
     console.info(`${name}: p=${result.pValue} aggregateBiasUs=${2 * TRIPWIRE_BATCH} rejected=${rejection}`);
-    expect(rejection).toBe(`Probe P family rejected: ${name}`);
+    expect(rejection).toBe(`Probe P family rejected: ${name} (p=${result.pValue} <= 0.01 at rank 1 of 1)`);
   }, 180_000);
 
   it('reports the length-proportional fill-wrapper sensitivity floor', async () => {
@@ -403,6 +411,15 @@ function hasPinnedTripwireBatch(source: string): boolean {
   // Anchored to a whole line: the quoted mutant text inside this file must not satisfy the pin.
   return /^const TRIPWIRE_BATCH = 64;$/mu.test(source)
     && source.includes('index < TRIPWIRE_BATCH; index += 1');
+}
+
+function hasDirectFamilyGate(source: string): boolean {
+  const direct = ['assertProbeFamily', '(probeResults, { alpha: 0.01, expected: PROBE_NAMES })', ';'].join('');
+  return source.split('\n').some((line) => line.trim() === direct);
+}
+
+function hasWrappedFamilyGate(source: string): boolean {
+  return source.includes(['expect(() => assertProbeFamily', '(probeResults'].join(''));
 }
 
 async function runTripwireBatch(host: SupervisedHost, afterCall: () => void = () => undefined): Promise<void> {
