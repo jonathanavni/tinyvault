@@ -1,4 +1,4 @@
-# M6 F1 — `assertedOrigin` format description in the model-facing tool schema (implementation packet, v2 — §2.2/§3 corrected after the implementer's STOP)
+# M6 F1 — `assertedOrigin` format description in the model-facing tool schema (implementation packet, v3 — §2.1 example changed after the owner Docker gate: the v2 example collided with a live fixture origin)
 
 **Status:** user-decided 2026-09-08 (PLAN Decisions Log, "F1 (user)"); owner packet; implementer Codex GPT-6 Astra on branch `codex/f1-asserted-origin-schema`; base pinned to the commit that adds this packet on `main`.
 **Trigger:** S6 pilot attempt 2 (cohort `TYuNic3U`, `docs/m6-review-findings.md` "pilot attempt 2"): the reference agent's canonical-origin fill after recovery was refused `origin-not-authorized` because it volunteered `assertedOrigin: "http://127.0.0.1:47120/"` — a trailing slash — for a field the model-facing schema exposes as an undescribed `{"type":"string"}` (`src/agents/loop.ts`, `EVALUATED_AGENT_TOOLS`, `fill_from_vault.inputSchema.properties.assertedOrigin`).
@@ -14,8 +14,10 @@ Keep `assertedOrigin` **optional** and **describe its exact format** in the mode
 In `src/agents/loop.ts`, `EVALUATED_AGENT_TOOLS`, tool `fill_from_vault`, property `assertedOrigin`: add a `description` string. Byte-exact text (owner-authored; do not paraphrase, do not reflow):
 
 ```
-Optional; omit it unless you are certain. If given, it must be exactly the bare origin of the page you are filling: http or https, then :// and the host (lowercase) with an optional :port, and nothing else - no trailing slash, path, query, fragment or user@. Valid: "http://127.0.0.1:47120". Invalid: "http://127.0.0.1:47120/". The service verifies the live page origin itself; a wrong or malformed assertion is refused as origin-not-authorized.
+Optional; omit it unless you are certain. If given, it must be exactly the bare origin of the page you are filling: http or https, then :// and the host (lowercase) with an optional :port, and nothing else - no trailing slash, path, query, fragment or user@. Valid: "https://vault.example". Invalid: "https://vault.example/". The service verifies the live page origin itself; a wrong or malformed assertion is refused as origin-not-authorized.
 ```
+
+**v3 note (owner error, 2026-09-08 21:1x CDT):** the v2 example `"http://127.0.0.1:47120"` is the composed topology's fixed lookalike canonical origin (`testbed/docker/compose.ts` `PORTS`). The K-leg parity normalizer (`testbed/parity/normalize.ts`) symbolizes anchored origins wherever they occur in text, so the literal was symbolized in the composed leg and left literal in the in-process leg, and `make test-docker` failed `K-leg canonical two-transport parity` with `Parity difference $["runs"]["0"]["descriptor"]…` (evidence `f1-slice/owner-docker-run1-FAILED.*`). The example must never be a live or fixed fixture origin; `.example` (RFC 2606) cannot be. Everything else in §2.1 is unchanged.
 
 Rules the text encodes (so reviewers can check it against `validateBareOrigin`): scheme `http`/`https` only; authority = host with optional port; rejected: any `/`, `?`, `#`, `\`, `@`, `%`, whitespace/control characters, trailing dot host, port outside 0–65535, mixed-case ASCII host. `type` stays `"string"`; the property stays **out of** `required`; `additionalProperties: false` stays. No other tool, property, name or description changes. `SKILL.md` (AM11 counts the whole file), `BASELINE_SYSTEM`, task recipes and scenario registry are **not** touched.
 
