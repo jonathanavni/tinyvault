@@ -214,3 +214,6 @@ Example:
   pins for new/split security-core files, the worker's proposed contract-doc patch applied in the same commit as the code,
   archive hygiene. Anything else goes back to the worker. (2026-09-07)
 
+
+- **Owner gate discipline (2026-09-09):** gate → read the result from the log → decide → commit/dispatch, as separate steps; never chain a commit or a review dispatch behind a gate in one script, and never quote a gate result you have not read. Mutant logs quote production-file SHA256 digests, not commit labels. Measurement runs (gate cost, timing partitions) get the host to themselves and preserve every `.vitest/*.json` per run.
+- **Pilot readiness (M6-AM13 §4.2, correction A):** computed fail-closed from the persisted `qualification.json`/`diagnostic.json` — READY requires reasons exactly `['pilot-not-qualification']`; READY-WITH-BASELINE-NONCOMPLETION exactly `['positive-control-missing']` with every missing cell a verified baseline noncompletion; anything else, including an unknown reason, is NOT READY. Quote the values in the register before any N10 command; the N10 attempt record (candidate SHA, prompt/tool digests, profiles, N, command order) is pre-declared, and one sequence means baseline N10 then comparison N10 with no repeat.

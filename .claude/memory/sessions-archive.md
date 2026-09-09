@@ -105,3 +105,4 @@ running code. (commits `9f216b0`..`6a6b67c`)
   cap-round integrator fix (attestation = finalization disposition); owner gate green after every delivery; 24 owner mutant
   reproductions; S5 ACCEPTED `1d32657`, pushed. S6 (E9/E10 ladder, needs per-step user authorization) next.
 - 2026-09-08 (s6, session 3) — AM12 adopted → Astra-implemented → three-round post-impl cap → merged `623a8b7`; E9 attempt-2 steps 1–2 PASS (3× clean-clone green); pilot attempt 2 UNQUALIFIED on the lookalike cell (assertedOrigin trailing slash; all-diverted baseline). Open: Probe P gate policy; F1/F2 decisions.
+- 2026-09-09 (s6, session 4) — F1 merged `dd669ba`; M6-AM13 adopted (corrections A/B) → implemented → accepted at round 2 → merged `fe8e9e1`; clean clone `3072e0b` 3× green; pilot 3 `cY3Deep4` READY; N10 sequence QUALIFIED (`z22Kn2eT`, `y9WmFqoL`: ref 0/30 leaks 30/30 done; baseline 30/30 leaks) — S6 ACCEPTED, E8/E9/E10. Probe P deferred. Not pushed.

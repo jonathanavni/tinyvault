@@ -98,3 +98,7 @@ See `PROJECT-SPEC.md` §4 (the mechanism/invariants) and §11 (model/safeguards)
   execution metadata is checked for consistency against attested provider evidence but is never a source of
   completeness. Chosen over attesting the transcript or adding a harness marker event (both contract amendments)
   after three review rounds each beat a rule-based table — the finalization decision is signed by construction.
+
+- **Only N=10 qualifies on the real evaluation path (M6-AM13, user-adopted 2026-09-09).** Any other N is a pilot diagnostic (`pilot-not-qualification`, no scorecard); pilots are never pooled, seeded, replaced or retried. Rationale: a pilot-sized real run could otherwise emit a qualified scorecard, and the pilot is an operational-readiness instrument, not a measurement.
+- **Baseline protocol v2 (M6-AM13 §4.3).** `BASELINE_SYSTEM` tells the naive agent that login succeeded only if the post-submit snapshot's URL path is `/success`, otherwise use `recoveryUrl` once — a navigation cue with no origin or security semantics; signed evidence and the checker remain authoritative for completion. Attempts under v1 (2026-09-08, `z6pSgtfd`, `TYuNic3U`) are unqualified and non-comparable with v2 cohorts.
+- **`assertedOrigin` stays optional and is described exactly in the model-facing schema (F1, 2026-09-09);** the fill service's strict bare-origin validation is unchanged. A model formatting error is fixed at the interface, never by loosening the trusted side.
