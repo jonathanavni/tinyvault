@@ -17,6 +17,7 @@ export const TRIPWIRE_PROBES = [
   'tripwire-real-click-match-vs-no-match',
 ];
 export const SYNTHETIC_CONTROL = 'tripwire-batched-injected-bias-control';
+export const SENSITIVITY_FLOOR = 'sensitivity-floor';
 export const DIAGNOSTICS = Object.freeze({
   'tripwire-match-vs-no-match': {
     aa: 'tripwire-match-vs-no-match-aa',
@@ -30,12 +31,27 @@ export const DIAGNOSTICS = Object.freeze({
   },
 });
 const BAR = 0.01 / 6;
+const EXPECTED_ENTRIES = Object.freeze([
+  ...PROBE_NAMES.map((name) => [name, 'gated']),
+  [SYNTHETIC_CONTROL, 'control-synthetic'],
+  [SENSITIVITY_FLOOR, 'sensitivity-floor'],
+  ['tripwire-match-vs-no-match-aa', 'twin-aa'],
+  ['tripwire-match-vs-no-match-sham', 'twin-sham'],
+  ['tripwire-real-click-match-vs-no-match-aa', 'twin-aa'],
+  ['tripwire-real-click-match-vs-no-match-sham', 'twin-sham'],
+  ['tripwire-real-click-bias-250us', 'control-real-click'],
+  ['tripwire-real-click-bias-1000us', 'control-real-click'],
+]);
+const RESULT_NUMBERS = ['pValue', 'z', 'effectSize', 'medianDiffMs', 'p95AMs', 'p95BMs'];
+const RESULT_ARRAYS = ['aSamplesMs', 'bSamplesMs', 'differencesMs'];
+const FAMILY_VALUES = new Set(['accept', 'reject', 'not-evaluated']);
+const SINGLE_FAMILY_VALUES = new Set(['accept', 'reject']);
 
 const PROPOSALS = Object.freeze({
   insufficient: 'Inconclusive. No inference about calibration.',
   'diagnostic-incompleteness': 'Inconclusive for the affected probe; the incompleteness itself is the finding (a harness defect to fix before re-running a *new* campaign, which would need new authorization).',
   'calibration-concern': 'Proposal: a D10 amendment packet changing the *statistic* for the affected probe(s) to one that respects the measured dependence (block permutation on the interleaved pairs with the block length derived from the retained series, or a declared false-rejection rate measured rather than assumed), keeping α, pairs and the hard clause.',
-  'harness-audit-then-security-investigation': 'Proposal: first an Astra audit of the probe construction in the timing file (host accumulation, setup asymmetry, warm-up order, the stationarity diagnostic); if the audit clears the harness, an Astra investigation of the tripwire path in `src/supervisor`. A consistent primary sign (same sign in ≥ 80 % of valid runs, count printed) strengthens this outcome but does not skip the audit.',
+  'harness-audit-then-security-investigation': 'Proposal: first an Astra audit of the probe construction in the timing file (host accumulation, setup asymmetry, warm-up order, the stationarity diagnostic); if the audit clears the harness, an Astra investigation of the tripwire path in `src/supervisor`.',
   mixed: 'Inconclusive; the pattern is reported in full; it is **not** evidence that the statistic is calibrated.',
   quiet: 'Inconclusive; the gate and the 2026-09-08 deferral stand; the historical reds remain unresolved. **A quiet campaign does not prove the absence of a timing channel, does not reclassify any historical red, and adopts no convention.**',
 });
@@ -64,12 +80,6 @@ function partition(runDirectory, name) {
   };
 }
 
-function normalizedEntries(sidecar) {
-  const source = sidecar?.entries ?? sidecar?.probes ?? {};
-  if (!Array.isArray(source)) return source;
-  return Object.fromEntries(source.filter((entry) => entry?.name).map((entry) => [entry.name, entry]));
-}
-
 function resultOf(entry) {
   return entry?.result ?? entry?.probe ?? entry?.measurement ?? null;
 }
@@ -86,10 +96,83 @@ function familyVerdict(sidecar) {
   return { verdict: family.status ?? 'missing', details: family.details ?? [], reason: family.reason ?? null };
 }
 
+function finiteArray(value, length) {
+  return Array.isArray(value) && value.length === length && value.every(Number.isFinite);
+}
+
+function resultViolation(entry) {
+  const result = entry?.result;
+  if (!result || RESULT_NUMBERS.some((name) => !Number.isFinite(result[name]))) return 'result-finite-numbers';
+  if (RESULT_ARRAYS.some((name) => !finiteArray(result[name], 500))) return 'result-sample-length';
+  return null;
+}
+
+function floorViolation(entry) {
+  if (!(entry.floorMicroseconds === null || Number.isFinite(entry.floorMicroseconds))) return 'floor-microseconds';
+  if (JSON.stringify(entry.magnitudes) !== JSON.stringify([4, 8, 16, 32])) return 'floor-magnitudes';
+  if (!Array.isArray(entry.results) || entry.results.length !== 4) return 'floor-results';
+  for (let index = 0; index < 4; index += 1) {
+    const result = entry.results[index];
+    if (result?.microseconds !== entry.magnitudes[index] || !Number.isFinite(result?.pValue)
+      || !Number.isFinite(result?.medianDiffMs) || !SINGLE_FAMILY_VALUES.has(result?.singleProbeFamily)) {
+      return 'floor-results';
+    }
+  }
+  return null;
+}
+
+function specialEntryViolation(entry) {
+  if (entry.name === SYNTHETIC_CONTROL
+    && (!SINGLE_FAMILY_VALUES.has(entry.singleProbeFamily) || !['pass', 'fail'].includes(entry.hardClause)
+      || entry.biasMicroseconds !== 2 || entry.biasPlacement !== 'per-call' || entry.batch !== 64)) {
+    return 'synthetic-control-fields';
+  }
+  const realBias = entry.name === DIAGNOSTICS['tripwire-real-click-match-vs-no-match'].control250 ? 250
+    : entry.name === DIAGNOSTICS['tripwire-real-click-match-vs-no-match'].control1000 ? 1000 : null;
+  if (realBias !== null && entry.status === 'measured'
+    && (entry.biasMicroseconds !== realBias || entry.biasPlacement !== 'per-sample'
+      || !SINGLE_FAMILY_VALUES.has(entry.singleProbeFamily))) return 'real-control-fields';
+  return null;
+}
+
+function entriesViolation(entries) {
+  if (!Array.isArray(entries)) return 'entries-not-array';
+  const names = entries.map((entry) => entry?.name);
+  const duplicate = names.find((name, index) => names.indexOf(name) !== index);
+  if (duplicate) return `duplicate-entry:${duplicate}`;
+  const expectedNames = EXPECTED_ENTRIES.map(([name]) => name);
+  if (JSON.stringify(names) !== JSON.stringify(expectedNames)) return 'entry-names';
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    const [name, kind] = EXPECTED_ENTRIES[index];
+    if (entry.kind !== kind) return `entry-kind:${name}`;
+    if (!['measured', 'missing', 'error'].includes(entry.status)) return `entry-status:${name}`;
+    if (entry.status !== 'measured' && typeof entry.reason !== 'string') return `entry-reason:${name}`;
+    if (entry.status === 'measured') {
+      const violation = name === SENSITIVITY_FLOOR ? floorViolation(entry) : resultViolation(entry);
+      if (violation) return `${violation}:${name}`;
+    }
+    const special = specialEntryViolation(entry);
+    if (special) return `${special}:${name}`;
+  }
+  return null;
+}
+
+function strictSidecarViolation(sidecar) {
+  if (sidecar.pairs !== 500 || sidecar.warmup !== 20 || sidecar.alpha !== 0.01) return 'root-constants';
+  const entries = entriesViolation(sidecar.entries);
+  if (entries) return entries;
+  if (!FAMILY_VALUES.has(sidecar.family?.status)) return 'family-status';
+  if (sidecar.family.status === 'reject' && (typeof sidecar.family.details !== 'object'
+    || sidecar.family.details === null)) return 'family-details';
+  return null;
+}
+
 function sidecarForRun(runDirectory, started) {
   const sidecar = optionalJson(path.join(runDirectory, 'timing-2-probes.json'));
   if (!sidecar) return { sidecar: null, reason: 'no-sidecar-for-this-run:absent' };
-  if (sidecar.schema !== 'timing-2-probes/1' || sidecar.complete !== true) {
+  if (sidecar.schema !== 'timing-2-probes/1') return { sidecar: null, reason: 'sidecar-invalid:schema' };
+  if (sidecar.complete !== true) {
     return { sidecar: null, reason: 'no-sidecar-for-this-run:incomplete' };
   }
   const written = Date.parse(sidecar.writtenAt);
@@ -97,33 +180,48 @@ function sidecarForRun(runDirectory, started) {
   if (!Number.isFinite(written) || !Number.isFinite(runStarted) || written < runStarted) {
     return { sidecar: null, reason: 'no-sidecar-for-this-run:stale' };
   }
-  return { sidecar, reason: null };
+  const violation = strictSidecarViolation(sidecar);
+  return violation ? { sidecar: null, reason: `sidecar-invalid:${violation}` } : { sidecar, reason: null };
 }
 
-function validity(partitions, sidecarState, entries, excluded, predicateAvailable) {
+function validity(partitions, sidecarState, entries, excluded, predicateAvailable, runEvidence) {
   const reasons = [];
-  if (!predicateAvailable) reasons.push('missing-competing-verdict');
+  if (!predicateAvailable) reasons.push('predicate-evidence-unavailable');
   if (excluded) reasons.push('competing-process');
+  reasons.push(...runEvidence);
   for (const [name, report] of Object.entries(partitions)) {
     if (!report.present) reasons.push(`missing-partition:${name}`);
   }
   if (sidecarState.reason) reasons.push(sidecarState.reason);
-  for (const name of PROBE_NAMES) {
-    if (entries[name]?.status !== 'measured') reasons.push(`probe-not-measured:${name}`);
+  if (sidecarState.sidecar) {
+    for (const name of PROBE_NAMES) {
+      if (entries[name]?.status !== 'measured') reasons.push(`probe-not-measured:${name}`);
+    }
+    const control = entries[SYNTHETIC_CONTROL];
+    if (control?.status !== 'measured') reasons.push(`probe-not-measured:${SYNTHETIC_CONTROL}`);
+    else if (singleFamily(control) !== 'reject') reasons.push('synthetic-control-did-not-reject');
   }
-  const control = entries[SYNTHETIC_CONTROL];
-  if (control?.kind !== 'control-synthetic' || control.status !== 'measured') reasons.push(`probe-not-measured:${SYNTHETIC_CONTROL}`);
-  else if (singleFamily(control) === 'reject') return { valid: reasons.length === 0, reasons, controlSource: 'sidecar' };
-  else reasons.push('synthetic-control-did-not-reject');
   return { valid: reasons.length === 0, reasons, controlSource: 'sidecar' };
 }
 
-function analyzeRun(runDirectory, label) {
+function runEvidenceReasons(startedRecord, label, hostState, campaign) {
+  const reasons = [];
+  if (startedRecord && startedRecord.run !== label) reasons.push('started-run-label-mismatch');
+  if (!hostState) reasons.push('host-state-missing');
+  else {
+    if (hostState.git?.head !== campaign.candidate) reasons.push('candidate-head-mismatch');
+    if (hostState.git?.dirty !== false || hostState.git?.status !== '') reasons.push('dirty-checkout-at-start');
+  }
+  return reasons;
+}
+
+function analyzeRun(runDirectory, label, campaign) {
   const startedRecord = optionalJson(path.join(runDirectory, 'started.json'));
   const started = startedRecord !== null;
   const ended = fs.existsSync(path.join(runDirectory, 'ended.json'));
   const exit = optionalJson(path.join(runDirectory, 'exit.json'));
   const competing = optionalJson(path.join(runDirectory, 'competing.json'));
+  const hostState = optionalJson(path.join(runDirectory, 'host-state.json'));
   const partitions = {
     main: partition(runDirectory, 'main.json'),
     timing1: partition(runDirectory, 'timing-1.json'),
@@ -131,10 +229,11 @@ function analyzeRun(runDirectory, label) {
   };
   const sidecarState = sidecarForRun(runDirectory, startedRecord);
   const sidecar = sidecarState.sidecar;
-  const entries = normalizedEntries(sidecar);
-  const predicateAvailable = Array.isArray(competing?.competing);
+  const entries = sidecar ? Object.fromEntries(sidecar.entries.map((entry) => [entry.name, entry])) : {};
+  const predicateAvailable = competing?.predicateEvidence === 'available' && Array.isArray(competing?.competing);
   const excluded = predicateAvailable && competing.competing.length > 0;
-  const check = validity(partitions, sidecarState, entries, excluded, predicateAvailable);
+  const check = validity(partitions, sidecarState, entries, excluded, predicateAvailable,
+    runEvidenceReasons(startedRecord, label, hostState, campaign));
   if (!ended) check.reasons.push('run-not-ended');
   return {
     run: label, started, ended, exit, partitions, excluded,
@@ -209,7 +308,7 @@ function probeDiagnosis(validRuns, probe) {
 }
 
 function diagnosticMissingCounts(validRuns) {
-  const names = new Set();
+  const names = new Set([SENSITIVITY_FLOOR]);
   for (const probe of TRIPWIRE_PROBES) Object.values(DIAGNOSTICS[probe]).forEach((name) => names.add(name));
   const counts = {};
   for (const name of names) {
@@ -243,13 +342,39 @@ export function outcomePatterns({ V, diagnoses, missingCounts, controls }) {
   if (classes.every((value) => value === 'quiet')) applicable.add('quiet');
   const ordered = OUTCOME_ORDER.filter((name) => applicable.has(name));
   if (ordered.length === 0) throw new Error('decision rule is not exhaustive');
-  return { primary: ordered[0], applicable: ordered, proposals: Object.fromEntries(ordered.map((name) => [name, PROPOSALS[name]])) };
+  const proposalOrder = [...ordered];
+  if (applicable.has('calibration-concern') && applicable.has('harness-audit-then-security-investigation')) {
+    const calibration = proposalOrder.indexOf('calibration-concern');
+    const audit = proposalOrder.indexOf('harness-audit-then-security-investigation');
+    [proposalOrder[calibration], proposalOrder[audit]] = [proposalOrder[audit], proposalOrder[calibration]];
+  }
+  return {
+    primary: ordered[0], applicable: ordered, proposalOrder,
+    proposals: Object.fromEntries(ordered.map((name) => [name, PROPOSALS[name]])),
+  };
 }
 
 export function analyzeCampaign(directory) {
   const campaign = readJson(path.join(directory, 'campaign.json'));
-  const names = fs.readdirSync(directory).filter((name) => /^run-\d{2}$/u.test(name)).sort();
-  const runs = names.map((name) => analyzeRun(path.join(directory, name), name));
+  if (!Array.isArray(campaign.labels)) throw new Error('campaign has no frozen label set');
+  const expectedLabels = Array.from({ length: campaign.runs },
+    (_, index) => `run-${String(index + 1).padStart(2, '0')}`);
+  if (JSON.stringify(campaign.labels) !== JSON.stringify(expectedLabels)) {
+    throw new Error('campaign frozen label set is invalid');
+  }
+  if (!Array.isArray(campaign.startedLabels) || new Set(campaign.startedLabels).size !== campaign.startedLabels.length
+    || campaign.startedLabels.some((label) => !campaign.labels.includes(label))) {
+    throw new Error('campaign started-label ledger is invalid');
+  }
+  for (const label of campaign.startedLabels) {
+    if (!fs.existsSync(path.join(directory, label, 'started.json'))) {
+      throw new Error(`campaign is unresumable: missing started run ${label}`);
+    }
+  }
+  const directories = fs.readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && /^run-/u.test(entry.name)).map((entry) => entry.name).sort();
+  const unexpectedDirectories = directories.filter((name) => !campaign.labels.includes(name));
+  const runs = campaign.labels.map((name) => analyzeRun(path.join(directory, name), name, campaign));
   const startedRuns = runs.filter((run) => run.started);
   const validRuns = startedRuns.filter((run) => run.valid);
   const diagnoses = TRIPWIRE_PROBES.map((probe) => probeDiagnosis(validRuns, probe));
@@ -259,7 +384,8 @@ export function analyzeCampaign(directory) {
   return {
     schema: 'probe-p-campaign-report/1', generatedAt: new Date().toISOString(), campaign,
     counts: { started: startedRuns.length, excluded: startedRuns.filter((run) => run.excluded).length, valid: validRuns.length },
-    actualGateOutcomes: startedRuns, diagnosis: { V: validRuns.length, probes: diagnoses, controls, missingCounts }, outcome,
+    actualGateOutcomes: startedRuns, unexpectedDirectories,
+    diagnosis: { V: validRuns.length, probes: diagnoses, controls, missingCounts }, outcome,
     power: '20 started runs resolve counts, not percentages; they separate a roughly 20 percent rate from roughly 0 percent but cannot separate 1 percent from 5 percent. Inconclusive is a likely and acceptable result.',
     closing: 'Every outcome is a proposal. A quiet campaign proves nothing about the absence of a timing channel.',
   };
@@ -286,7 +412,7 @@ function probeMarkdown(probe) {
     `### ${probe.probe}`,
     '',
     `- Counts at p <= 0.01/6: k_AB=${probe.k_AB}, k_AA=${probe.k_AA}, k_sham=${probe.k_sham}; V=${probe.V}.`,
-    `- Primary sign series: ${probe.signs.join(' ') || '(none)'}; majority ${probe.majoritySign} count=${probe.majorityCount} of V=${probe.V}.`,
+    `- Primary sign series: ${probe.signs.join(' ') || '(none)'}; majority ${probe.majoritySign}; same sign in ${probe.majorityCount} of ${probe.V} (threshold ⌈0.8·${probe.V}⌉ = ${Math.ceil(0.8 * probe.V)}).`,
     `- OLS arm-A slope per pair with normal 95% interval: ${slopes || '(none)'}.`,
     `- Stationarity summary: ${JSON.stringify(probe.stationaritySummary)}.`,
   ];
@@ -297,6 +423,7 @@ export function renderMarkdown(report) {
     '# Probe P campaign report', '',
     `Power: ${report.power}`, '',
     `Counts: started=${report.counts.started}, excluded=${report.counts.excluded}, valid V=${report.counts.valid}.`, '',
+    `Unexpected directories: ${report.unexpectedDirectories.join(', ') || 'none'}.`, '',
     'Diagnostic limitation: the twins run after the family gate and are not phase-matched to their siblings. A quiet twin beside a rejecting sibling is weaker evidence than a phase-matched null.', '',
     'Sham limitation: k_sham=0 with k_AB>=2 does not prove a branch-dependent channel; the sham removes only byte content equal to the canary.', '',
     '## (a) Actual gate outcomes', '',
@@ -310,7 +437,7 @@ export function renderMarkdown(report) {
   lines.push(`Real-click controls: 250 us rejected ${controls.microseconds250} of V=${controls.V}; 1,000 us rejected ${controls.microseconds1000} of V=${controls.V}.`, '');
   lines.push(`Diagnostic missing/error counts: ${JSON.stringify(report.diagnosis.missingCounts)}.`, '');
   lines.push('## Outcome', '', `Primary: ${report.outcome.primary}.`, '');
-  for (const name of report.outcome.applicable) lines.push(`- ${name}: ${report.outcome.proposals[name]}`);
+  for (const name of report.outcome.proposalOrder) lines.push(`- ${name}: ${report.outcome.proposals[name]}`);
   lines.push('', report.closing, '');
   return lines.join('\n');
 }

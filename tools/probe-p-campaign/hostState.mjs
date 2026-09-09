@@ -33,6 +33,27 @@ export function parsePackageVersion(text) {
   }
 }
 
+export function processCapture(text, exitCode) {
+  const processes = exitCode === 0 ? parsePs(text) : [];
+  const dataLines = text.split(/\r?\n/u).filter((line) => line.trim() !== ''
+    && !/^\s*PID\s+PPID\s+%?CPU\s+ELAPSED\s+COMMAND\s*$/iu.test(line));
+  const parsedAll = processes.length > 0 && processes.length === dataLines.length;
+  return {
+    status: exitCode !== 0 ? 'failed' : parsedAll ? 'ok' : 'unparseable',
+    exit: exitCode,
+    bytes: Buffer.byteLength(text),
+    processes,
+  };
+}
+
+export function parseChromiumIdentity(packageText, cacheText) {
+  const playwrightCore = parsePackageVersion(packageText);
+  const cacheDirectories = cacheText.split(/\r?\n/u).map((value) => value.trim())
+    .filter((value) => /^(?:chromium|chromium_headless_shell)-\d+$/u.test(value));
+  if (playwrightCore === null && cacheDirectories.length === 0) return null;
+  return { playwrightCore, cacheDirectories };
+}
+
 export function optionalCapture(text, exitCode) {
   return exitCode === 0 ? text.trim() || null : null;
 }

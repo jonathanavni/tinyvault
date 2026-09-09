@@ -77,8 +77,11 @@ while ((number <= runs)); do
     number=$((number + 1))
     continue
   fi
+  current_head="$(git -C "$checkout_root" rev-parse HEAD)"
+  current_status="$(git -C "$checkout_root" status --short --untracked-files=all)"
   mkdir "$run_dir"
-  node "$campaign_js" start --out "$out" --run "$number"
+  node "$campaign_js" start --out "$out" --run "$number" \
+    --candidate "$current_head" --git-status "$current_status"
   capture_raw processes ps -axo pid,ppid,pcpu,etimes,command
   capture_raw cpus sysctl -n hw.ncpu
   capture_raw uptime uptime
@@ -89,6 +92,11 @@ while ((number <= runs)); do
   capture_raw git-status git -C "$checkout_root" status --short --untracked-files=all
   capture_raw captured-at date -u +%FT%TZ
   capture_raw playwright cat "$checkout_root/node_modules/playwright/package.json"
+  capture_raw chromium-package node -e \
+    "process.stdout.write(require('node:fs').readFileSync(process.argv[1], 'utf8'))" \
+    "$checkout_root/node_modules/playwright-core/package.json"
+  capture_raw chromium-cache node -e \
+    "const fs=require('node:fs'),os=require('node:os'),p=require('node:path').join(os.homedir(),'Library/Caches/ms-playwright');process.stdout.write(fs.readdirSync(p).join('\\n'))"
   capture_raw memory-free node -e "console.log(require('node:os').freemem())"
   node "$campaign_js" host-state --out "$out" --run "$number" --own-pid "$$" --checkout-root "$checkout_root"
   start_ms="$(node -e 'process.stdout.write(String(Date.now()))')"

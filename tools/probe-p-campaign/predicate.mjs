@@ -26,7 +26,15 @@ function hasArg(command, alternatives) {
   return args.some((arg) => alternatives.includes(arg.replace(/^--?[^=]+=/u, '')));
 }
 
-function matchesFrozenPredicate(process) {
+function referencesOutsideCheckout(command, checkoutRoot) {
+  return command.trim().split(/\s+/u).slice(1).some((argument) => {
+    const candidate = argument.replace(/^['"]|['",;:]$/gu, '');
+    if (!candidate.startsWith('/')) return false;
+    return candidate !== checkoutRoot && !candidate.startsWith(`${checkoutRoot}/`);
+  });
+}
+
+function matchesFrozenPredicate(process, checkoutRoot) {
   const command = process.command.trim();
   const exe = executable(command);
   if (/^(codex|codex-cli|codex-companion(?:\.mjs)?|codex-app-server|app-server)$/iu.test(exe)) return true;
@@ -34,7 +42,8 @@ function matchesFrozenPredicate(process) {
   if (/(?:^|[/\s])claude-review\.mjs(?:$|\s)/u.test(command)) return true;
   if (/(?:^|[/\s])(?:vitest|playwright)(?:\.mjs)?(?:$|[/\s])/iu.test(command)) return true;
   if (/Chromium|Google Chrome for Testing|chrome-headless-shell/iu.test(command)) return true;
-  if (exe === 'make' && hasArg(command, ['test'])) return true;
+  if (exe === 'node' && referencesOutsideCheckout(command, checkoutRoot)) return true;
+  if (exe === 'make') return true;
   if (exe === 'docker' && hasArg(command, ['build', 'compose', 'run'])) return true;
   if (/^(tsc|esbuild)$/u.test(exe)) return true;
   if (/^(npm|npx)$/u.test(exe) && hasArg(command, ['test', 'vitest', 'eval', 'baseline'])) return true;
@@ -51,7 +60,7 @@ export function competingJobs(hostState, { ownPid, checkoutRoot }) {
     const command = process.command.trim();
     const exempt = ownTree.has(process.pid) || DESKTOP_APPS.has(command)
       || (MCP_HELPER.test(command) && process.pcpu < 1);
-    if (!exempt && matchesFrozenPredicate(process)) competing.push(process);
+    if (!exempt && matchesFrozenPredicate(process, checkoutRoot)) competing.push(process);
     else observed.push(process);
   }
   return { competing, observed };

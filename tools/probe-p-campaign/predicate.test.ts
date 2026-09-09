@@ -50,4 +50,17 @@ describe('competingJobs', () => {
     expect(result.competing.map(({ pid }) => pid)).toEqual([33]);
     expect(result.observed.map(({ pid }) => pid)).toEqual([30, 31, 32]);
   });
+
+  it('classifies node and make work from another checkout while preserving the own tree', () => {
+    const processes = [
+      process(40, 1, 2, 'node /other/checkout/x.mjs'),
+      process(41, 1, 2, 'node /repo/tools/probe-p-campaign/campaign.mjs host-state'),
+      process(42, 41, 2, 'node /repo/tools/probe-p-campaign/campaign.mjs start'),
+      process(43, 1, 2, 'make -C /other/checkout build'),
+      process(44, 1, 2, 'make build'),
+    ];
+    const result = competingJobs({ processes }, { ownPid: 41, checkoutRoot: '/repo' });
+    expect(result.competing.map(({ pid }) => pid)).toEqual([40, 43, 44]);
+    expect(result.observed.map(({ pid }) => pid)).toEqual([41, 42]);
+  });
 });

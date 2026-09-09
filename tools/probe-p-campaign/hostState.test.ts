@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { optionalCapture, parseInteger, parseLoadAverage, parsePackageVersion, parsePs } from './hostState.mjs';
+import {
+  optionalCapture, parseChromiumIdentity, parseInteger, parseLoadAverage, parsePackageVersion,
+  parsePs, processCapture,
+} from './hostState.mjs';
 
 describe('parsePs', () => {
   it('parses the fixed ps columns and preserves command arguments', () => {
@@ -21,5 +24,16 @@ invalid row
     expect(parseInteger('12\n')).toBe(12);
     expect(parsePackageVersion('{"version":"1.62.1"}')).toBe('1.62.1');
     expect(optionalCapture('command not found', 127)).toBeNull();
+    expect(parseChromiumIdentity('{"version":"1.62.1"}', 'chromium-1194\nchromium_headless_shell-1194\n'))
+      .toEqual({ playwrightCore: '1.62.1', cacheDirectories: ['chromium-1194', 'chromium_headless_shell-1194'] });
+  });
+
+  it('distinguishes failed and unparseable process capture from an empty clean set', () => {
+    expect(processCapture('ps: command failed\n', 1)).toMatchObject({ status: 'failed', exit: 1, bytes: 19, processes: [] });
+    expect(processCapture('PID PPID %CPU ELAPSED COMMAND\n', 0)).toMatchObject({
+      status: 'unparseable', exit: 0, processes: [],
+    });
+    expect(processCapture(' 12 1 0.0 3 /usr/bin/login\ntruncated row\n', 0).status).toBe('unparseable');
+    expect(processCapture(' 12 1 0.0 3 /usr/bin/login\n', 0)).toMatchObject({ status: 'ok', exit: 0 });
   });
 });
