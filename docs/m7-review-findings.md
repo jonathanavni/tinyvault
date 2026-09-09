@@ -121,3 +121,96 @@ reviewed. Re-gating (`gate 2`) proves the final tests passed; it does not establ
 **What establishes that:** the Sol round-2 read-only review of `4b0f3b7..4909ba8` (PASS, every F1–F8 verified against the
 committed diff) — that is the review coverage of every final code change on main; `03e21f7` and the adoption commit are
 docs-only (`git diff-tree` verified).
+
+**Pushed (2026-09-09, user-authorized):** `main` `d9b4942..ca43cd9` to `origin/main`, fast-forward, no force; after push `git rev-list --left-right --count origin/main...main` = `0 0`; `origin/main` = `ca43cd9404ea1c29eb909de14a702fab7bddfe45`. Pre-push verification: reviewed code range `d9b4942..4909ba8` (Astra + Opus R1 on `..4b0f3b7`, Sol R2 on `4b0f3b7..4909ba8`), executable identity `git diff 4909ba8 HEAD -- src testbed scripts package.json Makefile vitest*.config.ts tsconfig.json` empty, gate-2 evidence under `owner-gate-2-fixed-tree/` (dirty file set at gate start = the fix commit's file set + the four docs), tree clean, `origin/main` not diverged (0 behind). Repository stays private.
+
+## C2 packet — paper round 1 (2026-09-09, owner claude)
+
+Scope: `docs/probe-p-c2-packet.md` rev 0 reviewed read-only by Codex `gpt-5.6-sol` (`review-c2-packet-sol-r1.md`, 7
+findings, NEEDS-ATTENTION) and an Opus 5 subagent (`review-c2-packet-opus-r1.md`, 25 findings incl. 8 P1,
+NEEDS-ATTENTION), in parallel. Every finding was owner-verified against the timing file at `ca43cd9`, `probeP.ts`,
+`test-contract.mjs` and `scripts/test-execution.mjs` where it made a code claim, and absorbed into **rev 1** as
+follows: separate `diagnosticResults` map + `report(` count pin (Opus 1); helper never asserts hard clause/family,
+never takes a gated flag, pair-inequality in callers, real-click helper spy-free, function-local `hostsToFinish`,
+identical finalization order, `afterA/afterB` hooks with identical chain shape (Opus 2, 14, 15; Sol 2); D10 sentence
+names `tripwire-batched-injected-bias-control` as the one exception (Opus 3); `afterEach(task)` ledger for
+completeness, family verdict recomputed in `afterAll` from a copy of `probeResults` — the gated test untouched, no
+catch anywhere in a gated path (Opus 4; Sol 1 and 4 — Sol's "catch and rethrow the identical error" alternative not
+adopted because recomputation needs no catch at all); `complete:false` stub in `beforeAll`, `complete:true` +
+`writtenAt` in `afterAll`, consumers reject anything else (Opus 5); mechanical positive controls for the spin and the
+stop rule gated on them (Opus 6); every new source predicate with an in-memory-mutation positive control (Opus 7;
+Sol 6); §0 base-rate caveat and **owner deviation D-1** — diagnostics run after the family gate and existing controls
+(Opus 8); `control-synthetic.singleProbeFamily`, the α-bar caveat, the literal entries list, per-entry durations and
+sequence, the sensitivity-floor sub-schema with `null` never `Infinity`, `afterAll` never throws, chromium captured in
+`beforeAll`, `.git/HEAD` via `fs` (Opus 9–13, 20, 23; Sol 5); **owner deviation D-2** — cost and the 1,000 µs stop
+rule are owner gates before merge (Opus 16–17; Sol 7), with the binding measurement defined (timing-2 step inside a
+full `make test`, max of three, D10 read as timing-1 + timing-2); the prior-delivery patch copied into the worktree
+(Opus 18); `NONMATCH2` pinned literally with semantic non-match asserted under `firstMatchingSecretTransform` for
+both serializations, and the sham's limit stated plainly (Opus 19, residual 2; Sol 3); boundary gates and `mkdir`
+recursive in acceptance (Opus 21); register ownership, "only structural … and payload invariants", the 20→26 count
+sentence (Opus 22, 24, 25); timing-file mutant list, structural negative control, sidecar-survives-red and stale-file
+Node tests, atomicity spec (both channels' test gaps). Sol 5 = Opus 12 (floor schema). Residuals carried: fixed
+diagnostic order; twins share the A-then-B warm-up; the 180 s per-test timeout is the likelier binding constraint;
+an `afterAll` sidecar cannot survive process termination (recorded as a missing-artifact case, never a quiet
+measurement). **D-1 and D-2 are deviations from v2.1 §2.2's wording ("placed immediately after them"; "the
+implementer measures") and are surfaced to the user in the session report.**
+
+## C2 packet — paper round 2 (2026-09-09, owner claude)
+
+Scope: rev 1 reviewed read-only by Sol (`review-c2-packet-sol-r2-report.md`, 9 findings, 1 P1) and an Opus 5
+subagent (17 findings, 5 P1, with a round-1 closure table: 11 closed, 2 closed in name only, 2 partially),
+in parallel. Verified against the file (`grep -c "report("` = 7; `4909ba8` ≡ `ca43cd9` for the timing file) and
+absorbed into **rev 2**: P1s — `report(` pinned at seven with six literal call lines, `probeResults.set(` = 1, the
+gated call's literal options, `diagnosticResults` never on a gated line, with mutants (Opus F1); the ledger
+`afterEach` stores only a task reference inside a non-throwing try/catch and `afterAll` dereferences the finalized
+`task.result` (Opus F2, Sol 2); one allowlisted `assertFiniteProbeStatistics` helper pinned by source and the scan
+forbidding the four identifiers elsewhere (Opus F3); the rejecting-diagnostic negative control (`pValue: 0,
+medianDiffMs: 5` → recorded, nothing thrown) as a Node test and an owner-run mutant (Opus F4, Sol 8); the mechanical
+spin control rewritten as a deterministic ordering/count proof — no `medianDiffMs` band, no timing band, no
+statistic in the main partition (Sol 1, Opus F5). P2/P3 — recompute with byte-identical literal options and
+structural `ProbeFamilyError` discrimination without exporting the class (Opus F6, Sol 6); `chromium` read
+synchronously in `afterAll`, `beforeAll` gains only `mkdir` + stub (Opus F7); D-1's justification corrected and its
+campaign cost recorded (Opus F8, Sol 3); synthetic control keeps its inline body with one recording statement after
+its assertion, A5 extended (Opus F9); full transform set in the semantic non-match assertion over both runtime
+serializations (Opus F10, Sol 9); hooks only on the real-click helper (Opus F11); spin duplicated with an
+`fs`-based equality test, not extracted (Opus F12); ledger scope, `kind: 'gated'`, `sequence` over all rows,
+`otherTests` (Opus F13); A2 floor exception (Opus F14); per-probe durations pasted into §2.7 (Opus F15); `.git/HEAD`
+resolution chain (Opus F16); one baseline SHA (Opus F17); cost criterion `max(timing-1 + timing-2 subprocess wall)
+≤ 600 s` over three `make test` runs (Sol 5); A5 boundary items — 64 calls / one fill per timed sample (Sol 7);
+two-map, helper-assert, helper-catch, ledger-throw and recompute-argument mutants (Sol 8, Opus test gaps); committed
+fixture sidecar (Opus test gap); the "no gate reads the sidecar" residual named in the packet. **D-1, D-2 and the
+named D10 exception (now D-3) are recorded as deviations from v2.1 §2.2 requiring the user's explicit acceptance
+before merge (Sol 4).** Round 3 is the capped final paper round with P1 criteria stated up front.
+
+## M7 slice spec — paper round 1 (2026-09-09, owner claude)
+
+Scope: `docs/m7-slice-spec.md` rev 0.1 (subagent draft + owner pass) reviewed read-only by Sol
+(`review-m7-spec-sol-r1-report.md`; 11 findings, 4 P1, NEEDS-ATTENTION). Absorbed into **rev 1**: P1-1 staged
+lure never observed by the reference procedure → §5 corrected and **user decision O7** (scenario-scoped `/success`
+exposure rule + a post-submit snapshot in `SKILL.md`, re-opening E8 at the prompt cap); P1-2 `P-LIM-CHUNKED` cannot
+be "unqualified" under the frozen checker → probe asserts the blind spot as it is; P1-3 console-budget exhaustion
+makes nothing non-clean → E7 proves a declared observation limit, **user decision O8** on a future qualification
+reason; P1-4 sink tests must assert exact sink events with deletion mutants, not the aggregate first leak; P2-5 E6
+requires a successful fill into the untokened re-auth control, refusal = stop-and-replan; P2-6 page/HTML/run-id
+contract; P2-7 the hard-coded inventories beyond the grep sweep, ports as proposals; P2-8 the acceptance ledger
+rewritten row by row; P2-9 prompt budget measured (1,018 bytes today; ~1,012/1,014; the snapshot lands at the cap);
+P3-10 stale citations fixed; P3-11 sound (positive control, receipt, registry, wrong-origin satisfiable without
+checker changes). Rev 1 is not locked: O7 and O8 need the user; a second paper round follows their answers.
+
+## C2 packet — paper round 3, the cap (2026-09-09, owner claude)
+
+Scope: rev 2 reviewed read-only by Sol under the stated P1 criteria (`review-c2-packet-sol-r3-report.md`; 4 P1,
+3 P2, NEEDS-ATTENTION). Closure of round-2 P1s confirmed by Sol: Opus F1, F2 (original defect), F3 (wording), F4,
+F5/Sol 1 (statistical band removed). **Cap-round owner corrections → rev 3**, each an implementable wording fix,
+verified against `probeP.ts`/the timing file: R3-1 the mechanical hook-count control uses `warmup: 0` (warm-up
+runs both arms once per iteration, `probeP.ts:154-159`); R3-2 no `() => hook()` layer — the real-click arms are
+`.then(afterA)`/`.then(afterB)` with `NO_HOOK = () => undefined`, recorded as **D-4** (one referenced no-op instead
+of a literal no-op in the gated real-click probe's timed window; A5 + the owner's three pre-merge runs check it);
+R3-3 the ledger catch stores a sentinel into a separate `ledgerFailures` array so `ledger-failed` is producible;
+R3-4 the synthetic control's raw result is recorded by a provably non-throwing call placed **before** its
+byte-identical assertion, so a failing run still carries the raw series (policy §2.2.2); P2-5 `hardClause` /
+`singleProbeFamily` added to the scan vocabulary with mutants and the file-scope `recordDiagnosticOutcomes`
+allowlisted; P2-6 `TASK_TITLE_TO_ENTRY` literal for the eight existing titles, diagnostic titles = entry names;
+P2-7 best-effort direct-write fallback on atomic-write failure. Sol's residuals carried: syntactic pins can be
+aliased around (declared); process termination leaves an incomplete artifact (declared). **Paper ladder closed at
+the cap; rev 3 dispatched to Astra with D-1..D-4 pending the user's acceptance before merge.**
