@@ -702,16 +702,17 @@ function timingSourceCompiler() {
   if (parsed.errors.length) throw new Error('Cannot resolve timing-source tsconfig');
   const root = ts.sys.resolvePath('src/supervisor/host.timing.browser.test.ts');
   const host = ts.createCompilerHost(parsed.options, true);
-  // Synthetic graph for local binding identity plus the real Vitest and global declarations.
-  // Other root imports are text-pinned, not type-loaded here; acceptance separately runs full tsc.
-  // Avoid inferring the entire browser/library graph on every in-memory mutant.
+  // Binding-only scans keep the original lightweight graph. Semantic acceptance
+  // resolves all real imports, avoiding false diagnostics from omitted declarations.
+  let semantic = false;
+  const modules = ts.createModuleResolutionCache(ts.sys.getCurrentDirectory(), host.getCanonicalFileName, parsed.options);
   host.resolveModuleNames = (names, containingFile) => names.map((name) =>
-    containingFile === root && name !== 'vitest' ? undefined
-      : ts.resolveModuleName(name, containingFile, parsed.options, host).resolvedModule);
+    !semantic && containingFile === root && name !== 'vitest' ? undefined
+      : ts.resolveModuleName(name, containingFile, parsed.options, host, modules).resolvedModule);
   const read = host.getSourceFile;
   const dependencies = new Map<string, ts.SourceFile>();
   let current: ts.SourceFile;
-  let program: ts.Program | undefined;
+  const programs: (ts.Program | undefined)[] = [];
   host.getSourceFile = (name, ...args) => {
     if (ts.sys.resolvePath(name) === root) return current;
     let file = dependencies.get(name);
@@ -719,9 +720,12 @@ function timingSourceCompiler() {
     return file;
   };
   // Reuse immutable dependency syntax trees, never a previous mutant's root or check results.
-  return (source: string): ts.Program => {
+  return (source: string, checkSemantics = false): ts.Program => {
+    semantic = checkSemantics;
     current = ts.createSourceFile(root, source, parsed.options.target!, true);
-    program = ts.createProgram({ rootNames: [root], options: parsed.options, host, oldProgram: program });
+    const index = Number(semantic);
+    const program = ts.createProgram({ rootNames: [root], options: parsed.options, host, oldProgram: programs[index] });
+    programs[index] = program;
     return program;
   };
 }
@@ -751,8 +755,14 @@ function timingSourceResolve(source: string, compile: ReturnType<typeof timingSo
   const suites = new Map<string, ts.Block>();
   const hooks = new Map<string, ts.Block[]>();
   const tests: { title: string; body: string; block: ts.Block; suite: string }[] = [];
+  // This scan bounds test registration to references of the statically imported vitest symbols (`it`, `test`, `describe`, hooks) and `vi.spyOn`, with synchronous suite factories. Obtaining a registration function through Vitest internals, globals, or a module loader other than the static import is outside the scan; the complementary control is the execution gate's per-file test inventory (follow-up: pin the timing-2 report's exact 26 titles in `scripts/test-execution.mjs`).
+  // Fourth pinned exception: vi.restoreAllMocks() only at its existing site in
+  // the byte-pinned root afterEach cleanup hook (alongside the three existing exceptions).
   let registrationsResolved = registrationSymbols.size === 6 && pinsTimingImports(file)
     && program.getSyntacticDiagnostics(file).length === 0;
+  const viSymbol = unalias(exports.find((symbol) => symbol.name === 'vi'));
+  registrationsResolved &&= viSymbol !== undefined;
+  let cleanupRestore: ts.Identifier | undefined;
   const titles = ['H Probe P timing bounds', 'M6 S4 lifecycle timing bounds'];
   const lifecyclePins = timingSourceLifecyclePins();
   let rootAfterEach = 0; let lifecycleEach = 0; let lifecycleHook = 0;
@@ -766,6 +776,17 @@ function timingSourceResolve(source: string, compile: ReturnType<typeof timingSo
     if (ts.isPropertyAccessExpression(callee) && isReference(callee.expression, 'describe')
       && callee.name.getText(file) === 'sequential' && title && ts.isStringLiteral(title)
       && titles.includes(title.text) && bodyOf(call) && !suites.has(title.text)) {
+      const factory = call.arguments[1] as ts.ArrowFunction;
+      if (factory.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)) {
+        registrationsResolved = false;
+      }
+      const scanFactory = (node: ts.Node): void => {
+        // A nested function owns its awaits, including the existing it/hook callbacks.
+        if (ts.isFunctionLike(node)) return;
+        if (ts.isAwaitExpression(node)) registrationsResolved = false;
+        ts.forEachChild(node, scanFactory);
+      };
+      scanFactory(factory.body);
       suites.set(title.text, bodyOf(call)!); allowedRegistrations.add(callee.expression);
     }
     for (const name of ['beforeAll', 'afterEach', 'afterAll']) {
@@ -774,6 +795,14 @@ function timingSourceResolve(source: string, compile: ReturnType<typeof timingSo
         hooks.set(name, [...(hooks.get(name) ?? []), callback.body]);
         if (name !== 'afterEach' || statement.getText(file) === lifecyclePins.rootHooks[rootAfterEach++]) {
           allowedRegistrations.add(callee);
+          if (name === 'afterEach' && statement.getText(file) === lifecyclePins.rootHooks[0]) {
+            const restore = callback.body.statements[2];
+            if (restore && ts.isExpressionStatement(restore) && ts.isCallExpression(restore.expression)
+              && ts.isPropertyAccessExpression(restore.expression.expression)
+              && ts.isIdentifier(restore.expression.expression.expression)) {
+              cleanupRestore = restore.expression.expression.expression;
+            }
+          }
         }
       }
     }
@@ -821,6 +850,12 @@ function timingSourceResolve(source: string, compile: ReturnType<typeof timingSo
     if (ts.isImportEqualsDeclaration(node) || ts.isExportDeclaration(node)) registrationsResolved = false;
     if (ts.isIdentifier(node)) {
       const symbol = symbolAt(node); references.push({ node, symbol });
+      if (symbol && symbol === viSymbol && node !== cleanupRestore) {
+        const property = node.parent;
+        if (!ts.isPropertyAccessExpression(property) || property.expression !== node
+          || property.name.getText(file) !== 'spyOn' || !ts.isCallExpression(property.parent)
+          || property.parent.expression !== property) registrationsResolved = false;
+      }
       if (symbol && registrationSymbols.has(symbol) && !allowedRegistrations.has(node)) registrationsResolved = false;
       if (symbol && forbidden.has(symbol) && !(pinnedBody && node.pos >= pinnedBody.pos && node.end <= pinnedBody.end)) {
         registrationsResolved = false;
@@ -829,7 +864,16 @@ function timingSourceResolve(source: string, compile: ReturnType<typeof timingSo
     ts.forEachChild(node, visit);
   };
   visit(file);
-  return { file, checker, symbolAt, references, tests, hooks, registrationsResolved };
+  return { file, checker, symbolAt, references, tests, hooks,
+    // Run semantic diagnostics only when this predicate is read, after structural rejection.
+    // Map-only mutants do not need a second, unrelated check of their program's types.
+    get registrationsResolved() {
+      if (!registrationsResolved) return false;
+      const semanticProgram = compile(source, true);
+      const semanticFile = semanticProgram.getSourceFile(file.fileName);
+      return !!semanticFile && semanticProgram.getSemanticDiagnostics(semanticFile).length === 0;
+    },
+  };
 }
 
 function timingSourceFamilyBody(): string {
@@ -1386,7 +1430,10 @@ function timingSourceChecks(source: string, compile = timingSourceCompiler()): R
   let maps: Record<string, boolean> | undefined;
   const map = () => maps ??= pinsMapReferences(source);
   return {
-    get registrationsResolved() { return resolve().registrationsResolved; },
+    get registrationsResolved() {
+      try { return resolve().registrationsResolved; }
+      catch { return false; } // A failed program build cannot certify registrations.
+    },
     get mapReferencesResolved() { return pinsResolvedMapReferences(resolve()); },
     get reportCalls() { return isolated().reportCalls!; },
     get probeWrites() { return isolated().probeWrites!; },

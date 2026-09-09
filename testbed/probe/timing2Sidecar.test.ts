@@ -75,17 +75,21 @@ function definitions(source = SOURCE, diagnosticResults = new Map<string, Diagno
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
   }).outputText;
   return new Function('ts', 'expect', 'assertProbeFamily', 'assertProbeHardClause', 'diagnosticResults', code
-    + '\nconst build = timingSourceCompiler(); const programDurations = [];'
-    + '\nconst compile = (source) => { const start = performance.now(); const program = build(source);'
-    + ' program.getTypeChecker(); programDurations.push(performance.now() - start); return program; };'
-    + '\nreturn { timingSourceChecks: (source) => timingSourceChecks(source, compile), programDurations,'
+    + '\nconst build = timingSourceCompiler(); const programDurations = []; const semanticDurations = [];'
+    + '\nconst compile = (source, semantic = false) => { const start = performance.now(); const program = build(source, semantic);'
+    + ' program.getTypeChecker(); programDurations.push(performance.now() - start);'
+    + ' const diagnostics = program.getSemanticDiagnostics.bind(program);'
+    + ' program.getSemanticDiagnostics = (...args) => { const start = performance.now();'
+    + ' try { return diagnostics(...args); } finally { semanticDurations.push(performance.now() - start); } }; return program; };'
+    + '\nreturn { timingSourceChecks: (source, compiler = compile) => timingSourceChecks(source, compiler), programDurations, semanticDurations,'
     + ' timingSourceResolve: (source) => timingSourceResolve(source, compile), timingSourceCompiler,'
     + ' timingSourceMutations, timingSourceResolvedMutations, timingHardeningMutations, recordDiagnostic, recordDiagnosticOutcomes, assertFiniteProbeStatistics };')(
     ts, expect, assertProbeFamily, assertProbeHardClause, diagnosticResults,
   ) as {
-    timingSourceChecks: (source: string) => Record<string, boolean>;
-    timingSourceCompiler: () => (source: string) => ts.Program;
+    timingSourceChecks: (source: string, compiler?: (source: string, semantic?: boolean) => ts.Program) => Record<string, boolean>;
+    timingSourceCompiler: () => (source: string, semantic?: boolean) => ts.Program;
     programDurations: number[];
+    semanticDurations: number[];
     timingSourceResolve: (source: string) => { registrationsResolved: boolean; tests: { title: string; suite: string; body: string }[] };
     timingSourceMutations: (source: string) => [string, string, string][];
     timingSourceResolvedMutations: (source: string) => [string, string, string][];
@@ -174,7 +178,9 @@ describe('timing-2 sidecar', () => {
       expect(functions.timingSourceChecks(changed)[pin], name).toBe(false);
     }
     console.info(`timing source: ${mutations.length} mutants; program + checker cold=${functions.programDurations[0]!.toFixed(1)}ms`
-      + ` max=${Math.max(...functions.programDurations).toFixed(1)}ms`);
+      + ` max=${Math.max(...functions.programDurations).toFixed(1)}ms`
+      + `; file semantic cold=${functions.semanticDurations[0]!.toFixed(1)}ms`
+      + ` max=${Math.max(...functions.semanticDurations).toFixed(1)}ms`);
   });
 
   it.each(sourcePins.timingHardeningMutations(SOURCE))('rejects fix-round mutant %s: %s', (pin, name, changed) => {
@@ -187,6 +193,47 @@ describe('timing-2 sidecar', () => {
   it.each(sourcePins.timingSourceResolvedMutations(SOURCE))('rejects symbol-resolution mutant %s: %s', (pin, name, changed) => {
     expect(changed, name).not.toBe(SOURCE);
     expect(sourcePins.timingSourceChecks(changed)[pin], name).toBe(false);
+  });
+
+  it('rejects semantic build failure and a compiler that throws', () => {
+    expect(sourcePins.timingSourceChecks(SOURCE + '\nconst __reviewBuildFailure: string = 1;')
+      .registrationsResolved).toBe(false);
+    expect(sourcePins.timingSourceChecks(SOURCE, () => { throw new Error('build failed'); })
+      .registrationsResolved).toBe(false);
+  });
+
+  it.each([
+    ['computed it', "(await vi.importActual<typeof import('vitest')>('vitest'))['it']('hidden', () => {});"],
+    ['property descriptor', "Object.getOwnPropertyDescriptor(await vi.importActual<typeof import('vitest')>('vitest'), 'test')!.value('hidden', () => {});"],
+    ['computed destructuring', "const { ['it']: hidden } = await vi.importActual<typeof import('vitest')>('vitest'); hidden('hidden', () => {});"],
+    ['async factory', ''],
+  ])('rejects cap-round async suite mutant: %s', (_name, statement) => {
+    const changed = SOURCE.replace("describe.sequential('H Probe P timing bounds', () => {",
+      "describe.sequential('H Probe P timing bounds', async () => {\n  " + statement);
+    expect(changed).not.toBe(SOURCE);
+    expect(sourcePins.timingSourceChecks(changed).registrationsResolved).toBe(false);
+  });
+
+  it('rejects factory-level await', () => {
+    const changed = SOURCE.replace("describe.sequential('H Probe P timing bounds', () => {",
+      "describe.sequential('H Probe P timing bounds', () => {\n  await Promise.resolve();");
+    expect(sourcePins.timingSourceChecks(changed).registrationsResolved).toBe(false);
+    // Isolate the AST control: the same await also produces a semantic diagnostic.
+    const compile = sourcePins.timingSourceCompiler();
+    expect(sourcePins.timingSourceChecks(changed, (source) => {
+      const program = compile(source);
+      program.getSemanticDiagnostics = () => [];
+      return program;
+    }).registrationsResolved).toBe(false);
+  });
+
+  it.each([
+    'vi.importActual', 'vi.importMock', 'vi.mock', 'vi.doMock', 'vi.hoisted', 'vi.stubGlobal',
+    'vi.restoreAllMocks()', 'vi', 'vi.spyOn', "vi['spyOn']", 'const alias = vi;', 'const carried = { vi };',
+  ])('rejects cap-round vi reference in a test callback: %s', (statement) => {
+    const anchor = "  it('tripwire-match-vs-no-match-aa', async () => {";
+    const changed = SOURCE.replace(anchor, anchor + '\n    ' + statement + ';');
+    expect(sourcePins.timingSourceChecks(changed).registrationsResolved).toBe(false);
   });
 
   it('composes all completion states, preserves failed raw results, and dereferences final task state', () => {
