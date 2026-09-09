@@ -7,8 +7,10 @@ import type { EvaluationProvenance } from './evaluationProvenance';
 import type { RunRecord } from './scorecard.schema';
 
 /** A rejection is insufficient: pilot readiness requires this exact persisted reason list. */
-export async function expectPilot(execute: Promise<unknown>, directory: () => string | Promise<string>) {
+export async function expectPilot(execute: Promise<unknown>, directory: () => string | Promise<string>,
+  stdout?: { mock: { calls: readonly unknown[] } }) {
   await assert.rejects(execute, UnqualifiedComparisonError);
+  if (stdout) assert.equal(stdout.mock.calls.length, 0, 'Pilot printed output');
   const root = await directory();
   const qualification = JSON.parse(await readFile(join(root, 'qualification.json'), 'utf8'));
   assert.equal(qualification.status, 'unqualified');

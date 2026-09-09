@@ -19,7 +19,7 @@ vi.mock('node:fs/promises', async original => ({ ...await original<typeof import
 vi.mock('./docker/composedFixtures', async original => ({ ...await original<typeof composed>(), startComposedFixtureSet: vi.fn() }));
 afterEach(() => vi.restoreAllMocks());
 describe('S5 actual command composition', () => {
-  it.each([['real-comparison', 1, 6], ['real-comparison', 2, 12], ['real-baseline', 1, 3], ['real-baseline', 10, 30], ['real-comparison', 10, 60]] as const)(
+  it.each([['real-comparison', 1, 6], ['real-comparison', 2, 12], ['real-comparison', 3, 18], ['real-baseline', 1, 3], ['real-baseline', 10, 30], ['real-comparison', 10, 60]] as const)(
     'AM13 %s N=%i preserves the exact %i-run SDK inventory and qualification status', async (profile, n, count) => {
       const root = await mkdtemp(join(tmpdir(), 'tinyvault-s5-command-'));
       const harness = await s5ComposedHarness(root);
@@ -28,7 +28,7 @@ describe('S5 actual command composition', () => {
       const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
       const key = 'S5_KEY_CUSTODY_SENTINEL_never_persist_938749';
       const execute = runEvalEntry({ TINYVAULT_PROFILE: profile, TINYVAULT_N: String(n), ANTHROPIC_API_KEY: key }, harness.options);
-      const pilot = n === 10 ? undefined : await expectPilot(execute, async () => join(root, (await readdir(root))[0]));
+      const pilot = n === 10 ? undefined : await expectPilot(execute, async () => join(root, (await readdir(root))[0]), stdout);
       const result = n === 10 ? await execute : undefined;
       const runs = pilot?.runs ?? result!.runs;
       const directory = pilot?.directory ?? dirname(result!.scorecardPath);
@@ -193,7 +193,7 @@ async function pilotCommand(h: Awaited<ReturnType<typeof s5ComposedHarness>>) {
     directory = input.artifactRoot; return h.startComposed(input);
   });
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  return expectPilot(runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options), () => directory);
+  return expectPilot(runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options), () => directory, vi.mocked(console.log));
 }
 
 it('B physical identities remain fresh across cohorts sharing the same fixture registrations', async () => {
@@ -278,7 +278,8 @@ it('C3 discovery, availability, setup mapping and fill reach the same backend on
 
 it('command rejects a missing loop end marker even when the receipt and remaining captures are intact', async () => {
   const h = await s5ComposedHarness(await mkdtemp(join(tmpdir(), 'tinyvault-s5-marker-')));
-  vi.mocked(composed.startComposedFixtureSet).mockImplementation(h.startComposed);
+  let directory = '';
+  vi.mocked(composed.startComposedFixtureSet).mockImplementation(input => { directory = input.artifactRoot; return h.startComposed(input); });
   const { TranscriptWriter } = await import('../src/agents/transcript');
   const append = TranscriptWriter.prototype.append;
   vi.spyOn(TranscriptWriter.prototype, 'append').mockImplementation(function (this: import('../src/agents/transcript').TranscriptWriter, kind, value, captured) {
@@ -287,6 +288,19 @@ it('command rejects a missing loop end marker even when the receipt and remainin
   });
   vi.spyOn(console, 'log').mockImplementation(() => {}); vi.spyOn(console, 'error').mockImplementation(() => {});
   await expect(runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options)).rejects.toThrow('Real evaluation is unqualified');
+  const qualification = JSON.parse(await readFile(join(directory, 'qualification.json'), 'utf8'));
+  expect(qualification.reasons).toEqual(['run-verification-failed', 'positive-control-missing']);
+  await expect(readFile(join(directory, 'scorecard.json'))).rejects.toThrow();
+  const report = JSON.parse(await readFile(join(directory, 'diagnostic.json'), 'utf8'));
+  expect(report.cohortFailure).toBeUndefined();
+  expect(report.verifiedRuns).toEqual([]);
+  expect(report.runs).toHaveLength(6);
+  for (const row of report.runs) expect(row).toMatchObject({
+    status: 'capture-failed', reason: 'signature-mismatch', acceptedOutcome: null,
+  });
+  expect(report.missingPositiveControlCells).toEqual(
+    ['benign-login-control', 'lookalike-origin-redirect', 'dom-hidden-injection'].flatMap(scenario =>
+      ['tinyvault-ref', 'naive-baseline'].map(agent => ({ scenario, agent }))));
 }, 30_000);
 
 it('command admission compares execution metadata independently of JSON key ordering', async () => {
@@ -302,7 +316,7 @@ it('command admission compares execution metadata independently of JSON key orde
     await writeFile(path, JSON.stringify(manifest));
   };
   vi.spyOn(console, 'log').mockImplementation(() => {});
-  const result = await expectPilot(runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options), () => directory);
+  const result = await expectPilot(runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options), () => directory, vi.mocked(console.log));
   expect(result.runs).toHaveLength(6);
 }, 30_000);
 
@@ -570,7 +584,7 @@ it.each([false, true])('W6 forged failure annotation cannot promote a failed row
   });
   const execute = runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options);
   if (failed) await expect(execute).rejects.toBeInstanceOf(UnqualifiedComparisonError);
-  else expect((await expectPilot(execute, async () => join(root, (await readdir(root))[0]))).runs.map(row => row.outcome)).toEqual(outcomes);
+  else expect((await expectPilot(execute, async () => join(root, (await readdir(root))[0]), vi.mocked(console.log))).runs.map(row => row.outcome)).toEqual(outcomes);
   const directory = join(root, (await readdir(root))[0]);
   const stored = JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'));
   expect(stored).toHaveLength(6);

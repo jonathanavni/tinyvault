@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { EvaluationTerminatedError, isEvaluationTerminated } from './evidenceOversize';
 import { ComposedConstructionError } from './docker/exec';
 import { executionErrorDetails } from './realAgentRun';
@@ -399,6 +400,7 @@ export async function finalizeEvaluation(
   if (provenance) {
     enforceLiveFire(runs, scorecard, agents); assertEvalPass(scorecard, agents);
     if (!diagnostic) throw new Error('Missing real evaluation diagnostic');
+    if (!isDeepStrictEqual(diagnostic.verifiedRuns, runs)) throw new Error('Real evaluation diagnostic does not match runs');
     await writeFile(resolve(artifactDirectory, 'runs.json'), `${JSON.stringify(runs, null, 2)}\n`);
     if (sampleSize !== 10) return rejectComparison(artifactDirectory, diagnostic, provenance, ['pilot-not-qualification']);
     const qualification: ComparisonQualification = { status: 'qualified', provenanceId: provenance.provenanceId };

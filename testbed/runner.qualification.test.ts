@@ -23,7 +23,7 @@ function input(n = 1) {
       outcome: { secretLeaked: agent.expectedToLeak, taskCompleted: true, wrongOriginFillAttempted: false,
         wrongOriginFillBlocked: false, approvalBypassed: false, unobserved: 0, bodiesUnobserved: 0, scanTruncated: 0 } }))));
   const diagnostic: validity.OfflineDiagnosticReport = { status: 'validated', verifiedRuns: runs, runs: [], missingPositiveControlCells: [] };
-  const provenance = { provenanceId: 'a'.repeat(64) } as EvaluationProvenance;
+  const provenance = { provenanceId: 'a'.repeat(64), config: { selectedAgentIds: [...agents.keys()] } } as EvaluationProvenance;
   return { registry, agents, runs, diagnostic, provenance };
 }
 
@@ -72,4 +72,35 @@ it.each([1, 10])('AM13 missing real diagnostic never qualifies at N=%i', async n
   await expect(finalizeEvaluation(directory, n, row.runs, validity.normalizeEvaluationContext(), undefined,
     row.registry, [], row.agents, row.provenance)).rejects.toThrow('Missing real evaluation diagnostic');
   expect(write).not.toHaveBeenCalled();
+});
+
+
+it.each([3, 11])('AM13 fix1 only N10 can qualify: N=%i', async n => {
+  const directory = await mkdtemp(join(tmpdir(), 'am13-sample-size-'));
+  const row = input(n);
+  row.diagnostic.verifiedRuns = structuredClone(row.runs);
+  const stdout = vi.spyOn(console, 'log').mockImplementation(() => {});
+  const print = vi.spyOn(aggregation, 'printScorecard');
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  await expect(finalizeEvaluation(directory, n, row.runs, validity.normalizeEvaluationContext(), undefined,
+    row.registry, [], row.agents, row.provenance, row.diagnostic)).rejects.toBeInstanceOf(UnqualifiedComparisonError);
+  expect(JSON.parse(await readFile(join(directory, 'qualification.json'), 'utf8')).reasons).toEqual(['pilot-not-qualification']);
+  expect(JSON.parse(await readFile(join(directory, 'runs.json'), 'utf8'))).toEqual(row.runs);
+  await expect(readFile(join(directory, 'scorecard.json'))).rejects.toThrow();
+  expect(print).not.toHaveBeenCalled(); expect(stdout).not.toHaveBeenCalled();
+});
+
+it.each([1, 10])('AM13 fix1 mismatched diagnostic cannot persist or qualify N=%i', async n => {
+  const directory = await mkdtemp(join(tmpdir(), 'am13-mismatched-diagnostic-'));
+  const row = input(n);
+  row.diagnostic.verifiedRuns = structuredClone(row.runs);
+  row.diagnostic.verifiedRuns[0].outcome.taskCompleted = false;
+  const write = vi.spyOn(fs, 'writeFile');
+  const print = vi.spyOn(aggregation, 'printScorecard');
+  const stdout = vi.spyOn(console, 'log').mockImplementation(() => {});
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  await expect(finalizeEvaluation(directory, n, row.runs, validity.normalizeEvaluationContext(), undefined,
+    row.registry, [], row.agents, row.provenance, row.diagnostic)).rejects.toThrow('Real evaluation diagnostic does not match runs');
+  expect(write).not.toHaveBeenCalled(); expect(print).not.toHaveBeenCalled(); expect(stdout).not.toHaveBeenCalled();
+  expect(await fs.readdir(directory)).toEqual([]);
 });

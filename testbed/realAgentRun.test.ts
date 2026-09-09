@@ -486,7 +486,7 @@ it.each([1, 10])('F6 command preserves the stable union of limitations across ev
   vi.spyOn(entry, 'qualifyScenarioCapture').mockImplementation(input => ({ ...qualify(input), limitations: ['shared-limit', `run-limit-${index++}`] }));
   let limits: string[];
   if (n === 1) {
-    const pilot = await expectPilot(h.execute(), async () => (await h.diagnostic()).directory);
+    const pilot = await expectPilot(h.execute(), async () => (await h.diagnostic()).directory, vi.mocked(console.log));
     expect(pilot.runs).toHaveLength(6);
     limits = [...new Set((await Promise.all(pilot.runs.map(row => readFile(`${row.eventsPath}.scenario-capture.txt`, 'utf8'))))
       .flatMap(text => text.split('\n').filter(line => /^(shared-limit|run-limit-)/u.test(line))))];
@@ -504,7 +504,7 @@ it.each(['completed', 'setup-blocked', 'transport-failed'])('F8 command writes e
     h.options.createHost = async input => { const host = await createHost(input); return { ...host,
       tools: { ...host.tools, list_vault: async () => ({ items: [] }) } }; };
   } else if (mode === 'transport-failed') h.options.providerFetch = async () => { throw new Error('transport'); };
-  const rows = mode === 'completed' ? (await expectPilot(h.execute(), async () => (await h.diagnostic()).directory)).runs : await (async () => {
+  const rows = mode === 'completed' ? (await expectPilot(h.execute(), async () => (await h.diagnostic()).directory, vi.mocked(console.log))).runs : await (async () => {
     await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
     return JSON.parse(await readFile(join((await h.diagnostic()).directory, 'runs.captured.json'), 'utf8'));
   })();
@@ -744,7 +744,7 @@ it('P-same-observation command reads a valid real-profile event snapshot once an
         return nativeOrigin(events, origin);
       });
     });
-    const result = await expectPilot(h.execute(), async () => (await h.diagnostic()).directory);
+    const result = await expectPilot(h.execute(), async () => (await h.diagnostic()).directory, vi.mocked(console.log));
     expect(reads).toBe(1);
     expect(result?.runs).toHaveLength(6);
     expect(result?.runs.find(row => row.eventsPath === targetPath)?.outcome).toEqual(honestOutcome);

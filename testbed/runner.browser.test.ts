@@ -441,6 +441,7 @@ it('S5 real profiles quiesce real browser contexts before seal and persist every
       usage: { input_tokens: 100, output_tokens: 32 } }), { status: 200 });
   };
   try {
+  const stdout = vi.spyOn(console, 'log').mockImplementation(() => {});
   const result = await expectPilot(runEval({ profile: 'real-comparison', agentInventory: createAgentInventory('real-comparison', ANTHROPIC_SDK_VERSION),
     createModelClient: args => { realRunIds.add(args.runId); return new AnthropicModelClient({ ...args, apiKey: 'synthetic-browser-key', fetch: providerFetch }); },
     artifactDirectory, sampleSize: 1, architecture: 'in-process',
@@ -452,7 +453,7 @@ it('S5 real profiles quiesce real browser contexts before seal and persist every
       }, finish: () => {
         expect(lifecycle.at(-1)).toBe('seal'); lifecycle.push('finish'); return host.finish();
       } };
-    } }), async () => join(artifactDirectory, (await readdir(artifactDirectory))[0]));
+    } }), async () => join(artifactDirectory, (await readdir(artifactDirectory))[0]), stdout);
   expect(result.runs).toHaveLength(6);
   expect(lifecycle).toEqual(Array.from({ length: 6 }, () => ['quiesce-start', 'quiesce-done', 'seal', 'finish']).flat());
   for (const row of result.runs) {

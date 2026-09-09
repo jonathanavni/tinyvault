@@ -37,14 +37,14 @@ it('E1 one-byte root instruction edit changes every reference binding through th
   await mkdir(join(scratch, 'artifacts'), { recursive: true });
   await writeFile(join(scratch, 'artifacts', 'excluded.txt'), 'generated');
   const inventory = await enumerateSource(scratch);
-  vi.spyOn(console, 'log').mockImplementation(() => {});
+  const stdout = vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
   const run = async () => {
     const h = await s5ComposedHarness(join(scratch, 'artifacts', 'eval'));
     h.options.sourceRoot = scratch;
     let directory = '';
     vi.mocked(composed.startComposedFixtureSet).mockImplementation(input => { directory = input.artifactRoot; return h.startComposed(input); });
-    return expectPilot(runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options), () => directory);
+    return expectPilot(runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options), () => directory, stdout);
   };
   const before = await run();
   expect(before.provenance.source.inventory.some(row => row.path === 'new-source-input.txt')).toBe(true);
@@ -61,7 +61,8 @@ it('E1 one-byte root instruction edit changes every reference binding through th
   expect(after.provenance.provenanceId).not.toBe(before.provenance.provenanceId);
   expect(after.provenance.source.inventory.some(row => row.path === 'new-source-input.txt')).toBe(true);
   const h = await s5ComposedHarness(join(scratch, 'artifacts', 'eval')); h.options.sourceRoot = scratch;
-  vi.mocked(composed.startComposedFixtureSet).mockImplementation(h.startComposed);
+  let driftDirectory = '';
+  vi.mocked(composed.startComposedFixtureSet).mockImplementation(input => { driftDirectory = input.artifactRoot; return h.startComposed(input); });
   const delegate = h.options.providerFetch; let changed = false;
   h.options.providerFetch = async (...args) => {
     if (!changed) { changed = true; await writeFile(join(scratch, 'new-source-input.txt'), 'changed during execution'); }
@@ -69,6 +70,8 @@ it('E1 one-byte root instruction edit changes every reference binding through th
   };
   vi.spyOn(console, 'error').mockImplementation(() => {});
   await expect(runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options)).rejects.toBeInstanceOf(UnqualifiedComparisonError);
+  expect(JSON.parse(await readFile(join(driftDirectory, 'qualification.json'), 'utf8')).reasons).toEqual(['source-drift']);
+  await expect(readFile(join(driftDirectory, 'scorecard.json'))).rejects.toThrow();
 }, 60_000);
 
 it('F9 hashes runtime declarations without scraping source text', async () => {
