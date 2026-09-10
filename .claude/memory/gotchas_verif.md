@@ -166,3 +166,12 @@ Owner gate discipline, verification blind spots, mutant hygiene, evidence handli
   every reported count from the loop that produces it, and give each witness a deletion mutant that reds *that* assertion. (2026-09-10)
 - **Owner carve-out fixes made after a review are unreviewed on their committed form until a focused round covers them** — keep the
   list of such commits and review the range explicitly before final gates. (2026-09-10)
+
+- **A `finally` that throws replaces the assertion error you were looking for.** The Docker budget test asserted `e.secrets`
+  length 579 (three fixtures) while five fixtures registered 965; every report on `828c769`/`9a826e5` showed only the export
+  `command-timeout` thrown from `await e.finish()` in the teardown `finally`, so the stale inventory pin was invisible until the
+  timeout was fixed (Codex found it by reading). When a teardown red masks the body, re-read the assertions above the `finally`
+  before declaring the root cause complete. (2026-09-10)
+- **A handoff's "intended rejecting assertion" is a hypothesis until executed.** Of eleven reader-derived M7 mutants, four redded
+  earlier (at actuation), one was equivalent (the `close` action; the witness comes from the loop's next request), and one needed a
+  scratch copy to reach its assertion. Run the table; record where it actually reds. (2026-09-10)

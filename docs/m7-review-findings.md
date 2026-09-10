@@ -919,3 +919,86 @@ by the `close` action) — replaced by 7b, which kills through the E5 oracle; (2
 actuation before the exact-event assertions — still kills; the supplementary 1b–3b reach the intended assertions; (3) row 10's
 derived-count requirement is proved by 10b because Vitest stops at the first failing observer assertion. No candidate change
 follows from the table. Not authorized by this entry: merge, push, campaign, live spend, public flip.
+
+## M7 final acceptance — Docker export-deadline amendment, focused reviews and final gates (2026-09-10, owner claude) 
+
+**Docker amendment (user decision 2, handoff §2.2/§3.2).** Packet `packet-m7-astra-docker-deadline.md` (evidence dir) dispatched to
+Codex gpt-6-astra in the candidate worktree at `9a826e5` (`task-mtvy2gru-pxyldr`, `--fresh --write --effort high`). Delivery
+(`packet-m7-astra-docker-deadline-report.md`; sandbox logs `astra-docker-deadline-sandbox/`): `EXPORT_TIMEOUT_MS = 240_000` beside
+`COMMAND_TIMEOUT_MS` (`exec.ts:15-16`, one rationale comment); `ProjectCloser.#export`'s single `bounded` uses it (`compose.ts:262`);
+nothing else changes its bound (`exec.ts:154,183`, `compose.ts:188`, `probeOrigin` 5000 unchanged); both scans kept; kill/cleanup
+path untouched. Reconciliation: every grep hit tabled (49 rows) — `compose.test.ts` hanging-export test strengthened (pending and
+unkilled at 120 s, rejection + single kill + destroyed streams at 240 s, literal pins `240_000`/`120_000`), new partial-export/
+non-zero-exit → `scan-failed` test, `compose.registry.test.ts` advances `EXPORT_TIMEOUT_MS`, `composed.docker.test.ts:143,269`
+elapsed bounds `< EXPORT_TIMEOUT_MS`, `docs/m5-2-slice-4-plan.md:73,393` superseded in place with the old wording struck and the
+full rationale; no hit in `SCHEMA.md`, `phase-0-plan.md`, the claim table/mirror, `scripts/**`, README/ORIENT. Sandbox: `tsc` 0,
+243/243 across seven Node Docker files + `secretScan.test.ts` 56/56; mutants M-D1 (export 120 s), M-D2 (export on the general
+bound), M-D3 (general bound 240 s — killed by the literal pin, not by `exec.variants.test.ts:77` alone), M-D4 (registry kill deleted),
+M-D5 (stream destroys deleted) and the extra `exit !== 0` deletion all red then restored green. **Deviations From Handoff: none.**
+Owner commit `2aead00` on `codex/m7-fixtures` (explicit paths, `git diff --check` clean). Final candidate **`2aead00`**.
+
+**Focused reviews on `828c769..2aead00` (no gate running):** Codex adversarial (`review-mtvybvaq-x4gjw4`, base `828c769`, scope
+branch, focus `review-m7-final-codex-focus.md`) — **NEEDS-ATTENTION, 1 P1 / 1 P2** (`review-m7-final-codex-report.md`); blind Opus QA (`scripts/claude-review.mjs`, channel qa, real checkout
+detached at `2aead00`, base `828c769`, packet `review-m7-final-qa-packet.md`, evidence
+`~/Documents/Coding/tinyvault-evidence/m7-final-20260910/opus-qa-2aead00/`, copy `review-m7-final-opus-qa-report.md`) — **NEEDS-ATTENTION, 0 P1 / 2 P2 / 1 P3 + one declared gap**. Security review not re-run: no fixture
+page or witness content changed beyond `9a826e5`'s derived count (covered by the QA packet, focus 5).
+
+**Final gates on `b7889d3` (real checkout detached; host quiet at start — WindowServer only ≥ 10 % — and at the end of `make test`; Chrome and the Docker VM present during the Docker gate; driver `owner-gates-final-b7889d3.driver.log`):**
+`make test` **GREEN** — main **3282/0/1** (3283; +1 = the new partial-export test), timing-1 **5/5**, timing-2 **26/26** (this run's actual verdict; the `828c769` rejection stays recorded and unadjudicated, no timing-only run was made), `test execution PASS`, 15:12–15:25 (`owner-gate-final-make-test-b7889d3.log`, `{main,timing-1,timing-2,timing-2-probes}-b7889d3.json`). `make test-docker` **GREEN 7/7** — the budget test that timed out on `828c769`/`9a826e5` passes in 885 s; at 965 scanners the five exports took **143.1 / 144.0 / 144.4 / 145.2 / 149.6 s** (≈ 146 s as measured), teardown 728.6 s, all inside the 240 s per-export bound and the unchanged 1_800_000 ms test timeout (`owner-gate-final-test-docker-b7889d3.log`, `docker-b7889d3.json`, `slice4-probe-metrics-b7889d3.json`). `make eval-stub` **GREEN** — five scenarios, 0/10 leaks each, 10/10 completed, unobserved 0, `test execution PASS` (`owner-gate-final-eval-stub-b7889d3.log`, `eval-stub-b7889d3.json`, `eval-stub-scorecard-b7889d3.json`; stub results stay separate from live qualification — E8b unchanged). Mutant 9c (Codex P1's exact deletion) ran before the gates on `b7889d3`: red at the observer (`m7.diagnostics.browser.test.ts:28`, 1050 ≠ 1051), restored green, tree clean (`mutants-9a826e5/mutant-09c-*`).
+Mutant re-run rule (§3.4): `2aead00`/`b7889d3` touch none of the files the §3.1 mutants touch (`secret-echo/index.html`, `fake-reauth/index.html`,
+`m7.browser.testkit.ts`, `m7.hostile.browser.test.ts`, `anthropicClient.ts`), so the `9a826e5` table stands for `b7889d3`.
+
+### Review dispositions (owner, verified against the source) — reviews on `2aead00`; final candidate `b7889d3` = `2aead00` + one literal
+
+**Codex adversarial (`review-mtvybvaq-x4gjw4`, Astra): NEEDS-ATTENTION, 1 P1 / 1 P2.** Every focus item answered with `file:line`:
+only `#export` at 240 s; kill/destroy/remaining-scans/down-last preserved; the hanging-export test rejects a reverted deadline and
+both literal pins load-bearing; missing marker → `scan-control-missing`, non-zero partial → `scan-failed`, secret → `secret-exposed`;
+no unreconciled sentence or claim row; carve-outs verified (indices 0–4, 47160 outside every tuple, failure surfacing preserves the
+rejection checks, join unchanged for runs with a `/success` snapshot, initial gate survives); scope clean; Deviations none.
+- **P2 (VERIFIED — a pre-existing blocker the previous gates masked): `composed.docker.test.ts:249` pinned `e.secrets` at 579,
+  the three-fixture inventory (3 + 3 × 32 × 6).** At five fixtures the count is 5 + 5 × 32 × 6 = 965 — exactly the close-time
+  count in `diag-docker-export-9a826e5.log`. On `828c769`/`9a826e5` the assertion error was replaced by the export
+  `command-timeout` thrown from the teardown `finally` (`await e.finish()`), so the Docker report recorded only the timeout.
+  Present at base `828c769`; not a regression of the range. **Owner fix `b7889d3`: the literal 579 → 965 with the derivation
+  in the comment**; secrets, controls and the 32-run fill unchanged. A one-literal inventory pin recommended verbatim by the
+  reviewer (checklist-defect class, spec §7 item 8b); no further review round taken — recorded for the user at merge approval.
+- **P1 (VERIFIED as stated; DISPOSITION: accepted residual with the claim narrowed, no fix round):** `secret-echo/index.html:66`
+  puts `console.log(#password.value)` and `emitted += 1` in one statement; deleting only the `console.log` keeps the DOM count at
+  1051 while the emission is gone. Owner mutant **9c** (this exact deletion, run before the final gates): the diagnostic reds at the
+  independent observer (`m7.diagnostics.browser.test.ts:28`, 1050 ≠ 1051) — see the gate driver log. So the *test* kills it; only
+  the DOM-count witness (i) alone does not. Narrowed claim: witness (i) is the page's self-reported executed-increment count
+  (a constant string could not fail; the derived count fails on deleted iterations/lines); the emission witness is the test-only
+  `page.on('console')` observer, which every emission mutant (9, 9c, 10) trips. Not a P1 under the stated criteria (the witness can
+  fail; no forbidden file; no bound change); a fixture-page rewrite would re-open the security channel and the M7 fix-loop cap
+  (three rounds) is reached. Convergent with the Opus residual below.
+
+**Blind Opus QA (`scripts/claude-review.mjs`, channel qa, real checkout detached at `2aead00`, base `828c769`;
+`review-m7-final-opus-qa-report.md`): NEEDS-ATTENTION, 0 P1 / 2 P2 / 1 P3 + one declared gap.** Focus 1–6 all verified with
+`file:line` (bounds table; the 120 s vs 240 s discrimination re-derived incl. the fake-timer scheduling argument; the replaced
+fake handle mirrors the spy's `spawns` record and its `handles` omission; exit-0 partial stream cannot pass `checkScan`; no claim row
+names the bound; the derived count, failure surfacing, join guard, 47160 and `[0..4]` all verified; scope clean).
+- **Gap (VERIFIED — packet defect, not a candidate defect):** `docs/m7-final-acceptance-handoff.md` is absent from the checkout.
+  True: the handoff lives on `main` (`d72cdcc`); the candidate branch is based at `8c871e0` and does not carry it. The owner's
+  packet cited a file not on the branch. The authorization exists on `main`; no candidate change.
+- **P2 "no Decisions Log entry for the 240 s bound" (DISPROVED on `main`, same cause):** `PLAN.md` Decisions Log 2026-09-10
+  item (2) records the user's decision verbatim in substance — on `main`, not on the branch's `PLAN.md`.
+- **P2 "the amended sentence defers to a BACKLOG item that does not exist" (VERIFIED — owner action on `main`):** `BACKLOG.md` has
+  no scanner-throughput item yet. Owner integration (this session, on `main` after the gates): add the item ("StreamSecretScanner
+  sublinear in the secret count — Aho–Corasick / single-pass multi-pattern; the 240 s export deadline is a capacity accommodation").
+- **P3 (recorded, not amended):** `docs/m5-2-slice-4-review-findings.md:53,159,997,1164,1266,1571` still say 120 s — historical
+  register rows (append-only); the supersession lives in the plan doc and this register.
+- **Test gaps recorded as residuals:** `stderr.destroy()` / `marker.destroy()` in `#export`'s `finally` have no direct witness
+  (Astra's M-D5 covered the two handle streams); `compose.registry.test.ts` is reconciliation-only (advances the full 240 s);
+  `EXPORT_TIMEOUT_MS` confinement to `#export` is proved by grep, not by a gate; worst-case serial teardown 5 × 240 s = 1200 s inside
+  the unchanged 1_800_000 ms Vitest timeout (a Vitest timeout is not a fail-closed path — watch the first live run's teardown time).
+- **Residuals recorded:** the derived count counts increments beside emissions (convergent with Codex P1; disposition above); the
+  sibling `initialSnapshotJoin` (`scenarioCoverage.ts:49`) has no `index < 0` guard and surfaces `sdkRequestId` — pre-existing, out of
+  range, qualification unaffected (BACKLOG); real-Docker export regressions inside the 120–240 s band are invisible by design; the
+  965-secret inventory has ≈1.6× margin under the new bound and no alarm short of a red gate.
+
+**Security review:** not re-run — no fixture page or witness content changed beyond `9a826e5`'s derived count (QA focus 5 covered it).
+
+**RETURNED FOR MERGE APPROVAL (not merged, not pushed):** candidate `codex/m7-fixtures` at **`b7889d3`** (= `9a826e5` + `2aead00` Docker
+amendment + `b7889d3` one-literal inventory pin). Range `828c769..b7889d3` reviewed on `2aead00` by Codex adversarial and blind Opus QA;
+the one literal after `2aead00` is the reviewer-recommended pin. Owner integration on `main` after approval (E10): README/ORIENT/SCHEMA/
+phase-plan sentences, BACKLOG closures, Decisions Log, this register. Not authorized: merge, push, campaign, live spend, public flip.

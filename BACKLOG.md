@@ -172,3 +172,15 @@ work in flight, the rest stay parked here (register "Final5 round"):
 - **[S4 residual → S5] `abort()` discards all lease evidence, including pre-abort captures.** Verdict is capture-failed, never clean,
   so no false green — but S5's failed-run retention must snapshot the evidence array before `#drop` so diagnostics survive a
   page-triggered abort. Residual (2) in the same register entry. (2026-09-07)
+
+## From the M7 final acceptance (2026-09-10)
+
+- **`StreamSecretScanner` sublinear in the secret count** (`testbed/docker/secretScan.ts`) — throughput is inversely proportional to
+  the registered-secret count (96 → 35 MB/s, 579 → 6 MB/s, 965 → 3 MB/s per 249 MB export through two parallel scanners; measured
+  143–150 s per export at 965 close-time secrets). The 240 s per-export deadline (`EXPORT_TIMEOUT_MS`, 2026-09-10) is a capacity
+  accommodation, not a fix; a sixth fixture or a larger budget fill re-enters the failure mode with no alarm short of a red gate.
+  Aho–Corasick / single-pass multi-pattern; the Docker acceptance gate's own scanner, so a reviewed security-core change.
+- **`initialSnapshotJoin` (`testbed/scenarioCoverage.ts:49`) has no `index < 0` guard** and surfaces `sdkRequestId` — the same class the
+  `9a826e5` `/success` join guard fixed; qualification unaffected (`initial-snapshot-unobserved` still pushed). Opus QA residual, 2026-09-10.
+- **No direct witness for `stderr.destroy()` / `marker.destroy()` in `ProjectCloser.#export`'s `finally`**; `EXPORT_TIMEOUT_MS` confinement
+  to `#export` is proved by grep, not by a gate. Opus QA test gaps, 2026-09-10.

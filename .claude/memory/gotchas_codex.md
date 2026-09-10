@@ -178,3 +178,9 @@ Codex dispatch, sandbox limits, job monitoring, model routing, the safety classi
   nothing. Rule: after any read-only review in a worktree, dispatch the next implementation as `--fresh --write` with a
   self-contained packet (prior packets and reports concatenated); reserve `--resume-last` for an immediate follow-up to
   the last *write* job in that cwd. (2026-09-09)
+
+- **The companion's job store is keyed by the dispatch cwd.** `status`/`result <job-id>` run from another directory answer
+  `No job found`; run them from the worktree the job was dispatched in (a `(cd <wt> && node … result <id>)` subshell). Also:
+  `status --json` nests the state under `.job.status` (the top level has none — an empty parse looks like "finished"), and
+  `adversarial-review --background` still blocks the calling shell until the review ends (~10 min) — run it as a background
+  Bash call. (2026-09-10)
