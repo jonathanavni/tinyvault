@@ -574,3 +574,52 @@ use through the evening; PLAN.md carries the start command and conditions. No co
 run has ended. The harness requires the output directory to be outside the checkout (`artifacts/` is inside it, though
 ignored), so the campaign directory lives beside the repository; its contents are copied into
 `artifacts/review-evidence/` after the 20th run.
+
+## Probe P campaign — executed 2026-09-10 (owner claude; user-authorized; frozen candidate `9c063ec`)
+
+**Execution.** Started 2026-09-09 23:17:39 CDT after the laptop restart, once the frozen predicate saw zero competing
+processes for five consecutive minutes (boot-time iCloud/Spotlight/software-update activity had settled; load 1.5);
+`caffeinate -ims`; 20 runs ended by 02:41 (≈ 611 s each; timing-2 partition 231 s in every run); the runner exited
+normally; nothing was edited, committed, reviewed or run concurrently. One earlier invocation without `--resume` was
+refused by the harness ("candidate already has an incomplete campaign") before any run started — recorded as
+`run-attempt1-refused.log`, no run consumed. Evidence: `/Users/jonathanavni/Documents/Coding/tinyvault-evidence/probe-p-campaign-20260909/`
+(copied to `artifacts/review-evidence/probe-p-campaign-20260909/`, ignored); `report.md`/`report.json` from the
+frozen analyzer, run once.
+
+**(a) Actual gate outcomes — all 20 started runs:** `make test` exit 0 in 20 of 20; main / timing-1 / timing-2 partitions
+pass in 20 of 20; Holm family **accept in 20 of 20**; no refusal attempts; every sidecar complete with all 14 entries
+measured; the synthetic injected-bias control rejected in 20 of 20. The lowest gated p-value in 120 gated observations
+was 0.00856 (`tripwire-match-vs-no-match`, run-19, an excluded run) against the family bar 0.00167.
+
+**Exclusions (registered rule, applied without exception): 11 of 20** — runs 01, 06–12, 16, 19, 20 — every one under
+rule B (a non-harness process at ≥ 10 % CPU at run start), never rule A: `fileproviderd` (iCloud, 11–24 %),
+`mds_stores` (Spotlight, 14–63 %), `mediaanalysisd` (Photos, 45–95 %), `cloudd`, `sysmond`. macOS schedules exactly
+these maintenance jobs for idle hours, which is also when the campaign ran. **Valid denominator V = 9** (runs 02–05,
+13–15, 17, 18).
+
+**(b) Matched per-probe diagnosis over V = 9 (bar p ≤ 0.01/6):** `tripwire-match-vs-no-match`: k_AB = 0, k_AA = 0,
+k_sham = 0; primary sign series − 0 + + − − − − −, same sign in 6 of 9 (threshold ⌈0.8·9⌉ = 8, not met); stationarity
+slope mean −9.1e-6 ms/pair, intervals excluding zero 2 of 9. `tripwire-real-click-match-vs-no-match`: k_AB = 0,
+k_AA = 0, k_sham = 0; sign series + + − − − + + + +, 6 of 9 (not met); slope mean +2.5e-4 ms/pair, 1 of 9.
+Real-click controls: 250 µs rejected 9 of 9, 1,000 µs rejected 9 of 9. Sensitivity floor 8–32 µs (run-03: nothing
+rejected, recorded null). Diagnostic missing/error counts: 0 everywhere.
+
+**Outcome (frozen rule): primary "insufficient" (V = 9 < 15) — inconclusive, no inference about calibration;
+"quiet" also applicable over the nine valid runs.** The gate and the 2026-09-08 deferral stand; the three historical
+reds remain unresolved; no convention is adopted; a quiet campaign does not prove the absence of a timing channel.
+**D-1's limits:** the twins are not phase-matched to their siblings; quiet twins cannot, by themselves, clear the
+harness or distinguish a real channel from an order/environment effect; the sham removes only byte content equal to
+the canary.
+
+**Context, not evidence (excluded runs and single observations):** the 11 excluded runs were also green with family
+accept and quiet twins, so the campaign observed 20 consecutive `make test` runs without a Probe P rejection on this
+host — this reclassifies nothing. In excluded run-19 (under `cloudd`/`fileproviderd` load) the synthetic sham twin
+returned p = 7.7e-6 with `singleProbeFamily: reject` — one non-matching-versus-non-matching comparison that would have
+cleared the family bar under load; a single excluded observation, recorded as a hint about load-induced rejections.
+
+**Proposals to the user (nothing adopted):** P-1 accept the campaign as inconclusive under its own rule and leave the
+gate, the deferral and the historical reds exactly as they are. P-2 if a second campaign is wanted, decide first how
+macOS maintenance daemons are to be treated (they excluded 11 of 20 starts and run precisely during idle hours):
+either run when Spotlight/Photos/iCloud have finished their post-restart work, or amend the frozen predicate in a
+reviewed, pre-registered way before a new authorization — the 10 % rule B bar is a declared operational threshold,
+not a calibration. P-3 keep the execution-side timing-2 inventory pin (BACKLOG) as the next Astra packet regardless.

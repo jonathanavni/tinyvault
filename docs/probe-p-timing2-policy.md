@@ -7,7 +7,7 @@ C1 merged and pushed (`4909ba8`/`ca43cd9`); **C2 implemented through the full la
 249 s ≤ 600 s; the 1,000 µs stop rule never triggered), **D-1..D-4 accepted by the user and merged into main as `92d2bbe`** (`docs/probe-p-c2-packet.md` rev 3.1; register
 "C2 merged"); D-1's recorded limit: the twins are not phase-matched, and quiet twins cannot by themselves clear the
 harness or distinguish a real channel from an order/environment effect; the **campaign harness** (`tools/probe-p-campaign/`) is on the same
-integration head at its review cap; the campaign is **authorized** (user, 2026-09-09) to run once the host has its full idle window, with identities frozen before run 1. Register: `docs/m7-review-findings.md`. The user's framing governs: *the
+integration head at its review cap; the campaign **ran 2026-09-10** (frozen candidate `9c063ec`, predicate v5): 20 started / 20 ended, gate green and family accept in all 20, 11 starts excluded by rule B (macOS idle-hour maintenance), **V = 9 → primary outcome "insufficient" under §2.4, "quiet" also applicable; nothing adopted; proposals in the M7 register.** Register: `docs/m7-review-findings.md`. The user's framing governs: *the
 existing gate remains unchanged; this is authorization to characterize the problem, not to relax or reinterpret
 the gate.* Nothing here changes a threshold, a sample size, the gated probe set, the hard clause, or what
 `make test` certifies. The locked specification stays: **D10** in [`docs/m4-slice-spec.md`](m4-slice-spec.md)
