@@ -428,3 +428,38 @@ disposition:** the "pure moves" contract in the integrator packet was over-stric
 reads several files must be retargeted; the property that matters, an unchanged measurement surface with every pin
 and mutant still executing, is verified by the reviewer and by the owner's browser runs and three green clean-clone
 gates. Recorded as accepted scanner retargeting, not as pure moves. No fourth round.
+
+## C2 merged (user decision, 2026-09-09) — merge statement, accepted deviations, campaign authorization
+
+**Merge:** `claude/probe-p-integration` `1de4ad3` merged into `main` as `92d2bbe`; `git diff 1de4ad3 92d2bbe` over
+`src testbed scripts tools package.json Makefile vitest*.config.ts tsconfig.json SKILL.md` is empty, so the merged
+executable content is the reviewed candidate that passed the three exact-candidate clean-clone gates (register above).
+**Not pushed** — no push authorization for this merge or the local docs commits.
+
+**Equivalence statement (precise):** the Probe P gate's arithmetic, thresholds and assertions are unchanged — the six
+gated probes' `report()` and hard-clause lines, the family test, `PROBE_NAMES`, α, pairs, warm-up and the synthetic
+control's assertion are the lines they were at `4909ba8` — **with D-4 and the recorded setup changes disclosed**: the
+gated real-click probe's timed window now calls the referenced no-op `NO_HOOK` instead of a literal no-op (D-4);
+`beforeAll` gains one directory creation and one small stub write; a ledger `afterEach` storing a task reference runs
+after every test; the pinned-source test grew; the payload fixture functions and `TimingSessions` moved to
+`host.timing.fixtures.ts` (bodies unchanged); the sidecar hook bodies moved to `timing2Sidecar.ts`. The measured timing
+samples are **not** claimed to be byte-identical to any earlier run — they are new measurements under a changed
+process shape (§0 of the packet), which is why the campaign reports its own denominator.
+
+**Accepted deviations (user):** D-1 (diagnostics after the family gate; preserving the gated probes' preceding
+workload is the right trade-off) — **recorded limit: the twins are not phase-matched to their siblings; quiet twins
+cannot, by themselves, clear the harness or distinguish a real channel from an order/environment effect**; D-2
+(owner-run cost and stop-rule verification, supported by the three exact-candidate clean-clone runs); D-3 (the
+explicitly named existing synthetic-control exception; no other diagnostic inherits it); D-4 (the referenced no-op as
+the disclosed measurement-code change). **Scanner retargeting** in the integrator fix accepted on its review and
+verification — described as retargeting, not a pure move. **The earlier clean-clone red (run 1 on `24675f6`) stays
+recorded on its original head.** **The narrowed source scan is not universal registration isolation**; the
+execution-side timing-2 inventory pin remains a separate, scoped follow-up (BACKLOG) and is not bundled into this merge.
+
+**Campaign (user-authorized):** one pre-registered campaign of 20 started `make test` runs after this merge, once the
+host is available for the full idle window; all edits and registration finished and the final candidate, policy and
+analysis identities frozen before run 1; the merged executable content verified equal to the reviewed candidate; no
+concurrent implementation, reviews, browser tests or other competing jobs; no replacements, extensions or restarts;
+every started run, failure, exclusion and incomplete diagnostic preserved under the registered rules; the report
+carries the valid denominator, actual gate outcomes, controls, diagnostic comparisons and D-1's limits; every
+resulting action is a proposal — the campaign changes no gate and resolves no historical red by itself.
