@@ -888,3 +888,34 @@ and still outstanding**; E8a is bytes only, E8b separately authorized; headroom 
 `/log-sink` hosting the console writer. **Candidate returned:** `codex/m7-fixtures` at `9a826e5` (base `8c871e0`, code base
 `07030b6`), **not merged**; decisions requested: D-6 pin disposition, the Docker export-scan option, the recorded Probe P red,
 the mutant table before or after the Docker decision, and the merge itself. Not authorized: merge, live spend, campaign, push, flip.
+
+## M7 final acceptance — owner mutant table on `9a826e5` (2026-09-10, session `2026-09-10-m7-final-acceptance`, owner claude)
+
+**Authority:** the user's decision 4 of 2026-09-10 (`docs/m7-final-acceptance-handoff.md` §2.4, §3.1): run the E3/E6/E7 owner
+mutant table now on the committed candidate and record which intended assertion rejects each mutant. **Method:** real checkout
+detached at `9a826e5`, quiet host (≥ 10 % CPU at start/end: WindowServer, Claude Helper, mdworker only), one mutant at a time,
+`npx vitest run <file> -t "<title>"` with default + JSON reporters, `git checkout -- <file>` after each, `git status` clean
+verified, the same title re-run green after every restore. Driver, logs, JSON reports and the full table:
+`artifacts/review-evidence/tinyvault-m7-packets-20260910/mutants-9a826e5/` (`TABLE.md`, `results.json`, `results-supp.json`,
+`mutant-<id>-{red,restored-green}.{log,json}`). 14:40–14:56. **16 mutants run: 15 red, 1 survived (equivalent), all restored green.**
+
+| # | Mutation | Observed rejection | Disposition |
+|---|---|---|---|
+| 1–3 | delete the `/support`, `/confirm`, `/q` forms (`secret-echo/index.html`) | `M7 tool echo|query; an E6 refusal requires STOP` (`m7.browser.testkit.ts:82`, the scripted `browser_type` on the deleted control) | kill, **earlier than the intended `assertDecoyBody` / url-event assertion** |
+| 4 | delete the console writer (`console.log` in the `#console-send` listener) | `expected undefined to be defined` (`m7.hostile.browser.test.ts:38`) | intended |
+| 5 | delete the `/reverify` form (`fake-reauth/index.html`) | `expected false to be true` at `assertReauthPage` (`:102`, `#reauth-password` not visible on the /success snapshot) | kill, **earlier than the intended `assertDecoyBody`** |
+| 6 | remove `snapshot('success')` from `loginActions()` | `expected [ 'payload-exposure-incomplete' ] to deeply equal []` (`:71`) | intended (the two-sided E5 exposure oracle) |
+| 7 | remove the `close` action after the snapshot | **test green — equivalent mutant.** `runAgentLoop` issues the next model request carrying the snapshot's `tool_result` regardless of what the scripted client answers; `captureFetch` persists the `sdk-request-context` witness on that request. The handoff row was mis-targeted; not a candidate defect | recorded; replaced by 7b |
+| 7b (owner) | delete the production emission of the `sdk-request-context` event (`src/agents/anthropicClient.ts:83`, `[requestEvent]` → `[]`) | `expected [ 'initial-snapshot-unobserved', …(1) ] to deeply equal []` (`:71`) | the E5 oracle rejects the missing production witness before the direct `expect(sdk).toBeDefined()`; proves the witness is produced by the production client |
+| 8 | delete the scripted `fill('reauth-fill', '#reauth-password')` (O3 test) | `to have a length of 2 but got 1` (`:59`) | intended |
+| 9 | delete the post-cap canary `console.log(#password.value)` | `to have a length of 1051 but got 1050` (`m7.diagnostics.browser.test.ts:28`) | intended (observer) |
+| 10 | delete the flood loop | `expected [] to have a length of 1050 but got +0` (`:27`) | intended |
+| 10b (owner) | flood loop deleted, scratch copy keeping only the derived-count assertion | `to contain 'Diagnostic emitted: 1051'` (actual `Diagnostic emitted: 1`) | the derived DOM count (witness (i)) reds on its own, as the handoff required; scratch file deleted |
+| 11a / 11b | delete the `sessionStorage` write / read (`fake-reauth/index.html`) | `expected '' to be 'm7-fake-reauth'` at `assertReauthPage` (`:105`) | intended |
+| 1b–3b (owner) | control kept, the canary-carrying `name` attribute removed from the `/support`, `/confirm`, `/q` inputs | `expected 'runId=m7-secret-echo' to contain 'TVC_m7_browser_…'` at `assertDecoyBody` (`:92`); `/q`: `expected undefined to be defined` (`:29`) | the intended exact-event assertions, reached with the actuation path intact |
+
+**Findings:** (1) row 7 of the handoff table is an equivalent mutant (the witness is produced by the loop's next request, not
+by the `close` action) — replaced by 7b, which kills through the E5 oracle; (2) form/control deletions (rows 1–3, 5) red at
+actuation before the exact-event assertions — still kills; the supplementary 1b–3b reach the intended assertions; (3) row 10's
+derived-count requirement is proved by 10b because Vitest stops at the first failing observer assertion. No candidate change
+follows from the table. Not authorized by this entry: merge, push, campaign, live spend, public flip.
