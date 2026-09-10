@@ -67,4 +67,19 @@ describe('parsePs', () => {
       status: 'unparseable', processes: [{ pid: 12, pcpu: 0 }],
     });
   });
+
+  it.each(['0x10', '1e1', '-0.0'])('rejects non-decimal %%CPU form %s', (pcpu) => {
+    expect(processCapture(` 12 1 ${pcpu} 00:03 /usr/bin/login\n`, 0)).toMatchObject({
+      status: 'unparseable', processes: [],
+    });
+  });
+
+  it.each([
+    ['0.0', 0],
+    ['12.5', 12.5],
+  ])('accepts decimal %%CPU form %s', (pcpu, expected) => {
+    expect(processCapture(` 12 1 ${pcpu} 00:03 /usr/bin/login\n`, 0)).toMatchObject({
+      status: 'ok', processes: [{ pid: 12, pcpu: expected }],
+    });
+  });
 });

@@ -12,15 +12,16 @@ const proc = (pid: number, ppid: number, pcpu: number, command: string) => ({
 const classify = (processes: ReturnType<typeof proc>[], ownPid = 999) =>
   competingJobs({ processes }, { ownPid, checkoutRoot: CHECKOUT_ROOT });
 
-describe('competingJobs predicate v2.2', () => {
-  it('exports predicate version 4', () => {
-    expect(PREDICATE_VERSION).toBe(4);
+describe('competingJobs predicate v2.3', () => {
+  it('exports predicate version 5', () => {
+    expect(PREDICATE_VERSION).toBe(5);
   });
 
   it.each([
     ['direct vitest runner', '/repo/node_modules/.bin/vitest run'],
     ['node vitest runner', 'node /repo/node_modules/vitest/vitest.mjs run'],
     ['npx vitest runner', 'npx vitest run'],
+    ['vitest runner with incidental MCP filename', 'vitest run mcp-integration.test.ts'],
     ['direct playwright test runner', '/repo/node_modules/.bin/playwright test'],
     ['node scoped playwright runner', 'node /repo/node_modules/@playwright/test/cli.js test'],
     ['npx playwright runner', 'npx playwright test'],
@@ -40,6 +41,21 @@ describe('competingJobs predicate v2.2', () => {
   });
 
   it.each([
+    ['npm test', 'npm test'],
+    ['npm run test', 'npm run test'],
+    ['npm run eval', 'npm run eval'],
+    ['npm run baseline', 'npm run baseline'],
+    ['npm run test:docker', 'npm run test:docker'],
+    ['npx test', 'npx test'],
+    ['npx run test', 'npx run test'],
+    ['npx run eval', 'npx run eval'],
+    ['npx run baseline', 'npx run baseline'],
+    ['npx run test:docker', 'npx run test:docker'],
+  ])('rule A classifies %s at zero CPU without requiring a checkout path', (_label, command) => {
+    expect(classify([proc(10, 1, 0, command)]).competing.map(({ pid }) => pid)).toEqual([10]);
+  });
+
+  it.each([
     ['direct tsc', '/repo/node_modules/.bin/tsc --noEmit'],
     ['direct esbuild', '/repo/node_modules/.bin/esbuild app.ts'],
     ['npx tsc', 'npx tsc --noEmit'],
@@ -52,6 +68,7 @@ describe('competingJobs predicate v2.2', () => {
 
   it.each([
     ['Codex task', '/usr/local/bin/codex task packet'],
+    ['Codex task with incidental MCP path', '/usr/local/bin/codex task /tmp/mcp-review.md'],
     ['codex-cli exec', '/usr/local/bin/codex-cli exec packet'],
     ['Codex review', '/usr/local/bin/codex review packet'],
     ['Codex adversarial review', '/usr/local/bin/codex adversarial-review packet'],
@@ -105,7 +122,7 @@ describe('competingJobs predicate v2.2', () => {
     ['Chrome crashpad', '/Applications/Google Chrome.app/Contents/Frameworks/chrome_crashpad_handler --monitor-self'],
     ['Claude server', '/Applications/Visual Studio Code.app/extensions/claude/bin/claude server'],
     ['Playwright MCP via npm exec', 'npm exec @playwright/mcp -- --browser chrome'],
-    ['Playwright MCP via node', 'node /plugins/playwright-mcp/index.js'],
+    ['Playwright MCP via node', 'node /plugins/playwright-mcp/cli.js --browser chrome'],
     ['Chrome DevTools MCP via node', 'node /plugins/chrome-devtools-mcp/build/src/index.js'],
   ])('keeps the zero-CPU %s under rule B', (_label, command) => {
     expect(classify([proc(10, 1, 0, command)])).toMatchObject({ competing: [], observed: [{ pid: 10 }] });

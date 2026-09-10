@@ -22,6 +22,7 @@ export function parsePs(text) {
     const match = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(.+)$/u.exec(line);
     if (!match) continue;
     const etimes = parseElapsedSeconds(match[4]);
+    if (!/^\d+(?:\.\d+)?$/u.test(match[3])) continue;
     const pcpu = Number(match[3]);
     if (etimes === null || !Number.isFinite(pcpu) || pcpu < 0) continue;
     processes.push({

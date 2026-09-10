@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-export const PREDICATE_VERSION = 4;
+export const PREDICATE_VERSION = 5;
 
 const REPOSITORY_NAME = 'tinyvault';
 const RULE_B_CPU_PERCENT = 10;
@@ -58,18 +58,12 @@ function hasToolPath(tokens, tool) {
   }));
 }
 
-function isMcpServer(tokens) {
-  return tokens.some((token) => token.toLowerCase().split('/').some((part) =>
-    part === 'mcp' || /(?:^|[-_.])mcp(?:$|[-_.])/u.test(part)));
-}
-
 function hasScopedPackage(token, scope, name) {
   const parts = token.toLowerCase().split('/');
   return parts.some((part, index) => part === `@${scope}` && parts[index + 1] === name);
 }
 
 function isTestRunner(tokens) {
-  if (isMcpServer(tokens)) return false;
   if (hasToolPath(tokens, 'vitest')) return true;
   if (tokens.some((token) => hasScopedPackage(token, 'playwright', 'test'))) return true;
 
@@ -117,10 +111,10 @@ function matchesRuleA(process, checkoutRoot) {
   const tokens = command.split(/\s+/u);
   const exe = basename(tokens[0] ?? '').toLowerCase();
   const args = tokens.slice(1);
-  if (isMcpServer(tokens)) return false;
   if (isTestRunner(tokens)) return true;
   if (isPlaywrightManagedBrowser(command)) return true;
   if (exe === 'make' && hasArg(args, ['test', 'eval', 'baseline', 'test-docker'])) return true;
+  if (/^(?:npm|npx)$/u.test(exe) && hasArg(args, ['test', 'eval', 'baseline', 'test:docker'])) return true;
   if ((exe === 'docker' && hasArg(args, ['build', 'compose'])) || exe === 'docker-compose') return true;
   if (isCompilerOrBundler(exe, args)) return true;
   if (isCodexTask(tokens)) return true;
