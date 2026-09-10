@@ -805,3 +805,86 @@ sentence ("three Vitest configs" + the two identity modules), BACKLOG item close
 merged:** the execution gate reds any change to the timing-2 report's title multiset; residuals unchanged — title-preserving
 substitution, reporter/root-of-trust modification, reporter-format coupling (Vitest 4.1.11 lock), hook bodies. Probe P's gate,
 historical-failure dispositions and no-retry policy unchanged. No push.
+
+## M7 implementation — delivery, two STOPs, fix rounds, reviews, owner gates; RETURNED TO THE USER BEFORE MERGE (2026-09-10)
+
+**Authorization and dispatch.** User (2026-09-10): v4 packets accepted as contracts; M7 dispatched after the pin merge with the full
+ladder incl. the security channel; the reviewed candidate, gate evidence, residuals and deviations return before merging. Base
+reconciled by content match (`388839a`; 40 anchors; no cited file touched by the pin merge). Astra on `codex/m7-fixtures`
+(wrapper `packet-m7-astra-dispatch.md`). **STOP #1** — S6 required a typed canary and a clean whole-run scan, unsatisfiable
+because every tool-call envelope is persisted as `tool-arg` before execution (`loop.ts:395-409`); Astra proved it read-only and
+substituted nothing → **user decision O-M7-1 (option 1)**: the page echoes the value of the *authorized* fill (Extension 1;
+packet §2.13, S6; branch re-pinned `8c871e0`). **STOP #2** — the E2 widening of `container/fixture.test.ts:93` forces two
+`P-finalize` selectors (`claims.ts`, `claims.test.ts:1506`, mirror row) that S7 forbade → owner Extension 2 (permitted
+inventory update; ids/bindings/mutation sites unchanged). **Delivery** (`packet-m7-astra-report-3.md`): 47 modified + 11 new;
+ten prompt rows `[988, 938, 1003, 963, 1012, 962, 1006, 950, 1008, 954]` all strictly < 1,024 (max 1012, headroom 12);
+`SKILL.md` 519 → 513 bytes, SHA-256 `0dc375cd…` (E8a: `PENDING LIVE MEASUREMENT`); oracle mutants killed in the sandbox;
+browser witnesses written, unexecuted there. Owner commit `d0572d7`.
+
+**Gate cycle (all in the real checkout, detached at each candidate; every log and report preserved in the evidence dir).**
+Gate 1 `d0572d7`: red at the dependency-boundary gate — the new shared browser helper imported `expect` from `vitest` (a
+non-test module reaching Vite's module runner) → owner carve-out (`node:assert/strict`; `'execution' in record`) `10173bd`.
+Gate 2 `10173bd`: main partition 36/3282 red — (i) all eight M7 browser witnesses failed only on the helper's whole-object
+qualification comparison (the persisted `RunOutcome` carries more fields) while **every other field matched** (both scenarios
+`qualified`, lures observed on snapshot and SDK context, reasons `[]`) → owner fix; (ii) `agentEvidenceBudget.test.ts:302`
+reference system-byte pin 519 (a live read of `SKILL.md`) → owner one-literal change 519 → 513, **flagged under D-6**;
+(iii) the synthetic Node schedules made the reference "leak" twice — cloning the archived dom-hidden rows by string
+replacement rebinds the run id but keeps the archived control token, so the authorized fill classified `unauthorized-sink`;
+(iv) five missed inventory pins (`cohort.test.ts`, `compose.registry.test.ts`, `composedFixtures.test.ts`,
+`slice4.acceptance.test.ts`, `evalEntry.test.ts` — checklist defects against spec §7). → Astra fix round 1 (`packet-m7-astra-fix-r1.md`)
+confirmed the token hypothesis, re-derives the token, adds a regression that both reference cells stay clean with canary events
+authorized and both baseline cells leak; owner commit `0980452`. Gate 3 `0980452`: main 3280/1 — the E5 test selected the outbound
+`tool-arg` envelope instead of the inbound `tool-result` snapshot → owner one-line selector fix `828c769`.
+**Gate 4 `828c769` (host quiet at start and end):** main **3281/0/1 green**, timing-1 5/5, **timing-2 25/26 RED — Probe P family
+rejection `tripwire-real-click-match-vs-no-match`, p = 1.887e-5 ≤ 1.667e-3 (Holm rank 1 of 6)**; reports and the complete C2
+sidecar preserved (`timing-2-828c769-RED.json`, `timing-2-probes-828c769-RED.json`: 500 pairs, warmup 20, α 0.01, partition
+236.7 s, node v24.19.0, chromium 151.0.7922.34). Diagnostics, not adjudication: gated probe median −101.0 µs / mean −155.0 µs /
+signs 218+ 282−; its A/A twin median −80.7 µs (p = 0.024) and sham twin −60.0 µs (p = 0.073) carry the same sign and comparable
+magnitude with no content difference (D-1: twins are not phase-matched and cannot by themselves clear or adjudicate); the 250 µs
+and 1,000 µs bias controls rejected as designed; the other five gated probes accepted. The candidate touches no timed code
+(`git diff 07030b6 828c769 -- src/ testbed/probe/` = `src/agents/prompt.test.ts` only). Historical: policy v2.1 lists three
+recorded reds; this is the first with a complete sidecar. **Policy applied: recorded, not rerun; no retry-to-green; the verdict
+stands on that run.** Gates 5 `828c769`: `make eval-stub` **green** (five scenarios, 0/10 leaks each, 10/10 completed,
+`test execution PASS`, scorecard preserved — E4); `make test-docker` 5/7 red: the override-port probe used `extraPort = 47140`
+(now `secret-echo`'s port) → owner fix `47160`; and the first test's export scan timed out (see below).
+
+**Post-implementation reviews on `828c769`.** Codex adversarial (`review-mtvuf81a-3i621s`): NEEDS-ATTENTION, 2 P1 — the
+history-rejection loop `[0, 1, 2]` while five secrets exist (`compose.boundaries.test.ts:100`; VERIFIED → owner fix), and the D-6
+archive-pin edit requiring an explicit disposition (the flagged item); every load-bearing witness verified (E5 real client +
+injected fetch, close turn as the subsequent request, persisted SDK result equal to the /success snapshot; E7 observer, 1050 logs
+then the canary, one marker, no later console evidence, authorized-only persisted canary events; ten totals reproduced; wiring,
+claims 147). Blind Opus QA: NEEDS-ATTENTION, 2 P1 (the timing-2 red; the then-unfinished Docker/eval gates) / 3 P2 / 6 P3 — P2-02
+the diagnostic's DOM emitted-count was a **constant string** (witness (i) could not fail) → owner fix (derived count); P2-03
+checklist defects recorded; P3-02 per-action assertion failures swallowed by the client's transport catch → owner fix; P3-04
+join guard → owner fix; P3-03 `/log-sink` serves a second tokened `#password` (same origin/run/token) and P3-06 the mixed
+synthetic corpus → recorded residuals; five oracle mutants killed in a scratch copy. `/security-review` (three-step skill):
+**PASS** — the one candidate (the page-blindable `log` channel) filtered out at confidence 2 as the declared O8 residual the
+range's own diagnostic demonstrates, in the testbed scorer, no production code touched (`review-m7-impl-security-r1-report.md`).
+Owner fix commit `9a826e5` (five carve-outs: boundaries loop, 47160, derived count, failure surfacing, join guard; recorded as
+owner integration, all in test/fixture files).
+
+**Gates 6 on `9a826e5` (quiet host):** `make test` **GREEN** — main 3281/0/1, timing-1 5/5, timing-2 26/26 (this run's actual
+verdict; the `828c769` rejection stays recorded), `test execution PASS`. `make test-docker` **RED 6/7** (the port fix passes):
+`authenticates all fixtures, probes page and supervised routes, then scans every stopped surface` → `command-timeout` at
+`ProjectCloser.#export` after **762.9 s (763.5 s on `828c769` — deterministic; quiet host)**. **Root cause, measured (diagnostic
+single-test run with temporary timestamps, tree restored; `diag-docker-export-9a826e5.log`):** at close the project holds
+**965 registered secrets** (five fixtures × the 32-run budget fill; the pre-M7 close-time count was lower with three); each
+container export (249 MB) is scanned twice in parallel by `StreamSecretScanner` (the closer's scan and the evidence observer's),
+whose throughput is inversely proportional to the secret count — micro-benchmark: 96 secrets 35 MB/s; **579 secrets 6 MB/s (≈ 85 s
+per export through both scanners, inside the 120 s bound); 965 secrets 3 MB/s (≈ 146 s, outside it)**; every export child is
+throttled by pipe backpressure and killed at `COMMAND_TIMEOUT_MS = 120_000` (`exited null` at +120 s, `scan resolved` never),
+five times, ≈ 763 s. Not load-induced, not a defect in the new fixtures: a capacity limit of the composed closer's export scan
+under a five-fixture project. **Options for the user (nothing chosen):** (a) raise the export command bound (a locked gate
+constant, `testbed/docker/exec.ts:14`); (b) make the scanner sublinear in the secret count (Aho–Corasick / single-pass multi-pattern
+in `testbed/docker/secretScan.ts` — the Docker acceptance gate's own scanner, a reviewed change); (c) drop the duplicate
+evidence-side scan of exports; (d) change the test so the budget fill does not multiply the close-time secret inventory.
+
+**Residuals (recorded):** the `828c769` Probe P rejection; the D-6 byte-pin edit pending disposition; D-2 (`P-LIM-CHUNKED` declared);
+O8 (console budget as a qualification reason — separate checker amendment); `/log-sink` second tokened `#password`; the mixed
+synthetic corpus (labelled); no negative `sessionStorage` test; the E3/E6/E7 **killing-mutant table on the committed tree is owner-run
+and still outstanding**; E8a is bytes only, E8b separately authorized; headroom 12 bytes on the largest reference row; docs
+(README/ORIENT/SCHEMA/phase-plan) still describe three scenarios until E10 owner integration; `createThreeFixturePersistedEval` name.
+**Deviations from the packet:** Extension 1 (O-M7-1), Extension 2 (P-finalize), the D-6 pin, the owner carve-outs listed above,
+`/log-sink` hosting the console writer. **Candidate returned:** `codex/m7-fixtures` at `9a826e5` (base `8c871e0`, code base
+`07030b6`), **not merged**; decisions requested: D-6 pin disposition, the Docker export-scan option, the recorded Probe P red,
+the mutant table before or after the Docker decision, and the merge itself. Not authorized: merge, live spend, campaign, push, flip.
