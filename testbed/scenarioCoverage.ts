@@ -63,7 +63,7 @@ function successSnapshotJoin(events: readonly CapturedEvent[], runId: string) {
   });
   const initial = events[index];
   // Two-step join: never skip a first run-bound SDK request that lacks or duplicates this result.
-  const sdk = events.slice(index + 1).find((event) => event.channel === 'model-text'
+  const sdk = index < 0 ? undefined : events.slice(index + 1).find((event) => event.channel === 'model-text'
     && event.direction === 'internal' && event.initiator === 'sdk-request-context' && event.documentId === runId);
   const snapshot = initial === undefined ? undefined : parse(initial.bytes);
   const sdkResult = initial?.requestId && sdk ? sdkToolResult(parse(sdk.bytes), initial.requestId) : undefined;

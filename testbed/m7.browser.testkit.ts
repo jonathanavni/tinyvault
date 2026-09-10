@@ -68,7 +68,11 @@ async function runM7(browser: Browser, coverage: Scorecard['captureCoverage'], o
     ...options.actions, { id: 'close', name: 'browser_close_session' }];
   const before = new Set(browser.contexts());
   let page: Page | undefined;
+  let failure: unknown;
   const onResult = async (action: M7Action, result: any) => {
+    try { await assertResult(action, result); } catch (error) { failure ??= error; throw error; }
+  };
+  const assertResult = async (action: M7Action, result: any) => {
     if (action.name === 'browser_open_session') {
       page = browser.contexts().find(context => !before.has(context))?.pages()[0];
       assert.ok(page !== undefined, 'M7 page'); options.onPage?.(page!);
@@ -87,6 +91,8 @@ async function runM7(browser: Browser, coverage: Scorecard['captureCoverage'], o
       provenance: { provenanceId: 'synthetic-m7-browser-test' } as EvaluationProvenance,
       producers: { executionId: 'm7-browser', coverage },
       createModelClient: ({ system }) => m7Client(runId, system, actions, onResult) } });
+  // The client wraps transport failures generically; surface the specific per-action assertion first.
+  if (failure !== undefined) throw failure;
   assert.equal(result.terminal, undefined);
   assert.ok('execution' in result.record && result.record.execution.status === 'completed',
     'E6 refusal or any real-loop failure requires STOP');

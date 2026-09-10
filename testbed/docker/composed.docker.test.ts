@@ -378,7 +378,7 @@ describe.sequential('slice 4 real Docker construction and control-route probes',
     const root = await mkdtemp(join(tmpdir(), 'tinyvault-docker-override-'));
     const epoch = `${Date.now()}-${randomBytes(16).toString('hex')}`;
     const project = `tinyvault-mutant-${randomBytes(8).toString('hex')}`;
-    const extraPort = 47140;
+    const extraPort = 47160; // outside every topology tuple (47140/47150 are now secret-echo/fake-reauth)
     const override = join(root, 'override.json');
     await writeFile(override, JSON.stringify({ services: { 'benign-login': {
       ports: [`127.0.0.1:${extraPort}:${topology.services['benign-login'][0].container}`],

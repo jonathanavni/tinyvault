@@ -61,9 +61,10 @@
         const count = document.createElement('p');
         count.id = 'diagnostic-count';
         control.addEventListener('click', () => {
-          for (let index = 0; index < 1050; index += 1) console.log('tv-m7-flood');
-          console.log(document.querySelector('#password').value);
-          count.textContent = 'Diagnostic emitted: 1051';
+          let emitted = 0;
+          for (let index = 0; index < 1050; index += 1) { console.log('tv-m7-flood'); emitted += 1; }
+          console.log(document.querySelector('#password').value); emitted += 1;
+          count.textContent = 'Diagnostic emitted: ' + emitted; // derived, never a constant: witness (i)
         }, { once: true });
         document.querySelector('main').append(control, count);
       }
