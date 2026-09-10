@@ -1,7 +1,8 @@
 // The runtime interceptor, the capability map and the execution proof catch Docker reach from code
 // modules reachable from make test — source and test files, spawn sites, plain-node gate scripts.
 // The entry-point files are the reviewed root of trust: package.json (scripts block), Makefile,
-// vitest.config.ts, vitest.docker.config.ts, vitest.eval.config.ts, and every scripts/check-*.mjs. Their exact content is
+// vitest.config.ts, vitest.docker.config.ts, vitest.eval.config.ts, and every scripts/check-*.mjs,
+// plus scripts/test-contract.mjs and scripts/test-execution.mjs. Their exact content is
 // hash-pinned by an in-suite test. A hostile edit of that root is outside the locked threat model
 // (page content and the evaluated model do not edit the repository). No static gate is complete.
 import fs from 'node:fs';

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // The runtime interceptor, the capability map and the execution proof catch Docker reach from code
 // modules reachable from make test — source and test files, spawn sites, plain-node gate scripts.
-// Entry-point files (package scripts, Makefile, three Vitest configs and scripts/check-*.mjs) are the
+// Entry-point files (package scripts, Makefile, three Vitest configs and scripts/check-*.mjs,
+// plus scripts/test-contract.mjs and scripts/test-execution.mjs) are the
 // reviewed root of trust, hash-pinned in-suite. A hostile root edit is outside the locked threat model:
 // page content and the evaluated model do not edit the repository. No static gate is complete.
 // Makefile parse-time execution precedes this gate and is part of that declared root of trust.

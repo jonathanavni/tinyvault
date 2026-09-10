@@ -1,4 +1,4 @@
-// File inventory plus the six required Docker assertion identities are pinned below.
+// File inventory, six required Docker assertion identities and the exact 26 timing-2 test titles are pinned below.
 // The Acceptance J gate separately pins its ten names. Inventory copies Vitest's default glob;
 // it does not consume an include pattern from a candidate configuration.
 import fs from 'node:fs';
@@ -10,7 +10,7 @@ export const DEFAULT_TEST_PATTERN = '**/*.{test,spec}.?(c|m)[jt]s?(x)';
 export const SKIPPED_TEST = 'offline eval entry kills the fake fill and missing post-loop drain with the real meta-gated browser scorecard';
 export const EXECUTION_RULES = Object.freeze(['inventory', 'partition-disjoint', 'partition-union', 'report-count',
   'report-fresh', 'report-shape', 'report-success', 'report-files', 'file-tests', 'file-status',
-  'assertion-status', 'skip-identity', 'skip-count', 'report-counters', 'report-json', 'report-missing', 'start-record', 'docker-assertions', 'mode', 'claim-links', 'claim-execution']);
+  'assertion-status', 'skip-identity', 'skip-count', 'timing-2-inventory', 'report-counters', 'report-json', 'report-missing', 'start-record', 'docker-assertions', 'mode', 'claim-links', 'claim-execution']);
 export function inventory(root) {
   return walk(root).map((file) => path.relative(root, file)).filter((file) => path.matchesGlob(file, DEFAULT_TEST_PATTERN));
 }
@@ -46,6 +46,9 @@ function inspectReport(bundle, expected, root, started, mode) {
   const assertions = results.flatMap((r) => assertionsFor(r, mode));
   if (mode === 'docker') requireRule(REQUIRED_DOCKER_ASSERTIONS.every((name) =>
     assertions.filter((a) => a.fullName === name && a.status === 'passed').length === 1), 'docker-assertions');
+  if (mode === 'test' && equal(expected, [TIMING_TESTS[1]])) requireRule(
+    equal(sorted(assertions.map((a) => a.fullName)), sorted(REQUIRED_TIMING_2_ASSERTIONS))
+    && assertions.every((a) => a.status === 'passed'), 'timing-2-inventory');
   const pending = assertions.filter((a) => a.status === 'skipped').length;
   requireRule(report.numTotalTests === assertions.length && report.numPassedTests === assertions.length - pending
     && report.numPendingTests === pending && report.numFailedTests === 0 && report.numTodoTests === 0, 'report-counters');
@@ -88,6 +91,35 @@ export const REQUIRED_DOCKER_ASSERTIONS = Object.freeze([
   "slice 4 real Docker construction and control-route probes killing the first authenticated exec is bridge-closed with one bridge spawn and no reconnect",
   "slice 4 real Docker construction and control-route probes the dynamic matrix detects an extra published page port after a direct Compose override reaches Docker",
   "slice 4 real Docker construction and control-route probes K-leg canonical two-transport parity and K-observer-inert"
+]);
+
+export const REQUIRED_TIMING_2_ASSERTIONS = Object.freeze([
+  "H Probe P timing bounds pins same-constructor timing payloads against the bare-rotation mutant",
+  "H Probe P timing bounds kills secret-length-dependent fill latency after asserting exact result equality",
+  "H Probe P timing bounds kills secret-length-dependent mutex occupancy with an immediately queued control",
+  "H Probe P timing bounds kills a content-dependent reflection oracle with equal-length caller traffic",
+  "H Probe P timing bounds kills match-dependent tripwire timing through composeSupervisedHost",
+  "H Probe P timing bounds kills match-dependent tripwire timing on a real supervised browser fill call",
+  "H Probe P timing bounds kills content-dependent request-listener work on the real supervised click path",
+  "H Probe P timing bounds applies the Holm–Bonferroni family gate over the six probes",
+  "H Probe P timing bounds reports a path-specific 2us-per-call injected-bias control rejected by the family gate",
+  "H Probe P timing bounds reports the length-proportional fill-wrapper sensitivity floor",
+  "H Probe P timing bounds tripwire-match-vs-no-match-aa",
+  "H Probe P timing bounds tripwire-match-vs-no-match-sham",
+  "H Probe P timing bounds tripwire-real-click-match-vs-no-match-aa",
+  "H Probe P timing bounds tripwire-real-click-match-vs-no-match-sham",
+  "H Probe P timing bounds tripwire-real-click-bias-250us",
+  "H Probe P timing bounds tripwire-real-click-bias-1000us",
+  "M6 S4 lifecycle timing bounds never-loading subresource plus three-second beforeClose stays within the combined eight-second budget",
+  "M6 S4 lifecycle timing bounds busy-renderer suspension cutoff permits successful quiesce within the hard five-second budget (pending CDP=false)",
+  "M6 S4 lifecycle timing bounds busy-renderer suspension cutoff permits successful quiesce within the hard five-second budget (pending CDP=true)",
+  "M6 S4 lifecycle timing bounds black-hole failed navigation then close stays within the five-second close bound",
+  "M6 S4 lifecycle timing bounds active goto then close includes the courtesy wait within the five-second close bound",
+  "M6 S4 lifecycle timing bounds hostile self-navigation snapshot expires within ten seconds plus settlement",
+  "M6 S4 lifecycle timing bounds deadline expiry disposes a genuinely pending CDP holder within five seconds plus settlement",
+  "M6 S4 lifecycle timing bounds continuous page beacons quiesce successfully within the five-second bound",
+  "M6 S4 lifecycle timing bounds successful strict drain and finalization stay within the shared five-second bound",
+  "M6 S4 lifecycle timing bounds busy renderer snapshot fails within ten seconds plus the three-second disposal grace",
 ]);
 
 /** Read the reviewed static linkage as data, without importing tests or executing the module. */

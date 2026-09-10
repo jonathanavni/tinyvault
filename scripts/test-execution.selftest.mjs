@@ -4,13 +4,44 @@ import os from 'node:os';
 import path from 'node:path';
 import { EXECUTION_RULES, SKIPPED_TEST, proveExecution, checkExecution, checkPartitions, inventory, parseClaimSelectors, proveClaimExecution } from './test-execution.mjs';
 import { TIMING_TESTS, DOCKER_TEST, REPORTS, START_FILE, EVAL_TEST, EVAL_REPORT, EVAL_START_FILE } from './test-contract.mjs';
+// Independent report-title transcription; never derived from the production required set.
+const timing2Names = [
+  "H Probe P timing bounds pins same-constructor timing payloads against the bare-rotation mutant",
+  "H Probe P timing bounds kills secret-length-dependent fill latency after asserting exact result equality",
+  "H Probe P timing bounds kills secret-length-dependent mutex occupancy with an immediately queued control",
+  "H Probe P timing bounds kills a content-dependent reflection oracle with equal-length caller traffic",
+  "H Probe P timing bounds kills match-dependent tripwire timing through composeSupervisedHost",
+  "H Probe P timing bounds kills match-dependent tripwire timing on a real supervised browser fill call",
+  "H Probe P timing bounds kills content-dependent request-listener work on the real supervised click path",
+  "H Probe P timing bounds applies the Holm–Bonferroni family gate over the six probes",
+  "H Probe P timing bounds reports a path-specific 2us-per-call injected-bias control rejected by the family gate",
+  "H Probe P timing bounds reports the length-proportional fill-wrapper sensitivity floor",
+  "H Probe P timing bounds tripwire-match-vs-no-match-aa",
+  "H Probe P timing bounds tripwire-match-vs-no-match-sham",
+  "H Probe P timing bounds tripwire-real-click-match-vs-no-match-aa",
+  "H Probe P timing bounds tripwire-real-click-match-vs-no-match-sham",
+  "H Probe P timing bounds tripwire-real-click-bias-250us",
+  "H Probe P timing bounds tripwire-real-click-bias-1000us",
+  "M6 S4 lifecycle timing bounds never-loading subresource plus three-second beforeClose stays within the combined eight-second budget",
+  "M6 S4 lifecycle timing bounds busy-renderer suspension cutoff permits successful quiesce within the hard five-second budget (pending CDP=false)",
+  "M6 S4 lifecycle timing bounds busy-renderer suspension cutoff permits successful quiesce within the hard five-second budget (pending CDP=true)",
+  "M6 S4 lifecycle timing bounds black-hole failed navigation then close stays within the five-second close bound",
+  "M6 S4 lifecycle timing bounds active goto then close includes the courtesy wait within the five-second close bound",
+  "M6 S4 lifecycle timing bounds hostile self-navigation snapshot expires within ten seconds plus settlement",
+  "M6 S4 lifecycle timing bounds deadline expiry disposes a genuinely pending CDP holder within five seconds plus settlement",
+  "M6 S4 lifecycle timing bounds continuous page beacons quiesce successfully within the five-second bound",
+  "M6 S4 lifecycle timing bounds successful strict drain and finalization stay within the shared five-second bound",
+  "M6 S4 lifecycle timing bounds busy renderer snapshot fails within ten seconds plus the three-second disposal grace",
+];
 function report(files, root) {
-  const testResults = files.map((name) => ({ name: path.join(root, name), status: 'passed', assertionResults: [{
-    fullName: name.includes('runner.eval') ? SKIPPED_TEST : `test ${name}`,
-    status: name.includes('runner.eval') ? 'skipped' : 'passed',
-  }] }));
-  const pending = testResults.filter((r) => r.assertionResults[0].status === 'skipped').length;
-  return { success: true, testResults, numTotalTests: files.length, numPassedTests: files.length - pending,
+  const testResults = files.map((name) => ({ name: path.join(root, name), status: 'passed',
+    assertionResults: name === TIMING_TESTS[1] ? timing2Names.map((fullName) => ({ fullName, status: 'passed' })) : [{
+      fullName: name.includes('runner.eval') ? SKIPPED_TEST : `test ${name}`,
+      status: name.includes('runner.eval') ? 'skipped' : 'passed',
+    }] }));
+  const assertions = testResults.flatMap((r) => r.assertionResults);
+  const pending = assertions.filter((a) => a.status === 'skipped').length;
+  return { success: true, testResults, numTotalTests: assertions.length, numPassedTests: assertions.length - pending,
     numPendingTests: pending, numFailedTests: 0, numTodoTests: 0 };
 }
 export function executionFixture(root = '/fixture') {
@@ -31,6 +62,8 @@ export const EXECUTION_MUTANTS = [
   ['assertion-status', (d) => { d.bundles[0].report.testResults[0].assertionResults[0].status = 'todo'; }],
   ['skip-identity', (d) => { d.bundles[0].report.testResults[1].assertionResults[0].fullName += ' hidden'; }],
   ['skip-count', (d) => { const r = d.bundles[0].report; r.testResults[1].assertionResults[0].status = 'passed'; r.numPendingTests = 0; r.numPassedTests++; }],
+  // M-T1: rename a timing-2 title; exactly one derived mutant code for R1.
+  ['timing-2-inventory', (d) => { d.bundles[2].report.testResults[0].assertionResults[3].fullName += ' hidden'; }],
   ['report-counters', (d) => { d.bundles[0].report.numTotalTests++; }],
   ['start-record', (d) => { d.started = NaN; }],
 ];
@@ -68,10 +101,42 @@ export function executionSelftest() {
   }
   assert.throws(() => checkPartitions(['a', 'b'], [['a']]), { message: 'partition-union' });
   checkPartitions(['a', 'b'], [['a'], ['b']]);
+  timingInventoryCases();
   evaluationCases();
   claimLinkageCases();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tinyvault-execution-'));
   try { filesystemCases(root); } finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+
+function timingInventoryCases() {
+  const cases = [
+    ['M-T2', 'timing-2-inventory', (d, rows) => { rows.push({ fullName: 'hidden registration', status: 'passed' }); }],
+    ['M-T3', 'timing-2-inventory', (d, rows) => { rows.pop(); }],
+    ['M-T4', 'timing-2-inventory', (d, rows) => { rows.push({ ...rows[0] }); }],
+    ['M-T5', 'skip-identity', (d, rows) => { rows[0].status = 'skipped'; }],
+    ['M-T6', 'timing-2-inventory', (d, rows) => {
+      for (const row of rows) row.fullName = row.fullName.replace(/^(H Probe P|M6 S4 lifecycle) timing bounds /, 'other suite ');
+    }],
+    ['M-T7', 'report-files', (d) => { [d.bundles[1], d.bundles[2]] = [d.bundles[2], d.bundles[1]]; }],
+    ['M-T9', 'timing-2-inventory', (d, rows) => { rows.push({ fullName: 'hidden registration', status: 'passed' }); }],
+    ['M-T10', 'partition-disjoint', (d) => { d.bundles[1] = structuredClone(d.bundles[2]); }],
+  ];
+  for (const [name, code, mutate] of cases) {
+    const d = executionFixture(), r = d.bundles[2].report, rows = r.testResults[0].assertionResults;
+    mutate(d, rows);
+    if (name !== 'M-T9') {
+      r.numTotalTests = rows.length; r.numPendingTests = rows.filter((a) => a.status === 'skipped').length;
+      r.numPassedTests = rows.length - r.numPendingTests;
+    }
+    assert.throws(() => proveExecution(d), { message: code }, name);
+    proveExecution(executionFixture());
+  }
+  // M-T8: a coherent 27-row timing-1 report stays green; only timing-2 is keyed.
+  const d = executionFixture(), r = d.bundles[1].report;
+  r.testResults[0].assertionResults = Array.from({ length: 27 }, (_, i) => ({ fullName: `timing-1 ${i}`, status: 'passed' }));
+  r.numTotalTests = 27; r.numPassedTests = 27;
+  proveExecution(d);
+  proveExecution(executionFixture());
 }
 
 // Independent literal identities: do not build this fixture from the production required set.

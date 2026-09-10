@@ -1,7 +1,7 @@
 // The runtime interceptor, the capability map and the execution proof catch Docker reach from code
 // modules reachable from make test — source and test files, spawn sites, plain-node gate scripts.
-// Entry-point files are the reviewed root of trust: package.json (scripts block), Makefile, both
-// Vitest configs and every scripts/check-*.mjs. Their exact content is hash-pinned in-suite.
+// Entry-point files are the reviewed root of trust: package.json (scripts block), Makefile, three
+// Vitest configs and every scripts/check-*.mjs, plus scripts/test-contract.mjs and scripts/test-execution.mjs. Their exact content is hash-pinned in-suite.
 // Hostile root-of-trust edits are outside the locked threat model: page content and the evaluated
 // model do not edit the repository. Makefile parse-time execution precedes the in-recipe gates.
 // No static gate is complete. This runtime guard covers default-config Vitest, including in-process

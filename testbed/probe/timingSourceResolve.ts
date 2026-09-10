@@ -35,7 +35,7 @@ export function timingSourceResolve(source: string, compile: ReturnType<typeof t
   const suites = new Map<string, TimingBlock>();
   const hooks = new Map<string, TimingBlock[]>();
   const tests: { title: string; body: string; block: TimingBlock; suite: string }[] = [];
-  // This scan bounds test registration to references of the statically imported vitest symbols (`it`, `test`, `describe`, hooks) and `vi.spyOn`, with synchronous suite factories. Obtaining a registration function through Vitest internals, globals, or a module loader other than the static import is outside the scan; the complementary control is the execution gate's per-file test inventory (follow-up: pin the timing-2 report's exact 26 titles in `scripts/test-execution.mjs`).
+  // This scan bounds test registration to references of the statically imported vitest symbols (`it`, `test`, `describe`, hooks) and `vi.spyOn`, with synchronous suite factories. Obtaining a registration function through Vitest internals, globals, or a module loader other than the static import is outside the scan; the complementary control is the execution gate's per-file test inventory (the execution gate's `timing-2-inventory` rule pins the report's exact 26 titles).
   // Fourth pinned exception: vi.restoreAllMocks() only at its existing site in
   // the byte-pinned root afterEach cleanup hook (alongside the three existing exceptions).
   let registrationsResolved = registrationSymbols.size === 6 && pinsTimingImports(file)
