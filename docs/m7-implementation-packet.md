@@ -189,7 +189,7 @@ registers.
 
 ## 3. Branch, sandbox, writer rules
 
-Branch `codex/m7-fixtures` from base **`772c4cf`** (main after the inventory-pin merge `c49e9ad`; code identical to `07030b6`, the only later commits being PLAN breadcrumbs and this packet's O-M7-1 amendment; re-pinned 2026-09-10 after Astra STOP #1). Leave
+Branch `codex/m7-fixtures` from base **the main tip at dispatch, recorded by SHA in `packet-m7-astra-extension-1.md` (evidence dir) and the register** — its code is identical to `07030b6` (main after the inventory-pin merge `c49e9ad`); the only later commits are PLAN breadcrumbs and this packet's O-M7-1 amendment (re-pinned 2026-09-10 after Astra STOP #1). Leave
 all work uncommitted; the owner commits with explicit paths. Single writer, no subagent edits. The sandbox cannot launch
 Chromium, bind loopback, `mkdtemp` reliably, run Docker or write `.git`: every browser suite, every fixture-server test,
 `make test`, `make test-docker`, `make eval` and the stub eval are **owner-run**; report them as "Not run: sandbox"
