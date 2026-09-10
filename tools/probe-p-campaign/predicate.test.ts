@@ -2,54 +2,126 @@ import { describe, expect, it } from 'vitest';
 
 import { competingJobs, PREDICATE_VERSION } from './predicate.mjs';
 
+const CHECKOUT_ROOT = '/Users/jonathanavni/Documents/Coding/tinyvault';
+const OTHER_CHECKOUT = '/private/tmp/claude-501/-Users-jonathanavni-Documents-Coding-tinyvault/session/wt/other';
+
 const proc = (pid: number, ppid: number, pcpu: number, command: string) => ({
   pid, ppid, pcpu, etimes: 30, command,
 });
 
 const classify = (processes: ReturnType<typeof proc>[], ownPid = 999) =>
-  competingJobs({ processes }, { ownPid, checkoutRoot: '/repo' });
+  competingJobs({ processes }, { ownPid, checkoutRoot: CHECKOUT_ROOT });
 
-describe('competingJobs predicate v2', () => {
-  it('exports the frozen predicate version', () => {
-    expect(PREDICATE_VERSION).toBe(2);
+describe('competingJobs predicate v2.2', () => {
+  it('exports predicate version 4', () => {
+    expect(PREDICATE_VERSION).toBe(4);
   });
 
   it.each([
-    ['vitest runner', 'node /repo/node_modules/vitest/vitest.mjs run'],
-    ['playwright runner', 'node /repo/node_modules/playwright/cli.js test'],
-    ['make test', 'make -C /repo test'],
-    ['tsc', '/repo/node_modules/.bin/tsc --noEmit'],
-    ['esbuild', '/repo/node_modules/.bin/esbuild app.ts'],
-    ['npm test command', 'npm run test'],
-    ['npx eval command', 'npx vitest run'],
-    ['Chromium', '/Applications/Chromium.app/Contents/MacOS/Chromium --headless'],
-    ['Google Chrome for Testing', '/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'],
-    ['chrome-headless-shell', '/cache/chrome-headless-shell --headless'],
-    ['docker workload', 'docker compose up'],
-    ['codex task', '/usr/local/bin/codex task packet'],
-    ['codex exec', '/usr/local/bin/codex exec packet'],
-    ['codex review', '/usr/local/bin/codex review packet'],
-    ['codex companion task', 'node /plugins/codex-companion.mjs task packet'],
-    ['Claude review', 'node /repo/scripts/claude-review.mjs qa packet'],
-  ])('classifies %s at zero CPU as a known workload', (_label, command) => {
+    ['direct vitest runner', '/repo/node_modules/.bin/vitest run'],
+    ['node vitest runner', 'node /repo/node_modules/vitest/vitest.mjs run'],
+    ['npx vitest runner', 'npx vitest run'],
+    ['direct playwright test runner', '/repo/node_modules/.bin/playwright test'],
+    ['node scoped playwright runner', 'node /repo/node_modules/@playwright/test/cli.js test'],
+    ['npx playwright runner', 'npx playwright test'],
+    ['playwright-core CLI test runner', 'node /repo/node_modules/playwright-core/lib/cli/program.js test'],
+    ['node playwright CLI run', 'node /repo/node_modules/playwright/cli.js run'],
+  ])('rule A classifies %s at zero CPU', (_label, command) => {
     expect(classify([proc(10, 1, 0, command)]).competing.map(({ pid }) => pid)).toEqual([10]);
   });
 
   it.each([
-    ['cua_node helper', '/Applications/ChatGPT.app/cua_node helper'],
+    ['make test', `make -C ${CHECKOUT_ROOT} test`],
+    ['make eval', 'make eval'],
+    ['make baseline', 'make baseline'],
+    ['make test-docker', 'make test-docker'],
+  ])('rule A classifies %s at zero CPU', (_label, command) => {
+    expect(classify([proc(10, 1, 0, command)]).competing.map(({ pid }) => pid)).toEqual([10]);
+  });
+
+  it.each([
+    ['direct tsc', '/repo/node_modules/.bin/tsc --noEmit'],
+    ['direct esbuild', '/repo/node_modules/.bin/esbuild app.ts'],
+    ['npx tsc', 'npx tsc --noEmit'],
+    ['npx esbuild', 'npx esbuild app.ts'],
+    ['node TypeScript tsc', 'node node_modules/typescript/bin/tsc --noEmit'],
+    ['node esbuild', 'node node_modules/esbuild/bin/esbuild app.ts'],
+  ])('rule A classifies %s at zero CPU', (_label, command) => {
+    expect(classify([proc(10, 1, 0, command)]).competing.map(({ pid }) => pid)).toEqual([10]);
+  });
+
+  it.each([
+    ['Codex task', '/usr/local/bin/codex task packet'],
+    ['codex-cli exec', '/usr/local/bin/codex-cli exec packet'],
+    ['Codex review', '/usr/local/bin/codex review packet'],
+    ['Codex adversarial review', '/usr/local/bin/codex adversarial-review packet'],
+    ['direct Codex companion', '/plugins/codex-companion.mjs task packet'],
+    ['node Codex companion', 'node /plugins/codex-companion.mjs task packet'],
+  ])('rule A classifies %s at zero CPU', (_label, command) => {
+    expect(classify([proc(10, 1, 0, command)]).competing.map(({ pid }) => pid)).toEqual([10]);
+  });
+
+  it.each([
+    ['node', `node ${OTHER_CHECKOUT}/tools/helper.mjs`],
+    ['npm', `npm --prefix ${OTHER_CHECKOUT} run docs`],
+    ['npx', `npx --prefix=${OTHER_CHECKOUT} eslint .`],
+    ['make', `make -C ${OTHER_CHECKOUT} docs`],
+  ])('rule A classifies %s referencing another TinyVault checkout at zero CPU', (_label, command) => {
+    expect(classify([proc(10, 1, 0, command)]).competing.map(({ pid }) => pid)).toEqual([10]);
+  });
+
+  it.each([
+    ['docker build', 'docker build .'],
+    ['docker buildx build', 'docker buildx build .'],
+    ['docker compose', 'docker compose up'],
+    ['docker-compose', 'docker-compose up'],
+    ['cached Chromium', '/Users/test/Library/Caches/ms-playwright/chromium-1194/chrome-mac/Chromium.app/Contents/MacOS/Chromium --headless'],
+    ['Google Chrome for Testing', '/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'],
+    ['Google Chrome for Testing helper', '/Applications/Google Chrome for Testing.app/Contents/Frameworks/Google Chrome for Testing Framework.framework/Helpers/Google Chrome for Testing Helper (Renderer)'],
+    ['chrome-headless-shell', '/cache/chrome-headless-shell --headless'],
+    ['Claude review', `node ${CHECKOUT_ROOT}/scripts/claude-review.mjs qa packet`],
+  ])('rule A classifies %s at zero CPU', (_label, command) => {
+    expect(classify([proc(10, 1, 0, command)]).competing.map(({ pid }) => pid)).toEqual([10]);
+  });
+
+  it.each([
+    ['test runner counterpart', 'node /repo/node_modules/vite/bin/vite.js build'],
+    ['make counterpart', 'make docs'],
+    ['compiler counterpart', 'node /repo/node_modules/esbuild-register/index.js'],
     ['Codex app-server', '/usr/local/bin/codex app-server'],
     ['Codex broker', 'node /Applications/ChatGPT.app/app-server-broker.mjs'],
     ['Codex sandbox host', '/usr/local/bin/codex sandbox macos --log-denials'],
-    ['VS Code Claude binary', '/Applications/Visual Studio Code.app/extensions/claude/bin/claude server'],
+    ['same-checkout node', `node ${CHECKOUT_ROOT}/tools/helper.mjs`],
+    ['same-checkout npm', `npm --prefix ${CHECKOUT_ROOT} run docs`],
+    ['same-checkout npx', `npx --prefix=${CHECKOUT_ROOT} eslint .`],
+    ['unrelated node', 'node /Applications/Example.app/Contents/Resources/worker.mjs'],
+    ['unrelated make', 'make -C /tmp/unrelated-project docs'],
+    ['Docker run', 'docker run image'],
+    ['Google Chrome', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'],
+    ['Safari', '/Applications/Safari.app/Contents/MacOS/Safari'],
+    ['Arc', '/Applications/Arc.app/Contents/MacOS/Arc'],
+    ['Firefox', '/Applications/Firefox.app/Contents/MacOS/firefox'],
+    ['Microsoft Edge', '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge'],
+    ['Chrome crashpad', '/Applications/Google Chrome.app/Contents/Frameworks/chrome_crashpad_handler --monitor-self'],
+    ['Claude server', '/Applications/Visual Studio Code.app/extensions/claude/bin/claude server'],
+    ['Playwright MCP via npm exec', 'npm exec @playwright/mcp -- --browser chrome'],
+    ['Playwright MCP via node', 'node /plugins/playwright-mcp/index.js'],
+    ['Chrome DevTools MCP via node', 'node /plugins/chrome-devtools-mcp/build/src/index.js'],
+  ])('keeps the zero-CPU %s under rule B', (_label, command) => {
+    expect(classify([proc(10, 1, 0, command)])).toMatchObject({ competing: [], observed: [{ pid: 10 }] });
+  });
+
+  it.each([
+    ['cua_node helper', '/Applications/ChatGPT.app/cua_node helper'],
     ['chrome-devtools-mcp watchdog', 'node /plugins/chrome-devtools-mcp/build/src/index.js'],
+    ['generic MCP helper', 'node /plugins/another-mcp/server.js'],
     ['crashpad handler', '/Applications/ChatGPT.app/Contents/Frameworks/crashpad_handler --monitor-self'],
-    ['Chrome crashpad handler', '/Applications/Google Chrome for Testing.app/Contents/Frameworks/Google Chrome for Testing Framework.framework/Helpers/chrome_crashpad_handler --monitor-self'],
   ])('keeps idle %s observed and classifies the same process at 10.0 CPU', (_label, command) => {
     expect(classify([proc(10, 1, 0, command)])).toMatchObject({ competing: [], observed: [{ pid: 10 }] });
     expect(classify([proc(10, 1, 10, command)]).competing.map(({ pid }) => pid)).toEqual([10]);
   });
 
-  it('classifies any otherwise-unmatched process at the 10.0 CPU boundary', () => {
+  it('uses an inclusive per-process 10.0 CPU boundary for otherwise-unmatched processes', () => {
     const result = classify([
       proc(10, 1, 9.9, '/usr/bin/ordinary-helper'),
       proc(11, 1, 10, '/usr/bin/ordinary-helper'),
@@ -58,26 +130,32 @@ describe('competingJobs predicate v2', () => {
     expect(result.observed.map(({ pid }) => pid)).toEqual([10]);
   });
 
-  it('exempts the harness process, all descendants, and its ancestor chain through pid 1', () => {
+  it('keeps a user Google Chrome helper under rule B', () => {
+    const command = '/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Helpers/Google Chrome Helper (Renderer) --type=renderer';
+    expect(classify([proc(10, 1, 0, command)])).toMatchObject({ competing: [], observed: [{ pid: 10 }] });
+    expect(classify([proc(10, 1, 12, command)]).competing.map(({ pid }) => pid)).toEqual([10]);
+  });
+
+  it('exempts ancestors from rule A only while rule B still classifies busy ancestors', () => {
     const processes = [
       proc(1, 0, 50, '/sbin/launchd'),
-      proc(30, 1, 1.4, '/Applications/Terminal.app/Contents/MacOS/Terminal'),
-      proc(31, 30, 20, '/bin/zsh'),
-      proc(32, 31, 20, '/bin/bash tools/probe-p-campaign/run.sh'),
+      proc(30, 1, 20, '/Applications/Terminal.app/Contents/MacOS/Terminal'),
+      proc(31, 30, 0, `node ${OTHER_CHECKOUT}/node_modules/vitest/vitest.mjs run`),
+      proc(32, 31, 50, '/bin/bash tools/probe-p-campaign/run.sh'),
       proc(33, 32, 50, 'make test'),
       proc(34, 33, 50, 'npx vitest run'),
       proc(35, 1, 10, '/usr/bin/unrelated-work'),
     ];
     const result = classify(processes, 32);
-    expect(result.competing.map(({ pid }) => pid)).toEqual([35]);
-    expect(result.observed.map(({ pid }) => pid)).toEqual([1, 30, 31, 32, 33, 34]);
+    expect(result.competing.map(({ pid }) => pid)).toEqual([1, 30, 35]);
+    expect(result.observed.map(({ pid }) => pid)).toEqual([31, 32, 33, 34]);
   });
 
-  it('exempts descendant Chromium but classifies unrelated Chromium at zero CPU', () => {
+  it('exempts a descendant Playwright-managed browser but classifies an unrelated one at zero CPU', () => {
     const processes = [
       proc(40, 1, 0, '/bin/bash tools/probe-p-campaign/run.sh'),
-      proc(41, 40, 0, '/cache/chrome-headless-shell --headless'),
-      proc(42, 1, 0, '/cache/chrome-headless-shell --headless'),
+      proc(41, 40, 0, '/Users/test/Library/Caches/ms-playwright/chromium-1194/chrome-mac/Chromium.app/Contents/MacOS/Chromium --headless'),
+      proc(42, 1, 0, '/Users/test/Library/Caches/ms-playwright/chromium-1194/chrome-mac/Chromium.app/Contents/MacOS/Chromium --headless'),
     ];
     const result = classify(processes, 40);
     expect(result.competing.map(({ pid }) => pid)).toEqual([42]);

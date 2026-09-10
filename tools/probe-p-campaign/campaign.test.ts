@@ -68,8 +68,8 @@ afterEach(() => {
 describe('campaign lifecycle', () => {
   it('pins every resume field, exact labels, and mutable started labels', () => {
     const identity = campaignIdentity({ candidate: 'abc', harness: 'def', policyNote: 'ghi', runs: 2, cooldownSeconds: 0 });
-    expect(PREDICATE_VERSION).toBe(2);
-    expect(identity.predicateVersion).toBe(2);
+    expect(PREDICATE_VERSION).toBe(4);
+    expect(identity.predicateVersion).toBe(4);
     const existing = { ...identity, createdAt: '2026-09-09T10:00:00Z', startedLabels: ['run-01'] };
     expect(() => assertResumeMatches(existing, identity)).not.toThrow();
     expect(() => assertResumeMatches({ ...existing, labels: ['run-01'] }, identity)).toThrow('campaign mismatch: labels');
@@ -79,7 +79,7 @@ describe('campaign lifecycle', () => {
     const campaign = context();
     const frozen = JSON.parse(fs.readFileSync(path.join(campaign.out, 'campaign.json'), 'utf8'));
     expect(frozen).toMatchObject({ labels: ['run-01', 'run-02'], startedLabels: [] });
-    expect(frozen.predicateVersion).toBe(2);
+    expect(frozen.predicateVersion).toBe(4);
     expect(frozen.synthetic).toBe(true);
     expect(fs.existsSync(pointerFile(campaign))).toBe(false);
     expect(freezeCampaign({ out: campaign.out, runs: 2, candidate: campaign.candidate,
@@ -226,7 +226,7 @@ describe('campaign lifecycle', () => {
     });
     writeHostState({ out: campaign.out, run: 1, ownPid: 99, checkoutRoot: campaign.checkoutRoot });
     const verdict = JSON.parse(fs.readFileSync(path.join(runDirectory, 'competing.json'), 'utf8'));
-    expect(verdict.predicateVersion).toBe(2);
+    expect(verdict.predicateVersion).toBe(4);
     expect(verdict).toMatchObject({
       predicateEvidence: 'available', ownPid: 99, checkoutRoot: campaign.checkoutRoot,
     });

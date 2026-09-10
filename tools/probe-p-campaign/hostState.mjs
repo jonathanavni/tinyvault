@@ -19,14 +19,15 @@ function parseElapsedSeconds(value) {
 export function parsePs(text) {
   const processes = [];
   for (const line of text.split(/\r?\n/u)) {
-    const match = /^\s*(\d+)\s+(\d+)\s+([\d.]+)\s+(\S+)\s+(.+)$/u.exec(line);
+    const match = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(.+)$/u.exec(line);
     if (!match) continue;
     const etimes = parseElapsedSeconds(match[4]);
-    if (etimes === null) continue;
+    const pcpu = Number(match[3]);
+    if (etimes === null || !Number.isFinite(pcpu) || pcpu < 0) continue;
     processes.push({
       pid: Number(match[1]),
       ppid: Number(match[2]),
-      pcpu: Number(match[3]),
+      pcpu,
       etimes,
       command: match[5],
     });

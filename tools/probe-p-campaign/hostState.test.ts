@@ -46,8 +46,25 @@ describe('parsePs', () => {
     expect(processCapture(' 12 1 0.0 invalid /usr/bin/login\n', 0)).toMatchObject({
       status: 'unparseable', exit: 0, processes: [],
     });
+    expect(processCapture(' 12 1 . 00:03 /usr/bin/login\n', 0)).toMatchObject({
+      status: 'unparseable', exit: 0, processes: [],
+    });
+    expect(processCapture(' 12 1 -0.1 00:03 /usr/bin/login\n', 0)).toMatchObject({
+      status: 'unparseable', exit: 0, processes: [],
+    });
     expect(processCapture(' 12 1 0.0 00:03 /usr/bin/login\n', 0)).toMatchObject({
       status: 'ok', exit: 0, processes: [{ etimes: 3 }],
+    });
+  });
+
+  it('makes a whole capture unparseable when any row has malformed CPU', () => {
+    const capture = processCapture([
+      ' 12 1 0.0 00:03 /usr/bin/login',
+      ' 13 1 . 00:03 /usr/bin/other',
+      '',
+    ].join('\n'), 0);
+    expect(capture).toMatchObject({
+      status: 'unparseable', processes: [{ pid: 12, pcpu: 0 }],
     });
   });
 });
