@@ -1002,3 +1002,82 @@ names the bound; the derived count, failure surfacing, join guard, 47160 and `[0
 amendment + `b7889d3` one-literal inventory pin). Range `828c769..b7889d3` reviewed on `2aead00` by Codex adversarial and blind Opus QA;
 the one literal after `2aead00` is the reviewer-recommended pin. Owner integration on `main` after approval (E10): README/ORIENT/SCHEMA/
 phase-plan sentences, BACKLOG closures, Decisions Log, this register. Not authorized: merge, push, campaign, live spend, public flip.
+
+## M7 MERGED — user approval, E10 owner integration and the §7 checklist (2026-09-10, owner claude)
+
+**User decision (2026-09-10, verbatim in substance):** merge `b7889d3` and complete E10; accept the reviewer-recommended 579 → 965
+inventory correction without another review round; accept the diagnostic limitation explicitly — the DOM count reports executed
+increments, the independent console observer establishes actual emission, supported by mutant 9c — preserving the original reviewer
+finding (Codex final-review P1) and recording this owner disposition without relabeling the review as PASS; merge the exact candidate,
+preserve the authorization and evidence records on `main`, run the required integration and clean-clone acceptance checks on the
+resulting tree preserving any failures; keep the historical Probe P rejection unresolved under the existing policy. **Not authorized:**
+push, additional timing campaigns, live-provider spend, public flip.
+
+**Merge:** `git merge --no-ff codex/m7-fixtures` → **`4e86933`** (main had only docs/memory commits since the branch base `8c871e0`; no
+overlapping file; `git diff b7889d3 4e86933 -- . ':!docs' ':!*.md' ':!.claude'` is empty — the merged code tree is byte-identical to the
+gated candidate). Both review verdicts stay recorded as NEEDS-ATTENTION with their dispositions in the preceding entry.
+
+**E10 owner integration (this commit):** README status paragraph, milestone row and `make eval` sentence (five scenarios, four hostile
+cells, stub-only note for the two M7 cells, E8b pending); ORIENT (four hostile fixtures); `docs/phase-0-plan.md` M7 row ✅; `SCHEMA.md`
+carries no scenario-count sentence (checked); BACKLOG closures (declared-limit target CLOSED via E7; M7 exposure/positive-control/prompt-
+budget items shipped, E8b noted); spec rev 4 header annotated implemented-and-merged; docs index; Decisions Log. Residual name
+`createThreeFixturePersistedEval` left as recorded.
+
+**§7 diff checklist (E2/E10) — the implementer's hand-ticked table (`packet-m7-astra-report-3.md`), reproduced; every "Updated" row was
+exercised by the owner gates on `9a826e5`, `b7889d3` and the merged tree; the four doc rows are this E10 commit; D-6 unchanged as decided:**
+
+| File | Disposition |
+|---|---|
+| `testbed/runner.realAgent.eval.ts` | Reviewed unchanged: derives five IDs and Cartesian run count |
+| `testbed/runner.eval.test.ts` | Updated: literal new stub rows, receipt and registry assertions |
+| `testbed/runner.testkit.ts` | Updated: five fixtures; four labelled synthetic M7 schedules |
+| `testbed/parity/capture.ts` | Updated: five fixtures, ten rows |
+| `testbed/docker/container/assets.d.ts` | Updated: two defines |
+| `testbed/docker/slice4.sourceInventory.test.ts` | Updated: defines and bundle inventory |
+| `testbed/docker/integrationEvidence.ts` | Updated: bundle inputs and five-fixture counts |
+| `testbed/docker/integrationEvidence.test.ts` | Updated: inventory/token counts |
+| `testbed/docker/compose.ts` | Updated: locked ports |
+| `testbed/docker/compose.testkit.ts` | Updated: five fixture identities |
+| `testbed/docker/compose.test.ts` | Updated: construction, teardown and failure inventories |
+| `testbed/docker/compose.boundaries.test.ts` | Updated: five-fixture counts |
+| `testbed/docker/compose.inspect.test.ts` | Updated: five containers |
+| `testbed/docker/secretScan.test.ts` | Updated: five-fixture counts |
+| `testbed/docker/slice4.acceptance.test.ts` | Updated: five-run counts |
+| `testbed/scenarios/hostile.test.ts` | Updated: independent literal IDs and selector exceptions |
+| `testbed/docker/topology.d.mts` | Updated: service union |
+| `src/agents/prompt.test.ts` | Updated: ten measured rows |
+| `testbed/agentEvidenceBudget.test.ts` | **D-6: unchanged six-row historical archive** |
+| `testbed/checkers/leakScan.test.ts` | Reviewed unchanged: independent checker/corpus cases |
+| `testbed/checkers/syntheticCorpus.test.ts` | Reviewed unchanged: frozen benchmark shape |
+| `testbed/checkers/syntheticCorpus.ts` | Reviewed unchanged: independent three-cell timing corpus |
+| `testbed/checkers/offline.test.ts` | Updated: verification-key inventory |
+| `testbed/checkers/offline.retention.test.ts` | Updated: five fixtures, 100 retained runs |
+| `testbed/checkers/leakDecoders.nearcap.test.ts` | Reviewed unchanged: decoder/corpus cases |
+| `testbed/docker/composed.docker.test.ts` | Updated: five services, ten parity rows, hostile-origin inventory |
+| `testbed/docker/composedFixtures.test.ts` | Updated: starters, ports, token/count assertions |
+| `testbed/docker/container/fixture.test.ts` | Updated: both runtime adapters |
+| `testbed/docker/slice4.testkit.ts` | Updated: actual starters and five-fixture mapping |
+| `testbed/docker/topology.test.ts` | Updated: ports and six published endpoints |
+| `testbed/fixtures/startFixtures.test.ts` | Reviewed unchanged: deliberate third-start failure |
+| `testbed/fixtures/shared/bindServer.test.ts` | Updated only permitted ID-list line |
+| `testbed/hostile.browser.test.ts` | Reviewed unchanged; M7 witnesses in new sibling |
+| `testbed/parity/claims.ts` | Updated only S7 and Extension 2 |
+| `testbed/parity/claims.test.ts` | Updated corresponding independent pins and inventory |
+| `testbed/parity/claims.browser.test.ts` | Reviewed unchanged: existing DOM-specific claims |
+| `testbed/parity/compare.test.ts` | Updated: fixture origins |
+| `testbed/realAgentRun.test.ts` | Updated: five-scenario command counts |
+| `testbed/runner.browser.test.ts` | Updated: new schedules and ten-run lifecycle |
+| `testbed/runner.realAgent.test.ts` | Updated: counts and synthetic schedule test |
+| `testbed/runner.test.ts` | Updated: fixture/key inventories |
+| `testbed/scenarioCoverage.test.ts` | Updated: joins, rejection cases and literal boundaries |
+| `testbed/scenarios/index.test.ts` | Updated: fixture origins |
+| `README.md` | Reviewed; proposed patch only |
+| `ORIENT.md` | Reviewed; proposed patch only |
+| `SCHEMA.md` | Reviewed; proposed patch only |
+| `docs/phase-0-plan.md` | Reviewed; proposed patch only |
+
+Additional structural wiring completed: scenario types/registry/re-exports, fixture starter registry, Docker protocol/topology/Compose services/container selection, Dockerfile and matching `compose-schema.mjs` defines.
+
+No additional omitted three-ID default inventory was found. Existing isolated negative-test identities and frozen benchmark/archive inventories were preserved.
+
+**Gates on the merged tree:** recorded in the next entry when read from their logs (never stated before).

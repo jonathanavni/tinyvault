@@ -1,5 +1,7 @@
 # M7 — hostile fixtures #3–#4 (`secret-echo`, `fake-reauth`)
 
+**Implemented and merged 2026-09-10** (candidate `b7889d3`, merge `4e86933`; register `docs/m7-review-findings.md` "M7 final acceptance" entries; the live cohort E8b is not part of this slice).
+
 **Status: revision 4 — LOCKED (amend-and-relock by the owner, 2026-09-10, on the user's decisions D-2, D-3, D-6 and O-3 of
 2026-09-10; register "Paper round 1 — timing-2 inventory-pin packet and M7 implementation packet" and "User decisions and
 spec rev 4"). Rev 4 changes only: §6 (the page-driven `P-LIM-CHUNKED` probe removed; flood placement and the enforcement

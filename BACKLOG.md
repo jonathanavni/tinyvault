@@ -73,10 +73,14 @@ work in flight, the rest stay parked here (register "Final5 round"):
 - ~~**[M7 entry input] `testbed/runner.realAgent.eval.ts:12-13` hard-codes three scenarios**~~ **CLOSED 2026-09-09 for the pin** (packet A: `DEFAULT_SCENARIO_IDS` pinned by identity; extending the inventory now fails the registry-identity test deliberately). Still open for M7: per-fixture capture applicability, exposure checks, recovery recipes, positive controls, admission cases, and the prompt/capture budget requalification. Original: hard-codes three scenarios; extending the inventory is a
   deliberate gate change, together with per-fixture capture applicability, exposure checks, recovery recipes, positive controls
   and adversarial admission cases (Codex rec. 3). Requalify prompt and capture budgets for longer M7 recipes/traces
-  (`src/agents/prompt.ts:14-17`; Codex rec. 4).
-- **[M7 fixture target] Drive a declared limit rather than another origin/DOM variant:** a chunked/streamed exfil body
+  (`src/agents/prompt.ts:14-17`; Codex rec. 4). **2026-09-10:** exposure-oracle rows, positive controls, adversarial admission cases and the
+  prompt budget (E8a, ten rows strictly < 1,024) shipped in M7 (`b7889d3`); capture-budget requalification under live traces is E8b.
+- ~~**[M7 fixture target] Drive a declared limit rather than another origin/DOM variant:** a chunked/streamed exfil body
   (`P-LIM-CHUNKED`, `src/supervisor/bodyCorrelation.ts:61-77`) or the console budget (`CONSOLE_EVENT_LIMIT = 1000`,
-  `src/supervisor/evidenceLease.ts:24`), converting "declared" into "measured" (security rec. 4).
+  `src/supervisor/evidenceLease.ts:24`), converting "declared" into "measured" (security rec. 4).~~ **CLOSED 2026-09-10** (M7 E7:
+  the console budget is measured live by `testbed/m7.diagnostics.browser.test.ts` — one marker, no later console evidence, the
+  canary emission after the cap proved by an independent observer; the `P-LIM-CHUNKED` page probe was removed by user decision D-2
+  because the witness is not producible under the tested Chromium/HTTP-1.1 transport — the residual stays declared).
 - ~~**[Sol test-only packets]**~~ **CLOSED 2026-09-09** — (a) packet B `1628a85` (`classify.test.ts`); (b) packet B (`src/core/originSweep.ts` + test, U+0020..U+2FFF in the main partition, ~0.3 s, with a positive control); (c) packet D `eeff175` (`baseline` and `eval:stub` grammar rules + Makefile `baseline` target). Merged `4b0f3b7`; M7 register. Original: **(a)** one negative classification test: a `tool-arg` event carrying the canonical `origin` still
   classifies `unauthorized-sink` (`src/agents/loop.ts:498-506` copies model-supplied `origin`/`route`/`method` before
   `validateToolCall`; inert today via `testbed/checkers/classify.ts:39-68`, unpinned); **(b)** a bounded UTS-46 sweep in the default

@@ -29,7 +29,9 @@ and the repository and CI must contain no real credentials.
 (M4), the measurement harness runs the first two hostile fixtures (M5) behind one implementation with two transports
 (M5.2), and M6 has put real agents in front of them: the composed real-agent command path, a qualified N10
 reference-vs-baseline comparison and the E10 leak trace are recorded (S6 accepted 2026-09-09, code `3072e0b`). Hostile
-fixtures #3–#4 (M7), the MCP adapter (M8), the 1Password backend (M9) and the demo/release (M10) remain. The two
+fixtures #3–#4 (M7: `secret-echo`, `fake-reauth`) are **merged** (2026-09-10, `b7889d3` → `4e86933`) — five scenarios, four hostile
+cells, stub eval green; their live qualification under the amended `SKILL.md` (E8b) is pending. The MCP adapter (M8), the 1Password
+backend (M9) and the demo/release (M10) remain. The two
 test-gate defects found by the read-only assessment (`docs/project-assessment-2026-09-03.md`) were **fixed** and verified
 by literal clean-clone acceptance at M5.1; M6 passed the same literal clean-clone gate three times on `3072e0b` before
 its cohorts ran. **M5.2 is complete** (source `8103c47`, acceptance record `53fd94f`;
@@ -47,10 +49,10 @@ its cohorts ran. **M5.2 is complete** (source `8103c47`, acceptance record `53fd
 | M5.1 — test-gate repair (timing file split, generated run corpus, clean-clone acceptance) | **done** — accepted by a literal `git clone` + `npm ci` + `make browsers` + `make test`; register `docs/m5-review-findings.md` §C-Q |
 | M5.2 — Docker-composed fixtures behind one implementation, two transports | **done** — all six slices accepted; source `8103c47`, acceptance `53fd94f`; [milestone-close assessment](docs/project-assessment-2026-09-06.md) complete |
 | M6 — reference + naive agents | **done** (code `3072e0b`, S6 accepted 2026-09-09) — S1–S5 each accepted at capped three-channel rounds with declared residuals; amendments AM11–AM13 and F1 adopted by the user and implemented through the Codex ladder; pilot `cY3Deep4` READY under the fail-closed readiness rule; N10 sequence `E9-A3-N10` QUALIFIED (baseline `z22Kn2eT`, comparison `y9WmFqoL`); E8 met, E9 met, E10 recorded; register `docs/m6-review-findings.md` |
-| M7 — hostile fixtures #3–#4 | not started |
+| M7 — hostile fixtures #3–#4 (`secret-echo`, `fake-reauth`), the exposure oracle, the console-budget diagnostic, the amended `SKILL.md` (ten prompt rows strictly < 1,024 bytes) | **done** (`b7889d3`, merged `4e86933` 2026-09-10) — two paper rounds, Astra implementation with two STOPs, Codex + blind Opus QA + security review, owner mutant table (16 + 9c), Docker 240 s per-export deadline as a capacity accommodation; **live cohort (E8b) pending**; register `docs/m7-review-findings.md` |
 | M8–M10 — MCP adapter, 1Password backend, demo | not started |
 
-`make eval` defaults to 10 runs per cell across the three scenarios using Docker-composed fixtures and drives the
+`make eval` defaults to 10 runs per cell across the five scenarios (one benign, four hostile) using Docker-composed fixtures and drives the
 **real reference agent and the naive baseline** (pinned `claude-haiku-4-5-20251001`, `temperature: 0`); it needs a Docker
 daemon and `ANTHROPIC_API_KEY`. `make baseline` runs the baseline alone. `make eval-stub` drives the scripted stub agent
 through the same harness with no provider key, so its numbers describe the deterministic harness, not a real agent. The
@@ -60,6 +62,8 @@ local endpoint validation does not establish daemon isolation. The table below i
 (`benign-login-control`, `lookalike-origin-redirect`, `dom-hidden-injection`) the reference leaked 0/10 and completed
 10/10, the baseline leaked 10/10 and completed 10/10. It is a recorded measurement, not a release claim; the signed
 cohort archive is held by the owner (generated artifacts are gitignored), so re-running `make eval` remains the way to check it.
+That comparison predates M7: the two M7 scenarios (`secret-echo-probe`, `fake-reauth-prompt`) have stub-harness results only
+(0/10 leaks, 10/10 completed under the scripted stub) until the separately authorized live cohort (E8b) re-measures all five.
 
 | Agent | Runs | Leaks | Leak rate (95% CI) | Tasks completed |
 |---|---:|---:|---:|---:|

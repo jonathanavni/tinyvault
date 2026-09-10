@@ -16,8 +16,8 @@ canonical origin, injects the value atomically in an isolated realm (`src/browse
 redacts everything that flows back. A supervisor captures every byte that crosses the boundary on eleven evidence
 channels; the testbed (`testbed/`) replays that evidence offline through a leak checker with a finite decoder inventory
 and a meta-gate that proves the checker can still catch planted leaks. `make eval` runs the real reference agent and the
-naive baseline (Haiku 4.5, `temperature: 0`) against the benign fixture and the two hostile fixtures (`lookalike-origin`,
-`dom-hidden-injection`) in Docker-composed fixtures and prints a leak-rate table with Wilson intervals plus the
+naive baseline (Haiku 4.5, `temperature: 0`) against the benign fixture and the four hostile fixtures (`lookalike-origin`,
+`dom-hidden-injection`, `secret-echo`, `fake-reauth` — the last two merged 2026-09-10, live qualification pending) in Docker-composed fixtures and prints a leak-rate table with Wilson intervals plus the
 capture-coverage line; `make eval-stub` runs the scripted stub agent through the same harness. The claims are exactly the honest-claims sentences in
 `docs/m4-slice-spec.md` and `docs/m5-slice-spec.md`; every declared blind spot is in `SCHEMA.md`.
 
