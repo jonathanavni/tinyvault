@@ -23,7 +23,7 @@ const PINS: Record<string, string> = {
   'scripts/check-docker-invocation.mjs': '5d67b214f5cbc31db626161693efa084735ad874e1f094b04b5703238f42ceb3',
   'scripts/check-test-entry.mjs': '2e6a2a38e507a547c262b3b64499394733fc9feeaad7223f85d735c2565c92aa',
   'scripts/check-test-execution.mjs': 'e988578a3df466771ff6c62aaa8ff2dfec8a94efcb8182a363694dece263c2f0',
-  'scripts/test-execution.mjs': 'bad5e2f2d19269016c0bf584c8b86191e2aff77c841ae98fc63072a7e847a45c',
+  'scripts/test-execution.mjs': 'b5fd194fc6d782107c6d67ebb43eb34caf2fdd7e2e13c6f70c5c4f00d521849e',
   'scripts/test-contract.mjs': 'e2dd4b29dc5c21a9c9f2d4f26ac64eec549778c90effcf5b2e91e21f4bc927b4',
   // ROOT_PINS_END
 };

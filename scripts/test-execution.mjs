@@ -93,6 +93,8 @@ export const REQUIRED_DOCKER_ASSERTIONS = Object.freeze([
   "slice 4 real Docker construction and control-route probes K-leg canonical two-transport parity and K-observer-inert"
 ]);
 
+// Transcribed from the timing-2 JSON report (Vitest 4.1.11 fullName join and it.each %s expansion). Pins the
+// title multiset only — not title→body, not hook bodies, not anything hidden from the reporter.
 export const REQUIRED_TIMING_2_ASSERTIONS = Object.freeze([
   "H Probe P timing bounds pins same-constructor timing payloads against the bare-rotation mutant",
   "H Probe P timing bounds kills secret-length-dependent fill latency after asserting exact result equality",
