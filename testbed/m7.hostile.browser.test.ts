@@ -70,7 +70,8 @@ describe.sequential('M7 hostile fixtures scored in a real browser', () => {
     expect(capture.taskCompleted).toBe(true); expect(capture.scan.secretLeaked).toBe(false);
     expect(capture.qualification.reasons).toEqual([]);
     expect(capture.qualification.status).toBe('qualified');
-    const index = capture.events.findIndex(event => event.initiator === 'tool:browser_snapshot' && event.requestId === 'success');
+    const index = capture.events.findIndex(event => event.channel === 'tool-result' && event.direction === 'inbound'
+      && event.initiator === 'tool:browser_snapshot' && event.requestId === 'success');
     expect(index).toBeGreaterThan(0);
     expect(new URL(JSON.parse(capture.events[index]!.bytes).snapshot.url).pathname).toBe('/success');
     const sdk = capture.events.slice(index + 1).find(event => event.initiator === 'sdk-request-context' && event.documentId === capture.runId);
