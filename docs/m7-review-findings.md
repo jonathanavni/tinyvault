@@ -611,11 +611,13 @@ reds remain unresolved; no convention is adopted; a quiet campaign does not prov
 harness or distinguish a real channel from an order/environment effect; the sham removes only byte content equal to
 the canary.
 
-**Context, not evidence (excluded runs and single observations):** the 11 excluded runs were also green with family
-accept and quiet twins, so the campaign observed 20 consecutive `make test` runs without a Probe P rejection on this
-host — this reclassifies nothing. In excluded run-19 (under `cloudd`/`fileproviderd` load) the synthetic sham twin
-returned p = 7.7e-6 with `singleProbeFamily: reject` — one non-matching-versus-non-matching comparison that would have
-cleared the family bar under load; a single excluded observation, recorded as a hint about load-induced rejections.
+**Context, not evidence (excluded runs and single observations) — corrected per the user's decision:** all 20 gated
+families accepted, so the campaign observed 20 consecutive `make test` runs without a Probe P rejection on this host —
+this reclassifies nothing. **Not all diagnostic twins were quiet:** in excluded run-19 the synthetic sham twin rejected
+(see below); the nine-run primary analysis (b) is kept separate from these excluded-run exploratory observations. In excluded run-19 the synthetic sham twin (two non-matching payloads)
+returned p = 7.7e-6 with `singleProbeFamily: reject` — **an excluded null-comparison rejection under observed load**
+(`cloudd` 11.3 %, `fileproviderd` 17.3 % at run start), recorded as such and **not as proof that the load caused the
+rejection**; a single excluded observation, outside the primary analysis.
 
 **Proposals to the user (nothing adopted):** P-1 accept the campaign as inconclusive under its own rule and leave the
 gate, the deferral and the historical reds exactly as they are. P-2 if a second campaign is wanted, decide first how
@@ -623,3 +625,14 @@ macOS maintenance daemons are to be treated (they excluded 11 of 20 starts and r
 either run when Spotlight/Photos/iCloud have finished their post-restart work, or amend the frozen predicate in a
 reviewed, pre-registered way before a new authorization — the 10 % rule B bar is a declared operational threshold,
 not a calibration. P-3 keep the execution-side timing-2 inventory pin (BACKLOG) as the next Astra packet regardless.
+
+**USER DECISION (2026-09-10): P-1 accepted.** The campaign is recorded as completed and inconclusive under the frozen
+rule, V = 9. The gate, the 2026-09-08 deferral, the historical reds and D-1's limitations are unchanged. No second
+campaign now, no change to the exclusion predicate, no retroactive admission of excluded runs; all 20 runs preserved as
+observations with the nine-run primary analysis kept separate from excluded-run exploratory observations. The required
+campaign report has reached the user; another campaign is not a prerequisite for M7. Future required gates retain
+their actual verdicts; any new rejection must preserve its complete diagnostics and be investigated without retrying
+to green. Next: the scoped Astra packet for the execution-side timing-2 inventory pin, then the M7 implementation
+packet from locked rev 3, both brought back with review dispositions before implementation. No second campaign,
+live-provider spend, push or public flip authorized. Campaign archive preserved at
+`/Users/jonathanavni/Documents/Coding/tinyvault-evidence/probe-p-campaign-20260909/` (copy under `artifacts/`).
