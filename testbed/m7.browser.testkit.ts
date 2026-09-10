@@ -2,7 +2,7 @@
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect } from 'vitest';
+import assert from 'node:assert/strict';
 import { AnthropicModelClient, ANTHROPIC_MODEL, ANTHROPIC_SDK_VERSION } from '../src/agents/anthropicClient';
 import { createLocalFileBackend } from '../src/backends/localFile';
 import type { Browser, Page } from '../src/browser/playwright';
@@ -71,11 +71,12 @@ async function runM7(browser: Browser, coverage: Scorecard['captureCoverage'], o
   const onResult = async (action: M7Action, result: any) => {
     if (action.name === 'browser_open_session') {
       page = browser.contexts().find(context => !before.has(context))?.pages()[0];
-      expect(page).toBeDefined(); options.onPage?.(page!);
+      assert.ok(page !== undefined, 'M7 page'); options.onPage?.(page!);
     }
-    expect(result, `M7 tool ${action.id}; an E6 refusal requires STOP`).toMatchObject(
-      action.name === 'browser_open_session' ? { sessionId: expect.any(String) } : { ok: true });
-    if (action.name === 'fill_from_vault') expect(result).toEqual({ ok: true, filled: ['password'] });
+    const message = `M7 tool ${action.id}; an E6 refusal requires STOP`;
+    if (action.name === 'browser_open_session') assert.equal(typeof result?.sessionId, 'string', message);
+    else assert.equal(result?.ok, true, message);
+    if (action.name === 'fill_from_vault') assert.deepEqual(result, { ok: true, filled: ['password'] });
     await options.onResult?.(action, result, page!);
   };
   const result = await runOnce({ runIndex: 0, scenario, fixture, browser, artifactDirectory: root,
@@ -86,9 +87,10 @@ async function runM7(browser: Browser, coverage: Scorecard['captureCoverage'], o
       provenance: { provenanceId: 'synthetic-m7-browser-test' } as EvaluationProvenance,
       producers: { executionId: 'm7-browser', coverage },
       createModelClient: ({ system }) => m7Client(runId, system, actions, onResult) } });
-  expect(result.terminal).toBeUndefined();
-  expect(result.record, 'E6 refusal or any real-loop failure requires STOP').toMatchObject({ execution: { status: 'completed' } });
-  expect(result.evidence.eventsAttestation).not.toBe('');
+  assert.equal(result.terminal, undefined);
+  assert.ok('execution' in result.record && result.record.execution.status === 'completed',
+    'E6 refusal or any real-loop failure requires STOP');
+  assert.notEqual(result.evidence.eventsAttestation, '');
   return finalizedM7(result, fixture, scenario, runId, coverage);
 }
 
@@ -97,20 +99,20 @@ async function finalizedM7(result: Awaited<ReturnType<typeof runOnce>>,
   runId: string, coverage: Scorecard['captureCoverage']) {
   // runOnce has finalized the fixture and enforced runnerExecution.ts:104-108 before this attestation.
   const bytes = await readFile(result.record.eventsPath);
-  expect((await stat(result.record.eventsPath)).size).toBeLessThanOrEqual(MAX_EVENTS_BYTES);
-  expect(bytes.byteLength).toBeLessThanOrEqual(MAX_EVENTS_BYTES);
+  assert.ok((await stat(result.record.eventsPath)).size <= MAX_EVENTS_BYTES);
+  assert.ok(bytes.byteLength <= MAX_EVENTS_BYTES);
   const events = JSON.parse(bytes.toString('utf8')) as CapturedEvent[];
   const unauthorized = await fixture.unauthorizedRequests(runId);
   const loginCapture = Buffer.from(await fixture.captureRequests(runId)).toString('utf8');
   const receipt = result.record.completionReceipt;
   const binding = { ...result.evidence.completionBinding, canaryCommitment: canaryCommitment(M7_CANARY) };
   const taskCompleted = new CompletionVerifier(fixture.verificationPublicKey).verify(receipt, binding).taskCompleted;
-  expect(taskCompleted).toBe(result.record.outcome?.taskCompleted);
+  assert.equal(taskCompleted, result.record.outcome?.taskCompleted);
   const auth = scenario.authForRun(runId, binding.nonce), scan = leakScan(events, M7_CANARY, auth);
   const qualification = qualifyScenarioCapture({ scenarioId: scenario.id, fixtureVersion: scenario.fixtureVersion,
     runId, executionId: 'm7-browser', producers: { executionId: 'm7-browser', coverage }, events,
     outcome: { secretLeaked: scan.secretLeaked, taskCompleted, bodiesUnobserved: bodiesUnobserved(events), scanTruncated: scan.truncated ? 1 : 0 } });
-  expect(qualification).toEqual(result.captureQualification);
+  assert.equal(JSON.stringify(qualification), JSON.stringify(result.captureQualification));
   return { events, unauthorized, loginCapture, receipt, taskCompleted, auth, scan, qualification, byteLength: bytes.byteLength, runId };
 }
 
@@ -124,7 +126,7 @@ function m7Client(runId: string, system: string, actions: M7Action[], onResult: 
         const prior = actions[turn - 1]!;
         const results = wire.messages.flatMap((message: any) => message.role === 'user' && Array.isArray(message.content)
           ? message.content.filter((block: any) => block.type === 'tool_result' && block.tool_use_id === prior.id) : []);
-        expect(results).toHaveLength(1);
+        assert.equal(results.length, 1);
         const result = JSON.parse(results[0].content);
         if (result.sessionId) sessionId = result.sessionId;
         await onResult(prior, result);
