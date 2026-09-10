@@ -545,3 +545,17 @@ referencing the `harness-darwin` worktree — correctly caught by the "another c
 remedy is cleanup of the owner's own leftover processes before the freeze, not another rule. Stale brokers were
 terminated by the owner (criterion: broker `--cwd` no longer exists, or names a closed tinyvault session's scratch
 path; the main checkout's brokers untouched); the final live inventory is recorded at the freeze.
+
+**Predicate — final read-only pass on `887cd80..950fe19` (`review-harness-v2-2-sol-report.md`): NEEDS-ATTENTION, 3 P1
+(round 2 of the predicate's own loop):** (1) MCP detection examined every argv token and overrode rule A, so
+`vitest run mcp-integration.test.ts` or `codex task /tmp/mcp-review.md` were observed at 0 %; (2) v1's
+`npm test` / `npm run eval|baseline` clause was not fully preserved; (3) `%CPU` parsed with `Number()` accepted
+`0x10`, `1e1`, `-0.0`. Everything else confirmed: `etime` conversion, tools-only range, ancestor topology (descendants
+own; ancestors exempt from rule A only), intentional narrowings (browsers, MCP helpers, non-test `make`, `docker run`
+under rule B). Reviewer's standing verdict on the 10 % bar: defensible as an objective operational definition for this
+desktop campaign, deterministic and pre-registerable; not statistically calibrated; must not be described as proving an
+idle or isolated host; multiple sub-10 % processes, post-capture activity and aggregate load can escape rule B; `load1`
+and CPU count are non-gating context. **Cap-round owner correction dispatched as v2.3 (`PREDICATE_VERSION` 5,
+`packet-H-predicate-v2-3.md`)**: MCP identity by executable/package only with rule A evaluated first; the npm/npx
+test/eval/baseline/test:docker clause restored; `%CPU` validated against a decimal grammar. **The predicate's review
+loop is closed at this correction**; residuals above are recorded with the freeze.
