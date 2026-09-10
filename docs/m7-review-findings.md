@@ -559,3 +559,16 @@ and CPU count are non-gating context. **Cap-round owner correction dispatched as
 `packet-H-predicate-v2-3.md`)**: MCP identity by executable/package only with rule A evaluated first; the npm/npx
 test/eval/baseline/test:docker clause restored; `%CPU` validated against a decimal grammar. **The predicate's review
 loop is closed at this correction**; residuals above are recorded with the freeze.
+
+## Campaign freeze (2026-09-09 night, owner claude)
+
+Final live inventory before the freeze (predicate v2.3 / version 5, real `ps`, 1,003 rows, capture ok): **3 competing** —
+`WindowServer` 20 %, `fileproviderd` 12.7 % (rule B: the desktop in active use) and one leftover Codex broker for a
+just-removed worktree (rule A "another checkout of this repository"; terminated). Predicate loop closed at the cap.
+Recorded limits: the 10 % bar is an inclusive per-process operational threshold, not a calibration and not a proof of an
+idle host; macOS `%CPU` is a decaying snapshot; sub-10 % distributed work escapes rule B; `load1`/cpus are context only.
+**Frozen candidate = the HEAD of the docs commit that adds this paragraph** (the harness records it as
+`campaign.json.candidate` under `artifacts/review-evidence/probe-p-campaign-20260909/`, together with the harness
+and policy-note SHA-256 digests and `predicateVersion: 5`). The campaign was **not started**: the host was in active
+use through the evening; PLAN.md carries the start command and conditions. No commit may land on main until the 20th
+run has ended.
