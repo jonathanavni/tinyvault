@@ -289,8 +289,15 @@ implementation (`--fresh --write`).
   (mutation site + two references), the same string in the independent literal table at
   `testbed/parity/claims.test.ts:1337`, and the `P-CAP-CONSOLE-EVENT-COUNT` row of the generated mirror
   `docs/m5-2-claim-evidence.md` (regenerate the row with the test's own `tableText` shape) — one change, three files,
-  `claims.test.ts` green (id count 147 unchanged). Nothing else in `claims.ts` changes (§2.4); the separate three-key `verificationKeys` literal at `claims.test.ts:570`
-  is an S9 inventory widening, not part of this change. Precedent for a worker
+  `claims.test.ts` green (id count 147 unchanged). Nothing else in `claims.ts` changes **except the E2 inventory widening below (Extension 2, Astra STOP #2)**; the separate
+  three-key `verificationKeys` literal at `claims.test.ts:570` is an S9 inventory widening, not part of this change.
+  **Extension 2 (owner, 2026-09-10):** `testbed/docker/container/fixture.test.ts:93` iterates the three fixture ids and
+  `claims.test.ts:1506` mirrors that loop into `P-finalize`'s expected selectors, so widening the fixture list (spec §7
+  item 9) forces two new `P-finalize` runtime selectors (`<id> adapter dispatches every operation to shared primitives and
+  returns isolated immutable same-key evidence` for `secret-echo` and `fake-reauth`) in `testbed/parity/claims.ts`, the
+  same two in the independent list at `claims.test.ts:1506`, and the synchronized `P-finalize` row in
+  `docs/m5-2-claim-evidence.md` — one atomic change under S9. Claim ids (147), implementation bindings, mutation sites and
+  claim wording remain unchanged; no other row changes. Precedent for a worker
   applying a synchronized machine/test/mirror change: M6.1 (`dfb8ddb`).
 - **S8 — `SKILL.md` and prompt measurement (E8a).** The §2.6 transcription with before/after `wc -c`/`shasum`;
   `src/agents/prompt.test.ts:18-19` gains the two placeholder origins **pinned here**: `'secret-echo':
@@ -309,7 +316,8 @@ implementation (`--fresh --write`).
   (the checklist is the oracle, not a grep), **except `testbed/agentEvidenceBudget.test.ts` (D-6, §2.11 — not
   extended, ticked as "archive, unchanged")**; **explicitly including the three-key `verificationKeys` literals at `testbed/checkers/offline.test.ts:36`,
   `testbed/checkers/offline.retention.test.ts:88,134`, `testbed/parity/claims.test.ts:570` and the `it.each` id list at
-  `testbed/fixtures/shared/bindServer.test.ts:33` (§2.12)**; `testbed/checkers/syntheticCorpus.ts` is noted (independent
+  `testbed/fixtures/shared/bindServer.test.ts:33` (§2.12), and the `P-finalize` selector widening of Extension 2
+  (`container/fixture.test.ts:93`, `claims.test.ts:1506`, `claims.ts`, the mirror row)**; `testbed/checkers/syntheticCorpus.ts` is noted (independent
   union; widen only if the compiler or a test demands it, and report which); any inventory found that the list omits is
   reported as a checklist defect with the path and line. Round 1 grep sweep (49 files naming `dom-hidden-injection`): no omitted literal
   inventory; the one non-literal inventory both documents missed is the capability allowlist (§2.10).
@@ -490,3 +498,10 @@ whole-run scan — unsatisfiable, since `runAgentLoop` persists every tool-call 
 `leakChannel: 'tool-arg'`) and substituted nothing. Owner options to the user: (1) page-side echo of the authorized fill;
 (2) typed provenance with a narrowed assertion (contradicts spec §6); (3) harness-side injection (artificial). **User: option 1**
 (O-M7-1). Packet amended (S6, §2.13, §11); the M7 spec is unchanged (its §6 sentence already states the outcome).
+
+**Astra STOP #2 (2026-09-10; `packet-m7-astra-report-2.md`; four untracked fixture drafts, no tracked file changed).** E2's
+widening of `container/fixture.test.ts:93` (spec item 9) forces two `P-finalize` selectors in `claims.ts`, the independent list at
+`claims.test.ts:1506` and the mirror row — forbidden by S7's "nothing else in `claims.ts` changes". Astra proved the selector
+inequality read-only and substituted nothing. **Owner disposition: ADOPTED as Extension 2** — a permitted inventory update (ids,
+bindings, mutation sites, wording unchanged), within the user's "routine reference relocation and permitted inventory updates"
+authorization; no user decision required, recorded here and in the register.
