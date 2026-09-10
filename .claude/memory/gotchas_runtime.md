@@ -143,3 +143,14 @@ Runtime quirks of the harness's substrate: Chromium/Playwright/CDP behaviour, Do
 - **The campaign harness refuses an output directory inside the checkout** (even under ignored `artifacts/`) and, after a
   `--plan` freeze, starts only with `--runs 20 --resume`; a bare start is refused as "candidate already has an incomplete
   campaign". Both are by design — read `tools/probe-p-campaign/README.md` before invoking. (2026-09-10)
+- **The composed closer's export secret scan is linear in the number of registered secrets, and it has two consumers.** Each 249 MB
+  container export is scanned by the closer (`scanStreamWithControls`) and again by `IntegrationEvidence.observeExport`; `StreamSecretScanner`
+  throughput fell from 35 MB/s at 96 secrets to 6 MB/s at 579 and 3 MB/s at 965 (micro-benchmark), so a five-fixture project whose
+  close-time inventory is 965 secrets needs ≈146 s per export and every export is killed at `COMMAND_TIMEOUT_MS` (120 s) — a
+  deterministic 763 s red (`exited null` at +120 s, scan never resolves). Symptom to recognise: the runner metrics' `elapsedMs ≈ 6 s`
+  for exports comes from a different test's closes; do not read it as "exports are fast". Diagnose with a temporary timestamped
+  `#export`/`#scan` (single test, tree restored), not by re-running the gate. Authorized fix 2026-09-10: a 240 s per-export deadline;
+  scanner optimization is separate work. (2026-09-10)
+- **Never run the Docker gate while review agents or Codex jobs are working the host.** The first red on `828c769` was misread as
+  load-induced because three reviewers ran concurrently; the true cause was the export-scan capacity above. Gates get the host to
+  themselves (the timing partitions need it anyway); dispatch reviews before or after, never during. (2026-09-10)

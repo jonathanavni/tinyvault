@@ -154,3 +154,15 @@ Owner gate discipline, verification blind spots, mutant hygiene, evidence handli
   ("the green gate on `4b0f3b7` no longer describes the tree"). "Hold commits while a review runs" is not enough: reviewers
   read the tree, not only the range. Draft fixes in the evidence directory or a separate worktree and apply them after every
   channel has reported. (2026-09-09)
+- **A witness that must show a secret reaching the page cannot deliver it by typing through a tool: every tool-call envelope is
+  persisted as a plaintext `tool-arg` event before the tool runs** (`src/agents/loop.ts:395-409`) and classifies `unauthorized-sink`,
+  so "canary absent from evidence, checker clean" is unsatisfiable with typed provenance. The page reading the *authorized*
+  `fill_from_vault` value (`#password.value`, set through the prototype setter; lockdown blocks only further typing) is the honest
+  route (M7 O-M7-1). Write the provenance into the packet before dispatch. (2026-09-10)
+- **Tests that read `SKILL.md` live pin byte counts and shift when the instructions change** — `testbed/agentEvidenceBudget.test.ts:302`
+  pinned the reference system size (519); the E8a wording moved it to 513 and a paper reviewer's "all four assertions stay green" missed
+  the fifth. Grep for `SKILL` readers and exact-byte pins whenever a measured input changes; list them in the packet. (2026-09-10)
+- **A DOM-side "witness" that prints a constant cannot fail.** The M7 diagnostic's `'Diagnostic emitted: 1051'` was a literal; derive
+  every reported count from the loop that produces it, and give each witness a deletion mutant that reds *that* assertion. (2026-09-10)
+- **Owner carve-out fixes made after a review are unreviewed on their committed form until a focused round covers them** — keep the
+  list of such commits and review the range explicitly before final gates. (2026-09-10)
