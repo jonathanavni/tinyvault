@@ -25,6 +25,15 @@ defensive testbed content, framed as such. **Post-implementation:** `/review`, `
 concur), Codex adversarial review; capped at three rounds; §10 states the cap round's P1 criteria. **Sequencing:**
 dispatched after the timing-2 inventory-pin packet has merged or been declined (D-5, both channels concur).
 
+**D-5 reconciliation (owner, 2026-09-10, against base `07030b6`):** the inventory-pin merge touched nine files
+(`scripts/test-execution.mjs`, `test-execution.selftest.mjs`, `test-execution.d.mts`, `check-test-entry.mjs`,
+`check-test-execution.mjs`, `gate-common.mjs`, `testbed/rootOfTrust.test.ts`, `testbed/docker/no-docker.setup.ts`,
+`testbed/probe/timingSourceResolve.ts`); **none of them is cited by this packet** (set intersection empty), and 40
+load-bearing `file:line` anchors across §1, §2, §4 and §6 were re-checked by content match — all hold. The S7 triple
+(`claims.ts:162`, `claims.test.ts:1337`, the `docs/m5-2-claim-evidence.md` row) and the §2.5/§2.6 measurement anchors
+(`prompt.test.ts:11-13,18-19,22,27-28,37`) are restated in the dispatch wrapper. No paper round is needed for this
+relocation (user, 2026-09-10).
+
 ## 0. What this is and is not
 
 - **Is:** the two fixtures, two scenarios, their wiring, the coverage-oracle rows and `/success` join (O7), the
@@ -127,7 +136,8 @@ registers.
    `scenarioCoverage.ts` with the same two-step shape (§4 S4). `MaskedSnapshot` carries `url` as origin + pathname only
    (`src/core/types.ts:76-77`), so the `/success` pathname test needs no new field and no query handling.
 8. **Diagnostic placement.** No M7 test may be added to `src/supervisor/host.timing.browser.test.ts` (its 26-row
-   report inventory is being pinned by the companion packet, and the Probe P partition must keep its environment) nor
+   report inventory is pinned by the merged `timing-2-inventory` execution-gate rule, `c49e9ad`, and the Probe P partition
+   must keep its environment) nor
    to `testbed/checkers/leakDecoders.timing.test.ts`. The main partition is `vitest run --exclude <those two>`
    (`scripts/test-contract.mjs:18`), so a new file lands there automatically; `.browser.test.ts` is a naming
    convention, not an environment selector. E7's diagnostic lives in a new main-partition browser file (§4 S6).
@@ -170,7 +180,7 @@ registers.
 
 ## 3. Branch, sandbox, writer rules
 
-Branch `codex/m7-fixtures` from base `__BASE__` (the owner fills the SHA at dispatch and pins it in the prompt). Leave
+Branch `codex/m7-fixtures` from base **`07030b6`** (main after the inventory-pin merge `c49e9ad` and its integration commit; pinned 2026-09-10). Leave
 all work uncommitted; the owner commits with explicit paths. Single writer, no subagent edits. The sandbox cannot launch
 Chromium, bind loopback, `mkdtemp` reliably, run Docker or write `.git`: every browser suite, every fixture-server test,
 `make test`, `make test-docker`, `make eval` and the stub eval are **owner-run**; report them as "Not run: sandbox"
