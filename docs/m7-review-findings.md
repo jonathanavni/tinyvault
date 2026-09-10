@@ -502,3 +502,46 @@ the reference host after v2 (10 %): see the commit and the review below. Sol wor
 owner-verified 125/125, both boundary gates PASS; a Sol read-only review precedes the freeze. Recorded limit: the 10 %
 bar is a declared, objective threshold for a desktop host, not a measured calibration; `mediaanalysisd`-class system
 jobs above it exclude a run correctly and are reported.
+
+**Predicate v2 — Sol read-only review (`review-harness-v2-sol-report.md`): NEEDS-ATTENTION, 4 P1 / 1 P2.** The range
+P1 was a branch-behind-main artifact (rebased). Substantive: malformed `%CPU` graded `ok` (NaN → null → non-competing);
+rule A dropped v1 clauses the policy names explicitly (`node`/`make` from another checkout, `codex-cli task`, wrapped
+`npx tsc` / `node …/typescript/bin/tsc`, non-test `make`, MCP helpers between 1 and 10 %); the ancestor exemption
+could hide a busy Terminal/launchd ancestor. Reviewer's verdict on the 10 % bar: defensible as an objective desktop
+exclusion heuristic, not a measured idle definition; record that it is inclusive per-process (not aggregate, not
+`load1/cpus`), that macOS `%CPU` is a decaying average so distributed sub-10 % work can escape it, and that it was
+chosen operationally after the 1 % draft. **Fix dispatched as predicate v2.1 (`PREDICATE_VERSION` 3; nothing frozen):**
+malformed CPU → unparseable capture; "another checkout" made objective as *another checkout of this repository* (a
+`node`/`npm`/`npx`/`make` command line referencing a path outside `checkoutRoot` that contains `tinyvault`), so the
+desktop apps' unrelated `node` helpers stay under rule B; Codex task processes by basename prefix `codex` with
+task/exec/review argv; compilers in every invocation shape; `make` with test/eval/baseline/test-docker; test runners by
+path or argv; ancestors exempt from rule A only, rule B still applies. Live inventory to be recorded at freeze.
+
+**Predicate v2.1 delivered (Sol, fresh dispatch after a resume mis-attached to the read-only review session — second
+occurrence; gotcha recorded):** `PREDICATE_VERSION = 3`; rule A in every invocation shape (test runners by path or
+argv; `make` test/eval/baseline/test-docker; `tsc`/`esbuild` direct, `npx`, `node …/bin/*`; Codex task/exec/review by
+basename prefix; `node`/`npm`/`npx`/`make` referencing another checkout of this repository by path; `claude-review.mjs`;
+docker build/buildx/compose; Chromium/Chrome/headless-shell not descended from the harness); rule B per-process
+≥ 10 % applies to everything else **including the harness's ancestors** (ancestors are exempt from rule A only, since
+they carry the harness's own command text); malformed or negative `%CPU` → capture `unparseable`; README records the
+threshold semantics (inclusive per-process; macOS `%CPU` is a decaying average; chosen operationally after the 1 %
+draft; the owner's live inventory precedes the freeze). Worker-reported 156/156, both gates PASS; owner verification and
+live inventory below.
+Owner verification of v2.1: 156/156, both gates PASS, `bash -n`, no capability imports; **live inventory on the
+reference host: 1,204 rows parsed, 175 competing** — every helper of the user's own Google Chrome (rule A "browser" at
+0 % CPU), the desktop app's `npm exec @playwright/mcp` servers (rule A "test runner" via `playwright` in argv), plus
+`mds_stores` 25.9 % and `cloudd` 12.9 % (rule B, correct). The policy's "a browser launched by anything but this run"
+is read as a Playwright-managed test browser and "another vitest/playwright" as the test runner; **v2.2 dispatched** to
+narrow those two rule-A shapes (Playwright cache paths / Chrome for Testing / headless shell not descended from the
+harness; `vitest`, `playwright test`, `@playwright/test`; MCP servers and user browsers under rule B). Each live
+inventory is recorded here because the policy requires the definition to be objective *before* run 1 and the desktop
+host keeps revealing process classes the sandboxed worker cannot see.
+
+**Predicate v2.2 (`PREDICATE_VERSION` 4) merged into main** (`950fe19` via merge). Owner live inventories on the
+reference host: v2.1 → 175 competing (the user's Google Chrome helpers; `@playwright/mcp` servers); v2.2 → **20
+competing, all idle (0 % CPU)**: ~16 stale Codex `app-server-broker.mjs` daemons whose `--cwd` names deleted worktrees
+of this repository (this session's and earlier sessions'), plus the completed Sol worker's `cua_node` kernel pair
+referencing the `harness-darwin` worktree — correctly caught by the "another checkout of this repository" clause; the
+remedy is cleanup of the owner's own leftover processes before the freeze, not another rule. Stale brokers were
+terminated by the owner (criterion: broker `--cwd` no longer exists, or names a closed tinyvault session's scratch
+path; the main checkout's brokers untouched); the final live inventory is recorded at the freeze.

@@ -165,3 +165,9 @@ Codex dispatch, sandbox limits, job monitoring, model routing, the safety classi
   canonical real probes, regression/mutation proofs and coverage limits: M6 register final S2 R3.
   New top-level helper tests also require the explicit synthetic inventory pin in gate-cli.selftest
   to stay current; do not hide declarations to satisfy the old count. (2026-09-07)
+- **`task --resume-last` resumes the most recent thread in that cwd, whatever it was — including a read-only review.**
+  Twice on 2026-09-09 a follow-up implementation packet dispatched with `--resume-last` in a worktree attached to the
+  Sol *review* session that had run there last, which then reported "writing is blocked by read-only sandbox" and did
+  nothing. Rule: after any read-only review in a worktree, dispatch the next implementation as `--fresh --write` with a
+  self-contained packet (prior packets and reports concatenated); reserve `--resume-last` for an immediate follow-up to
+  the last *write* job in that cwd. (2026-09-09)
