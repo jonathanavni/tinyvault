@@ -636,3 +636,86 @@ to green. Next: the scoped Astra packet for the execution-side timing-2 inventor
 packet from locked rev 3, both brought back with review dispositions before implementation. No second campaign,
 live-provider spend, push or public flip authorized. Campaign archive preserved at
 `/Users/jonathanavni/Documents/Coding/tinyvault-evidence/probe-p-campaign-20260909/` (copy under `artifacts/`).
+
+## Paper round 1 — timing-2 inventory-pin packet and M7 implementation packet (2026-09-10, session `2026-09-10-m7-packets`)
+
+**Scope and channels.** Two v1 packets drafted by the owner from `main` `913416b`: `docs/probe-p-timing2-inventory-pin-packet.md`
+(the execution-side complement to the narrowed C2 source scan; BACKLOG "From the C2 / campaign-harness ladder") and
+`docs/m7-implementation-packet.md` (the Astra implementation contract from locked `docs/m7-slice-spec.md` rev 3). Each was
+reviewed by two blind read-only channels in parallel — Sol (`task --fresh --model gpt-5.6-sol`, jobs `task-mtvlezyk-sg62cp`,
+`task-mtvlf24q-4n862c`) and a fresh-context Opus 5 subagent — with the register written only after all four reports were in.
+Prompts, reports, the owner's probes and the owner's per-finding dispositions are under
+`artifacts/review-evidence/tinyvault-m7-packets-20260910/`. Nothing implemented, committed, pushed or dispatched for
+implementation; no spend beyond the four reviews.
+
+**Owner probe recorded before the round (D-2 input).** `chunked-probe.mjs`: Playwright Chromium 151.0.7922.34 against a loopback
+Node HTTP/1.1 server — a streaming `fetch` body (`ReadableStream`, `duplex: 'half'`) is rejected with `TypeError: Failed to fetch`
+and the server never receives the request; plain and XHR bodies arrive with `content-length`. The Opus channel re-ran it byte for
+byte and widened it (seven further page-side producers all carried `content-length`; every streaming variant refused). Consequence:
+the locked spec's E7 P-LIM-CHUNKED page probe is not producible from page content over the fixtures' transport.
+
+**Pin packet — Sol R1: NEEDS-ATTENTION, 2 P1 / 1 P3. Opus R1 (blind): NEEDS-ATTENTION, 2 P1 / 3 P2 / 4 P3.** Convergent P1s
+(high confidence): (1) the digest-refresh accounting was wrong — the §6 header edit touches the pinned `check-test-execution.mjs`
+under every D-1 option and option A also touches the pinned `check-test-entry.mjs` (four rows under A, one under B or C);
+(2) mutant M-T7 as written reds `partition-disjoint` (`scripts/test-execution.mjs:62-63`) before `report-files`. Opus P2s, all
+verified: the §0 claim was broader than the rule (a title-preserving substitution keeps the multiset; no `CLAIM_LINKS` selector
+names the timing file); the self-test's `timing2Names` must be byte-identical to the production literal because
+`filesystemCases` and the CLI self-test run the production `checkExecution` over the fixture; the transcription source is
+gitignored and was absent from the evidence directory. P3s: citation drift, `docker-invocation.mjs:3` does not enumerate the
+pinned set, `no-docker.setup.ts:3-4` says "both Vitest configs" (pre-existing drift), V1–V3 need a `mkdtemp` sandbox caveat.
+**Dispositions:** every finding absorbed in packet **v2** (claim narrowed to "changes the title multiset"; M-T7 = bundle swap;
+M-T8 positive timing-1 control; M-T9 stale-counters placement witness; the unkillable "all passed" conjunct stated plainly; the
+green report copied to the evidence directory with its SHA-256 and a STOP if absent; digest rows corrected; A-minimal variant
+offered). Both channels: no reaching shape within the claim, no false red on the current report, scope clean, V6(b) valid,
+recommend D-1 option A, O-1 no, O-2 no.
+
+**M7 packet — Sol R1: NEEDS-ATTENTION, 2 P1 / 1 P2 / 2 P3. Opus R1 (blind): NEEDS-ATTENTION, 2 P1 / 8 P2 / 6 P3.** Convergent
+P1: the packet's E5 production-loop test said "scripted `ModelClient`, never the SDK", but `runAgentLoop` emits only
+`model-context` (`src/agents/loop.ts:298-312`) and the sole producer of `sdk-request-context` is
+`AnthropicModelClient.captureFetch` (`src/agents/anthropicClient.ts:82`) — the locked E5 witness could not be produced as
+instructed (precedent for the fix: the offline client with an injected `fetch`, `testbed/scenarioCoverage.test.ts:57-64`).
+Convergent P1/P2: the Astra-runnable list contained Chromium, loopback and `mkdtemp` work. Opus's second P1, verified: the S7
+`claims.ts` attribution edit could not be green as scoped because `claims.test.ts:1721-1722` compares the machine table to the
+generated mirror `docs/m5-2-claim-evidence.md` and to an independent literal table (`:1337`) carrying the same wrong string.
+Further verified findings: `FIXTURE_IDS` is `protocol.ts:40` (the packet's §2.3 had inverted the spec's correct cite); run-id
+propagation across `/login` → `/success` has no in-fixture server mechanism (`loginFixture.ts:414,433-439`) and the packet had
+left `loginFixture.ts` as an unauthorized-by-omission escape hatch; `scripts/docker-invocation.mjs:18-46` is a per-file capability
+allowlist neither document named; the `/q` and console sink mutants kill only if actuation goes through a page control; the
+prompt-test origins literal was unpinned for the new ids; only `host.ts:CONSOLE_EVENT_LIMIT` is provably wrong on `claims.ts:162`
+(`host.ts:45-46` re-exports `EvidenceLease`, so the spec's "`:41` re-exports only `CONSOLE_BUDGET_EXCEEDED`" is false);
+`agentEvidenceBudget.test.ts` is a six-row historical archive pin, not an inventory to extend. **Disproved:** Sol P3-01 claimed
+`SKILL.md` has no trailing newline — `tail -c 1 SKILL.md | xxd` is `0a`, 519 bytes; the 519 → 513 arithmetic was right and both
+digests (before `9c91f500…`, after `0dc375cd…`) are now stated in the packet. **Dispositions:** every verified finding absorbed in
+packet **v2** (production client with scripted `fetch`; three-way sandbox split; atomic three-file claim correction with a mirror
+carve-out; page-side `sessionStorage` run-id mechanism with a shared-fixture STOP; capability-allowlist STOP and
+`check-docker-invocation` in the runnable set; page-control actuation for every sink; origins 55498/55499 pinned; spec amendments
+moved **before dispatch**; D-6 added for the archive pin). Both channels: D-2 sound and scoped (remove the probe, no raw-socket
+decoration), the `/success` join fits inside `scenarioCoverage.ts` as a sibling helper reusing `sdkToolResult`, no omitted literal
+three-id inventory, diagnostic placement right and the 1,050-event flood ~5× under `MAX_EVENTS_BYTES`, D-4 and D-5 agreed.
+
+**Open for the user (nothing adopted):** pin packet D-1 (A recommended; A-minimal, B, C), O-1, O-2; M7 packet D-2, D-3, D-4, D-5,
+D-6, O-3. **Owner recommendation:** take the decisions, fold them into both packets, amend and re-lock the M7 spec (rev 4) per
+D-2/D-6, then run paper round 2 on the v2 packets before any Astra dispatch. Not authorized by this entry: implementation of either
+packet, live-provider spend, push, public flip.
+
+**USER DECISIONS (2026-09-10) — recommended choices approved with scope clarifications; spec rev 4.** D-1 Option A: pin
+`scripts/test-execution.mjs` and `scripts/test-contract.mjs` with the four digest rows; the claim stays limited to detecting
+changes in the reported title multiset, title-preserving substitutions and reporter/root-of-trust modifications remain explicit
+residuals. D-2: the P-LIM-CHUNKED page probe removed from E7 and the spec amended and re-locked before dispatch citing both
+preserved probes; the witness was not producible under the tested Chromium build, launch configuration, producers and HTTP/1.1
+fixture transport, which does not establish that the blind spot is fixed or universally unreachable — residual retained; no other
+transport or non-page producer enters M7. D-3: every M7 production-shaped prompt row strictly below 1,024 UTF-8 bytes as M7's
+headroom requirement (not a change to the global ≤ 1,024 runtime contract); exact sizes for all ten rows; any shortening preserves
+the approved instructions and is reflected in the reviewed prompt text and digests. D-4: `/security-review` after M7
+implementation alongside `/review` and Codex adversarial review. D-5: M7 dispatched only after the inventory-pin work has merged or
+been explicitly declined; the actual base pinned afterward and affected packet references reconciled. D-6: the six-row historical
+evidence-budget archive unchanged and annotated; never presented as five-scenario evidence or as validation of the updated
+instructions; the new prompt measurements, artifact-cap checks and separately authorized live qualification preserved. O-1 no
+timing-1 twin; O-2 no additional security channel for the pin packet; O-3 the 1,050-event flood and
+`testbed/m7.diagnostics.browser.test.ts`, exhaustion confined to the labelled diagnostics. **Applied by the owner:** both packets
+to **v3** with the decisions folded; `docs/m7-slice-spec.md` amended and re-locked as **rev 4** (status header; §6 P-LIM-CHUNKED
+paragraph superseded and quoted, flood placement and enforcement point, the `host.ts` re-export sentence corrected; §7 item 9
+archive annotation; §9 O4 estimates and D-3; §10 E7 and E8a rows) with superseded rev 3 wording struck or quoted in place. Next:
+paper round 2 on the committed v3 packets as stable candidate files, then the final packets and verified dispositions back to
+the user before any Astra dispatch. Not authorized: implementation, merge of implementation work, a second campaign,
+live-provider spend, push, public flip; Probe P's gate and historical-failure dispositions unchanged.
