@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -6,16 +7,25 @@ import {
 } from './hostState.mjs';
 
 describe('parsePs', () => {
-  it('parses the fixed ps columns and preserves command arguments', () => {
+  it('requests the portable ps etime column from the shell spawner', () => {
+    const runner = readFileSync(new URL('./run.sh', import.meta.url), 'utf8');
+    expect(runner).toContain('ps -axo pid,ppid,pcpu,etime,command');
+    expect(runner).not.toContain('ps -axo pid,ppid,pcpu,etimes,command');
+  });
+
+  it('parses every ps etime form into elapsed seconds and preserves command arguments', () => {
     const fixture = `  PID  PPID  %CPU ELAPSED COMMAND
-  101     1   0.0   86400 /Applications/Claude
-  202   101  12.5      42 node /repo/node_modules/vitest/vitest.mjs run tools/
-invalid row
+  101     1   0.0      04:05 /Applications/Claude
+  202   101  12.5   02:03:04 node /repo/node_modules/vitest/vitest.mjs run tools/
+  303     1   1.5 3-02:03:04 /usr/local/bin/codex-app-server
 `;
-    expect(parsePs(fixture)).toEqual([
-      { pid: 101, ppid: 1, pcpu: 0, etimes: 86400, command: '/Applications/Claude' },
-      { pid: 202, ppid: 101, pcpu: 12.5, etimes: 42, command: 'node /repo/node_modules/vitest/vitest.mjs run tools/' },
-    ]);
+    const expected = [
+      { pid: 101, ppid: 1, pcpu: 0, etimes: 245, command: '/Applications/Claude' },
+      { pid: 202, ppid: 101, pcpu: 12.5, etimes: 7384, command: 'node /repo/node_modules/vitest/vitest.mjs run tools/' },
+      { pid: 303, ppid: 1, pcpu: 1.5, etimes: 266584, command: '/usr/local/bin/codex-app-server' },
+    ];
+    expect(parsePs(fixture)).toEqual(expected);
+    expect(processCapture(fixture, 0)).toMatchObject({ status: 'ok', exit: 0, processes: expected });
   });
 
   it('parses macOS host-state command output without deciding on failures', () => {
@@ -33,7 +43,11 @@ invalid row
     expect(processCapture('PID PPID %CPU ELAPSED COMMAND\n', 0)).toMatchObject({
       status: 'unparseable', exit: 0, processes: [],
     });
-    expect(processCapture(' 12 1 0.0 3 /usr/bin/login\ntruncated row\n', 0).status).toBe('unparseable');
-    expect(processCapture(' 12 1 0.0 3 /usr/bin/login\n', 0)).toMatchObject({ status: 'ok', exit: 0 });
+    expect(processCapture(' 12 1 0.0 invalid /usr/bin/login\n', 0)).toMatchObject({
+      status: 'unparseable', exit: 0, processes: [],
+    });
+    expect(processCapture(' 12 1 0.0 00:03 /usr/bin/login\n', 0)).toMatchObject({
+      status: 'ok', exit: 0, processes: [{ etimes: 3 }],
+    });
   });
 });

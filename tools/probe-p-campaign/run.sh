@@ -85,7 +85,7 @@ while ((number <= runs)); do
   current_status="$(git -C "$checkout_root" status --short --untracked-files=all)"
   node "$campaign_js" start --out "$out" --run "$number" \
     --candidate "$current_head" --git-status "$current_status"
-  capture_raw processes ps -axo pid,ppid,pcpu,etimes,command
+  capture_raw processes ps -axo pid,ppid,pcpu,etime,command
   capture_raw cpus sysctl -n hw.ncpu
   capture_raw uptime uptime
   capture_raw power pmset -g batt

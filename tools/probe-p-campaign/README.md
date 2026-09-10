@@ -26,6 +26,8 @@ The flag is refused for resume and cannot supersede an incomplete campaign.
 
 ## Run and resume
 
+Predicate v2 replaces predicate v1 after v1 classified 239 processes as competing on the reference macOS desktop, including idle `cua_node`, Codex app-server and broker, VS Code/Claude-extension, MCP, sandbox-host, and crashpad processes at zero CPU. V2 instead marks the harness process tree and its ancestor chain as own; marks test runners, `make test`, compiler/bundler jobs, test/eval package commands, Chromium, Docker workloads, Codex task commands, and `claude-review.mjs` as competing regardless of CPU; and sets rule B's bar for every other process at `pcpu >= 10.0` (10 percent, a meaningful single-core share). Lower-CPU daemons and desktop helpers remain observed. Each run also records the one-minute load average and `hw.ncpu`; `load1 / cpus` is report context only and does not affect the predicate.
+
 Run the frozen campaign from the same clean commit:
 
 ```sh

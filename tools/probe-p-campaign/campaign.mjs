@@ -7,10 +7,10 @@ import {
   optionalCapture, parseChromiumIdentity, parseInteger, parseLoadAverage, parsePackageVersion,
   processCapture,
 } from './hostState.mjs';
-import { competingJobs } from './predicate.mjs';
+import { competingJobs, PREDICATE_VERSION } from './predicate.mjs';
 
 export const CAMPAIGN_SCHEMA = 'probe-p-campaign/1';
-export const PREDICATE_VERSION = 1;
+export { PREDICATE_VERSION };
 const MODULE_FILE = decodeURIComponent(new URL(import.meta.url).pathname);
 const TOOL_DIRECTORY = path.dirname(MODULE_FILE);
 const CHECKOUT_ROOT = path.resolve(TOOL_DIRECTORY, '../..');
@@ -291,10 +291,12 @@ export function composeHostState({ runDirectory, ownPid, checkoutRoot }) {
   const chromiumCache = rawCapture(raw, 'chromium-cache');
   const processRaw = rawCapture(raw, 'processes');
   const processState = processCapture(processRaw.text, processRaw.exitCode);
+  const loadavg = uptime.exitCode === 0 ? parseLoadAverage(uptime.text) : null;
   const status = requiredRaw(raw, 'git-status');
   return {
     capturedAt: requiredRaw(raw, 'captured-at'),
-    loadavg: uptime.exitCode === 0 ? parseLoadAverage(uptime.text) : null,
+    load1: loadavg?.[0] ?? null,
+    loadavg,
     cpus: parseInteger(requiredRaw(raw, 'cpus') ?? ''),
     memoryFree: parseInteger(requiredRaw(raw, 'memory-free') ?? ''),
     processes: processState.processes,

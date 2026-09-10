@@ -1,13 +1,33 @@
+function parseElapsedSeconds(value) {
+  const dayParts = value.split('-');
+  if (dayParts.length > 2) return null;
+  const hasDays = dayParts.length === 2;
+  const clock = dayParts.at(-1).split(':');
+  if (clock.length !== 2 && clock.length !== 3) return null;
+  if (hasDays && clock.length !== 3) return null;
+  const fields = [...dayParts.slice(0, -1), ...clock];
+  if (fields.some((field) => !/^\d+$/u.test(field))) return null;
+  const days = hasDays ? Number(dayParts[0]) : 0;
+  const [hours, minutes, seconds] = clock.length === 2
+    ? [0, Number(clock[0]), Number(clock[1])]
+    : clock.map(Number);
+  if (hours > 23 || minutes > 59 || seconds > 59) return null;
+  const elapsed = (((days * 24) + hours) * 60 + minutes) * 60 + seconds;
+  return Number.isSafeInteger(elapsed) ? elapsed : null;
+}
+
 export function parsePs(text) {
   const processes = [];
   for (const line of text.split(/\r?\n/u)) {
-    const match = /^\s*(\d+)\s+(\d+)\s+([\d.]+)\s+(\d+)\s+(.+)$/u.exec(line);
+    const match = /^\s*(\d+)\s+(\d+)\s+([\d.]+)\s+(\S+)\s+(.+)$/u.exec(line);
     if (!match) continue;
+    const etimes = parseElapsedSeconds(match[4]);
+    if (etimes === null) continue;
     processes.push({
       pid: Number(match[1]),
       ppid: Number(match[2]),
       pcpu: Number(match[3]),
-      etimes: Number(match[4]),
+      etimes,
       command: match[5],
     });
   }

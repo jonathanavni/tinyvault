@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   assertResumeMatches, campaignIdentity, composeHostState, finishRun, freezeCampaign,
-  nextRunNumber, planLines, startRun, writeHostState,
+  nextRunNumber, planLines, PREDICATE_VERSION, startRun, writeHostState,
 } from './campaign.mjs';
 
 const temporaryDirectories: string[] = [];
@@ -45,7 +45,7 @@ function writeRaw(raw: string, name: string, text: string, exitCode = 0) {
   fs.writeFileSync(path.join(raw, `${name}.exit`), `${exitCode}\n`);
 }
 
-function populateRaw(raw: string, processes = ' 99 1 0.0 5 /bin/bash run.sh\n') {
+function populateRaw(raw: string, processes = ' 99 1 0.0 00:05 /bin/bash run.sh\n') {
   writeRaw(raw, 'processes', processes);
   writeRaw(raw, 'cpus', '12\n');
   writeRaw(raw, 'uptime', 'load averages: 1.00 2.00 3.00\n');
@@ -68,6 +68,8 @@ afterEach(() => {
 describe('campaign lifecycle', () => {
   it('pins every resume field, exact labels, and mutable started labels', () => {
     const identity = campaignIdentity({ candidate: 'abc', harness: 'def', policyNote: 'ghi', runs: 2, cooldownSeconds: 0 });
+    expect(PREDICATE_VERSION).toBe(2);
+    expect(identity.predicateVersion).toBe(2);
     const existing = { ...identity, createdAt: '2026-09-09T10:00:00Z', startedLabels: ['run-01'] };
     expect(() => assertResumeMatches(existing, identity)).not.toThrow();
     expect(() => assertResumeMatches({ ...existing, labels: ['run-01'] }, identity)).toThrow('campaign mismatch: labels');
@@ -77,6 +79,7 @@ describe('campaign lifecycle', () => {
     const campaign = context();
     const frozen = JSON.parse(fs.readFileSync(path.join(campaign.out, 'campaign.json'), 'utf8'));
     expect(frozen).toMatchObject({ labels: ['run-01', 'run-02'], startedLabels: [] });
+    expect(frozen.predicateVersion).toBe(2);
     expect(frozen.synthetic).toBe(true);
     expect(fs.existsSync(pointerFile(campaign))).toBe(false);
     expect(freezeCampaign({ out: campaign.out, runs: 2, candidate: campaign.candidate,
@@ -213,14 +216,17 @@ describe('campaign lifecycle', () => {
   it('normalizes process-capture and Chromium identity and writes predicate availability', () => {
     const campaign = context();
     const runDirectory = begin(campaign, 1);
-    populateRaw(path.join(runDirectory, 'raw'), ' 99 1 0.0 5 /bin/bash run.sh\n 100 1 2.0 5 npx vitest run\n');
+    populateRaw(path.join(runDirectory, 'raw'), ' 99 1 0.0 00:05 /bin/bash run.sh\n 100 1 2.0 00:05 npx vitest run\n');
     const state = composeHostState({ runDirectory, ownPid: 99, checkoutRoot: campaign.checkoutRoot });
     expect(state).toMatchObject({
       processCapture: { status: 'ok', exit: 0 },
+      load1: 1,
+      cpus: 12,
       chromium: { playwrightCore: '1.62.1', cacheDirectories: ['chromium-1194'] },
     });
     writeHostState({ out: campaign.out, run: 1, ownPid: 99, checkoutRoot: campaign.checkoutRoot });
     const verdict = JSON.parse(fs.readFileSync(path.join(runDirectory, 'competing.json'), 'utf8'));
+    expect(verdict.predicateVersion).toBe(2);
     expect(verdict).toMatchObject({
       predicateEvidence: 'available', ownPid: 99, checkoutRoot: campaign.checkoutRoot,
     });

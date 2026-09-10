@@ -397,6 +397,8 @@ function analyzeRun(runDirectory, label, campaign) {
     competing: predicate.competing, refusals: refusalContext(runDirectory), valid: started && ended && check.valid,
     invalidReasons: check.reasons, controlSource: check.controlSource,
     family: familyVerdict(sidecar), entries,
+    load1: Number.isFinite(hostState?.load1) ? hostState.load1 : null,
+    cpus: Number.isInteger(hostState?.cpus) ? hostState.cpus : null,
   };
 }
 
@@ -565,7 +567,8 @@ function actualRows(report) {
     const familyEvidence = JSON.stringify({ details: run.family.details, reason: run.family.reason ?? null });
     const reasons = run.invalidReasons.join(', ') || 'none';
     const refusals = `${run.refusals.count}:${run.refusals.reasons.join(',') || 'none'}`;
-    return `| ${run.run} | ${run.ended} | ${make} | ${run.partitions.main.verdict}/${run.partitions.timing1.verdict}/${run.partitions.timing2.verdict} | ${run.family.verdict} | ${run.excluded} | ${run.valid} | ${reasons} | ${refusals} | ${familyEvidence} |`;
+    const load = `${run.load1 ?? 'unavailable'} / ${run.cpus ?? 'unavailable'}`;
+    return `| ${run.run} | ${run.ended} | ${make} | ${load} | ${run.partitions.main.verdict}/${run.partitions.timing1.verdict}/${run.partitions.timing2.verdict} | ${run.family.verdict} | ${run.excluded} | ${run.valid} | ${reasons} | ${refusals} | ${familyEvidence} |`;
   });
 }
 
@@ -592,8 +595,8 @@ export function renderMarkdown(report) {
     'Diagnostic limitation: the twins run after the family gate and are not phase-matched to their siblings. A quiet twin beside a rejecting sibling is weaker evidence than a phase-matched null.', '',
     'Sham limitation: k_sham=0 with k_AB>=2 does not prove a branch-dependent channel; the sham removes only byte content equal to the canary.', '',
     '## (a) Actual gate outcomes', '',
-    '| Run | ended | make test code/signal | main/timing-1/timing-2 | family | excluded | valid | reasons | refusal attempts | family details |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| Run | ended | make test code/signal | load1 / cpus | main/timing-1/timing-2 | family | excluded | valid | reasons | refusal attempts | family details |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
     ...actualRows(report), '',
     '## (b) Matched per-probe diagnosis', '',
   ];

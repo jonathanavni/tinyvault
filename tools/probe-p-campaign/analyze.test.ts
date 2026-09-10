@@ -115,6 +115,7 @@ function addRun(directory: string, index: number, configure: Configure = () => u
   writeJson(path.join(runDirectory, 'host-state.json'), {
     processCapture: { status: options.processStatus ?? 'ok', exit: 0, bytes: 10 },
     processes: options.processes ?? (options.excluded ? [ownProcess, competingProcess] : [ownProcess]),
+    load1: options.load1 ?? 1, cpus: options.cpus ?? 12,
     ownPid: 99, checkoutRoot: '/checkout',
     git: { head: options.head ?? 'candidate', dirty: options.dirty ?? false, status: options.status ?? '' },
   });
@@ -527,6 +528,14 @@ describe('exhaustive outcomes', () => {
     const markdown = renderMarkdown(analyzeCampaign(fixture(15)));
     expect(markdown).toContain('same sign in 15 of 15 (threshold ⌈0.8·15⌉ = 12)');
     expect(markdown).not.toMatch(/(?:threshold[^\n]*\d+(?:\.\d+)?\s*%|\d+(?:\.\d+)?\s*%\s+of valid runs)/u);
+  });
+
+  it('prints load1 divided by cpus per run as non-gating context', () => {
+    const report = analyzeCampaign(fixture(1, undefined, { 1: { load1: 12.5, cpus: 8 } }));
+    expect(report.actualGateOutcomes[0]).toMatchObject({ excluded: false, load1: 12.5, cpus: 8 });
+    const markdown = renderMarkdown(report);
+    expect(markdown).toContain('| load1 / cpus |');
+    expect(markdown).toContain('| 12.5 / 8 |');
   });
 
   it('always selects one primary and reaches every class across random summaries', () => {
