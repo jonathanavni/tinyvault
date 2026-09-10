@@ -480,3 +480,25 @@ citation repairs and every `claims.ts` drift site (P3-6). Residual: live port av
 M7 (next session): the Astra implementation packet drafted from rev 3 (fixture pages and prompt payloads are the spec
 §11 Codex trigger), with its own paper round; the M7 live cohort waits for the Probe P campaign report and a separate
 spend authorization.**
+
+## Campaign harness — pre-freeze corrections found by the owner on the reference host (2026-09-09 evening)
+
+Two defects that would have wasted the authorized campaign, both outside what the sandboxed worker and reviewers could
+observe ("Darwin `ps` dynamically unverified" was a declared residual of all three harness reviews): (1) `run.sh`
+captured processes with `ps … etimes`, which macOS rejects (`ps: etimes: keyword not found`) — every run would have been
+**invalid** for missing process evidence; fixed by `etime` parsed into seconds (`mm:ss`, `hh:mm:ss`, `dd-hh:mm:ss`;
+malformed rows → `unparseable`). (2) Predicate v1, evaluated by the owner over the live process list (1,220 parsed),
+classified **239** processes as competing — every `node` outside the checkout (dozens of idle `cua_node` helpers of the
+ChatGPT desktop app, VS Code's Claude extension binaries, `chrome-devtools-mcp` watchdogs), idle Codex `app-server` /
+broker daemons from earlier sessions, the desktop app's `codex sandbox` host and crashpad handlers, all at 0 % CPU —
+every run would have been **excluded**. v1 conflated the presence of a name with a competing job. **Predicate v2
+(frozen as `PREDICATE_VERSION = 2`, objective):** rule A — known workloads compete at any CPU share (test runners,
+`make test`, `tsc`, `esbuild`, npm/npx test/vitest/eval/baseline, Chromium not descended from the harness, docker
+build/compose/run, Codex task/exec/review processes and `codex-companion.mjs task`, `claude-review.mjs`); rule B — any
+other process not in the harness's own tree or ancestor chain competes only at **≥ 10 % CPU share** (a first draft at
+1 % flagged 13 ordinary macOS background daemons — Spotlight/media-analysis indexing, WindowServer, cloud sync — as
+competing on an otherwise idle desktop); `load1` and `cpus` recorded per run as context, not a rule. Live verdict on
+the reference host after v2 (10 %): see the commit and the review below. Sol worker in `codex/probe-p-harness-darwin`;
+owner-verified 125/125, both boundary gates PASS; a Sol read-only review precedes the freeze. Recorded limit: the 10 %
+bar is a declared, objective threshold for a desktop host, not a measured calibration; `mediaanalysisd`-class system
+jobs above it exclude a run correctly and are reported.
