@@ -1,7 +1,12 @@
 # Probe P timing-2 gate policy — decision and pre-registered characterization (v2.1, ADOPTED 2026-09-09)
 
 Owner: Claude, session `2026-09-09-m7-entry`. Status: **ADOPTED by the user on 2026-09-09 as the
-observability-first direction, with the clarifications folded into §2 (v2.1).** The user's framing governs: *the
+observability-first direction, with the clarifications folded into §2 (v2.1).** Execution status (2026-09-09 evening):
+C1 merged and pushed (`4909ba8`/`ca43cd9`); **C2 implemented through the full ladder** on `codex/probe-p-c2`
+(`16d455a`), three green exact-candidate clean-clone gates on the integration head `1de4ad3` (timing-1 + timing-2 ≈
+249 s ≤ 600 s; the 1,000 µs stop rule never triggered), **awaiting the user's acceptance of deviations D-1..D-4**
+(`docs/probe-p-c2-packet.md` rev 3.1) before merge; the **campaign harness** (`tools/probe-p-campaign/`) is on the same
+integration head at its review cap; the campaign itself has not started. Register: `docs/m7-review-findings.md`. The user's framing governs: *the
 existing gate remains unchanged; this is authorization to characterize the problem, not to relax or reinterpret
 the gate.* Nothing here changes a threshold, a sample size, the gated probe set, the hard clause, or what
 `make test` certifies. The locked specification stays: **D10** in [`docs/m4-slice-spec.md`](m4-slice-spec.md)
