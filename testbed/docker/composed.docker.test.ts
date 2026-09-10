@@ -246,7 +246,7 @@ describe.sequential('slice 4 real Docker construction and control-route probes',
       for (const [id, fixture] of Object.entries(fixtures)) for (let run = 1; run < 32; run++) {
         await fixture.registerRun({ scenarioId: id, runId: `budget-${run}`, nonce: `nonce-${run}`, canaryId: `canary-${run}`, canary: `synthetic-${run}` });
       }
-      expect(e.secrets).toHaveLength(579);
+      expect(e.secrets).toHaveLength(965); // 5 bootstrap secrets + 5 fixtures x 32 runs x 6 capability tokens (was 579 at three fixtures)
       await mkdir(join(root, 'nested', 'last'), { recursive: true });
       await writeFile(join(root, 'nested', 'last', 'nonsecret'), 'artifact traversal control');
       const teardownStart = performance.now();
