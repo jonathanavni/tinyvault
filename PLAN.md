@@ -27,7 +27,7 @@ at the cap. **M7 slice spec rev 1** after a Sol round with two user decisions (O
 console-budget qualification). All on `claude/probe-p-integration` (`1de4ad3`, worktree `wt/integration2`); branches
 `codex/probe-p-c2` (`16d455a`), `codex/probe-p-campaign-harness` (`e252713`). Not merged, not pushed.
 
-**Decided 2026-09-09 (evening):** D-1..D-4 accepted, `1de4ad3` merged (`92d2bbe`), campaign authorized after the merge, O7 approved, O8 accepted — Decisions Log. **Open:** push authorization; the campaign run and its report; M7 rev 2 paper round.
+**Decided 2026-09-09 (evening):** D-1..D-4 accepted, `1de4ad3` merged (`92d2bbe`), campaign authorized after the merge, O7 approved, O8 accepted — Decisions Log. M7 slice spec **rev 3 LOCKED** (`ef1732c`). **Pre-freeze harness corrections merged** (`950fe19`): Darwin `ps` (`etimes` → `etime`) and predicate v2.2 (`PREDICATE_VERSION` 4), after three owner live inventories on the reference host (239 → 175 → 20 → 5 competing; the last five are the desktop in active use). Stale Codex brokers from closed sessions terminated. **Open:** push authorization (main is many commits ahead of `origin/main` = `ca43cd9`); **the campaign has NOT started** — the host was in active use all evening (Spotlight/media-analysis indexing at 40–90 % CPU for hours, then WindowServer/Finder/Telegram); excluded runs would consume the single authorized campaign, so the start waits for a real idle window (freeze recorded below when done).
 
 **Previously open (now decided):** (1) accept or amend **D-1..D-4** (diagnostics after the family gate; owner measures cost and the
 stop rule; the named D10 exception; `.then(NO_HOOK)` in the gated real-click probe) → then merge `1de4ad3` to main and
