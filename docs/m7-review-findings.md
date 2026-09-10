@@ -391,3 +391,27 @@ measurement defect; both are integration defects the worktree runs could not sho
 (`packet-C2-integration-fix.md`):** extract the scanner into `testbed/probe/timingSourcePins.ts`, move literals / hook
 bodies / payload fixtures out as pure moves only as far as needed (STOP if still ≥ 800), explicit 180 s timeout and
 program reuse for the re-execution test; then a Sol read-only pass on the moves and three fresh clean-clone gates.
+
+**Integration fix (Astra, `16d455a`) and the three exact-candidate clean-clone gates — GREEN.** The pin scanner moved
+into `testbed/probe/timingSource{Compiler 203, Resolve 296, Contracts 183, Pins 358, Mutations 268}.ts`, payload
+fixtures into `src/supervisor/host.timing.fixtures.ts` (108), sidecar hook bodies into `timing2Sidecar.ts` (240);
+the certifying file is **760 lines** (734 at `4909ba8`); the re-execution test has a 180 s timeout with program reuse;
+69 declarations byte-identical under `--color-moved`; 32 predicates / 131 mutants unchanged; `CANARY`/`NONMATCH`/
+`NONMATCH2` stay in the file. Owner-verified twice (before and after the module split): tsc, 166/166 incl.
+`fillService.structure.test.ts`, both boundary gates PASS, browser run 26/26 with a complete sidecar. Integration head
+**`1de4ad3`** = main `2947fc8`… (docs) + harness `e252713` + C2 `16d455a`. Clean clone (`git clone` → `npm ci` → `make
+browsers`), host otherwise idle, tree clean before every run:
+
+| Run | Head | `make test` | main | timing-1 | timing-2 | timing-1 + timing-2 subprocess wall | sidecar | 1,000 µs control |
+|---|---|---|---|---|---|---|---|---|
+| 1 | `24675f6` (pre-fix) | **RED** | 3162 / 3159 / 2 failed (structure limit; re-execution timeout) | — | — | — | — | — |
+| 2 | `1de4ad3` | PASS | 3162 / 3161 / 0 / 1 skip | 5/5 | 26/26 | 14.3 s + 234.3 s = **248.6 s** | complete, 14/14, accept | reject |
+| 3 | `1de4ad3` | PASS | 3162 / 3161 / 0 / 1 skip | 5/5 | 26/26 | 14.5 s + 233.6 s = **248.0 s** | complete, 14/14, accept | reject |
+| 4 | `1de4ad3` | PASS | 3162 / 3161 / 0 / 1 skip | 5/5 | 26/26 | 14.3 s + 233.7 s = **248.0 s** | complete, 14/14, accept | reject |
+
+**§2.7 cost criterion met: max(sum) = 248.6 s ≤ 600 s** (D10's ten-minute sentence, read as timing-1 + timing-2). The
+1,000 µs real-click control rejected in every owner run (worktree runs 1, fix-1, fix-2, cap, integration, split; clean
+runs 2–4) — **the stop rule was never triggered**; the 250 µs control likewise. Subprocess wall is approximated as the
+JSON report's file end minus the run's `startTime` (Vitest startup included). Evidence `owner-gate-integration-run1-RED/`
+and `owner-gate-integration-1de4ad3/run{2,3,4}/`. Run 1 stays recorded as red on its head. A Sol read-only pass on the
+moves (`review-c2-integration-fix-sol.md`) is the last review; C2 then waits only on the user's acceptance of D-1..D-4.
