@@ -415,3 +415,16 @@ runs 2–4) — **the stop rule was never triggered**; the 250 µs control likew
 JSON report's file end minus the run's `startTime` (Vitest startup included). Evidence `owner-gate-integration-run1-RED/`
 and `owner-gate-integration-1de4ad3/run{2,3,4}/`. Run 1 stays recorded as red on its head. A Sol read-only pass on the
 moves (`review-c2-integration-fix-sol.md`) is the last review; C2 then waits only on the user's acceptance of D-1..D-4.
+
+**Integration fix — Sol read-only pass (`review-c2-integration-fix-sol-report.md`): NEEDS-ATTENTION on the rubric, not
+on the code.** Verified: every payload function and `TimingSessions` byte-identical in `host.timing.fixtures.ts`; the
+moved literals and hook bodies exact; `CANARY`/`NONMATCH`/`NONMATCH2` unchanged in the certifying file; `flatCopy`
+imported with its `toString()` pin intact; both callers read the real browser source; 32 predicates and 131 mutants
+run from both the browser pin and the Node suite; hook order exact-pinned and symbol-checked; the four exceptions at
+their sites; all nine files < 800 lines; no new skip/spawn/capability import; no probe, gate, control, helper, recorder
+or lifecycle hunk changed. Finding: 14 scanner functions are **retargeted, not byte-identical** (external-source
+routing across the new modules, contract constants, moved-source mutants, and the requested program reuse). **Owner
+disposition:** the "pure moves" contract in the integrator packet was over-strict for the scanner — a scanner that
+reads several files must be retargeted; the property that matters, an unchanged measurement surface with every pin
+and mutant still executing, is verified by the reviewer and by the owner's browser runs and three green clean-clone
+gates. Recorded as accepted scanner retargeting, not as pure moves. No fourth round.
