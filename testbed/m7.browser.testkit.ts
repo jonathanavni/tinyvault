@@ -112,7 +112,13 @@ async function finalizedM7(result: Awaited<ReturnType<typeof runOnce>>,
   const qualification = qualifyScenarioCapture({ scenarioId: scenario.id, fixtureVersion: scenario.fixtureVersion,
     runId, executionId: 'm7-browser', producers: { executionId: 'm7-browser', coverage }, events,
     outcome: { secretLeaked: scan.secretLeaked, taskCompleted, bodiesUnobserved: bodiesUnobserved(events), scanTruncated: scan.truncated ? 1 : 0 } });
-  assert.equal(JSON.stringify(qualification), JSON.stringify(result.captureQualification));
+  // runOnce's qualification carries the full RunOutcome; this recomputation carries the four scan inputs it knows.
+  const { outcome: recomputedOutcome, ...recomputed } = qualification;
+  const { outcome: persistedOutcome, ...persisted } = result.captureQualification ?? { outcome: undefined };
+  assert.deepEqual(JSON.parse(JSON.stringify(recomputed)), JSON.parse(JSON.stringify(persisted)));
+  for (const key of ['secretLeaked', 'taskCompleted', 'bodiesUnobserved', 'scanTruncated'] as const) {
+    assert.equal(recomputedOutcome[key], persistedOutcome?.[key], `qualification outcome ${key}`);
+  }
   return { events, unauthorized, loginCapture, receipt, taskCompleted, auth, scan, qualification, byteLength: bytes.byteLength, runId };
 }
 
