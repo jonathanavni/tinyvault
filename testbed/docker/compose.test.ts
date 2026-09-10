@@ -1,11 +1,12 @@
 // Acceptance A/G via the public capture path and real in-memory protocol peers; no subprocess or dial.
+import { PassThrough, Readable } from 'node:stream';
 import { afterEach, expect, it, vi } from 'vitest';
 import { capturePersistedRuns } from '../runner';
 import * as fixtures from '../fixtures';
 import { createComposedProject, HandleRegistry } from './compose';
 import { BridgeError } from './protocol';
 import { scanArtifactsWithControls } from './secretScan';
-import { COMMAND_TIMEOUT_MS, KILL_TIMEOUT_MS, ComposedConstructionError, CONSTRUCTION_CODES, runDockerCommand, systemClock } from './exec';
+import { COMMAND_TIMEOUT_MS, EXPORT_TIMEOUT_MS, KILL_TIMEOUT_MS, ComposedConstructionError, CONSTRUCTION_CODES, runDockerCommand, systemClock } from './exec';
 import { fakeProject, ids, kindOf, mintPin } from './compose.testkit';
 
 const disposals: (() => Promise<void>)[] = [];
@@ -87,11 +88,11 @@ it.each(['exit', 'reject'] as const)('failed up follow-up query (%s) preserves c
   expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
   expect(h.spawns.filter((s) => kindOf(s) === 'compose-stop')).toHaveLength(1);
 });
-it('kills both established bridges AND the third service on failed probe, preserving cause over teardown', async () => {
+it('kills all established bridges AND the fifth service on failed probe, preserving cause over teardown', async () => {
   const h = track(await fakeProject(vi.fn, { result: (k) => k === 'compose-down' ? { exitCode: 1, stdout: '', stderr: '' } : undefined }));
-  h.options.probeOrigin = vi.fn(async (origin) => !origin.endsWith('47130'));
+  h.options.probeOrigin = vi.fn(async (origin) => !origin.endsWith('47150'));
   await expect(capture(h)).rejects.toMatchObject({ code: 'origin-unreachable', teardownCode: 'compose-down' });
-  expect(h.handles).toHaveLength(3);
+  expect(h.handles).toHaveLength(5);
   for (const handle of h.handles) expect(handle.kill).toHaveBeenCalledOnce();
   expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
 });
@@ -107,7 +108,7 @@ it('shared closer is idempotent and scans after kill and stop, before down and a
   const run = h.runner.run.getMockImplementation()!;
   h.runner.run.mockImplementation(async (spawn) => { events.push(kindOf(spawn)); return run(spawn); });
   const a = p.closer.close(); const b = p.closer.close(); expect(a).toBe(b); await a;
-  expect(events.slice(0, 4)).toEqual(['kill', 'kill', 'kill', 'compose-stop']);
+  expect(events.slice(0, 6)).toEqual(['kill', 'kill', 'kill', 'kill', 'kill', 'compose-stop']);
   expect(events.indexOf('scan')).toBeLessThan(events.indexOf('compose-down'));
   expect(events.lastIndexOf('scan')).toBeGreaterThan(events.indexOf('compose-down'));
   await p.closer.close(); expect(events.filter((e) => e === 'compose-down')).toHaveLength(1);
@@ -123,27 +124,44 @@ it('bounds each teardown command without letting an aggregate timeout race scans
   vi.useFakeTimers();
   const close = p.closer.close();
   const assertion = expect(close).resolves.toBeUndefined();
-  await vi.advanceTimersByTimeAsync(180000); await assertion;
-  expect(h.spawns.map(kindOf).slice(-12)).toEqual(['compose-stop', 'image-history', 'inspect', 'logs', 'export', 'inspect', 'logs', 'export',
-    'inspect', 'logs', 'export', 'compose-down']);
+  await vi.advanceTimersByTimeAsync(300000); await assertion;
+  expect(h.spawns.map(kindOf).slice(-18)).toEqual(['compose-stop', 'image-history', 'inspect', 'logs', 'export', 'inspect', 'logs', 'export',
+    'inspect', 'logs', 'export', 'inspect', 'logs', 'export', 'inspect', 'logs', 'export', 'compose-down']);
 });
 it('a hanging export is killed on its own bound and remaining scans precede down', async () => {
+  expect(EXPORT_TIMEOUT_MS).toBe(240_000); expect(COMMAND_TIMEOUT_MS).toBe(120_000);
   const h = track(await fakeProject(vi.fn));
   const p = await createComposedProject(h.options);
   const spawn = h.runner.spawnLongLived.getMockImplementation()!;
   let exported = 0;
-  let killed: (() => void) | undefined;
+  const handle = { stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(),
+    exited: new Promise<never>(() => {}), kill: vi.fn() };
   h.runner.spawnLongLived.mockImplementation((description) => {
-    const handle = spawn(description);
     if (kindOf(description) === 'export' && ++exported === 1) {
-      handle.exited = new Promise(() => {}); killed = handle.kill;
+      h.spawns.push(description); return handle;
     }
-    return handle;
+    return spawn(description);
   });
   vi.useFakeTimers();
-  const assertion = expect(p.closer.close()).rejects.toMatchObject({ code: 'command-timeout', command: 'export' });
-  await vi.advanceTimersByTimeAsync(COMMAND_TIMEOUT_MS); await assertion;
-  expect(killed).toHaveBeenCalledOnce(); expect(exported).toBe(3);
+  const closing = p.closer.close(); const settled = vi.fn();
+  void closing.then(settled, settled);
+  const assertion = expect(closing).rejects.toMatchObject({ code: 'command-timeout', command: 'export' });
+  await vi.advanceTimersByTimeAsync(COMMAND_TIMEOUT_MS);
+  expect(exported).toBe(1); expect(settled).not.toHaveBeenCalled(); expect(handle.kill).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(EXPORT_TIMEOUT_MS - COMMAND_TIMEOUT_MS); await assertion;
+  expect(handle.kill).toHaveBeenCalledOnce(); expect(exported).toBe(5);
+  expect(handle.stdout.destroyed).toBe(true); expect(handle.stderr.destroyed).toBe(true);
+  expect(kindOf(h.spawns.at(-1)!)).toBe('compose-down');
+});
+it('a partial export with a nonzero child exit fails the scan', async () => {
+  const h = track(await fakeProject(vi.fn));
+  const p = await createComposedProject(h.options);
+  const spawn = h.runner.spawnLongLived.getMockImplementation()!;
+  h.runner.spawnLongLived.mockImplementation((description) => kindOf(description) === 'export' ? {
+    stdin: new PassThrough(), stdout: Readable.from(['partial tar']), stderr: Readable.from([]),
+    exited: Promise.resolve(1), kill: vi.fn(),
+  } : spawn(description));
+  await expect(p.closer.close()).rejects.toMatchObject({ code: 'scan-failed' });
   expect(kindOf(h.spawns.at(-1)!)).toBe('compose-down');
 });
 it('a hanging injected run is bounded with the variant in command-timeout', async () => {
@@ -172,7 +190,7 @@ it.each(['compose-stop', 'compose-down'] as const)('closer preserves %s failure,
   expect(p.closer.close()).toBe(closing);
   expect(h.spawns.filter((s) => kindOf(s) === 'compose-stop')).toHaveLength(1);
   expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
-  expect(h.spawns.filter((s) => kindOf(s) === 'export')).toHaveLength(3);
+  expect(h.spawns.filter((s) => kindOf(s) === 'export')).toHaveLength(5);
 });
 it('construction command-timeout invokes the closer exactly once', async () => {
   const h = track(await fakeProject(vi.fn));
@@ -233,11 +251,11 @@ it('closed-code error constructors cannot interpolate injected secret text', () 
   expect(String(new BridgeError(secret.toString('hex') as never))).toBe('BridgeError: bridge-closed');
 });
 
-it('final peer-set check rejects an earlier bridge dying during the third peer handshake', async () => {
+it('final peer-set check rejects an earlier bridge dying during the fifth peer handshake', async () => {
   const h = track(await fakeProject(vi.fn, { peer(_handle, index) {
-    if (index === 2) h.handles[0].kill();
+    if (index === 4) h.handles[0].kill();
   } }));
   await expect(createComposedProject(h.options)).rejects.toMatchObject({ code: 'bridge-closed' });
-  expect(h.handles).toHaveLength(3);
+  expect(h.handles).toHaveLength(5);
   expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
 });

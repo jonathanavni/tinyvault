@@ -567,7 +567,7 @@ async function signedBundle() {
     runEndedAt: '2026-09-01T00:00:01.000Z', eventsAttestation: signEventsDigest(scenario.fixtureId, runId, bytes, key.privateKey) }] };
   const input: OfflineAdjudicationInput = { artifactDirectory: directory, runsPath: resolve(directory, 'runs.json'),
     manifestPath: resolve(directory, 'manifest.json'), agentConfigs: AGENT_CONFIGS, scenarioRegistry: registry,
-    verificationKeys: { 'benign-login': key.publicKey, 'lookalike-origin': key.publicKey, 'dom-hidden-injection': key.publicKey } };
+    verificationKeys: { 'benign-login': key.publicKey, 'lookalike-origin': key.publicKey, 'dom-hidden-injection': key.publicKey, 'secret-echo': key.publicKey, 'fake-reauth': key.publicKey } };
   await mkdir(resolve(directory, 'fixture-captures'));
   const capturePath = resolve(directory, 'fixture-captures', runId + '.requests');
   await Promise.all([writeFile(run.eventsPath, bytes), writeFile(capturePath, bodies.join('\n') + '\n'),
@@ -1334,7 +1334,7 @@ P-CAP-CONSOLE-SOURCE ; implemented ; H ; src/supervisor/host.ts:attachDeferredBo
 P-CAP-CONSOLE-ARG-BYTES ; implemented ; H ; src/supervisor/consoleSerialization.ts:serializeConsoleArgument ; Console argument serialization applies the declared per-argument UTF-8 byte bound.
 P-CAP-CONSOLE-ARG-COUNT ; implemented ; H ; src/supervisor/host.ts:EvidenceLease.recordConsole ; Console serialization bounds the number of arguments admitted from an event.
 P-CAP-CONSOLE-EVENT-BYTES ; implemented ; H ; src/supervisor/host.ts:EvidenceLease.recordConsole ; Console evidence serialization bounds aggregate bytes within each console event.
-P-CAP-CONSOLE-EVENT-COUNT ; implemented ; H ; src/supervisor/host.ts:CONSOLE_EVENT_LIMIT,src/supervisor/host.ts:EvidenceLease.recordConsole ; Per-lease console event count is bounded and budget exhaustion remains visible through its marker.
+P-CAP-CONSOLE-EVENT-COUNT ; implemented ; H ; src/supervisor/evidenceLease.ts:CONSOLE_EVENT_LIMIT,src/supervisor/host.ts:EvidenceLease.recordConsole ; Per-lease console event count is bounded and budget exhaustion remains visible through its marker.
 P-LIM-CONSOLE-TRANSPORT ; declared-limit ; H ; src/supervisor/host.ts:EvidenceLease.recordConsole ; CDP transports console data before local bounds; the measured 30-by-50-MiB OOM point is not prevented by those bounds.
 P-LIM-CONSOLE-V8-NAMED ; declared-limit ; H ; src/supervisor/consoleSerialization.ts:serializeConsoleArgument ; V8's named-property preview cap limits observable console object contents before local serialization.
 P-LIM-CONSOLE-V8-INDEXED ; declared-limit ; H ; src/supervisor/consoleSerialization.ts:serializeConsoleArgument ; V8's indexed-element preview cap limits observable console array contents before local serialization.
@@ -1503,7 +1503,7 @@ expectRuntime('P-capture', DT, BEHAVIOR + 'P-capture rejects dropped and reorder
 expectRuntime('P-inventory', RT, 'run inventory gate rejects a favourable subset left after deleting unfavourable runs', 'run inventory gate rejects duplicate run indexes padding a cell to the right count', 'run inventory gate rejects a missing required cell entirely', 'run inventory gate rejects surplus cells outside the registry by exact set equality');
 expectRuntime('P-inventory', DT, BEHAVIOR + 'P-manifest rejects duplicate or missing run keys', BEHAVIOR + 'P-inventory finalizer cannot bypass inventory before aggregation');
 expectRuntime('P-finalize', 'testbed/fixtures/shared/loginFixture.lifecycle.test.ts', 'real HTTP pauses an admitted body before attribution, then preserves 303 and snapshot before refusing late writes', 'late 413 and 408 take precedence over frozen attribution and never capture or call custom routes', 'finalization freezes a run with no receipt; late valid login cannot create bytes or a receipt');
-for (const fixture of ['benign-login', 'lookalike-origin', 'dom-hidden-injection']) expectRuntime('P-finalize', 'testbed/docker/container/fixture.test.ts', fixture + ' adapter dispatches every operation to shared primitives and returns isolated immutable same-key evidence');
+for (const fixture of ['benign-login', 'lookalike-origin', 'dom-hidden-injection', 'secret-echo', 'fake-reauth']) expectRuntime('P-finalize', 'testbed/docker/container/fixture.test.ts', fixture + ' adapter dispatches every operation to shared primitives and returns isolated immutable same-key evidence');
 expectRuntime('P-admin', 'testbed/fixtures/benign-login/server.test.ts', 'benign login fixture kills static control identity while retaining capture and out-of-band receipt behavior');
 for (const operation of ['register', 'receipt', 'ack', 'capture', 'attest', 'key', 'finalize']) expectRuntime('P-admin', 'testbed/docker/slice4.acceptance.test.ts', 'hostile attribution ' + operation + ' produces zero settled primitive and wire deltas on every page path');
 expectRuntime('P-reproducibility', DT, BEHAVIOR + 'P-reproducibility adjudicates the same persisted bundle identically');

@@ -96,7 +96,9 @@ it('actual container bundle compiles only the closed private-key source boundary
     bundle: true, platform: 'node', target: 'node24', format: 'esm', write: false, outdir: 'tinyvault-bundle-proof', metafile: true,
     define: { TV_CONTAINER_TOPOLOGY: await readFile(new URL('./topology.json', import.meta.url), 'utf8'),
       TV_BENIGN_PAGE: JSON.stringify(await readFile(new URL('../fixtures/benign-login/index.html', import.meta.url), 'utf8')),
-      TV_HIDDEN_PAGE: JSON.stringify(await readFile(new URL('../fixtures/dom-hidden-injection/index.html', import.meta.url), 'utf8')) } });
+      TV_HIDDEN_PAGE: JSON.stringify(await readFile(new URL('../fixtures/dom-hidden-injection/index.html', import.meta.url), 'utf8')),
+      TV_SECRET_ECHO_PAGE: JSON.stringify(await readFile(new URL('../fixtures/secret-echo/index.html', import.meta.url), 'utf8')),
+      TV_FAKE_REAUTH_PAGE: JSON.stringify(await readFile(new URL('../fixtures/fake-reauth/index.html', import.meta.url), 'utf8')) } });
   expect(Object.keys(result.metafile!.inputs).sort()).toEqual([...FIXTURE_BUNDLE_INPUTS]);
   expect(result.outputFiles).toHaveLength(2);
 });

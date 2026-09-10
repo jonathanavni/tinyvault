@@ -27,7 +27,7 @@ it('export timeout kills the handle and completes remaining scans before down', 
   const { fakeProject, kindOf } = await import('./compose.testkit');
   const { createComposedProject } = await import('./compose');
   const { PassThrough } = await import('node:stream');
-  const { COMMAND_TIMEOUT_MS } = await import('./exec');
+  const { EXPORT_TIMEOUT_MS } = await import('./exec');
   const h = await fakeProject(vi.fn);
   const p = await createComposedProject(h.options);
   const events: string[] = [];
@@ -46,10 +46,10 @@ it('export timeout kills the handle and completes remaining scans before down', 
   try {
     const closing = p.closer.close();
     const assertion = expect(closing).rejects.toMatchObject({ code: 'command-timeout' });
-    await vi.advanceTimersByTimeAsync(COMMAND_TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(EXPORT_TIMEOUT_MS);
     await assertion;
     expect(kill).toHaveBeenCalledOnce();
     expect(events.filter((event) => event === 'export' || event === 'compose-down'))
-      .toEqual(['export', 'export', 'export', 'compose-down']);
+      .toEqual(['export', 'export', 'export', 'export', 'export', 'compose-down']);
   } finally { vi.useRealTimers(); await h.dispose(); }
 });

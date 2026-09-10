@@ -12,6 +12,8 @@ const topology = validateTopology(JSON.parse(readFileSync(new URL('./topology.js
 export const COMPOSE_FILE = fileURLToPath(new URL(`../../${topology.composePath}`, import.meta.url));
 export const IMAGE_NAME = topology.imageName;
 export const COMMAND_TIMEOUT_MS = 120_000;
+// Capacity accommodation for export scanning (≈146 s per 249 MB export at 965 close-time secrets through two stream scanners; 2026-09-10); every other command stays at COMMAND_TIMEOUT_MS; scanner throughput is separate work.
+export const EXPORT_TIMEOUT_MS = 240_000;
 export const WAIT_TIMEOUT_SECONDS = 60;
 export const STOP_TIMEOUT_SECONDS = 10;
 export const KILL_TIMEOUT_MS = 5_000;

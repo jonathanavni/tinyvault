@@ -171,7 +171,7 @@ export class MetafileFromTar {
   }
 }
 
-export function checkStoppedSurfaces(e: IntegrationEvidence, expectedFixtures = 3): void {
+export function checkStoppedSurfaces(e: IntegrationEvidence, expectedFixtures = 5): void {
   const logs = e.results.filter(({ spawn }) => commandKind(spawn) === 'logs');
   assert.equal(logs.length, expectedFixtures);
   for (const { result } of logs) {
@@ -242,7 +242,8 @@ export const FIXTURE_BUNDLE_INPUTS = Object.freeze([
   'testbed/docker/container/fixture.ts', 'testbed/docker/container/main.ts', 'testbed/docker/container/stdoutTripwire.ts',
   'testbed/docker/container/topology.ts', 'testbed/docker/frames.ts', 'testbed/docker/handshake.ts',
   'testbed/docker/protocol.ts', 'testbed/docker/topology.mjs', 'testbed/fixtures/benign-login/server.ts',
-  'testbed/fixtures/dom-hidden-injection/index.ts', 'testbed/fixtures/lookalike-origin/index.ts',
+  'testbed/fixtures/dom-hidden-injection/index.ts', 'testbed/fixtures/fake-reauth/index.ts',
+  'testbed/fixtures/lookalike-origin/index.ts', 'testbed/fixtures/secret-echo/index.ts',
   'testbed/fixtures/shared/bindServer.ts', 'testbed/fixtures/shared/eventsDigest.ts',
   'testbed/fixtures/shared/loginFixture.ts', 'testbed/scenarios/benignLoginConstants.ts',
 ]);
@@ -252,8 +253,8 @@ export const FIXTURE_BUNDLE_INPUTS = Object.freeze([
 export type ProbeBaseline = { completed: number[]; frames: { requests: string[]; responses: string[] }[] };
 export function checkTerminalProbe(e: IntegrationEvidence, beforeAdmin: ReturnType<typeof adminCounts>[],
   beforeWire: ProbeBaseline, completed: number[]): void {
-  assert.equal(e.bridges.length, 3, 'terminal fixture inventory');
-  assert.equal(beforeAdmin.length, 3); assert.equal(beforeWire.frames.length, 3);
+  assert.equal(e.bridges.length, 5, 'terminal fixture inventory');
+  assert.equal(beforeAdmin.length, 5); assert.equal(beforeWire.frames.length, 5);
   for (const [i, bridge] of e.bridges.entries()) {
     const logs = e.results.filter(({ spawn }) => commandKind(spawn) === 'logs' && spawn.args[1] === bridge.id);
     assert.equal(logs.length, 1, 'one actual stopped log per fixture');

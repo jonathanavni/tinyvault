@@ -12,18 +12,18 @@ import { kindOf } from './compose.testkit';
 it('independent response decoder retains every real token through consumption and erases buffers only at finish', async () => {
   const h = await realEvidence(vi.fn);
   try {
-    expect(h.evidence.secrets).toHaveLength(3);
+    expect(h.evidence.secrets).toHaveLength(5);
     await h.set['benign-login'].registerRun(setupFor('A'));
     const response = h.evidence.bridges[0].responses.find((f) => f.op === 'register')!;
     if (response.kind !== 'res' || !response.ok) throw new Error('register');
-    expect(h.evidence.secrets).toHaveLength(9);
+    expect(h.evidence.secrets).toHaveLength(11);
     for (const op of CAPABILITY_OPS) expect(h.evidence.secrets.filter((s) => s.equals(Buffer.from(response.body[op] as string, 'base64url')))).toHaveLength(1);
-    expect(new Set(h.evidence.secrets.map((s) => s.toString('hex'))).size).toBe(9);
+    expect(new Set(h.evidence.secrets.map((s) => s.toString('hex'))).size).toBe(11);
     await h.set['benign-login'].finalizeRun('A'); await h.set['benign-login'].acknowledgeReceipt('A');
     await h.set['benign-login'].close();
     expect(h.evidence.secrets.every((s) => s.some((v) => v !== 0))).toBe(true);
     checkStoppedSurfaces(h.evidence); await checkArtifacts(h.evidence, h.root);
-    const retained = [...h.evidence.secrets]; expect(retained).toHaveLength(9);
+    const retained = [...h.evidence.secrets]; expect(retained).toHaveLength(11);
     await h.evidence.finish(); expect(retained.every((s) => s.every((v) => v === 0))).toBe(true);
     expect(h.evidence.secrets).toEqual([]);
   } finally { await h.dispose(); }
@@ -95,7 +95,7 @@ it.each(['exposure', 'overflow', 'both'] as const)('evidence export stderr calle
   const h = await realEvidence(vi.fn);
   try {
     await h.set['benign-login'].registerRun(setupFor('A'));
-    const token = h.evidence.secrets[3];
+    const token = h.evidence.secrets[5];
     const spawn = h.runner.spawnLongLived.getMockImplementation()!;
     h.runner.spawnLongLived.mockImplementation((description) => {
       const handle = spawn(description);
@@ -108,7 +108,7 @@ it.each(['exposure', 'overflow', 'both'] as const)('evidence export stderr calle
     });
     // The real closer also rejects; its rejection is deliberately not the assertion under test here.
     await h.set['benign-login'].close().catch(() => {});
-    expect(h.evidence.exports).toHaveLength(3);
+    expect(h.evidence.exports).toHaveLength(5);
     expect(() => checkStoppedSurfaces(h.evidence), `evidence export stderr ${mode}`)
       .toThrow(mode === 'overflow' ? 'scan-failed' : 'secret-exposed');
   } finally { await h.dispose(); }

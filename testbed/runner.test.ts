@@ -381,6 +381,7 @@ describe('offline registry authority and event attestation', () => {
       'benign-login': keys['lookalike-origin'],
       'lookalike-origin': keys['benign-login'],
       'dom-hidden-injection': keys['dom-hidden-injection'],
+      'secret-echo': keys['secret-echo'], 'fake-reauth': keys['fake-reauth'],
     };
     const results = await Promise.allSettled([
       adjudicateScenario(captured, 'benign-login-control', swapped),
@@ -573,7 +574,7 @@ async function createThreeFixturePersistedEval(): Promise<PersistedEval> {
   const directory = await mkdtemp(join(tmpdir(), 'tinyvault-offline-key-map-'));
   const captureDirectory = join(directory, 'fixture-captures');
   const fixtureIds: readonly FixtureId[] = [
-    'benign-login', 'lookalike-origin', 'dom-hidden-injection',
+    'benign-login', 'lookalike-origin', 'dom-hidden-injection', 'secret-echo', 'fake-reauth',
   ];
   const started = await Promise.all(fixtureIds.map(async (fixtureId) => [
     fixtureId,
@@ -686,6 +687,7 @@ async function createSignedPersistedEval(
           'benign-login': fixture.verificationPublicKey,
           'lookalike-origin': generateKeyPairSync('ed25519').publicKey,
           'dom-hidden-injection': generateKeyPairSync('ed25519').publicKey,
+          'secret-echo': generateKeyPairSync('ed25519').publicKey, 'fake-reauth': generateKeyPairSync('ed25519').publicKey,
         },
         scenarioRegistry,
       },

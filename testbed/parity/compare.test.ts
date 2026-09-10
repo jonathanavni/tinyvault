@@ -20,7 +20,7 @@ async function vector(architecture: 'in-process' | 'composed', observed = true, 
   await sodium.ready;
   const root = await realpath(await mkdtemp(join(tmpdir(), 'parity-caller-vector-')));
   const base = architecture === 'in-process' ? 'left' : 'rght';
-  const origins: FixtureOrigins = { 'benign-login': `http://${base}-a.invalid`, 'lookalike-origin': `http://${base}-b.invalid`, 'dom-hidden-injection': `http://${base}-c.invalid` };
+  const origins: FixtureOrigins = { 'benign-login': `http://${base}-a.invalid`, 'lookalike-origin': `http://${base}-b.invalid`, 'dom-hidden-injection': `http://${base}-c.invalid`, 'secret-echo': `http://${base}-d.invalid`, 'fake-reauth': `http://${base}-e.invalid` };
   const pairs = Object.fromEntries(Object.keys(origins).map((id) => [id, generateKeyPairSync('ed25519')]));
   const scenarioRegistry = createScenarioRegistry(origins);
   const verificationKeys = Object.fromEntries(Object.keys(origins).map((id) => [id, pairs[id].publicKey])) as ParityBundle['trust']['verificationKeys'];

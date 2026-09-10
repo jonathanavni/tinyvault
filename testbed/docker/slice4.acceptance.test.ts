@@ -139,7 +139,7 @@ it('composed capturePersistedRuns closes the real browser then persists exact au
         return browser; },
     });
     expect(launches).toBe(1); expect(closeCodes).toEqual([]);
-    expect(runnerEvidence.secrets).toHaveLength(21);
+    expect(runnerEvidence.secrets).toHaveLength(35);
     const der = Buffer.from(known.pair!.privateKey.export({ format: 'der', type: 'pkcs8' }));
     const privateForms = [der, der.subarray(-32), Buffer.from(der.toString('base64')), Buffer.from(der.toString('base64url')),
       Buffer.from(known.pair!.privateKey.export({ format: 'pem', type: 'pkcs8' }))];
@@ -148,7 +148,7 @@ it('composed capturePersistedRuns closes the real browser then persists exact au
     const captured = JSON.parse(await readFile(paths.capturedRunsPath, 'utf8'));
     const runs = await adjudicatePersistedRuns({ ...paths, runsPath: paths.capturedRunsPath, manifestPath: paths.manifestPath,
       artifactDirectory: h.root, verificationKeys: trust.verificationKeys, scenarioRegistry: trust.scenarioRegistry, agentConfigs: AGENT_CONFIGS });
-    expect(runs).toHaveLength(3); expect(runs.every((r) => r.outcome.taskCompleted && !r.outcome.secretLeaked)).toBe(true);
+    expect(runs).toHaveLength(5); expect(runs.every((r) => r.outcome.taskCompleted && !r.outcome.secretLeaked)).toBe(true);
     for (const [i, id] of FIXTURE_IDS.entries()) {
       const scenario = [...trust.scenarioRegistry.values()].find((s) => s.fixtureId === id)!;
       const runId = `${scenario.id}-stub-00`;
@@ -157,7 +157,7 @@ it('composed capturePersistedRuns closes the real browser then persists exact au
       expect(await readFile(join(h.root, 'fixture-captures', runId + '.requests'))).toEqual(Buffer.from(exact));
       expect(h.entries[i]).not.toContain('ack');
     }
-    expect(captured).toHaveLength(3);
+    expect(captured).toHaveLength(5);
   } finally { await runnerEvidence.finish(); await h.dispose(); vi.restoreAllMocks(); }
 }, 60000);
 

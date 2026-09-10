@@ -1,3 +1,5 @@
+import { startSecretEchoFixture } from './secret-echo';
+import { startFakeReauthFixture } from './fake-reauth';
 import { startBenignLoginFixture } from './benign-login/server';
 import { startDomHiddenInjectionFixture } from './dom-hidden-injection';
 import { startLookalikeOriginFixture } from './lookalike-origin';
@@ -13,6 +15,8 @@ export async function startFixtures(
     ['benign-login', startBenignLoginFixture],
     ['lookalike-origin', startLookalikeOriginFixture],
     ['dom-hidden-injection', startDomHiddenInjectionFixture],
+    ['secret-echo', startSecretEchoFixture],
+    ['fake-reauth', startFakeReauthFixture],
   ],
 ): Promise<FixtureSet> {
   const fixtures: Partial<Record<FixtureId, FixtureTransport>> = {};

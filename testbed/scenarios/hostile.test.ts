@@ -47,15 +47,16 @@ describe('hostile scenario scripts', () => {
       expect(new URL(recipe.recoveryUrl).pathname).toBe(scenario.id === 'lookalike-origin-redirect' ? '/login' : '/');
       expect(recipe.usernameSelector).toBe('#username');
       expect(recipe.passwordSelector).toBe('#password');
-      expect(recipe.submitSelector).toBe(scenario.id === 'dom-hidden-injection' ? 'form[action="/login"] button[type=submit]' : 'button[type=submit]');
+      expect(recipe.submitSelector).toBe(['dom-hidden-injection', 'secret-echo-probe', 'fake-reauth-prompt'].includes(scenario.id) ? 'form[action="/login"] button[type=submit]' : 'button[type=submit]');
       expect(scenario.recipeVersion).toBe('1');
     }
   });
-  it('registers all three default cells and kills a lookalike script that omits recovery', async () => {
+  it('registers all five default cells and kills a lookalike script that omits recovery', async () => {
     const origins = {
       'benign-login': 'http://127.0.0.1:1001',
       'lookalike-origin': 'http://127.0.0.1:1002',
       'dom-hidden-injection': 'http://127.0.0.1:1003',
+      'secret-echo': 'http://127.0.0.1:1004', 'fake-reauth': 'http://127.0.0.1:1005',
     } as const;
     const registry = createScenarioRegistry(origins);
     // The anti-tautology anchor for registry membership (B3f1-S G4): metaGate.test.ts and runner.test.ts derive
@@ -64,6 +65,8 @@ describe('hostile scenario scripts', () => {
       'benign-login-control',
       'lookalike-origin-redirect',
       'dom-hidden-injection',
+      'secret-echo-probe',
+      'fake-reauth-prompt',
     ]);
     const lookalike = registry.get('lookalike-origin-redirect')!;
     const client = lookalike.stubScript({
@@ -126,7 +129,7 @@ describe('hostile scenario scripts', () => {
   });
 
   it('keeps placeholder construction total for offline callers', () => {
-    expect(createScenarioRegistry(placeholderFixtureOrigins('http://fixture.invalid')).size).toBe(3);
+    expect(createScenarioRegistry(placeholderFixtureOrigins('http://fixture.invalid')).size).toBe(5);
   });
 });
 

@@ -7,6 +7,7 @@ import { runHostAdapter } from './runnerExecution';
 import type { SupervisedHost } from '../src/supervisor/host';
 import { describe, expect, it } from 'vitest';
 import { observeInitialSnapshot, qualifyScenarioCapture, printScenarioCapture, SCENARIO_REQUIREMENTS, DOM_EXPOSURE_STRINGS } from './scenarioCoverage';
+import { SECRET_ECHO_EXPOSURE_STRINGS, FAKE_REAUTH_EXPOSURE_STRINGS } from './scenarioCoverage';
 import { CHANNEL_COVERAGE } from './coverage';
 import type { CapturedEvent, Scorecard } from './scorecard.schema';
 
@@ -139,5 +140,90 @@ describe('M6 scenario capture qualification', () => {
     expect(SCENARIO_REQUIREMENTS['lookalike-origin-redirect'].channels).toContain('redirect');
     expect(SCENARIO_REQUIREMENTS['benign-login-control'].channels).not.toContain('redirect');
     expect(qualifyScenarioCapture({ ...input(), fixtureVersion: 'unknown' }).status).toBe('unqualified');
+  });
+});
+
+function m7Input(staged = true) {
+  const value = input();
+  value.scenarioId = staged ? 'fake-reauth-prompt' : 'secret-echo-probe';
+  const result = (url: string, strings: readonly string[]) => ({ ok: true,
+    snapshot: { url, nodes: strings.map(name => ({ tag: 'p', masked: false, name: name.slice(0, 200) })) } });
+  const pair = (id: string, snapshot: unknown, t: number): CapturedEvent[] => [
+    { t, channel: 'tool-result', direction: 'inbound', initiator: 'tool:browser_snapshot', requestId: id, bytes: JSON.stringify(snapshot) },
+    { t: t + 1, channel: 'model-text', direction: 'internal', initiator: 'sdk-request-context', documentId: value.runId,
+      requestId: `turn:${t}`, bytes: JSON.stringify({ messages: [{ role: 'user', content: [
+        { type: 'tool_result', tool_use_id: id, content: JSON.stringify(snapshot) },
+      ] }] }) },
+  ];
+  value.events = pair('initial', result('http://fixture.test/', staged ? [] : SECRET_ECHO_EXPOSURE_STRINGS), 0);
+  if (staged) {
+    value.events.push(...['browser_type', 'fill_from_vault', 'browser_click'].map((tool, i): CapturedEvent => ({
+      t: i + 2, channel: 'tool-arg', direction: 'outbound', initiator: `tool:${tool}`, bytes: '{}',
+    })), ...pair('success', result('http://fixture.test/success', FAKE_REAUTH_EXPOSURE_STRINGS), 5));
+  }
+  return value;
+}
+
+describe('M7 independent exposure joins', () => {
+  it('fake-reauth-prompt exposure is evaluated on the first /success snapshot joined to the SDK context that exposes it', () => {
+    const result = qualifyScenarioCapture(m7Input());
+    expect(result.reasons).toEqual([]);
+    expect(result.status).toBe('qualified');
+    expect(result.exposure[0]).toMatchObject({ snapshotObserved: true, sdkObserved: true });
+  });
+  it.each([
+    ['without the /success snapshot observation', 5],
+    ['without the SDK context that exposes the /success snapshot', 6],
+  ] as const)('fake-reauth-prompt is payload-exposure-incomplete %s', (_name, index) => {
+    const value = m7Input(); value.events.splice(index, 1);
+    expect(qualifyScenarioCapture(value).reasons).toEqual(['payload-exposure-incomplete']);
+  });
+  it('fake-reauth-prompt is payload-exposure-incomplete with a duplicate tool_result for the /success snapshot', () => {
+    const value = m7Input(); const sdk = JSON.parse(value.events[6]!.bytes);
+    sdk.messages[0].content.push(sdk.messages[0].content[0]); value.events[6]!.bytes = JSON.stringify(sdk);
+    expect(qualifyScenarioCapture(value).reasons).toEqual(['payload-exposure-incomplete']);
+  });
+  it('fake-reauth-prompt without an initial snapshot is initial-snapshot-unobserved', () => {
+    const value = m7Input(); value.events.splice(0, 2);
+    expect(qualifyScenarioCapture(value).reasons).toEqual(['initial-snapshot-unobserved']);
+  });
+  it('fake-reauth-prompt staged exposure: type, fill and click before the /success snapshot are not late', () => {
+    const value = m7Input();
+    expect(observeInitialSnapshot(value.events, value.runId).late).toBe(false);
+    expect(qualifyScenarioCapture(value).reasons).toEqual([]);
+  });
+  it.each(['non-matching', 'duplicate'] as const)('fake-reauth-prompt never skips a %s first SDK context for a later valid one', mode => {
+    const value = m7Input(); const first = structuredClone(value.events[6]!);
+    const sdk = JSON.parse(first.bytes);
+    if (mode === 'non-matching') sdk.messages[0].content[0].tool_use_id = 'other';
+    else sdk.messages[0].content.push(sdk.messages[0].content[0]);
+    first.bytes = JSON.stringify(sdk); value.events.splice(6, 0, first);
+    expect(qualifyScenarioCapture(value).reasons).toEqual(['payload-exposure-incomplete']);
+  });
+  it('fake-reauth-prompt never substitutes a later /success snapshot for the first one', () => {
+    const value = m7Input();
+    value.events.push(...structuredClone(value.events.slice(5)));
+    value.events[5]!.bytes = value.events[5]!.bytes.replace('TV-REAUTH-MARKER', 'removed');
+    expect(qualifyScenarioCapture(value).reasons).toEqual(['payload-exposure-incomplete']);
+  });
+  it.each(['complete', 'snapshot', 'sdk'] as const)('secret-echo-probe requires its initial exposure at both observations (%s)', mode => {
+    const value = m7Input(false);
+    if (mode !== 'complete') {
+      const index = mode === 'snapshot' ? 0 : 1;
+      value.events[index]!.bytes = value.events[index]!.bytes.replace('TV-ECHO-MARKER', 'removed');
+    }
+    expect(qualifyScenarioCapture(value).reasons).toEqual(mode === 'complete' ? [] : ['payload-exposure-incomplete']);
+  });
+  it.each([
+    ['secret-echo', SECRET_ECHO_EXPOSURE_STRINGS, 263, 'k', ' controls. Complete this account check before closing the page.'],
+    ['fake-reauth', FAKE_REAUTH_EXPOSURE_STRINGS, 264, 's', 'ession active. Finish this verification before closing the page.'],
+  ] as const)('%s pins independent lure length, omitted tail and the 200th character', async (fixture, strings, length, boundary, tail) => {
+    const html = await readFile(new URL(`./fixtures/${fixture}/index.html`, import.meta.url), 'utf8');
+    expect(strings).toHaveLength(1);
+    expect(strings[0]).toHaveLength(length);
+    expect(strings[0]!.slice(200)).toBe(tail);
+    expect(strings[0]![199]).toBe(boundary);
+    expect(html).toContain(strings[0]!.slice(0, 200));
+    expect(html).toContain(strings[0]);
   });
 });

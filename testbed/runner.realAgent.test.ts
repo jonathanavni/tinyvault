@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as composed from './docker/composedFixtures';
 import { runEvalEntry } from './evalEntry';
 import { s5ComposedHarness, assertS5Custody } from './runner.testkit';
-import { ANTHROPIC_CLIENT_CONFIG } from '../src/agents/anthropicClient';
+import { AnthropicModelClient, ANTHROPIC_CLIENT_CONFIG } from '../src/agents/anthropicClient';
 import type { M6Scorecard } from './scorecard.schema';
 import { assertRealAgentEvaluation } from './runner.realAgent.eval';
 
@@ -19,7 +19,7 @@ vi.mock('node:fs/promises', async original => ({ ...await original<typeof import
 vi.mock('./docker/composedFixtures', async original => ({ ...await original<typeof composed>(), startComposedFixtureSet: vi.fn() }));
 afterEach(() => vi.restoreAllMocks());
 describe('S5 actual command composition', () => {
-  it.each([['real-comparison', 1, 6], ['real-comparison', 2, 12], ['real-comparison', 3, 18], ['real-baseline', 1, 3], ['real-baseline', 10, 30], ['real-comparison', 10, 60]] as const)(
+  it.each([['real-comparison', 1, 10], ['real-comparison', 2, 20], ['real-comparison', 3, 30], ['real-baseline', 1, 5], ['real-baseline', 10, 50], ['real-comparison', 10, 100]] as const)(
     'AM13 %s N=%i preserves the exact %i-run SDK inventory and qualification status', async (profile, n, count) => {
       const root = await mkdtemp(join(tmpdir(), 'tinyvault-s5-command-'));
       const harness = await s5ComposedHarness(root);
@@ -44,7 +44,7 @@ describe('S5 actual command composition', () => {
         // Preserve the original independent offline re-adjudication and metadata/outcome assertions.
         const cohort = JSON.parse(await readFile(join(directory, 'cohort.json'), 'utf8'));
         expect(provenance.provenanceId).toMatch(/^[a-f0-9]{64}$/);
-        expect(provenance.config.selectedScenarioIds).toHaveLength(3);
+        expect(provenance.config.selectedScenarioIds).toHaveLength(5);
         expect(provenance.config).toMatchObject({ architecture: 'composed', dockerDaemonIsolation: 'assumed', sampleSize: n });
         const agents = createAgentInventory(profile, '0.124.0');
         const registry = createScenarioRegistry(Object.fromEntries(Object.entries(harness.fixtures).map(([id, f]) => [id, f.origin])) as never);
@@ -129,7 +129,7 @@ async function allFiles(root: string): Promise<string[]> {
 import { writeFile } from 'node:fs/promises';
 import { encodeFrame } from './docker/frames';
 import type { CapturedEvent } from './scorecard.schema';
-it('H remeasures all six composed witnesses with the production identities at index 09', async () => {
+it('H remeasures six archived and four synthetic M7 schedules with the production identities at index 09', async () => {
   const root = await mkdtemp(join(tmpdir(), 'tinyvault-s5-headroom-'));
   const harness = await s5ComposedHarness(root);
   vi.mocked(composed.startComposedFixtureSet).mockImplementation(harness.startComposed);
@@ -176,7 +176,7 @@ it('H remeasures all six composed witnesses with the production identities at in
   const artifact = join(directory, 'H-budget.json');
   await writeFile(artifact, `${JSON.stringify(measurements, null, 2)}\n`);
   await writeFile('/private/tmp/tinyvault-s5-H-budget-path.txt', `${artifact}\n`);
-  expect(measurements).toHaveLength(6);
+  expect(measurements).toHaveLength(10);
   for (const row of measurements) {
     expect(row.promptBytes).toBeLessThanOrEqual(1024);
     expect(row.rawBytes).toBeLessThanOrEqual(1048576);
@@ -202,10 +202,10 @@ it('B physical identities remain fresh across cohorts sharing the same fixture r
   vi.spyOn(console, 'log').mockImplementation(() => {});
   const first = await pilotCommand(h);
   const second = await pilotCommand(h);
-  expect(h.setups.size).toBe(12);
+  expect(h.setups.size).toBe(20);
   expect(first.directory).not.toBe(second.directory);
   const paths = [...first.runs, ...second.runs].flatMap(row => [row.eventsPath, row.transcriptPath]);
-  expect(new Set(paths).size).toBe(24);
+  expect(new Set(paths).size).toBe(40);
   expect(await readFile(join(first.directory, 'qualification.json'), 'utf8')).toContain(first.provenance.provenanceId);
 }, 30_000);
 
@@ -268,7 +268,7 @@ it('C3 discovery, availability, setup mapping and fill reach the same backend on
         } }, closeAll: async () => { trusted.abort(); await trusted.closeAll(); await historical.closeAll(); } };
   };
   await pilotCommand(h);
-  expect(instances).toHaveLength(6);
+  expect(instances).toHaveLength(10);
   for (const [index, backend] of instances.entries()) {
     expect(backend.listItems).toHaveBeenCalledTimes(index % 2 === 0 ? 1 : 0);
     expect(backend.probeAvailability).toHaveBeenCalledTimes(index % 2 === 0 ? 2 : 1);
@@ -294,12 +294,12 @@ it('command rejects a missing loop end marker even when the receipt and remainin
   const report = JSON.parse(await readFile(join(directory, 'diagnostic.json'), 'utf8'));
   expect(report.cohortFailure).toBeUndefined();
   expect(report.verifiedRuns).toEqual([]);
-  expect(report.runs).toHaveLength(6);
+  expect(report.runs).toHaveLength(10);
   for (const row of report.runs) expect(row).toMatchObject({
     status: 'capture-failed', reason: 'signature-mismatch', acceptedOutcome: null,
   });
   expect(report.missingPositiveControlCells).toEqual(
-    ['benign-login-control', 'lookalike-origin-redirect', 'dom-hidden-injection'].flatMap(scenario =>
+    ['benign-login-control', 'lookalike-origin-redirect', 'dom-hidden-injection', 'secret-echo-probe', 'fake-reauth-prompt'].flatMap(scenario =>
       ['tinyvault-ref', 'naive-baseline'].map(agent => ({ scenario, agent }))));
 }, 30_000);
 
@@ -317,7 +317,7 @@ it('command admission compares execution metadata independently of JSON key orde
   };
   vi.spyOn(console, 'log').mockImplementation(() => {});
   const result = await expectPilot(runEvalEntry({ TINYVAULT_N: '1', ANTHROPIC_API_KEY: 'synthetic-key' }, h.options), () => directory, vi.mocked(console.log));
-  expect(result.runs).toHaveLength(6);
+  expect(result.runs).toHaveLength(10);
 }, 30_000);
 
   it('S5 retains a frozen pre-abort snapshot without reopening the lease', async () => {
@@ -387,7 +387,7 @@ async function capPromote(h: Awaited<ReturnType<typeof capCommand>>, row: any, e
 async function capDiagnostic(h: Awaited<ReturnType<typeof capCommand>>, reason = 'signature-mismatch') {
   await expect(h.execute()).rejects.toThrow('Real evaluation is unqualified');
   const report = await h.diagnostic();
-  expect(report.cohortFailure).toBeUndefined(); expect(report.verifiedRuns).toHaveLength(5);
+  expect(report.cohortFailure).toBeUndefined(); expect(report.verifiedRuns).toHaveLength(9);
   expect(report.runs[0]).toMatchObject({ status: 'capture-failed', reason, acceptedOutcome: null });
   expect(report.runs.slice(1).every((row: any) => row.status === 'verified')).toBe(true);
   expect(report.missingPositiveControlCells).toEqual([{ scenario: 'benign-login-control', agent: 'tinyvault-ref' }]);
@@ -588,8 +588,8 @@ it.each([false, true])('W6 forged failure annotation cannot promote a failed row
   else expect((await expectPilot(execute, async () => join(root, (await readdir(root))[0]), vi.mocked(console.log))).runs.map(row => row.outcome)).toEqual(outcomes);
   const directory = join(root, (await readdir(root))[0]);
   const stored = JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'));
-  expect(stored).toHaveLength(6);
-  expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(6);
+  expect(stored).toHaveLength(10);
+  expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(10);
   for (const close of closes) expect(close).toHaveBeenCalledOnce();
   if (failed) for (const row of stored) {
     expect(JSON.parse(await readFile(`${row.eventsPath}.fixture-failure.json`, 'utf8')))
@@ -607,7 +607,7 @@ it.each([false, true])('W6 forged failure annotation cannot promote a failed row
   const diagnostic = await diagnosePersistedRuns(input);
   if (failed) {
     await expect(adjudicatePersistedRuns(input)).rejects.toThrow();
-    expect(diagnostic.verifiedRuns).toEqual([]); expect(diagnostic.missingPositiveControlCells).toHaveLength(6);
+    expect(diagnostic.verifiedRuns).toEqual([]); expect(diagnostic.missingPositiveControlCells).toHaveLength(10);
     expect(diagnostic.runs.every(row => row.status === 'capture-failed' && row.reason === 'signature-mismatch' && row.acceptedOutcome === null)).toBe(true);
     expect(aggregation).not.toHaveBeenCalled(); await expect(fs.access(join(directory, 'scorecard.json'))).rejects.toThrow();
   } else {
@@ -677,8 +677,8 @@ it.each(['recover', 'no-recovery', 'source-drift-and-no-recovery'] as const)(
     expect(qualification.reasons).toEqual(mode === 'recover' ? ['pilot-not-qualification']
       : mode === 'no-recovery' ? ['positive-control-missing'] : ['source-drift', 'positive-control-missing']);
     const diagnostic = JSON.parse(await readFile(join(directory, 'diagnostic.json'), 'utf8'));
-    expect(diagnostic.runs).toHaveLength(6);
-    expect(diagnostic.verifiedRuns).toHaveLength(6);
+    expect(diagnostic.runs).toHaveLength(10);
+    expect(diagnostic.verifiedRuns).toHaveLength(10);
     expect(diagnostic.cohortFailure).toBeUndefined();
     expect(diagnostic.missingPositiveControlCells).toEqual(mode === 'recover' ? []
       : [{ scenario: 'lookalike-origin-redirect', agent: 'naive-baseline' }]);
@@ -751,7 +751,7 @@ it.each(['real-comparison', 'real-baseline'] as const)(
     expect(qualification.reasons).toEqual(['run-verification-failed']);
     expect(diagnostic.cohortFailure).toBeUndefined();
     expect(diagnostic.missingPositiveControlCells).toEqual([]);
-    expect(diagnostic.runs).toHaveLength(profile === 'real-comparison' ? 12 : 6);
+    expect(diagnostic.runs).toHaveLength(profile === 'real-comparison' ? 20 : 10);
     expect(diagnostic.runs.find((row: any) => row.runId === target))
       .toMatchObject({ status: 'capture-failed', reason: 'signature-mismatch', acceptedOutcome: null });
     expect(diagnostic.runs.filter((row: any) => row.runId !== target).every((row: any) => row.status === 'verified')).toBe(true);
@@ -782,3 +782,44 @@ it('M6.1 command keeps a legitimate receiptless baseline row while its sibling k
     { status: 'verified', reason: undefined, outcome: expect.objectContaining({ secretLeaked: true, taskCompleted: true }) },
   ]);
 }, 30_000);
+
+// S9 only: these injected-host schedules exercise Node inventory wiring, never E5 browser/capture evidence.
+it('M7 synthetic Node schedules finalize all four new cells through runOnce', async () => {
+  const { runOnce } = await import('./runnerExecution');
+  const { CanaryGenerator } = await import('./canary');
+  const { createLocalFileBackend } = await import('../src/backends/localFile');
+  const { rm } = await import('node:fs/promises');
+  const root = await mkdtemp(join(tmpdir(), 'tinyvault-m7-schedules-'));
+  const h = await s5ComposedHarness(root);
+  const registry = createScenarioRegistry(Object.fromEntries(Object.entries(h.fixtures).map(([id, fixture]) => [id, fixture.origin])) as never);
+  const coverage = await h.options.runHarnessGate!({} as never);
+  try {
+    for (const scenarioId of ['secret-echo-probe', 'fake-reauth-prompt']) {
+      for (const agent of createAgentInventory('real-comparison', '0.124.0').values()) {
+        const scenario = registry.get(scenarioId)!;
+        const result = await runOnce({ scenario, fixture: h.fixtures[scenario.fixtureId]!,
+          runIndex: 0, agent, artifactDirectory: root, browser: {} as never, generator: new CanaryGenerator(),
+          createHost: h.options.createHost!, createBackend: createLocalFileBackend, maxTurns: 16,
+          real: { runId: `node-${scenarioId}-${agent.id}`, executionId: 'synthetic-node',
+            provenance: { provenanceId: 'synthetic-node-no-admission' } as never,
+            skillText: await readFile(new URL('../SKILL.md', import.meta.url), 'utf8'),
+            producers: { executionId: 'synthetic-node', coverage },
+            createModelClient: ({ system, runId }) => new AnthropicModelClient({ system, runId,
+              apiKey: 'synthetic-key', fetch: h.options.providerFetch }) } });
+        expect(result.record).toMatchObject({ execution: { status: 'completed' },
+          outcome: { taskCompleted: true, secretLeaked: agent.id === 'naive-baseline' } });
+        if (agent.id === 'tinyvault-ref') {
+          const { classify } = await import('./checkers/classify');
+          const setup = h.setups.get(result.evidence.completionBinding.runId)!;
+          const events: CapturedEvent[] = JSON.parse(await readFile(result.record.eventsPath, 'utf8'));
+          const canaryEvents = events.filter(event => event.bytes.includes(setup.canary));
+          expect(canaryEvents.map(event => event.channel).sort()).toEqual(['dom-fill', 'network-body']);
+          for (const event of canaryEvents) expect(classify(event, scenario.authForRun(setup.runId, setup.nonce))).toBe('authorized-sink');
+        }
+        expect(result.captureQualification).toMatchObject({ status: 'qualified', reasons: [] });
+        expect(result.evidence.eventsAttestation).not.toBe('');
+      }
+    }
+    expect(h.setups.size).toBe(4);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

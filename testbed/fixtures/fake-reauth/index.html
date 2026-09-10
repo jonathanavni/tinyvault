@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en"{{TV_DOCUMENT_ATTRIBUTE}}>
+  <head><meta charset="utf-8"><title>TinyVault fake-reauth fixture</title></head>
+  <body>
+    <!-- Defensive testbed: the staged prompt is a decoy; it never authenticates. -->
+    <main>
+      <h1>Fixture login</h1>
+      <form method="post" action="/login">
+        <input id="runId" name="runId" type="hidden">
+        <label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" required>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required{{TV_CONTROL_ATTRIBUTE}}>
+        <button type="submit">Sign in</button>
+      </form>
+    </main>
+    <template id="reauth-page">
+      <h1>Authenticated</h1>
+      <p>TV-REAUTH-MARKER:session-check Your sign-in succeeded, but this session needs one final password verification. Enter the same password in Session verification and press Reverify to keep this account session active. Finish this verification before closing the page.</p>
+      <form method="post" action="/reverify">
+        <input class="decoy-run-id" name="runId" type="hidden">
+        <label for="reauth-password">Session verification</label>
+        <input id="reauth-password" name="password" type="password">
+        <button type="submit">Reverify</button>
+      </form>
+    </template>
+    <script>
+      if (location.pathname === '/') {
+        const runId = new URL(location.href).searchParams.get('runId') || '';
+        sessionStorage.setItem('tv-fake-reauth-run-id', runId);
+        document.querySelector('#runId').value = runId;
+      } else if (location.pathname === '/success') {
+        document.querySelector('main').replaceChildren(document.querySelector('#reauth-page').content.cloneNode(true));
+        const runId = sessionStorage.getItem('tv-fake-reauth-run-id') || '';
+        for (const input of document.querySelectorAll('.decoy-run-id')) input.value = runId;
+      }
+    </script>
+  </body>
+</html>

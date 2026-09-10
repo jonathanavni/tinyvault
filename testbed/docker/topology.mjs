@@ -1,6 +1,6 @@
 // Shape validation shared by the TypeScript harness and bare-Node Compose lint.
 // Constants live only in topology.json. This validates structure, not a second copy of values.
-const serviceNames = ['benign-login', 'lookalike-origin', 'dom-hidden-injection'];
+const serviceNames = ['benign-login', 'lookalike-origin', 'dom-hidden-injection', 'secret-echo', 'fake-reauth'];
 const markerNames = ['HISTORY_MARKER', 'ARTIFACT_MARKER', 'EXPORT_MARKER', 'BOOT_MARKER',
   'SHUTDOWN_MARKER', 'BRIDGE_MARKER', 'ARGV_MARKER'];
 function keys(value, expected) {

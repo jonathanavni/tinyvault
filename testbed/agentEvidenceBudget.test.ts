@@ -299,7 +299,7 @@ describe('S3 exact usable profile SDK sizing', () => {
       const measured = await trace(witness,1024,false,profile);
       expect(measured.exactProfile).toBe(true);
       // AM13 re-pin the measured system contribution; frozen calls and host observations stay unchanged.
-      expect(measured.systemBytes).toBe(witness.profile === 'naive-baseline' ? 526 : 519);
+      expect(measured.systemBytes).toBe(witness.profile === 'naive-baseline' ? 526 : 513); // E8a: SKILL.md 519 -> 513 (owner, flagged under D-6)
       if (witness.profile === 'naive-baseline') expect(measured.systemSha256)
         .toBe('62ba8ba466139d3a40f591fec9f3454b4590d87960bcf434542e4b58dbcbb2a3');
       expect(measured.rawBytes).toBeLessThanOrEqual(1048576);

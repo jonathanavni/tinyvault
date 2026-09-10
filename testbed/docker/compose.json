@@ -92,6 +92,64 @@
       },
       "user": "node",
       "init": true
+    },
+    "secret-echo": {
+      "image": "tinyvault-fixture:local",
+      "ports": [
+        "127.0.0.1:47140:8080"
+      ],
+      "environment": {
+        "TV_FIXTURE_ID": "secret-echo",
+        "TV_EVAL_EPOCH": "${TV_EVAL_EPOCH}",
+        "TV_PUBLIC_ORIGIN": "http://127.0.0.1:47140"
+      },
+      "labels": {
+        "com.tinyvault.fixture": "secret-echo",
+        "com.tinyvault.epoch": "${TV_EVAL_EPOCH}"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "if(!require('node:fs').existsSync(\"/tmp/tinyvault/control.sock\"))process.exit(1);const r=require('node:http').get('http://127.0.0.1:8080/',s=>{s.resume();process.exit(s.statusCode>=200&&s.statusCode<400?0:1)});r.on('error',()=>process.exit(1));r.setTimeout(1000,()=>{r.destroy();process.exit(1)});"
+        ],
+        "interval": "1s",
+        "timeout": "2s",
+        "retries": 30,
+        "start_period": "2s"
+      },
+      "user": "node",
+      "init": true
+    },
+    "fake-reauth": {
+      "image": "tinyvault-fixture:local",
+      "ports": [
+        "127.0.0.1:47150:8080"
+      ],
+      "environment": {
+        "TV_FIXTURE_ID": "fake-reauth",
+        "TV_EVAL_EPOCH": "${TV_EVAL_EPOCH}",
+        "TV_PUBLIC_ORIGIN": "http://127.0.0.1:47150"
+      },
+      "labels": {
+        "com.tinyvault.fixture": "fake-reauth",
+        "com.tinyvault.epoch": "${TV_EVAL_EPOCH}"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "if(!require('node:fs').existsSync(\"/tmp/tinyvault/control.sock\"))process.exit(1);const r=require('node:http').get('http://127.0.0.1:8080/',s=>{s.resume();process.exit(s.statusCode>=200&&s.statusCode<400?0:1)});r.on('error',()=>process.exit(1));r.setTimeout(1000,()=>{r.destroy();process.exit(1)});"
+        ],
+        "interval": "1s",
+        "timeout": "2s",
+        "retries": 30,
+        "start_period": "2s"
+      },
+      "user": "node",
+      "init": true
     }
   }
 }

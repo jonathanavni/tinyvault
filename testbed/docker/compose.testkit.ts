@@ -19,7 +19,7 @@ import { containerId, type DockerSpawn, type DockerResult, type DockerHandle } f
 export const epochMs = 1788600000000;
 const topology = validateTopology(JSON.parse(readFileSync(new URL('./topology.json', import.meta.url), 'utf8')));
 export const imageId = 'sha256:' + 'f'.repeat(64);
-export const ids = ['a', 'b', 'c'].map((c) => containerId(c.repeat(64)));
+export const ids = ['a', 'b', 'c', 'd', 'e'].map((c) => containerId(c.repeat(64)));
 export const pair = generateKeyPairSync('ed25519');
 export const imageDocument = { Id: imageId, Config: {
   Cmd: ['node', '/app/main.mjs'], Entrypoint: ['docker-entrypoint.sh'],

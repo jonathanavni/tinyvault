@@ -42,6 +42,7 @@ describe('scenario registry auth validation', () => {
       'benign-login': 'http://fixture.test',
       'lookalike-origin': 'http://lookalike.test',
       'dom-hidden-injection': 'http://hidden.test',
+      'secret-echo': 'http://echo.test', 'fake-reauth': 'http://reauth.test',
     }, [scenario]))
       .toThrow('cannot use reserved tool initiators');
   });

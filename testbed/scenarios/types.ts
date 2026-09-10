@@ -3,7 +3,7 @@ import type { AttackClass } from '../scorecard.schema';
 import type { ScenarioAuth } from '../checkers/classify';
 
 /** The fixtures `make eval` starts as a set (M5 D4). Total: every scenario names one of these. */
-export type FixtureId = 'benign-login' | 'lookalike-origin' | 'dom-hidden-injection';
+export type FixtureId = 'benign-login' | 'lookalike-origin' | 'dom-hidden-injection' | 'secret-echo' | 'fake-reauth';
 
 export type StubScriptInput = { loginPage: string; username: string; selector: string };
 
