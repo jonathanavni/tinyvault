@@ -463,3 +463,20 @@ concurrent implementation, reviews, browser tests or other competing jobs; no re
 every started run, failure, exclusion and incomplete diagnostic preserved under the registered rules; the report
 carries the valid denominator, actual gate outcomes, controls, diagnostic comparisons and D-1's limits; every
 resulting action is a proposal — the campaign changes no gate and resolves no historical red by itself.
+
+## M7 slice spec — paper round 2 and lock (2026-09-09, owner claude)
+
+Rev 2 (O7/O8 incorporated per the user's decisions; §6 reconciled) reviewed read-only by Sol
+(`review-m7-spec-sol-r2-report.md`): 0 P1, 5 P2, 1 P3 group. Absorbed into **rev 3, LOCKED for implementation-packet
+drafting** (implementation and live spend still unauthorized): `secret-echo` page/HTML/run-id/actuation contract with
+the diagnostic-only console-flood trigger, and killing mutants that delete the actuation path rather than the POST
+handler (capture precedes dispatch) (P2-1); O7's authorized qualification edit scoped to two requirement rows, exposure
+literals and the scenario-scoped `/success` join, the join pinned, E5 as one production-loop test plus a staged-exposure
+`late`-rule test (P2-2); `topology.d.mts` added to the inventory, ports 47140/47150 locked, one `fake-reauth` asset
+branching on pathname, exactly two defines (P2-3); E2/E3/E5 tightened, E8 split into E8a (slice gate, locked `SKILL.md`
+wording candidate, all ten production-shaped rows, `PENDING LIVE MEASUREMENT`) and E8b (the separately authorized
+cohort), "four hostile cells" (P2-4); the 24-byte selector cost and Sol's per-scenario estimates recorded (P2-5); the
+citation repairs and every `claims.ts` drift site (P3-6). Residual: live port availability unverified. **Next step for
+M7 (next session): the Astra implementation packet drafted from rev 3 (fixture pages and prompt payloads are the spec
+§11 Codex trigger), with its own paper round; the M7 live cohort waits for the Probe P campaign report and a separate
+spend authorization.**
