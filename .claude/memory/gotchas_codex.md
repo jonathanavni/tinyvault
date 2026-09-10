@@ -18,6 +18,13 @@ Codex dispatch, sandbox limits, job monitoring, model routing, the safety classi
   hole on the host. Dispatch Sol (`task --fresh --model gpt-5.6-sol`) and a `Plan` subagent on the same packet, in
   parallel, and write the register only when both are in. (2026-09-05)
 
+- **A TypeScript test that imports a symbol from a gate `.mjs` module needs a sibling `.d.mts`, and that file belongs in the
+  packet's ownership list.** The pin slice asked for an in-suite hygiene test over a production literal in `scripts/test-execution.mjs`;
+  `tsconfig` (`moduleResolution: Bundler`, no `allowJs`) then needs `scripts/test-execution.d.mts`, which the packet had not assigned,
+  so Astra STOPped correctly at TS7016 and a one-file Extension was needed. When a packet puts a `.ts` test over an `.mjs` export,
+  list the declaration file up front. Also: a worktree with a symlinked `node_modules` cannot run the owner `make test` (provenance
+  suites red on the symlink) — Codex works there, the owner gate runs in the real checkout detached at the candidate. (2026-09-10)
+
 ## Sandbox limits (what a Codex report can never prove)
 
 - **The Codex sandbox cannot write `.git`** (index.lock EPERM) and usually **cannot `mkdtemp`** (its

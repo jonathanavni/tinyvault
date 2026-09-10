@@ -767,3 +767,41 @@ channel's concurrent-writer observation was the owner editing the sibling pin pa
 with explicit paths. Returned to the user with every disposition; no round-3 defect class open in the owner's judgement — a
 cap round is the user's call. Not authorized: implementation, merge of implementation work, a second campaign,
 live-provider spend, push, public flip; Probe P's gate and historical-failure dispositions unchanged.
+
+## Inventory pin — implementation, post-implementation reviews, owner gates and merge (2026-09-10)
+
+**Authorization:** the user (2026-09-10) closed paper review at round 2, accepted both v4 packets at `32ab229` as implementation
+contracts, and authorized the pin slice through implementation, reviews, owner verification, explicit-path commits and merge
+when green with no blocking finding. **Dispatch:** Codex gpt-6-astra, worktree `scratchpad/wt/timing2-inventory-pin`, branch
+`codex/timing2-inventory-pin` at base `32ab229`, wrapper `packet-pin-astra-dispatch.md` (evidence dir), D-1 = Option A.
+**Delivery:** one STOP — `testbed/rootOfTrust.test.ts` imports the production literal and `scripts/test-execution.mjs` had no
+declaration file (TS7016) — answered by **Extension 1** (`scripts/test-execution.d.mts`, one declaration line, sibling precedent
+style; ADOPTED); the resumed thread completed V1–V4b in the sandbox (V2 prescribed form 19/19 on the second attempt; the guarded
+`timingSourceResolve.ts:38` comment was left undone after a config-loader EPERM and applied by the owner on the host, `npx vitest
+run testbed/probe` 161/161). Deviations recorded in the implementer's report (`packet-pin-astra-report.md`,
+`packet-pin-astra-extension-1-report.md`). Owner commit `4229d66`.
+**Post-implementation reviews on `4229d66`:** Codex adversarial (Astra, `review-mtvo7lyu-17vvc1`): **PASS, no findings** — literal
+fidelity, placement/keying, all ten self-test verdicts, all thirteen digests, scope, claim and the CLI fixture reproduced
+read-only (`review-pin-impl-codex-r1-report.md`). Blind Opus QA: **PASS, 0 P1 / 0 P2 / 5 P3**, with a seven-variant gate-mutation
+matrix proving each self-test case discriminates its property (M-T4 the unique multiset witness, M-T9 the unique placement
+witness, M-T8 + control kill a broadened keying, M-T5/M-T7/M-T10 kill deletions of the rules they defer to), the two declared
+unkillable conjuncts reproduced, and the `timing2Names` drift signal proved (`review-pin-impl-opus-r1-report.md`). P3
+dispositions: P3-01 the `.d.mts` is in the implementer's Deviations (Extension 1); P3-02 `PLAN.md` declared-root sentence —
+owner integration (this commit); P3-03 comment above the literal stating the transcription source and the multiset-only claim —
+**applied as owner integration `c49e9ad`** with the `scripts/test-execution.mjs` digest row refreshed
+(`b5fd194fc6d782107c6d67ebb43eb34caf2fdd7e2e13c6f70c5c4f00d521849e`); P3-04 M-T9 keyed on its case label — recorded residual, not
+changed post-review; P3-05 cosmetic — not taken.
+**Owner gates on `c49e9ad`.** In the worktree, `make test` went red (169 failures, `Source input must be a regular file without
+symlinks`) — the known symlinked-`node_modules` provenance artifact (`gotchas_runtime.md`), an environment red, preserved
+(`owner-gate-make-test-c49e9ad.log`), not a candidate red. In the **real checkout** detached at `c49e9ad`, host quiet (no process
+≥ 10 % CPU at start or end): `make test` **green** — main 3248/0/1 (3249), timing-1 5/5, timing-2 **26/26 (actual verdict, no
+Probe P rejection)**, `test execution PASS` with the new rule live (`owner-gate-main-checkout-c49e9ad.log`). **V6(b)** on that
+real report (`owner-gate-v6b-report-mutants-c49e9ad.log`): baseline PASS; add, rename, drop, duplicate → `gate FAIL:
+timing-2-inventory` each; restored PASS, report digest identical. **V7** `make test-docker` 7/7 (`owner-gate-test-docker-c49e9ad.log`).
+Fast gates on the candidate: `tsc` 0, `22 22 1 26`, entry gate PASS, CLI self-test PASS, root-of-trust 19/19; literal == report
+ordered through the module (`owner-gates-pin-4229d66.log`).
+**Merge:** fast-forward, main = `c49e9ad`; the merged code tree is the gated tree. Integration (this commit): `PLAN.md` declared-root
+sentence ("three Vitest configs" + the two identity modules), BACKLOG item closed, Decisions Log, this entry. **Claim as
+merged:** the execution gate reds any change to the timing-2 report's title multiset; residuals unchanged — title-preserving
+substitution, reporter/root-of-trust modification, reporter-format coupling (Vitest 4.1.11 lock), hook bodies. Probe P's gate,
+historical-failure dispositions and no-retry policy unchanged. No push.

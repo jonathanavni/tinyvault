@@ -46,7 +46,7 @@ work in flight, the rest stay parked here (register "Final5 round"):
 
 ## From the C2 / campaign-harness ladder (2026-09-09; M7 register)
 
-- **[Next session, Astra, gate change] Execution-side pin of the timing-2 test inventory.** The C2 pinned-source scan
+- ~~**[Next session, Astra, gate change] Execution-side pin of the timing-2 test inventory.**~~ **CLOSED 2026-09-10** — merged `c49e9ad` (`timing-2-inventory` rule; packet `docs/probe-p-timing2-inventory-pin-packet.md` v4; register "Inventory pin — implementation"). Claim: changes to the reported title multiset only; residuals (title-preserving substitution, reporter/root-of-trust modification, reporter-format coupling, hook bodies) recorded. Original text: The C2 pinned-source scan
   bounds test registration to references of the statically imported vitest symbols and `vi.spyOn`; three review rounds
   showed each source-side spelling can be evaded by the next (alias → equivalent spelling → `vi.importActual`), so the
   claim was narrowed at the cap. The complementary control is execution-side: `scripts/test-execution.mjs` pins the
