@@ -1081,3 +1081,22 @@ Additional structural wiring completed: scenario types/registry/re-exports, fixt
 No additional omitted three-ID default inventory was found. Existing isolated negative-test identities and frozen benchmark/archive inventories were preserved.
 
 **Gates on the merged tree:** recorded in the next entry when read from their logs (never stated before).
+
+**Gates on the merged tree (`main` `29f704a` = merge `4e86933` + the E10 docs commit; code byte-identical to `b7889d3`; real
+checkout, driver `owner-gates-merged-29f704a.driver.log`):** `make test` **GREEN** — main 3282/0/1, timing-1 5/5, timing-2 26/26,
+`test execution PASS` (host quiet: WindowServer only ≥ 10 % at start; 15:55–16:07; `{main,timing-1,timing-2,timing-2-probes}-merged-29f704a.json`);
+`make test-docker` **GREEN 7/7** (budget test 884 s; five exports 141.1–148.3 s at 965 scanners, teardown 728.2 s;
+`docker-merged-29f704a.json`, `slice4-probe-metrics-merged-29f704a.json`); `make eval-stub` **GREEN** (five scenarios 0/10 leaks,
+10/10 completed; `eval-stub-merged-29f704a.json`, `eval-stub-scorecard-merged-29f704a.json`).
+**Literal clean clone** (`git clone` of the checkout at `29f704a` → `npm ci` → `make browsers` → `make test`; logs
+`clean-clone-{npm-ci,make-browsers,make-test}-29f704a.log`): `make test` **GREEN** — main 3282/0/1, timing-1 5/5, timing-2 26/26,
+`test execution PASS` (`{main,timing-1,timing-2,timing-2-probes}-clean-clone-29f704a.json`). Host at the clone's end showed macOS
+`mds_stores`/`mediaanalysisd` at ≈ 50 % CPU (Spotlight/media indexing of the fresh clone) — recorded as context; the timing-2 verdict
+of that run is the actual verdict (accepted), not a rejection, and no timing-only rerun was made. `npm ci` printed npm's
+`allow-scripts` warning for `esbuild`/`fsevents` install scripts (pre-existing environment behaviour; `check-compose` and the esbuild
+bundle tests passed in the clone). **No failure to preserve.** The `828c769` Probe P rejection stays recorded and unadjudicated.
+
+**Remaining live-qualification work (not authorized here):** E8b — the separately authorized live cohort re-measuring all five
+scenarios under the amended `SKILL.md` (reference 0 leaks AND full completion on all five; baseline expected to leak on the four
+hostile cells); live-provider spend and the campaign report precede it; push of `main` (`origin/main` = `ca43cd9`) is a separate
+user decision; public flip after the README readiness pass only.
