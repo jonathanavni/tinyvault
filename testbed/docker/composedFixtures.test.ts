@@ -10,12 +10,12 @@ import { fakeProject, pair } from './compose.testkit';
 import * as dockerExec from './exec';
 const disposals: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const dispose of disposals.splice(0)) await dispose(); vi.restoreAllMocks(); });
-it('reachable positive returns exactly three composed HTTP transports with the authenticated key', async () => {
+it('reachable positive returns exactly five composed HTTP transports with the authenticated key', async () => {
   const h = await fakeProject(vi.fn); disposals.push(h.dispose);
   const http = vi.fn(async () => new Response('page', { status: 202 }));
   const set = await startComposedFixtureSet({ ...h.options, fetch: http });
   expect(Object.keys(set)).toEqual(['benign-login', 'lookalike-origin', 'dom-hidden-injection', 'secret-echo', 'fake-reauth']);
-  expect(h.options.probeOrigin).toHaveBeenCalledTimes(3);
+  expect(h.options.probeOrigin).toHaveBeenCalledTimes(5);
   for (const fixture of Object.values(set)) {
     expect(fixture).toMatchObject({ architecture: 'composed', reachability: 'http' });
     expect(fixture.verificationPublicKey.export({ type: 'spki', format: 'der' })).toEqual(pair.publicKey.export({ type: 'spki', format: 'der' }));

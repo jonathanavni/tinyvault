@@ -139,7 +139,7 @@ it('composed capturePersistedRuns closes the real browser then persists exact au
         return browser; },
     });
     expect(launches).toBe(1); expect(closeCodes).toEqual([]);
-    expect(runnerEvidence.secrets).toHaveLength(21);
+    expect(runnerEvidence.secrets).toHaveLength(35);
     const der = Buffer.from(known.pair!.privateKey.export({ format: 'der', type: 'pkcs8' }));
     const privateForms = [der, der.subarray(-32), Buffer.from(der.toString('base64')), Buffer.from(der.toString('base64url')),
       Buffer.from(known.pair!.privateKey.export({ format: 'pem', type: 'pkcs8' }))];

@@ -50,6 +50,6 @@ it('export timeout kills the handle and completes remaining scans before down', 
     await assertion;
     expect(kill).toHaveBeenCalledOnce();
     expect(events.filter((event) => event === 'export' || event === 'compose-down'))
-      .toEqual(['export', 'export', 'export', 'compose-down']);
+      .toEqual(['export', 'export', 'export', 'export', 'export', 'compose-down']);
   } finally { vi.useRealTimers(); await h.dispose(); }
 });

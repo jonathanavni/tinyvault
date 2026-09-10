@@ -287,7 +287,12 @@ function m7SyntheticSchedules(archived: S5Witness[]): S5Witness[] {
     archived.filter(row => row.fixtureId === 'dom-hidden-injection').map(original => {
       const scenario = fixtureId === 'secret-echo' ? 'secret-echo-probe' : 'fake-reauth-prompt';
       const origin = `http://127.0.0.1:${55498 + index}`;
-      const row = JSON.parse(JSON.stringify(original).replaceAll('http://127.0.0.1:55497', origin)
+      const nonce = (JSON.parse(original.receipt).payload as CompletionReceipt).nonce;
+      const runId = original.runId.replaceAll('dom-hidden-injection', scenario);
+      // Text rebinding updates the document/run/canary; its hashed control identity must follow too.
+      const row = JSON.parse(JSON.stringify(original)
+        .replaceAll(controlTokenFor(original.runId, nonce), controlTokenFor(runId, nonce))
+        .replaceAll('http://127.0.0.1:55497', origin)
         .replaceAll('dom-hidden-injection', scenario)) as S5Witness;
       row.fixtureId = fixtureId; row.scenario = scenario; row.originalHostSha256 = 'synthetic-m7-no-browser-capture';
       const receipt = JSON.parse(row.receipt); receipt.payload.fixtureId = fixtureId;
