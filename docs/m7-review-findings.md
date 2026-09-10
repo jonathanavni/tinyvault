@@ -719,3 +719,51 @@ archive annotation; §9 O4 estimates and D-3; §10 E7 and E8a rows) with superse
 paper round 2 on the committed v3 packets as stable candidate files, then the final packets and verified dispositions back to
 the user before any Astra dispatch. Not authorized: implementation, merge of implementation work, a second campaign,
 live-provider spend, push, public flip; Probe P's gate and historical-failure dispositions unchanged.
+
+## Paper round 2 — both packets v3 at `2b38dec` (2026-09-10, stable candidate files; Sol + blind Opus per packet)
+
+**Pin packet — Sol NEEDS-ATTENTION 1 P1 / 2 P3; Opus NEEDS-ATTENTION 1 P1 / 3 P2 / 6 P3.** **Convergent P1, verified:** §4 routed
+the eight new self-test cases through the existing `EXECUTION_MUTANTS` loop, but `EXECUTION_MUTANT_CODES` is derived one code per
+tuple and array-`deepEqual`ed to `EXECUTION_RULES` (`scripts/test-execution.selftest.mjs:37,63`) — duplicates break it — and the
+eval-mode filter (`:106-110`) would have re-applied M-T7 to the eval fixture; the green control M-T8 had no home. Absorbed in
+**v4**: exactly one `EXECUTION_MUTANTS` entry (M-T1), a dedicated `timingInventoryCases()` for M-T2–M-T10, acceptance
+22 === 22 (V4b). **Opus P2s, verified:** `docker-assertions` is a required-identity rule, not closed-set (extras accepted;
+R1 would be the gate's first closed-set inventory rule); the `mode === 'test'` guard is a second unkillable conjunct; the
+round-1 transitive-pinning sentence was wrong for `DOCKER_TEST`/`EVAL_TEST`/`EVAL_REPORT` (only `TIMING_TESTS`, `REPORTS`,
+`DOCKER_REPORT` are interpolated into the pinned commands). **P3s:** "two residuals" → four (a fourth, hook bodies, named);
+25 registrations / 26 rows; eight unpinned lifecycle registrations; lifecycle-pin citation; the pinned-source checks run in
+both partitions (Opus said main only — partly right; `host.timing.browser.test.ts:130-134` also runs them) so `report-success`
+fires at bundle 0 first; `gate-cli.selftest.mjs:116` spawns the CLI; `PLAN.md:437` "both" → "three"; `rootOfTrust.test.ts:39`
+title (both channels). Test gaps absorbed: V6(b)(iv) duplicate on the real report; M-T10 split-`testResults` precedence;
+the transcription source also copied outside the checkout (`~/Documents/Coding/tinyvault-evidence/m7-packets-20260910/`,
+same SHA-256) for a worktree. Both channels reproduced every mutant verdict in memory and the real report green under R1;
+digest rows four; no reaching shape; dispatchable after the P1 fix.
+
+**M7 packet — Sol NEEDS-ATTENTION 1 P1 / 2 P2 / 2 P3; Opus NEEDS-ATTENTION 1 P1 / 7 P2 / 6 P3.** **Sol P1, verified:** S6 never
+required the post-cap canary-bearing console emission that the spec's E7 witness turns on (`m7-slice-spec.md` §6: "a canary
+emitted to console beyond the cap is absent from evidence") — absorbed (page-control emission after the marker, a test-only
+`page.on('console')` observer, canary absent from evidence, deletion mutants). **Opus P1, verified:** the packet's
+`testbed/checkers/**` leave-alone contradicted spec §7 item 9 and would have failed `npx tsc --noEmit` on the `FixtureId`
+widening (`offline.ts:56` `Record<FixtureId, KeyObject>`; three-key literals at `offline.test.ts:36`,
+`offline.retention.test.ts:88,134`, plus `claims.test.ts:570` and the `it.each` at `bindServer.test.ts:33`) — absorbed
+(§2.12, §5 narrowed to checker implementations, S9 anchors). **Convergent, verified:** the routes alternative for run-id
+propagation dead-ends (route context is `{ url, body }`; the redirect has no query) — removed, `sessionStorage` failure is a
+STOP; and the E8a estimate: `secret-echo-probe` is 17 bytes, `fake-reauth-prompt` 18, so the spec's rev 3 **1006/1008 was
+right** and the owner's rev 4 "1008/1008" (absorbed from Opus R1 P3-04 without re-deriving) was an **owner error** — reverted in
+the spec and packet; ten projected rows `[988, 938, 1003, 963, 1012, 962, 1006, 950, 1008, 954]` (both channels
+independently). **Sol P2/P3:** spec §9 O1 still called P-LIM-CHUNKED a test-only probe and §4 still carried "Open question O3"
+— both struck (rev 4 round-2 corrections). **Opus P2s, verified:** `claims.test.ts:570` is S9 not S7; the O7 join wording —
+now explicit two-step, never skipping; E5 deletion cases assert exact `reasons`; D-5 reconciliation by content match with the
+S7 triple and measurement anchors restated; `bindServer.test.ts:33` carve-out. **P3s:** citations (`docker-invocation.mjs:12-46`,
+`types.ts:76-77`, `hostile.test.ts:54,63-67,47` — spec item 9 `:46` → `:47`, `prompt.test.ts:11-13`); E5 case names; `GET
+/log-sink` made the page hosting the console writer. **Test gaps absorbed:** `agentEvidenceBudget.test.ts` reads `SKILL.md`
+live (`:253,:286`; Opus computed the −6 bytes keep its four assertions green — recorded as owner-relayed, re-verified at the
+gate); E7 killing mutants; a scripted turn after the snapshot; the sandbox escape extended to all of §7. **Residuals:** empty
+`data-tv-document` on `/success` as an anticipated E6 STOP cause; `syntheticCorpus.ts` stays `[UNVERIFIED]`; the
+service-worker/WebTransport statements in the D-2 evidence are unprobed assertions inside the retained residual. The Opus
+channel's concurrent-writer observation was the owner editing the sibling pin packet (a file it was told not to read).
+
+**State after round 2:** both packets **v4**, spec rev 4 with the round-2 corrections, register and PLAN updated, committed
+with explicit paths. Returned to the user with every disposition; no round-3 defect class open in the owner's judgement — a
+cap round is the user's call. Not authorized: implementation, merge of implementation work, a second campaign,
+live-provider spend, push, public flip; Probe P's gate and historical-failure dispositions unchanged.
