@@ -132,3 +132,14 @@ Runtime quirks of the harness's substrate: Chromium/Playwright/CDP behaviour, Do
   `evalEntry`, `realAgentRun`, `runner.browser`, `runner.realAgent` and `sourceInventory` — an environment artifact, not a
   code red. Worktrees are fine for Codex workers and single-file runs; the owner gate runs in a real checkout (or a clean
   clone). (2026-09-09)
+- **macOS runs Spotlight (`mds_stores`), Photos analysis (`mediaanalysisd`) and iCloud (`fileproviderd`) at 10–95 % CPU exactly
+  during idle hours, and after a restart the software-update service joins them.** An objective per-process CPU predicate
+  therefore excludes most "idle window" run starts (11 of 20 in the 2026-09-10 campaign). Check `ps -axo pcpu,comm | awk '$1>=10'`
+  before any measurement campaign; treat these daemons explicitly in the pre-registration rather than discovering them in
+  the report. (2026-09-10)
+- **`git worktree remove` from inside that worktree kills the rest of a chained command** ("Unable to read current working
+  directory") — a later `git merge` in the same chain silently never ran. Run worktree removal from the main checkout with
+  `git -C`. (2026-09-09)
+- **The campaign harness refuses an output directory inside the checkout** (even under ignored `artifacts/`) and, after a
+  `--plan` freeze, starts only with `--runs 20 --resume`; a bare start is refused as "candidate already has an incomplete
+  campaign". Both are by design — read `tools/probe-p-campaign/README.md` before invoking. (2026-09-10)
