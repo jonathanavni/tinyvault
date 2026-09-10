@@ -568,7 +568,9 @@ just-removed worktree (rule A "another checkout of this repository"; terminated)
 Recorded limits: the 10 % bar is an inclusive per-process operational threshold, not a calibration and not a proof of an
 idle host; macOS `%CPU` is a decaying snapshot; sub-10 % distributed work escapes rule B; `load1`/cpus are context only.
 **Frozen candidate = the HEAD of the docs commit that adds this paragraph** (the harness records it as
-`campaign.json.candidate` under `artifacts/review-evidence/probe-p-campaign-20260909/`, together with the harness
+`campaign.json.candidate` under `/Users/jonathanavni/Documents/Coding/tinyvault-evidence/probe-p-campaign-20260909/`, together with the harness
 and policy-note SHA-256 digests and `predicateVersion: 5`). The campaign was **not started**: the host was in active
 use through the evening; PLAN.md carries the start command and conditions. No commit may land on main until the 20th
-run has ended.
+run has ended. The harness requires the output directory to be outside the checkout (`artifacts/` is inside it, though
+ignored), so the campaign directory lives beside the repository; its contents are copied into
+`artifacts/review-evidence/` after the 20th run.
