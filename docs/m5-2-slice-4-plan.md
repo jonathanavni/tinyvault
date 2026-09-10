@@ -70,7 +70,7 @@ Production `scanStreamWithControls` scanned a real 249409024-byte export of the 
 183 synthetic secret needles in 13355 ms and with 579 needles in 41667 ms; both observed the export positive
 control and no secret match (`export-benchmark.log`, `export-budget.log`). Each temporary container remained
 stopped and was removed afterward. These are per-image throughput samples, not full teardown acceptance or
-a worst-case guarantee. The existing 120-second per-export deadline remains unchanged and fails closed.
+a worst-case guarantee. ~~The existing 120-second per-export deadline remains unchanged and fails closed.~~ **Superseded 2026-09-10 (owner-authorized M7 capacity accommodation):** the per-export deadline is 240 s; the operation deadline remains 120 s; both fail closed. Owner measurements on `9a826e5` in the real checkout on a quiet host (`diag-docker-export-9a826e5.log`): `make test-docker` failed at `ProjectCloser.#export` after 762.9 s (763.5 s on `828c769`, deterministic), with five exports each killed at +120 s before the scan resolved. The close-time inventory is 965 registered secrets (five fixtures × the 32-run budget fill); each 249 MB export is scanned twice in parallel (closer + evidence observer) by `StreamSecretScanner`, whose throughput is inversely proportional to the secret count. The owner's micro-benchmark measured 96 secrets at 35 MB/s, 579 secrets at 6 MB/s (≈85 s per export, within 120 s), and 965 secrets at 3 MB/s (≈146 s, outside 120 s). The inventory-pin candidate with three fixtures was 7/7 green. The 240 s deadline is a capacity accommodation, not a fix; making the scanner sublinear in the secret count is separate work in the owner-recorded BACKLOG item.
 
 No Slice 4 mutants yet. No dependency updates are needed. Read the code at this
 baseline when line numbers shift. Carry Slice 3's register residuals at its final QA/merge entries: constant-time
@@ -390,8 +390,8 @@ documented scope disposition. Extending this slice must not hide a weakened inhe
    The existing in-process registration-through-attestation and actual image-export scanner measurements in §2
    support the locked parameters; they do not execute the new protocol. After implementation, measure live
    composed registration-through-finalize/transfer/attest and maximum-budget teardown, including bounded transfer
-   and retained stderr. Require completion within unchanged operation/export deadlines and explicit refusal at
-   limits. The gate/Vitest prerequisite is complete and the user-approved SCHEMA boundary is applied.
+   and retained stderr. ~~Require completion within unchanged operation/export deadlines and explicit refusal at
+   limits.~~ **Superseded 2026-09-10:** require completion within the unchanged 120 s operation deadline and the 240 s per-export deadline (the owner-authorized capacity accommodation documented in §2); both fail closed with explicit refusal at limits. The gate/Vitest prerequisite is complete and the user-approved SCHEMA boundary is applied.
    Plan lock does not constitute implemented acceptance evidence or authorize commits/merges.
 4. Implement the bounded jobs; run narrow tests and independent mutants after each. Run `npm run typecheck`,
    relevant Vitest paths, invocation/Compose gates and `git diff --check`; then `make test` and `make test-docker`

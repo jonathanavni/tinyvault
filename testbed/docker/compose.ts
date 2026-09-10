@@ -14,7 +14,7 @@ import { BridgeSession, type BridgeClock } from './bridge';
 import { BridgeError, FIXTURE_IDS, type FixtureId } from './protocol';
 import { assertPinned, type PinnedDockerEndpoint } from './preflight';
 import { bounded, buildDockerSpawn, containerId, ComposedConstructionError, createDockerProcessRunner,
-  COMMAND_TIMEOUT_MS, KILL_TIMEOUT_MS, ID_PATTERN, IMAGE_ID_PATTERN, runDockerCommand, systemClock,
+  COMMAND_TIMEOUT_MS, EXPORT_TIMEOUT_MS, KILL_TIMEOUT_MS, ID_PATTERN, IMAGE_ID_PATTERN, runDockerCommand, systemClock,
   type ContainerId, type ConstructionCode, type DockerCommand, type DockerHandle, type DockerProcessRunner,
   type DockerResult, type DockerSpawn, type ProcessHandle } from './exec';
 import { observeStderr, scanArtifactsWithControls, scanSpawns, scanStreamWithControls, scanSurface,
@@ -259,7 +259,7 @@ export class ProjectCloser {
       handle.stdin.end();
       const [result, exit] = await bounded(Promise.all([
         (ctx.options.scanners?.stream ?? scanStreamWithControls)(handle.stdout, ctx.secrets, [marker]), handle.exited,
-      ]), COMMAND_TIMEOUT_MS, ctx.clock, new ComposedConstructionError('command-timeout', 'export'));
+      ]), EXPORT_TIMEOUT_MS, ctx.clock, new ComposedConstructionError('command-timeout', 'export'));
       if (result.exposed || stderr.exposed()) throw new ComposedConstructionError('secret-exposed');
       if (exit !== 0 || stderr.failed()) throw new ComposedConstructionError('scan-failed');
       checkScan(result, 'export', 1, 'export');

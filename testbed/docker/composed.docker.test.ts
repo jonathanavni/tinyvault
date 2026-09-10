@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Browser } from '../../src/browser/playwright';
 import { BridgeSession } from './bridge';
 import { startComposedFixtureSet, probeHttpOrigin } from './composedFixtures';
-import { buildDockerSpawn, bounded, COMMAND_TIMEOUT_MS, ComposedConstructionError, systemClock,
+import { buildDockerSpawn, bounded, COMMAND_TIMEOUT_MS, EXPORT_TIMEOUT_MS, ComposedConstructionError, systemClock,
   type DockerSpawn, type DockerResult } from './exec';
 import { canaryCommitment, CompletionVerifier } from '../completion';
 import type { RunRecord } from '../scorecard.schema';
@@ -140,7 +140,7 @@ describe.sequential('slice 4 real Docker construction and control-route probes',
       checkDescriptionSurfaces(e); checkStoppedSurfaces(e);
       await checkArtifacts(e, composed.root); await noProjectLeft(e, pin);
       expect(e.bridges.every((bridge) => bridge.errors.length === 0)).toBe(true);
-      for (const exported of e.exports) expect(exported.elapsedMs).toBeLessThan(120000);
+      for (const exported of e.exports) expect(exported.elapsedMs).toBeLessThan(EXPORT_TIMEOUT_MS);
       complete = true;
     } catch (error) {
       if (error instanceof Error && 'artifactRoot' in error && typeof error.artifactRoot === 'string') failedArtifactRoot = error.artifactRoot;
@@ -266,7 +266,7 @@ describe.sequential('slice 4 real Docker construction and control-route probes',
       checkDescriptionSurfaces(e); checkStoppedSurfaces(e); teardownOrder(e);
       await checkArtifacts(e, root); await noProjectLeft(e, pin);
       expect(e.bridges.every((b) => b.errors.length === 0)).toBe(true);
-      for (const exported of e.exports) { expect(exported.elapsedMs).toBeGreaterThan(0); expect(exported.elapsedMs).toBeLessThan(120000); }
+      for (const exported of e.exports) { expect(exported.elapsedMs).toBeGreaterThan(0); expect(exported.elapsedMs).toBeLessThan(EXPORT_TIMEOUT_MS); }
       metrics = { ...surfaceMetrics(e), teardownMs: performance.now() - teardownStart };
     } finally {
       await browser?.close();
