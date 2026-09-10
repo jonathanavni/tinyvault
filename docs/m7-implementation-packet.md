@@ -1,5 +1,7 @@
 # M7 implementation packet (v4 — paper round 2 absorbed; returned to the user before dispatch) — hostile fixtures #3–#4 from the locked slice spec rev 4
 
+**Implemented and merged 2026-09-10** (candidate `b7889d3`, merge `4e86933`; register `docs/m7-review-findings.md`).
+
 **Status:** **v4, 2026-09-10 — paper round 2 (Sol + blind Opus, on the committed v3 at `2b38dec`) absorbed: two P1s
 (the console diagnostic lacked the post-cap canary emission; the checker leave-alone would have failed `tsc` on the
 fixture-id widening), nine P2s, eight P3s, every one owner-verified and dispositioned in §12; one owner error from the

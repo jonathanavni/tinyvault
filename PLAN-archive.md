@@ -1038,3 +1038,35 @@ Verbatim block as it stood in Current State:
 **M6.1 DONE (2026-09-09):** packet `docs/m6-1-canary-authentication-packet.md` v4 ADOPTED at the three-round Sol paper cap (R1/R2/R3 all NO-SHIP, every finding verified; the R3 criterion-(b) P1 absorbed as the cap-round owner correction; two P2 residuals) — pinned `bb2a1cc`. Astra implemented on `codex/m6-1-canary-auth` with one STOP (the AM12 retention fixture had no bootstrap) → Extension 1 (four fixture lines). Three-channel review: Codex MERGEABLE (no findings); Claude QA and security NEEDS-ATTENTION with no code defect (P2 on the implementer report text; P3s recorded); owner gates on the candidate: `make test` 2921/0/1 + timing 5/5, 20/20 + execution PASS, `make test-docker` 7/7. Merged fast-forward `7ae23be`; owner integration applied (README claim restored, SCHEMA reference sentence, phase-plan oracle sentence, M6 plan §3 row, BACKLOG closed). Register entry "M6.1 receiptless-row canary authentication". Evidence `artifacts/review-evidence/tinyvault-m6-1-canary-auth-20260909/`.
 
 **Open / next session:** (1) M7 entry inputs and the Sol test-only packets in BACKLOG "From the M6 close assessment". (2) Probe P timing-2 gate policy — DEFERRED by the user; a third idle-host rejection was recorded 2026-09-09; decide before M7. (3) Public-flip of the repository stays gated on a separate explicit go-ahead.
+
+## Archived 2026-09-10 (m7-final-acceptance)
+
+Session `2026-09-10-m7-final-acceptance` (owner claude; the fresh session the m7-packets wrapup handed off to). Executed
+`docs/m7-final-acceptance-handoff.md` §3 in order under the user's five decisions of 2026-09-10:
+1. **Owner mutant table on `9a826e5`** (real checkout detached, quiet host; driver + logs in the evidence dir
+   `mutants-9a826e5/`): 11 handoff rows + 7b + 10b + 1b–3b, then 9c. 15 of the first 16 red; row 7 (remove the `close` action)
+   was an equivalent mutant — the loop's next request produces the `sdk-request-context` witness — replaced by 7b (production
+   emission deleted → red through the E5 oracle); rows 1–3 and 5 redded at actuation (earlier than the intended assertion),
+   1b–3b reached `assertDecoyBody`; 10b proved the derived count in a scratch copy. Register `80d588a`.
+2. **Docker amendment** — packet `packet-m7-astra-docker-deadline.md` to Astra (`task-mtvy2gru-pxyldr`): `EXPORT_TIMEOUT_MS = 240_000`
+   for `#export` only, 49-hit reconciliation table, strengthened hanging-export test (pending/unkilled at 120 s, kill + destroyed
+   streams at 240 s, literal pins), new partial-export test, five sandbox mutants killed, no deviations. Owner commit `2aead00`.
+3. **Focused reviews on `828c769..2aead00`** (no gate running): Codex adversarial NEEDS-ATTENTION — P2 the budget test's 579 pin
+   (true count 965; masked on both earlier candidates by the export timeout thrown from the teardown `finally`) → owner fix
+   `b7889d3`; P1 the DOM count counts increments → accepted residual, proved by mutant 9c (observer kills it). Blind Opus QA
+   NEEDS-ATTENTION — gap/P2 from files that live on `main` not the branch; P2 dangling BACKLOG reference → item added; P3 and
+   residuals recorded. Security review not re-run (no fixture/witness content change beyond the derived count).
+4. **Final gates on `b7889d3`**: `make test` 3282/0/1 + 5/5 + 26/26, `make test-docker` 7/7 (exports 143–150 s at 965 scanners,
+   teardown 729 s), `make eval-stub` green. Returned for merge approval (`050a8c6`).
+5. **User approval** (verbatim in substance in the Decisions Log): merge `b7889d3`, E10, accept the 579 → 965 correction without
+   another round, accept the diagnostic limitation explicitly without relabeling the reviews, keep Probe P unresolved, no
+   push/campaign/spend/flip. Merge `4e86933` (no-ff; code byte-identical to `b7889d3`), E10 docs `29f704a`, merged-tree gates
+   and a literal clean clone (`npm ci` → `make browsers` → `make test`) all green; acceptance record `9f4574f`.
+Lessons to memory: the companion job store is keyed by the dispatch cwd; a throwing `finally` masks the assertion you were
+looking for; a handoff's intended assertion is a hypothesis until executed.
+
+### Moved from the `2026-09-09-m7-entry` entry (superseded "Shipped"/"Next session" paragraphs; kept verbatim)
+
+**Shipped this session (all on main, reviewed through the ladder, gated):** M7 entry inputs (4 Sol packets → `4b0f3b7`, fixes `4909ba8`, pushed); Probe P policy note adopted by the user as v2.1 (observability first, gate unchanged); **C2** diagnostics beside the gate (`16d455a` → merged `92d2bbe` after the user accepted D-1..D-4; three clean-clone gates green, cost 248.6 s ≤ 600 s); **campaign harness** `tools/probe-p-campaign/` (bash-only spawner; predicate v5 after three live inventories); **the pre-registered 20-run campaign executed 2026-09-10** — 20/20 gate green, 11 starts excluded by rule B (macOS idle-hour maintenance), **V = 9 → inconclusive; user accepted P-1**: gate, deferral, historical reds and D-1 limits unchanged, no second campaign, excluded runs never admitted; archive `~/Documents/Coding/tinyvault-evidence/probe-p-campaign-20260909/`. **M7 slice spec rev 3 LOCKED** (`docs/m7-slice-spec.md`; O7/O8 decided). Register for all of it: `docs/m7-review-findings.md`.
+
+**Next session (user-directed, in order):** (1) the scoped **Astra packet for the execution-side timing-2 inventory pin** (`scripts/test-execution.mjs` pins the timing-2 report's 26 test titles; root-of-trust script change, self-test mutants, digest refresh — BACKLOG "From the C2 / campaign-harness ladder"); (2) the **M7 implementation packet** drafted from locked rev 3 (fixture pages and prompt payloads are the spec §11 Codex trigger — Astra authors them; Claude owns plan, integration, gates); **bring both packets and their paper-review dispositions back to the user before implementation.** Not authorized: implementation of either, a second campaign, live-provider spend, push, public flip. Standing rules restated by the user: future required gates keep their actual verdicts; any new Probe P rejection keeps its complete diagnostics (sidecar) and is investigated without retrying to green.

@@ -1,5 +1,7 @@
 # M7 final-acceptance handoff (execution-ready; written at the 2026-09-10 wrapup of session `2026-09-10-m7-packets`)
 
+**Executed 2026-09-10** (session `2026-09-10-m7-final-acceptance`): §3 completed, `b7889d3` approved and merged `4e86933`; kept as the record of the acceptance contract.
+
 **Purpose.** A fresh Claude Code session finishes M7's acceptance work under the user's decisions of 2026-09-10 (recorded
 verbatim in substance in §2) and returns the final candidate for **merge approval**. Nothing here re-opens a settled paper
 review, an accepted decision, or a locked contract beyond the one amendment authorized in §2.2. Owner: Claude
