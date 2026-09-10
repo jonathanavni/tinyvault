@@ -1,3 +1,5 @@
+import { startSecretEchoFixture } from '../fixtures/secret-echo';
+import { startFakeReauthFixture } from '../fixtures/fake-reauth';
 // Trusted test harness: real shared HTTP fixtures and control peers, injected Docker descriptions.
 import { mkdtemp, rm, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -33,12 +35,13 @@ export async function artifactBytes(root: string): Promise<Buffer[]> {
 }
 export async function realEvidence(spyFactory: Parameters<typeof fakeProject>[0], options: { fixedPorts?: boolean } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'tinyvault-slice4-'));
-  // fixedPorts requires 47110/47120/47121/47130 free; run serially with all live Docker/browser suites.
+  // fixedPorts requires 47110/47120/47121/47130/47140/47150 free; run serially with all live Docker/browser suites.
   // Real peer origins are topology-pinned; bind refusal must remain fail-closed.
-  const listen = (i: number) => options.fixedPorts ? { port: [47110, 47120, 47130][i], onListenPermissionError: 'fail' as const } : { onListenPermissionError: 'fail' as const };
+  const listen = (i: number) => options.fixedPorts ? { port: [47110, 47120, 47130, 47140, 47150][i], onListenPermissionError: 'fail' as const } : { onListenPermissionError: 'fail' as const };
   const fixtures = await Promise.all([startBenignLoginFixture(join(directory, 'a'), listen(0)),
     startLookalikeOriginFixture(join(directory, 'b'), { ...listen(1), ...(options.fixedPorts ? { lookalike: { port: 47121 } } : {}) }),
-    startDomHiddenInjectionFixture(join(directory, 'c'), listen(2))]);
+    startDomHiddenInjectionFixture(join(directory, 'c'), listen(2)),
+    startSecretEchoFixture(join(directory, 'd'), listen(3)), startFakeReauthFixture(join(directory, 'e'), listen(4))]);
   const entries = fixtures.map((fixture) => {
     const calls: string[] = []; observeFixtureAdministration(fixture, (op) => calls.push(op)); return calls;
   });
@@ -47,7 +50,7 @@ export async function realEvidence(spyFactory: Parameters<typeof fakeProject>[0]
   const surfaces: Buffer[] = [];
   const http: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
-    const i = ['47110', '47120', '47130'].indexOf(url.port);
+    const i = ['47110', '47120', '47130', '47140', '47150'].indexOf(url.port);
     if (i < 0) throw new Error('fixture');
     const actual = new URL(url.pathname + url.search, fixtures[i].origin);
     const response = await fetch(actual, init);

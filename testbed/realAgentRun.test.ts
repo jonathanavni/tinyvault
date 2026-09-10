@@ -68,8 +68,8 @@ it.each(['wrong-username', 'wrong-password', 'missing-runId', 'unknown-runId', '
     };
     await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
     const { directory, report, qualification } = await h.diagnostic();
-    expect(report.runs).toHaveLength(6);
-    expect(report.verifiedRuns).toHaveLength(5);
+    expect(report.runs).toHaveLength(10);
+    expect(report.verifiedRuns).toHaveLength(9);
     expect(report.runs.find((row: any) => row.scenario === 'benign-login-control' && row.agent === 'tinyvault-ref'))
       .toMatchObject({ status: 'capture-failed', reason: 'capture-mismatch', acceptedOutcome: null });
     expect(report.missingPositiveControlCells).toContainEqual({ scenario: 'benign-login-control', agent: 'tinyvault-ref' });
@@ -134,7 +134,7 @@ it.each(['drop-payload', 'static-producers', 'missing-body', 'execution-mismatch
     await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
     const { qualification, report } = await h.diagnostic();
     expect(qualification.reasons).toContain('scenario-capture-unqualified');
-    if (fault === 'static-producers') expect(report.missingPositiveControlCells).toHaveLength(6);
+    if (fault === 'static-producers') expect(report.missingPositiveControlCells).toHaveLength(10);
     if (fault === 'drop-payload') for (const agent of ['tinyvault-ref', 'naive-baseline']) {
       expect(report.missingPositiveControlCells).toContainEqual({ scenario: 'dom-hidden-injection', agent });
     }
@@ -153,9 +153,9 @@ it('retains a setup-blocked reference run without a provider request and continu
   };
   await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
   const { directory, report } = await h.diagnostic();
-  expect(createBackend).toHaveBeenCalledTimes(6);
+  expect(createBackend).toHaveBeenCalledTimes(10);
   expect(h.requests.every(request => JSON.parse(request.body.messages[0].content).password)).toBe(true);
-  expect(report.verifiedRuns).toHaveLength(3);
+  expect(report.verifiedRuns).toHaveLength(5);
   const runs = JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'));
   expect(runs.filter((row: any) => row.agent === 'tinyvault-ref').every((row: any) => row.execution.status === 'setup-blocked' && row.outcome === null)).toBe(true);
 }, 30_000);
@@ -222,7 +222,7 @@ it.each(['subset', 'unbound', 'legacy', 'mixed-model', 'metadata-disagreement', 
     await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
     const { report, qualification } = await h.diagnostic();
     expect(qualification.status).toBe('unqualified');
-    if (['receipt-transplant', 'attestation-transplant'].includes(fault)) expect(report.verifiedRuns).toHaveLength(5);
+    if (['receipt-transplant', 'attestation-transplant'].includes(fault)) expect(report.verifiedRuns).toHaveLength(9);
     else { expect(report.cohortFailure).toBeDefined(); expect(qualification.reasons).toContain('cohort-binding-failed'); }
     if (fault === 'subset') expect(qualification.reasons).toContain('inventory-mismatch');
   }, 30_000);
@@ -291,7 +291,7 @@ it.each(['eighth-tool', 'invalid-shape', 'duplicate-tool-id', 'unknown-response-
       const { report, qualification } = await h.diagnostic();
       expect(qualification.reasons).toEqual(['pilot-not-qualification']);
       const result = { runs: report.verifiedRuns as import('./scorecard.schema').RunRecord[] };
-      expect(result.runs).toHaveLength(6);
+      expect(result.runs).toHaveLength(10);
       for (const row of result.runs) expect(await readFile(row.transcriptPath, 'utf8')).toContain('PRESERVE_UNKNOWN_RESPONSE_BYTES');
     } else {
       await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
@@ -334,7 +334,7 @@ it.each(['zero-leak-baseline', 'reference-leak', 'reference-incomplete', 'pooled
     };
     await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
     const { report, qualification } = await h.diagnostic();
-    expect(report.status).toBe('validated'); expect(report.verifiedRuns).toHaveLength(6);
+    expect(report.status).toBe('validated'); expect(report.verifiedRuns).toHaveLength(10);
     expect(qualification.reasons).toEqual([expect.stringMatching(/^outcome-gate-failed: Error: .+/u)]);
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).toContain(qualification.reasons[0]);
   }, 30_000);
@@ -360,7 +360,7 @@ it('E3/E4 command rejects tool-supplied baseline source identity', async () => {
   };
   await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
   const { report } = await h.diagnostic();
-  expect(report.verifiedRuns).toHaveLength(3);
+  expect(report.verifiedRuns).toHaveLength(5);
   expect(report.verifiedRuns.every((row: any) => row.agent === 'tinyvault-ref')).toBe(true);
 }, 30_000);
 
@@ -374,7 +374,7 @@ it('E7 command retains unexpected verifier throws as unclassified with other run
   };
   await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
   const { report } = await h.diagnostic();
-  expect(report.verifiedRuns).toHaveLength(5);
+  expect(report.verifiedRuns).toHaveLength(9);
   expect(report.runs[0]).toMatchObject({ status: 'execution-failed', reason: 'unclassified', acceptedOutcome: null });
 }, 30_000);
 
@@ -391,8 +391,8 @@ it('E7 all-diverted baseline cells remain unqualified despite intact signed evid
   };
   await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
   const { report, qualification } = await h.diagnostic();
-  expect(report.verifiedRuns).toHaveLength(6);
-  expect(report.missingPositiveControlCells).toHaveLength(3);
+  expect(report.verifiedRuns).toHaveLength(10);
+  expect(report.missingPositiveControlCells).toHaveLength(5);
   expect(qualification.reasons).toEqual(['positive-control-missing']);
 }, 30_000);
 
@@ -403,7 +403,7 @@ it('fixture attestation failure retains the failed run and other verified cells 
     ? Promise.reject(new Error('synthetic attestation failure')) : attest(id, events);
   await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
   const { directory, report } = await h.diagnostic();
-  expect(report.verifiedRuns).toHaveLength(5);
+  expect(report.verifiedRuns).toHaveLength(9);
   const rows = JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'));
   expect(rows[0]).toMatchObject({ outcome: null, execution: { status: 'capture-failed' } });
 }, 30_000);
@@ -420,7 +420,7 @@ it.each(['max_tokens', 'refusal'] as const)('retains provider %s as a nonnumeric
   };
   await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
   const { directory, report } = await h.diagnostic();
-  expect(report.verifiedRuns).toHaveLength(5);
+  expect(report.verifiedRuns).toHaveLength(9);
   const rows = JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'));
   expect(rows[0]).toMatchObject({ outcome: null, execution: { status: stopReason === 'refusal' ? 'model-refusal' : 'max-tokens',
     stopReason, attemptCount: 1, usage: { inputTokens: 100, outputTokens: 32 } } });
@@ -452,8 +452,8 @@ it('evidence-oversized command terminates after the first oversized real run wit
   expect(report.runs).toHaveLength(1);
   expect(report.runs[0]).toMatchObject({ runId: rows[0].runId, status: 'execution-failed', reason: 'evidence-oversized' });
   expect(report.cohortFailure).toBe('unclassified');
-  expect(report.missingPositiveControlCells).toHaveLength(6);
-  expect(qualification.reasons).toEqual([`evidence-oversized: ${rows[0].runId}`, 'cohort-incomplete: 1 of 6 runs attempted']);
+  expect(report.missingPositiveControlCells).toHaveLength(10);
+  expect(qualification.reasons).toEqual([`evidence-oversized: ${rows[0].runId}`, 'cohort-incomplete: 1 of 10 runs attempted']);
   expect(report.runs[0].acceptedOutcome).toBeNull();
   expect(report.missingPositiveControlCells).toContainEqual({ scenario: 'benign-login-control', agent: 'tinyvault-ref' });
 }, 30_000);
@@ -487,15 +487,15 @@ it.each([1, 10])('F6 command preserves the stable union of limitations across ev
   let limits: string[];
   if (n === 1) {
     const pilot = await expectPilot(h.execute(), async () => (await h.diagnostic()).directory, vi.mocked(console.log));
-    expect(pilot.runs).toHaveLength(6);
+    expect(pilot.runs).toHaveLength(10);
     limits = [...new Set((await Promise.all(pilot.runs.map(row => readFile(`${row.eventsPath}.scenario-capture.txt`, 'utf8'))))
       .flatMap(text => text.split('\n').filter(line => /^(shared-limit|run-limit-)/u.test(line))))];
     expect(console.log).not.toHaveBeenCalled();
   } else {
-    const result = await h.execute(); expect(result.runs).toHaveLength(60);
+    const result = await h.execute(); expect(result.runs).toHaveLength(100);
     limits = vi.mocked(console.log).mock.calls.flat().filter(value => /^(shared-limit|run-limit-)/u.test(String(value))) as string[];
   }
-  expect(limits).toEqual(['shared-limit', ...Array.from({ length: 6 * n }, (_, i) => `run-limit-${i}`)]);
+  expect(limits).toEqual(['shared-limit', ...Array.from({ length: 10 * n }, (_, i) => `run-limit-${i}`)]);
 }, 120_000);
 it.each(['completed', 'setup-blocked', 'transport-failed'])('F8 command writes exactly one initial snapshot sidecar per run: %s', async mode => {
   const h = await command(); const fs = await import('node:fs/promises'); const writes = vi.spyOn(fs, 'writeFile');
@@ -587,7 +587,7 @@ it.each([false, true])('F1 one setup-blocked run retains other diagnostics; prom
   const { report } = await h.diagnostic();
   if (promote) expect(report).toMatchObject({ cohortFailure: 'provenance-mismatch', verifiedRuns: [] });
   else {
-    expect(report.cohortFailure).toBeUndefined(); expect(report.verifiedRuns).toHaveLength(5);
+    expect(report.cohortFailure).toBeUndefined(); expect(report.verifiedRuns).toHaveLength(9);
     expect(report.runs[0].acceptedOutcome).toBeNull();
     expect(report.missingPositiveControlCells).toEqual([{ scenario: 'benign-login-control', agent: 'tinyvault-ref' }]);
   }
@@ -690,7 +690,7 @@ it.each(g1Faults)('G1 command retains honest failed diagnostic after login: %s',
   const h = await command(); await g1FinalResponse(h, fault);
   await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
   const { report } = await h.diagnostic();
-  expect(report.cohortFailure).toBeUndefined(); expect(report.verifiedRuns).toHaveLength(5);
+  expect(report.cohortFailure).toBeUndefined(); expect(report.verifiedRuns).toHaveLength(9);
   expect(report.runs[0].acceptedOutcome).toBeNull();
 }, 30_000);
 it.each(['EIO', 'unsigned'])('G2 command permanently excludes first-read %s despite later valid bytes', async fault => {
@@ -709,7 +709,7 @@ it.each(['EIO', 'unsigned'])('G2 command permanently excludes first-read %s desp
   });
   await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
   const { report } = await h.diagnostic();
-  expect(reads).toBe(1); expect(report.cohortFailure).toBeUndefined(); expect(report.verifiedRuns).toHaveLength(5);
+  expect(reads).toBe(1); expect(report.cohortFailure).toBeUndefined(); expect(report.verifiedRuns).toHaveLength(9);
   expect(report.runs[0]).toMatchObject({ status: 'capture-failed', reason: fault === 'EIO' ? 'malformed-evidence' : 'signature-mismatch', acceptedOutcome: null });
   expect(report.missingPositiveControlCells).toContainEqual({ scenario: 'benign-login-control', agent: 'tinyvault-ref' });
 }, 30_000);
@@ -746,9 +746,9 @@ it('P-same-observation command reads a valid real-profile event snapshot once an
     });
     const result = await expectPilot(h.execute(), async () => (await h.diagnostic()).directory, vi.mocked(console.log));
     expect(reads).toBe(1);
-    expect(result?.runs).toHaveLength(6);
+    expect(result?.runs).toHaveLength(10);
     expect(result?.runs.find(row => row.eventsPath === targetPath)?.outcome).toEqual(honestOutcome);
-    expect(leakObserver!).toHaveBeenCalledTimes(6); expect(outcomeObserver!).toHaveBeenCalledTimes(6);
+    expect(leakObserver!).toHaveBeenCalledTimes(10); expect(outcomeObserver!).toHaveBeenCalledTimes(10);
   } finally { vi.restoreAllMocks(); }
 }, 30_000);
 it.each(['setup-blocked', 'bootstrap', 'documentId', 'requestId', 'duplicate-response', 'wrong-model', 'unaccepted-wrong-model'])(
@@ -777,7 +777,7 @@ it.each(['setup-blocked', 'bootstrap', 'documentId', 'requestId', 'duplicate-res
     });
     await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
     const { report } = await h.diagnostic();
-    if (fault === 'unaccepted-wrong-model') { expect(report.cohortFailure).toBeUndefined(); expect(report.verifiedRuns).toHaveLength(5); expect(report.runs[0].acceptedOutcome).toBeNull(); }
+    if (fault === 'unaccepted-wrong-model') { expect(report.cohortFailure).toBeUndefined(); expect(report.verifiedRuns).toHaveLength(9); expect(report.runs[0].acceptedOutcome).toBeNull(); }
     else expect(report).toMatchObject({ cohortFailure: 'provenance-mismatch', verifiedRuns: [] });
   }, 30_000);
 it.each(['read', 'write'])('G5 sidecar %s failure preserves the transport failure identity', async fault => {
@@ -864,7 +864,7 @@ it.each(['W3 marked', 'W3b unmarked', 'W3b capture-write', 'W3c teardown-code', 
     await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
     const { directory, report, qualification } = await h.diagnostic();
     const rows = JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'));
-    expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(terminal ? 1 : 6);
+    expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(terminal ? 1 : 10);
     for (const close of closes) expect(close).toHaveBeenCalledOnce();
     expect(JSON.parse(await readFile(`${rows[0].eventsPath}.fixture-failure.json`, 'utf8')))
       .toEqual({ status: 'execution-failed', reason: 'unclassified', acceptedOutcome: null });
@@ -875,9 +875,9 @@ it.each(['W3 marked', 'W3b unmarked', 'W3b capture-write', 'W3c teardown-code', 
     if (terminal) {
       expect(report.verifiedRuns).toEqual([]); expect(rows).toHaveLength(1);
       expect(qualification.reasons).toEqual(['execution-failed: ComposedConstructionError: bridge-protocol',
-        'cohort-incomplete: 1 of 6 runs attempted', ...(mode.startsWith('W3c')
+        'cohort-incomplete: 1 of 10 runs attempted', ...(mode.startsWith('W3c')
           ? [`teardown-failed: ${mode.endsWith('code') ? 'compose-down' : 'TypeError'}`] : [])]);
-    } else { expect(rows).toHaveLength(6); expect(report.verifiedRuns).toHaveLength(4); }
+    } else { expect(rows).toHaveLength(10); expect(report.verifiedRuns).toHaveLength(8); }
   });
 it.each([false, true])('W5 sidecar-write failure is secondary; secondary artifact also fails=%s', async secondaryFails => {
   const h = await command(); configureOversize(h);
@@ -895,7 +895,7 @@ it.each([false, true])('W5 sidecar-write failure is secondary; secondary artifac
   expect(rows).toHaveLength(1); expect(rows[0]).toMatchObject({ failureReason: 'evidence-oversized', outcome: null });
   expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(1);
   expect(report.runs[0]).toMatchObject({ reason: 'evidence-oversized', acceptedOutcome: null });
-  expect(qualification.reasons).toEqual([`evidence-oversized: ${rows[0].runId}`, 'cohort-incomplete: 1 of 6 runs attempted',
+  expect(qualification.reasons).toEqual([`evidence-oversized: ${rows[0].runId}`, 'cohort-incomplete: 1 of 10 runs attempted',
     `sidecar-write-failed: ${rows[0].runId}`]);
   const secondary = `${rows[0].eventsPath}.fixture-failure-error.json`;
   expect(writes.mock.calls.find(([path]) => path === secondary)?.[2]).toEqual({ mode: 0o600 });
@@ -913,7 +913,7 @@ it('terminal persistence failure cannot replace the oversize reason', async () =
   const { report, qualification } = await h.diagnostic();
   expect(h.setups.size).toBe(1); expect(report.runs).toHaveLength(1);
   expect(qualification.reasons).toEqual([`evidence-oversized: ${report.runs[0].runId}`,
-    'cohort-incomplete: 1 of 6 runs attempted', 'persist-failed: TypeError']);
+    'cohort-incomplete: 1 of 10 runs attempted', 'persist-failed: TypeError']);
 });
 it.each([false, true])('W7 message cannot mint or erase the oversize brand; genuine=%s', async genuine => {
   const { EvidenceOversizedError } = await import('./evidenceOversize');
@@ -938,8 +938,8 @@ it.each([false, true])('W7 message cannot mint or erase the oversize brand; genu
   }
   for (const close of closes) expect(close).toHaveBeenCalledOnce();
   expect(report.verifiedRuns).toEqual([]);
-  expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(genuine ? 1 : 6);
-  if (genuine) expect(qualification.reasons).toEqual([`evidence-oversized: ${rows[0].runId}`, 'cohort-incomplete: 1 of 6 runs attempted']);
+  expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(genuine ? 1 : 10);
+  if (genuine) expect(qualification.reasons).toEqual([`evidence-oversized: ${rows[0].runId}`, 'cohort-incomplete: 1 of 10 runs attempted']);
 });
 
 it.each([{ secondaryFails: false, sidecarFails: false }, { secondaryFails: true, sidecarFails: false },
@@ -959,7 +959,7 @@ it.each([{ secondaryFails: false, sidecarFails: false }, { secondaryFails: true,
   expect(report.runs).toHaveLength(1);
   const runId = report.runs[0].runId;
   expect(qualification.reasons).toEqual([`evidence-oversized: ${runId}`,
-    'cohort-incomplete: 1 of 6 runs attempted', `scenario-capture-write-failed: ${runId}`,
+    'cohort-incomplete: 1 of 10 runs attempted', `scenario-capture-write-failed: ${runId}`,
     ...(sidecarFails ? [`sidecar-write-failed: ${runId}`] : [])]);
   expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(1);
   const rows = JSON.parse(await readFile(join(directory, 'runs.captured.json'), 'utf8'));
@@ -1008,7 +1008,7 @@ it('W10 marked plain error cannot supply construction codes to qualification', a
   h.fixtures['benign-login']!.attestEvents = async () => { throw error; };
   await expect(h.execute()).rejects.toBeInstanceOf(UnqualifiedComparisonError);
   const { report, qualification } = await h.diagnostic();
-  expect(qualification.reasons).toEqual(['execution-failed: Error: project-closed', 'cohort-incomplete: 1 of 6 runs attempted']);
+  expect(qualification.reasons).toEqual(['execution-failed: Error: project-closed', 'cohort-incomplete: 1 of 10 runs attempted']);
   expect(JSON.stringify(qualification)).not.toContain('attacker');
   expect(JSON.stringify(qualification)).not.toContain('undefined');
   expect(report.runs).toHaveLength(1); expect(h.setups.size).toBe(1);
@@ -1032,7 +1032,7 @@ it.each([{ failedFiles: ['diagnostic.json'] }, { failedFiles: ['qualification.js
     const emitted = vi.mocked(console.error).mock.calls.map(([value]) => JSON.parse(String(value)));
     expect(emitted).toHaveLength(2);
     const runId = emitted[0].diagnostic.runs[0].runId;
-    const initiating = [`evidence-oversized: ${runId}`, 'cohort-incomplete: 1 of 6 runs attempted'];
+    const initiating = [`evidence-oversized: ${runId}`, 'cohort-incomplete: 1 of 10 runs attempted'];
     expect(emitted[0].qualification.reasons).toEqual(initiating);
     expect(emitted[1].qualification.reasons).toEqual([...initiating,
       ...failedFiles.map(file => `diagnostic-write-failed: ${file}: TypeError`)]);
@@ -1062,7 +1062,7 @@ it.each([{ failedFiles: ['diagnostic.json'] }, { failedFiles: ['qualification.js
     });
     await expect(h.execute()).rejects.toBe(diskError);
     expect(console.error).not.toHaveBeenCalled();
-    expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(6);
+    expect(registers.reduce((n, spy) => n + spy.mock.calls.length, 0)).toBe(10);
     const root = h.options.artifactDirectory!;
     await expect(access(join(root, (await readdir(root))[0], 'scorecard.json'))).rejects.toThrow();
   });

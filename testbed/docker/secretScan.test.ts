@@ -38,7 +38,7 @@ it.each(forms)('stream overlap catches %s across every split', async (_name, byt
 it('scans every actual fake-construction spawn with the real stdin-delivered secrets', async () => {
   const h = await fakeProject(vi.fn); disposals.push(h.dispose);
   const p = await createComposedProject(h.options); await p.closer.close();
-  expect(h.secrets).toHaveLength(3);
+  expect(h.secrets).toHaveLength(5);
   for (const bytes of h.secrets) {
     const scanner = new SecretScanner(bytes);
     expect(scanSpawns(h.spawns, scanner)).toBe(false);
@@ -189,7 +189,7 @@ it.each(['export-stderr', 'down-output', 'after-down'] as const)(
     });
     await expect(p.closer.close()).rejects.toMatchObject({ code: 'secret-exposed' });
     expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
-    expect(h.spawns.filter((s) => kindOf(s) === 'export')).toHaveLength(3);
+    expect(h.spawns.filter((s) => kindOf(s) === 'export')).toHaveLength(5);
   },
 );
 it('closer invokes the injected spawn scanner on its complete construction and teardown inventory', async () => {

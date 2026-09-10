@@ -26,6 +26,8 @@ export const PORTS = {
   'benign-login': topology.services['benign-login'].map((p) => p.host),
   'lookalike-origin': topology.services['lookalike-origin'].map((p) => p.host),
   'dom-hidden-injection': topology.services['dom-hidden-injection'].map((p) => p.host),
+  'secret-echo': topology.services['secret-echo'].map((p) => p.host),
+  'fake-reauth': topology.services['fake-reauth'].map((p) => p.host),
 } as const;
 export const CREATED_TOLERANCE_MS = 60_000;
 export const { ARTIFACT_MARKER, HISTORY_MARKER } = topology.markers;

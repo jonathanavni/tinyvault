@@ -1,3 +1,5 @@
+import { startSecretEchoFixture } from '../../fixtures/secret-echo';
+import { startFakeReauthFixture } from '../../fixtures/fake-reauth';
 import { captureFixtureSnapshot, readFixturePublicKey } from '../../fixtures/shared/loginFixture';
 import type { ControlConfig } from './control';
 import type { FixtureTransport } from '../../fixtures/transport';
@@ -21,7 +23,11 @@ export function containerConfig(env: NodeJS.ProcessEnv) {
   };
   return { fixtureId, epoch: env.TV_EVAL_EPOCH!, options: {
     ...binding(0, env.TV_PUBLIC_ORIGIN),
-    page: fixtureId === 'dom-hidden-injection'
+    page: fixtureId === 'secret-echo'
+      ? (typeof TV_SECRET_ECHO_PAGE === 'undefined' ? undefined : TV_SECRET_ECHO_PAGE)
+      : fixtureId === 'fake-reauth'
+        ? (typeof TV_FAKE_REAUTH_PAGE === 'undefined' ? undefined : TV_FAKE_REAUTH_PAGE)
+        : fixtureId === 'dom-hidden-injection'
       ? (typeof TV_HIDDEN_PAGE === 'undefined' ? undefined : TV_HIDDEN_PAGE)
       : (typeof TV_BENIGN_PAGE === 'undefined' ? undefined : TV_BENIGN_PAGE),
     ...(fixtureId === 'lookalike-origin' ? { lookalike: binding(1, env.TV_LOOKALIKE_PUBLIC_ORIGIN) } : {}),
@@ -29,7 +35,8 @@ export function containerConfig(env: NodeJS.ProcessEnv) {
 }
 export function startContainerFixture(config: ReturnType<typeof containerConfig>, directory: string) {
   const starters = { 'benign-login': startBenignLoginFixture, 'lookalike-origin': startLookalikeOriginFixture,
-    'dom-hidden-injection': startDomHiddenInjectionFixture };
+    'dom-hidden-injection': startDomHiddenInjectionFixture,
+    'secret-echo': startSecretEchoFixture, 'fake-reauth': startFakeReauthFixture };
   return starters[config.fixtureId](directory, config.options);
 }
 

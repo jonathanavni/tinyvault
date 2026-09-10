@@ -7,9 +7,9 @@ const read = () => JSON.parse(readFileSync(new URL('./topology.json', import.met
 describe('single topology home', () => {
   it('retains the locked ports, paths, image and B1 marker exports', () => {
     const topology = validateTopology(read());
-    expect(PORTS).toEqual({ 'benign-login': [47110], 'lookalike-origin': [47120, 47121], 'dom-hidden-injection': [47130] });
+    expect(PORTS).toEqual({ 'benign-login': [47110], 'lookalike-origin': [47120, 47121], 'dom-hidden-injection': [47130], 'secret-echo': [47140], 'fake-reauth': [47150] });
     expect(Object.values(topology.services).flat().map((p) => [p.address, p.container]))
-      .toEqual([['127.0.0.1', 8080], ['127.0.0.1', 8080], ['127.0.0.1', 8081], ['127.0.0.1', 8080]]);
+      .toEqual([['127.0.0.1', 8080], ['127.0.0.1', 8080], ['127.0.0.1', 8081], ['127.0.0.1', 8080], ['127.0.0.1', 8080], ['127.0.0.1', 8080]]);
     expect(IMAGE_NAME).toBe('tinyvault-fixture:local');
     expect(COMPOSE_FILE).toBe(fileURLToPath(new URL('./compose.json', import.meta.url)));
     expect(topology.controlSocket).toBe('/tmp/tinyvault/control.sock');

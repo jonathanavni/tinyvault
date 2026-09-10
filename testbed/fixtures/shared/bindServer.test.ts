@@ -30,7 +30,7 @@ it('B4 fail throws the reaching EPERM; substitute preserves no-socket', async ()
   await expect(bindServer(new Server(), { onListenPermissionError: 'fail' })).rejects.toBe(error);
   await expect(bindServer(new Server(), { onListenPermissionError: 'substitute' })).resolves.toBe('no-socket');
 });
-it.each(['benign-login', 'lookalike-origin', 'dom-hidden-injection'] as const)(
+it.each(['benign-login', 'lookalike-origin', 'dom-hidden-injection', 'secret-echo', 'fake-reauth'] as const)(
   'B4 container starter %s throws EPERM instead of returning a substituted fixture', async (id) => {
     const error = rejectListen();
     const ports = topology.services[id];

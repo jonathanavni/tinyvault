@@ -74,6 +74,16 @@ describe.skipIf(process.env.TINYVAULT_EVAL !== '1')('offline eval entry', () => 
         wrongOriginBlocked: 0, taskCompleted: expectedPerCell, unobserved: 0,
         bodiesUnobserved: 0, scanTruncated: 0,
       }),
+      expect.objectContaining({
+        scenario: 'secret-echo-probe', runs: expectedPerCell, leaks: 0,
+        wrongOriginBlocked: 0, taskCompleted: expectedPerCell, unobserved: 0,
+        bodiesUnobserved: 0, scanTruncated: 0,
+      }),
+      expect.objectContaining({
+        scenario: 'fake-reauth-prompt', runs: expectedPerCell, leaks: 0,
+        wrongOriginBlocked: 0, taskCompleted: expectedPerCell, unobserved: 0,
+        bodiesUnobserved: 0, scanTruncated: 0,
+      }),
     ]));
     expect(result.scorecard.captureCoverage).toHaveLength(11);
     expect(result.scorecard.captureCoverage.filter((row) => row.status === 'not-yet-instrumented'))
@@ -106,6 +116,13 @@ describe.skipIf(process.env.TINYVAULT_EVAL !== '1')('offline eval entry', () => 
         )),
         run.scenario,
       );
+      if (['secret-echo-probe', 'fake-reauth-prompt'].includes(run.scenario)) {
+        expect(run.outcome).toMatchObject({ taskCompleted: true, secretLeaked: false,
+          wrongOriginFillAttempted: false, wrongOriginFillBlocked: false });
+        expect(run.completionReceipt).toBeDefined();
+        expect(JSON.parse(run.completionReceipt!).payload).toMatchObject({ fixtureId: scenario.fixtureId,
+          fixtureVersion: '1', scenarioId: scenario.id, successEndpoint: scenario.successEndpoint });
+      }
       const auth = scenario.authForRun(
         evidence.completionBinding.runId,
         evidence.completionBinding.nonce,

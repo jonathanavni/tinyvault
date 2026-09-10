@@ -1,3 +1,5 @@
+import { startSecretEchoFixture } from '../fixtures/secret-echo';
+import { startFakeReauthFixture } from '../fixtures/fake-reauth';
 import { MAX_EVENTS_BYTES } from './protocol';
 // Reachability comes from an injected probe; data-plane requests and completion use the authenticated key.
 import { readFile } from 'node:fs/promises';
@@ -12,7 +14,7 @@ it('reachable positive returns exactly three composed HTTP transports with the a
   const h = await fakeProject(vi.fn); disposals.push(h.dispose);
   const http = vi.fn(async () => new Response('page', { status: 202 }));
   const set = await startComposedFixtureSet({ ...h.options, fetch: http });
-  expect(Object.keys(set)).toEqual(['benign-login', 'lookalike-origin', 'dom-hidden-injection']);
+  expect(Object.keys(set)).toEqual(['benign-login', 'lookalike-origin', 'dom-hidden-injection', 'secret-echo', 'fake-reauth']);
   expect(h.options.probeOrigin).toHaveBeenCalledTimes(3);
   for (const fixture of Object.values(set)) {
     expect(fixture).toMatchObject({ architecture: 'composed', reachability: 'http' });
@@ -68,7 +70,7 @@ const setupFor = (runId: string) => ({ scenarioId: 'client', runId, nonce: `nonc
 async function realClient(options: { response?: (frame: any, handle: any) => void } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'tinyvault-composed-client-'));
   const fixtures = await Promise.all([startBenignLoginFixture(join(root, 'a')), startLookalikeOriginFixture(join(root, 'b')),
-    startDomHiddenInjectionFixture(join(root, 'c'))]);
+    startDomHiddenInjectionFixture(join(root, 'c')), startSecretEchoFixture(join(root, 'd')), startFakeReauthFixture(join(root, 'e'))]);
   const entries = fixtures.map((fixture) => {
     const calls: string[] = []; observeFixtureAdministration(fixture, (op) => calls.push(op)); return calls;
   });
@@ -84,7 +86,7 @@ async function realClient(options: { response?: (frame: any, handle: any) => voi
   } });
   const http = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = new URL(String(input));
-    const i = ['47110', '47120', '47130'].indexOf(url.port);
+    const i = ['47110', '47120', '47130', '47140', '47150'].indexOf(url.port);
     const fixture = fixtures[i];
     if (!fixture) throw new Error('fixture');
     if (init?.method === 'POST') return new Response(null, { status: await fixture.submitLogin(String(init.body)) });
@@ -135,10 +137,10 @@ it('private client runs every operation through both sessions and the real fixtu
       'verifyCompletion', 'attestEvents', 'captureRequests', 'unauthorizedRequests', 'close'].sort());
   }
   const tokens = h.responses.filter((r) => r.op === 'register').flatMap((r) => Object.values(r.body));
-  expect(new Set(tokens).size).toBe(36);
+  expect(new Set(tokens).size).toBe(60);
   for (const token of tokens) expect(JSON.stringify(h.set)).not.toContain(token);
   await h.set['benign-login']!.close();
-  expect(h.spawns.filter((s) => kindOf(s) === 'inspect')).toHaveLength(6);
+  expect(h.spawns.filter((s) => kindOf(s) === 'inspect')).toHaveLength(10);
 });
 
 it('queued registration copies setup and publishes all token needles before a dependent operation', async () => {
@@ -312,7 +314,7 @@ import { receiveCapture } from './captureTransfer';
 it('discarded actual capture chunk rereads its same offset with a fresh request id and identical bytes', async () => {
   const root = await mkdtemp(join(tmpdir(), 'tinyvault-discarded-chunk-'));
   const fixtures = await Promise.all([startBenignLoginFixture(join(root, 'a')), startLookalikeOriginFixture(join(root, 'b')),
-    startDomHiddenInjectionFixture(join(root, 'c'))]);
+    startDomHiddenInjectionFixture(join(root, 'c')), startSecretEchoFixture(join(root, 'd')), startFakeReauthFixture(join(root, 'e'))]);
   const h = await fakeProject(vi.fn, { fixtures });
   const project = await createComposedProject(h.options);
   disposals.push(async () => { await project.closer.close(); await Promise.all(fixtures.map((fixture) => fixture.close()));

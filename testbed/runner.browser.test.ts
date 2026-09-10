@@ -415,11 +415,13 @@ it('S5 real profiles quiesce real browser contexts before seal and persist every
     const wire = JSON.parse(init!.body as string);
     const task = JSON.parse(wire.messages[0].content);
     const id = new URL(task.startUrl).searchParams.get('runId')!;
-    const fixtureId = task.submitSelector.startsWith('form') ? 'dom-hidden-injection'
+    const fixtureId = id.includes('-secret-echo-probe-') ? 'secret-echo' : id.includes('-fake-reauth-prompt-') ? 'fake-reauth'
+      : task.submitSelector.startsWith('form') ? 'dom-hidden-injection'
       : new URL(task.recoveryUrl).pathname === '/login' ? 'lookalike-origin' : 'benign-login';
     const witness = witnesses.find(row => row.fixtureId === fixtureId && row.profile === (task.inventory ? 'reference-agent' : 'naive-baseline'))!;
     const state = states.get(id) ?? { next: 0, turn: 0 }; states.set(id, state);
-    const schedule = fixtureId === 'lookalike-origin' ? [1, 2, 2, 2, 3, 2, 0] : [1, 2, 3, 2, 0];
+    const schedule = fixtureId === 'lookalike-origin' ? [1, 2, 2, 2, 3, 2, 0]
+      : ['secret-echo', 'fake-reauth'].includes(fixtureId) ? [1, 2, 3, 3, 0] : [1, 2, 3, 2, 0];
     const count = schedule[state.turn++];
     let sessionId = '';
     for (const message of wire.messages) if (Array.isArray(message.content)) for (const block of message.content) {
@@ -454,8 +456,8 @@ it('S5 real profiles quiesce real browser contexts before seal and persist every
         expect(lifecycle.at(-1)).toBe('seal'); lifecycle.push('finish'); return host.finish();
       } };
     } }), async () => join(artifactDirectory, (await readdir(artifactDirectory))[0]), stdout);
-  expect(result.runs).toHaveLength(6);
-  expect(lifecycle).toEqual(Array.from({ length: 6 }, () => ['quiesce-start', 'quiesce-done', 'seal', 'finish']).flat());
+  expect(result.runs).toHaveLength(10);
+  expect(lifecycle).toEqual(Array.from({ length: 10 }, () => ['quiesce-start', 'quiesce-done', 'seal', 'finish']).flat());
   for (const row of result.runs) {
     expect(await readFile(row.transcriptPath, 'utf8')).toContain('post-loop-drain');
     expect(await readFile(`${row.eventsPath}.initial-snapshot.json`, 'utf8')).toContain('"sdkObserved":true');

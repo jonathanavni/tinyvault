@@ -100,11 +100,11 @@ it.each(forms)('history CreatedBy exposes each real bootstrap secret as %s', asy
   for (const index of [0, 1, 2]) {
     const h = await historyProject(() => markerLine + '{"CreatedBy":' + escaped(encode(h.secrets[index])) + '}\n');
     const p = await createComposedProject(h.options);
-    expect(h.secrets).toHaveLength(3);
+    expect(h.secrets).toHaveLength(5);
     const closing = p.closer.close();
     await expect(closing).rejects.toMatchObject({ code: 'secret-exposed', surface: 'history' });
     expect(p.closer.close()).toBe(closing);
-    expect(h.spawns.filter((s) => kindOf(s) === 'export')).toHaveLength(3);
+    expect(h.spawns.filter((s) => kindOf(s) === 'export')).toHaveLength(5);
     expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
   }
 });

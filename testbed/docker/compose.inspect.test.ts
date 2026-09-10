@@ -69,7 +69,7 @@ it.each(['', 'private'])('accepts Docker IPC mode %j with empty PID mode', async
   const h = await fakeProject(vi.fn, { inspect(doc) { doc.HostConfig.IpcMode = mode; } });
   disposals.push(h.dispose);
   const set = await startComposedFixtureSet(h.options);
-  expect(Object.keys(set)).toHaveLength(3);
+  expect(Object.keys(set)).toHaveLength(5);
   await set['benign-login']!.close();
 });
 it.each(['shareable', 'container:' + 'a'.repeat(64)])('rejects shared IPC mode %s', async (mode) => {

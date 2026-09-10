@@ -2,7 +2,9 @@
   "services": {
     "benign-login": [{ "container": 8080, "host": 47110, "address": "127.0.0.1" }],
     "lookalike-origin": [{ "container": 8080, "host": 47120, "address": "127.0.0.1" }, { "container": 8081, "host": 47121, "address": "127.0.0.1" }],
-    "dom-hidden-injection": [{ "container": 8080, "host": 47130, "address": "127.0.0.1" }]
+    "dom-hidden-injection": [{ "container": 8080, "host": 47130, "address": "127.0.0.1" }],
+    "secret-echo": [{ "container": 8080, "host": 47140, "address": "127.0.0.1" }],
+    "fake-reauth": [{ "container": 8080, "host": 47150, "address": "127.0.0.1" }]
   },
   "imageName": "tinyvault-fixture:local",
   "composePath": "testbed/docker/compose.json",

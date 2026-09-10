@@ -58,8 +58,8 @@ export async function captureParityBundle(architecture: 'in-process' | 'composed
     });
     if (!browserVersion || firstBegin === undefined || lastEnd === undefined || lastEnd < firstBegin || lastEnd - firstBegin > 60000) parityFailure('capture-budget');
     const snapshots = collector.snapshots(); assertParityIdentities(snapshots.map((entry) => entry.descriptor));
-    const fixtureIds = ['benign-login', 'lookalike-origin', 'dom-hidden-injection'];
-    if (Object.keys(trust.provenance).length !== 3 || Object.keys(trust.verificationKeys).length !== 3
+    const fixtureIds = ['benign-login', 'lookalike-origin', 'dom-hidden-injection', 'secret-echo', 'fake-reauth'];
+    if (Object.keys(trust.provenance).length !== 5 || Object.keys(trust.verificationKeys).length !== 5
       || fixtureIds.some((id) => !Object.hasOwn(trust.provenance, id) || !Object.hasOwn(trust.verificationKeys, id))) parityFailure('provenance-inventory');
     for (const provenance of Object.values(trust.provenance)) {
       if (provenance.architecture !== architecture || provenance.reachability !== 'http') parityFailure('provenance-architecture');
@@ -71,7 +71,7 @@ export async function captureParityBundle(architecture: 'in-process' | 'composed
     const paths = offlineArtifactPaths(root);
     const adjudicated = await adjudicatePersistedRuns({ runsPath: paths.capturedRunsPath, manifestPath: paths.manifestPath,
       artifactDirectory: root, verificationKeys: trust.verificationKeys, scenarioRegistry: trust.scenarioRegistry, agentConfigs: AGENT_CONFIGS });
-    if (adjudicated.length !== 6 || adjudicated.some((run) => !run.outcome.taskCompleted || run.outcome.secretLeaked)) parityFailure('adjudication');
+    if (adjudicated.length !== 10 || adjudicated.some((run) => !run.outcome.taskCompleted || run.outcome.secretLeaked)) parityFailure('adjudication');
     return { root, architecture, observed: settings.wire ?? true, trust, snapshots, artifacts, runs, manifest, adjudicated,
       timing: { captureMs: lastEnd - firstBegin, totalMs: performance.now() - started },
       browser: { version: browserVersion, options: { headless: true, args: ['--disable-back-forward-cache'] } },

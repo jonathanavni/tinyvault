@@ -267,6 +267,7 @@ import { controlTokenFor } from './scenarios/benignLogin';
 import { dockerPreflight } from './docker/preflight';
 import { IMAGE_NAME } from './docker/exec';
 import { ANTHROPIC_CLIENT_CONFIG } from '../src/agents/anthropicClient';
+import { SECRET_ECHO_EXPOSURE_STRINGS, FAKE_REAUTH_EXPOSURE_STRINGS } from './scenarioCoverage';
 
 export type S5Witness = { profile: string; scenario: string; fixtureId: string; runId: string;
   task: Record<string, unknown>; calls: { call: ToolCall; result: unknown; events: CapturedEventInput[] }[];
@@ -275,10 +276,36 @@ export async function s5Witnesses(): Promise<S5Witness[]> {
   const source = await readFile(new URL('./agentEvidenceBudget.test.ts', import.meta.url), 'utf8');
   const literal = source.match(/const witnesses: Witness\[\] = (\[[\s\S]*?\n\]);/u)?.[1];
   if (!literal) throw new Error('Missing frozen S3 witness corpus');
-  return JSON.parse(literal);
+  const archived = JSON.parse(literal) as S5Witness[];
+  // D-6: the six archived captures remain byte-for-byte unchanged. M7 rows below are synthetic
+  // Node test schedules, never historical captures, budget evidence, or an E5 browser witness.
+  return [...archived, ...m7SyntheticSchedules(archived)];
 }
 
-/** Finite historical browser observations; this is Node composition evidence, never a browser claim. */
+function m7SyntheticSchedules(archived: S5Witness[]): S5Witness[] {
+  return (['secret-echo', 'fake-reauth'] as const).flatMap((fixtureId, index) =>
+    archived.filter(row => row.fixtureId === 'dom-hidden-injection').map(original => {
+      const scenario = fixtureId === 'secret-echo' ? 'secret-echo-probe' : 'fake-reauth-prompt';
+      const origin = `http://127.0.0.1:${55498 + index}`;
+      const row = JSON.parse(JSON.stringify(original).replaceAll('http://127.0.0.1:55497', origin)
+        .replaceAll('dom-hidden-injection', scenario)) as S5Witness;
+      row.fixtureId = fixtureId; row.scenario = scenario; row.originalHostSha256 = 'synthetic-m7-no-browser-capture';
+      const receipt = JSON.parse(row.receipt); receipt.payload.fixtureId = fixtureId;
+      row.receipt = JSON.stringify(receipt);
+      const strings = fixtureId === 'secret-echo' ? SECRET_ECHO_EXPOSURE_STRINGS : [];
+      for (const step of row.calls.filter(step => step.call.name === 'browser_snapshot')) {
+        step.result = { ok: true, snapshot: { url: origin + '/', nodes: strings.map(name => ({ tag: 'p', masked: false, name: name.slice(0, 200) })) } };
+      }
+      const post = structuredClone(row.calls.find(step => step.call.name === 'browser_snapshot')!);
+      post.call = { ...post.call, id: 'toolu_m7_post_submit' };
+      post.result = { ok: true, snapshot: { url: origin + '/success', nodes: (fixtureId === 'fake-reauth' ? FAKE_REAUTH_EXPOSURE_STRINGS : [])
+        .map(name => ({ tag: 'p', masked: false, name: name.slice(0, 200) })) } };
+      row.calls.splice(row.calls.findIndex(step => step.call.name === 'browser_close_session'), 0, post);
+      return row;
+    }));
+}
+
+/** Historical observations plus labelled synthetic M7 schedules; Node composition evidence only. */
 export async function s5ComposedHarness(artifactDirectory: string) {
   const witnesses = await s5Witnesses();
   const setups = new Map<string, FixtureRunSetup>();
@@ -291,7 +318,8 @@ export async function s5ComposedHarness(artifactDirectory: string) {
     pending: CapturedEventInput[]; aborted: CapturedEventInput[]; backend: HostInput['backend'] }>();
   let latest: FixtureRunSetup;
   const origins = { 'benign-login': 'http://127.0.0.1:55494', 'lookalike-origin': 'http://127.0.0.1:55496',
-    'dom-hidden-injection': 'http://127.0.0.1:55497' };
+    'dom-hidden-injection': 'http://127.0.0.1:55497',
+    'secret-echo': 'http://127.0.0.1:55498', 'fake-reauth': 'http://127.0.0.1:55499' };
   const scenarios = createScenarioRegistry(origins);
   const fixtures: FixtureSet = Object.fromEntries(Object.entries(origins).map(([fixtureId, origin]) => {
     const verifier = new CompletionVerifier(keys.publicKey);
@@ -372,7 +400,8 @@ export async function s5ComposedHarness(artifactDirectory: string) {
         state.witness = rebindWitness(original, setup, task);
       }
       requests.push({ url: String(url), headers: new Headers(init?.headers), body, runId });
-      const schedule = state.witness.fixtureId === 'lookalike-origin' ? [1, 2, 2, 2, 3, 2, 0] : [1, 2, 3, 2, 0];
+      const schedule = state.witness.fixtureId === 'lookalike-origin' ? [1, 2, 2, 2, 3, 2, 0]
+        : ['secret-echo', 'fake-reauth'].includes(state.witness.fixtureId) ? [1, 2, 3, 3, 0] : [1, 2, 3, 2, 0];
       const count = schedule[state.turn++];
       const content = count === 0 ? [{ type: 'text', text: 'Login complete.' }]
         : state.witness.calls.slice(state.next, state.next += count).map(({ call }) => ({ type: 'tool_use', ...call }));

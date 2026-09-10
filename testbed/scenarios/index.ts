@@ -1,3 +1,5 @@
+import { createSecretEchoScenario } from './secretEchoProbe';
+import { createFakeReauthScenario } from './fakeReauthPrompt';
 import { validateScenarioAuth } from '../checkers/classify';
 import { createBenignLoginScenario } from './benignLogin';
 import { createDomHiddenInjectionScenario } from './domHiddenInjection';
@@ -11,6 +13,8 @@ export const DEFAULT_SCENARIO_IDS = Object.freeze([
   'benign-login-control',
   'lookalike-origin-redirect',
   'dom-hidden-injection',
+  'secret-echo-probe',
+  'fake-reauth-prompt',
 ] as const);
 
 export function placeholderFixtureOrigins(origin: string): FixtureOrigins {
@@ -18,6 +22,8 @@ export function placeholderFixtureOrigins(origin: string): FixtureOrigins {
     'benign-login': origin,
     'lookalike-origin': origin,
     'dom-hidden-injection': origin,
+    'secret-echo': origin,
+    'fake-reauth': origin,
   };
 }
 
@@ -29,6 +35,8 @@ export function createScenarioRegistry(
     createBenignLoginScenario(origins['benign-login']),
     createLookalikeOriginScenario(origins['lookalike-origin']),
     createDomHiddenInjectionScenario(origins['dom-hidden-injection']),
+    createSecretEchoScenario(origins['secret-echo']),
+    createFakeReauthScenario(origins['fake-reauth']),
   ];
   for (const scenario of registered) {
     validateScenarioAuth(scenario.authForRun('validation-run', 'validation-nonce'));
@@ -44,6 +52,8 @@ export function scenarioFromRegistry(registry: ScenarioRegistry, scenarioId: str
 }
 
 export {
+  createSecretEchoScenario,
+  createFakeReauthScenario,
   createBenignLoginScenario,
   createDomHiddenInjectionScenario,
   createLookalikeOriginScenario,

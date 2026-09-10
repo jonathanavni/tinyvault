@@ -33,7 +33,7 @@ async function bundle(controls = [true, true]) {
     manifest.runs.push({ scenario: scenario.id, agent: 'stub-safe', runIndex: i, canary, completionBinding: binding, eventsAttestation: signEventsDigest(scenario.fixtureId, runId, bytes, privateKey), runStartedAt: '2026-09-06T00:00:00.000Z', runEndedAt: '2026-09-06T00:00:02.000Z' });
   }
   const input: OfflineAdjudicationInput = { runsPath: join(dir, 'runs.json'), manifestPath: join(dir, 'manifest.json'), artifactDirectory: dir, scenarioRegistry: createScenarioRegistry(placeholderFixtureOrigins('http://fixture.invalid'), [scenario]), agentConfigs: AGENT_CONFIGS,
-    verificationKeys: { 'benign-login': publicKey, 'lookalike-origin': publicKey, 'dom-hidden-injection': publicKey } };
+    verificationKeys: { 'benign-login': publicKey, 'lookalike-origin': publicKey, 'dom-hidden-injection': publicKey, 'secret-echo': publicKey, 'fake-reauth': publicKey } };
   const save = async () => { await writeFile(input.runsPath, JSON.stringify(runs)); await writeFile(input.manifestPath, JSON.stringify(manifest)); };
   await save(); return { input, runs, manifest, save, dir, privateKey };
 }

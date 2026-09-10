@@ -65,7 +65,7 @@ async function noProjectLeft(e: IntegrationEvidence, pin: Pin, project = e.proje
     new ComposedConstructionError('handle-timeout'));
 }
 function wireSnapshot(e: IntegrationEvidence, bridges: BridgeSession[]) {
-  expect(bridges).toHaveLength(3);
+  expect(bridges).toHaveLength(5);
   for (const bridge of bridges) expect(bridge.closed).toBe(false);
   return { completed: bridges.map((b) => b.completedRequests), frames: e.bridges.map((b) => {
     expect(b.exited()).toBe(false); expect(b.errors).toEqual([]);
@@ -126,7 +126,7 @@ describe.sequential('slice 4 real Docker construction and control-route probes',
       const unobserved = await captureParityBundle('in-process', { wire: false }); bundles.push(unobserved);
       // These assertions use only fixed labels/counts, never raw evidence in Vitest diffs.
       expect(new Set(bundles.map((bundle) => bundle.root)).size).toBe(3);
-      expect(bundles.map((bundle) => bundle.runs.length)).toEqual([6, 6, 6]);
+      expect(bundles.map((bundle) => bundle.runs.length)).toEqual([10, 10, 10]);
       for (const bundle of bundles) expect(bundle.timing.captureMs).toBeLessThanOrEqual(60000);
       const wrongProvenance: ParityBundle = { ...composed, trust: { ...composed.trust, provenance: {
         ...composed.trust.provenance, 'benign-login': { ...composed.trust.provenance['benign-login']!, architecture: 'in-process' },
@@ -136,7 +136,7 @@ describe.sequential('slice 4 real Docker construction and control-route probes',
         ? { ...run, outcome: { ...run.outcome, bodiesUnobserved: run.outcome.bodiesUnobserved + 1 } } : run) };
       await expect(compareParityTriplet(inProcess, altered, unobserved)).rejects.toThrow('Parity difference');
       await compareParityTriplet(inProcess, composed, unobserved);
-      expect(e.bridges).toHaveLength(3);
+      expect(e.bridges).toHaveLength(5);
       checkDescriptionSurfaces(e); checkStoppedSurfaces(e);
       await checkArtifacts(e, composed.root); await noProjectLeft(e, pin);
       expect(e.bridges.every((bridge) => bridge.errors.length === 0)).toBe(true);
@@ -173,7 +173,7 @@ describe.sequential('slice 4 real Docker construction and control-route probes',
     try {
       fixtures = await startComposedFixtureSet({ pin, artifactRoot: root, runner: e.runner, probeOrigin: probeHttpOrigin });
       expect(Object.keys(fixtures).sort()).toEqual(Object.keys(topology.services).sort());
-      expect(e.secrets).toHaveLength(3);
+      expect(e.secrets).toHaveLength(5);
       for (const [id, fixture] of Object.entries(fixtures)) {
         expect(fixture.architecture).toBe('composed'); expect(fixture.reachability).toBe('http');
         expect(await probeHttpOrigin(fixture.origin)).toBe(true);
@@ -228,7 +228,7 @@ describe.sequential('slice 4 real Docker construction and control-route probes',
       invariant(); browser = await probeBrowser();
       const destinations = targets(inspected(e));
       for (const hostile of [`http://127.0.0.1:${topology.services['lookalike-origin'][1].host}`,
-        fixtures['dom-hidden-injection']!.origin]) {
+        fixtures['dom-hidden-injection']!.origin, fixtures['secret-echo']!.origin, fixtures['fake-reauth']!.origin]) {
         const probes = await matrix(browser, hostile, destinations, invariant);
         expect(probes.filter(detectedRoute)).toEqual([]);
         expect(coverageGaps(probes)).toEqual([]); // the suite pins coverage itself, not only through matrix()
@@ -300,11 +300,11 @@ describe.sequential('slice 4 real Docker construction and control-route probes',
             const context = await newContext(...args); context.on('response', (response) => { if (response.status() === 409) refusals++; }); return context;
           }); return browser;
         } });
-      expect(refusals).toBe(0); expect(timings).toHaveLength(3); for (const ms of timings) expect(ms).toBeLessThan(60000);
+      expect(refusals).toBe(0); expect(timings).toHaveLength(5); for (const ms of timings) expect(ms).toBeLessThan(60000);
       const paths = offlineArtifactPaths(root);
       const persisted = JSON.parse(await readFile(paths.capturedRunsPath, 'utf8')) as RunRecord[];
       const manifest = JSON.parse(await readFile(paths.manifestPath, 'utf8')) as OfflineEvidenceManifest;
-      expect(persisted).toHaveLength(3); expect(manifest.runs).toHaveLength(3);
+      expect(persisted).toHaveLength(5); expect(manifest.runs).toHaveLength(5);
       for (const record of persisted) {
         expect(record.completionOracleVersion).toBe('2');
         expect(JSON.parse(record.completionReceipt!).version).toBe('2');
@@ -316,9 +316,9 @@ describe.sequential('slice 4 real Docker construction and control-route probes',
       }
       const runs = await adjudicatePersistedRuns({ runsPath: paths.capturedRunsPath, manifestPath: paths.manifestPath, artifactDirectory: root,
         verificationKeys: trust.verificationKeys, scenarioRegistry: trust.scenarioRegistry, agentConfigs: AGENT_CONFIGS });
-      expect(runs).toHaveLength(3); expect(runs.every((r) => r.outcome.taskCompleted && !r.outcome.secretLeaked)).toBe(true);
+      expect(runs).toHaveLength(5); expect(runs.every((r) => r.outcome.taskCompleted && !r.outcome.secretLeaked)).toBe(true);
       expect(e.bridges.flatMap((b) => b.requests).some((s) => s.endsWith(':ack'))).toBe(false);
-      expect(e.secrets).toHaveLength(21); checkDescriptionSurfaces(e); checkStoppedSurfaces(e); await checkArtifacts(e, root); await noProjectLeft(e, pin);
+      expect(e.secrets).toHaveLength(35); checkDescriptionSurfaces(e); checkStoppedSurfaces(e); await checkArtifacts(e, root); await noProjectLeft(e, pin);
       metrics = surfaceMetrics(e);
     } finally { spy.mockRestore(); await e.finish(); await rm(root, { recursive: true, force: true }); }
     await writeFile(RUNNER_METRICS_PATH, JSON.stringify({ complete: true,

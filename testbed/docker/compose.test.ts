@@ -87,11 +87,11 @@ it.each(['exit', 'reject'] as const)('failed up follow-up query (%s) preserves c
   expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
   expect(h.spawns.filter((s) => kindOf(s) === 'compose-stop')).toHaveLength(1);
 });
-it('kills both established bridges AND the third service on failed probe, preserving cause over teardown', async () => {
+it('kills all established bridges AND the fifth service on failed probe, preserving cause over teardown', async () => {
   const h = track(await fakeProject(vi.fn, { result: (k) => k === 'compose-down' ? { exitCode: 1, stdout: '', stderr: '' } : undefined }));
-  h.options.probeOrigin = vi.fn(async (origin) => !origin.endsWith('47130'));
+  h.options.probeOrigin = vi.fn(async (origin) => !origin.endsWith('47150'));
   await expect(capture(h)).rejects.toMatchObject({ code: 'origin-unreachable', teardownCode: 'compose-down' });
-  expect(h.handles).toHaveLength(3);
+  expect(h.handles).toHaveLength(5);
   for (const handle of h.handles) expect(handle.kill).toHaveBeenCalledOnce();
   expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
 });
@@ -107,7 +107,7 @@ it('shared closer is idempotent and scans after kill and stop, before down and a
   const run = h.runner.run.getMockImplementation()!;
   h.runner.run.mockImplementation(async (spawn) => { events.push(kindOf(spawn)); return run(spawn); });
   const a = p.closer.close(); const b = p.closer.close(); expect(a).toBe(b); await a;
-  expect(events.slice(0, 4)).toEqual(['kill', 'kill', 'kill', 'compose-stop']);
+  expect(events.slice(0, 6)).toEqual(['kill', 'kill', 'kill', 'kill', 'kill', 'compose-stop']);
   expect(events.indexOf('scan')).toBeLessThan(events.indexOf('compose-down'));
   expect(events.lastIndexOf('scan')).toBeGreaterThan(events.indexOf('compose-down'));
   await p.closer.close(); expect(events.filter((e) => e === 'compose-down')).toHaveLength(1);
@@ -123,9 +123,9 @@ it('bounds each teardown command without letting an aggregate timeout race scans
   vi.useFakeTimers();
   const close = p.closer.close();
   const assertion = expect(close).resolves.toBeUndefined();
-  await vi.advanceTimersByTimeAsync(180000); await assertion;
-  expect(h.spawns.map(kindOf).slice(-12)).toEqual(['compose-stop', 'image-history', 'inspect', 'logs', 'export', 'inspect', 'logs', 'export',
-    'inspect', 'logs', 'export', 'compose-down']);
+  await vi.advanceTimersByTimeAsync(300000); await assertion;
+  expect(h.spawns.map(kindOf).slice(-18)).toEqual(['compose-stop', 'image-history', 'inspect', 'logs', 'export', 'inspect', 'logs', 'export',
+    'inspect', 'logs', 'export', 'inspect', 'logs', 'export', 'inspect', 'logs', 'export', 'compose-down']);
 });
 it('a hanging export is killed on its own bound and remaining scans precede down', async () => {
   const h = track(await fakeProject(vi.fn));
@@ -143,7 +143,7 @@ it('a hanging export is killed on its own bound and remaining scans precede down
   vi.useFakeTimers();
   const assertion = expect(p.closer.close()).rejects.toMatchObject({ code: 'command-timeout', command: 'export' });
   await vi.advanceTimersByTimeAsync(COMMAND_TIMEOUT_MS); await assertion;
-  expect(killed).toHaveBeenCalledOnce(); expect(exported).toBe(3);
+  expect(killed).toHaveBeenCalledOnce(); expect(exported).toBe(5);
   expect(kindOf(h.spawns.at(-1)!)).toBe('compose-down');
 });
 it('a hanging injected run is bounded with the variant in command-timeout', async () => {
@@ -172,7 +172,7 @@ it.each(['compose-stop', 'compose-down'] as const)('closer preserves %s failure,
   expect(p.closer.close()).toBe(closing);
   expect(h.spawns.filter((s) => kindOf(s) === 'compose-stop')).toHaveLength(1);
   expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
-  expect(h.spawns.filter((s) => kindOf(s) === 'export')).toHaveLength(3);
+  expect(h.spawns.filter((s) => kindOf(s) === 'export')).toHaveLength(5);
 });
 it('construction command-timeout invokes the closer exactly once', async () => {
   const h = track(await fakeProject(vi.fn));
@@ -233,11 +233,11 @@ it('closed-code error constructors cannot interpolate injected secret text', () 
   expect(String(new BridgeError(secret.toString('hex') as never))).toBe('BridgeError: bridge-closed');
 });
 
-it('final peer-set check rejects an earlier bridge dying during the third peer handshake', async () => {
+it('final peer-set check rejects an earlier bridge dying during the fifth peer handshake', async () => {
   const h = track(await fakeProject(vi.fn, { peer(_handle, index) {
-    if (index === 2) h.handles[0].kill();
+    if (index === 4) h.handles[0].kill();
   } }));
   await expect(createComposedProject(h.options)).rejects.toMatchObject({ code: 'bridge-closed' });
-  expect(h.handles).toHaveLength(3);
+  expect(h.handles).toHaveLength(5);
   expect(h.spawns.filter((s) => kindOf(s) === 'compose-down')).toHaveLength(1);
 });

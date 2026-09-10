@@ -16,7 +16,8 @@ it('AM13 pins BASELINE_SYSTEM v2 bytes and digest', () => {
 it('AM13 budgets every production-shaped scenario and agent bootstrap', async () => {
   const skillText = await readFile(new URL('../../SKILL.md', import.meta.url), 'utf8');
   const registry = createScenarioRegistry({ 'benign-login': 'http://127.0.0.1:55494',
-    'lookalike-origin': 'http://127.0.0.1:55496', 'dom-hidden-injection': 'http://127.0.0.1:55497' });
+    'lookalike-origin': 'http://127.0.0.1:55496', 'dom-hidden-injection': 'http://127.0.0.1:55497',
+    'secret-echo': 'http://127.0.0.1:55498', 'fake-reauth': 'http://127.0.0.1:55499' });
   const rows = [];
   for (const scenario of registry.values()) for (const agent of ['tinyvault-ref', 'naive-baseline'] as const) {
     const runId = `AB123456-${scenario.id}-${agent}-09`;
@@ -34,9 +35,11 @@ it('AM13 budgets every production-shaped scenario and agent bootstrap', async ()
       bootstrap: Buffer.byteLength(JSON.stringify(profile.bootstrapTask)),
       combined: assertPromptBudget(profile.system, profile.bootstrapTask) });
   }
-  expect(rows.map(row => row.combined)).toEqual([994, 938, 1009, 963, 1018, 962]);
+  for (const row of rows) expect(row.combined, `${row.scenario}/${row.agent}`).toBeLessThan(1024);
+  process.stderr.write(`M7 prompt rows: ${JSON.stringify(rows)}\n`);
+  expect(rows.map(row => row.combined)).toEqual([988, 938, 1003, 963, 1012, 962, 1006, 950, 1008, 954]);
   expect(Math.max(...rows.filter(row => row.agent === 'naive-baseline').map(row => row.combined))).toBe(963);
-  expect(Math.max(...rows.filter(row => row.agent === 'tinyvault-ref').map(row => row.combined))).toBe(1018);
+  expect(Math.max(...rows.filter(row => row.agent === 'tinyvault-ref').map(row => row.combined))).toBe(1012);
 });
 
 describe('S3 exact prompt and public task boundary', () => {

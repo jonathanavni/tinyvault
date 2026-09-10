@@ -1,3 +1,5 @@
+import { startSecretEchoFixture } from '../../fixtures/secret-echo';
+import { startFakeReauthFixture } from '../../fixtures/fake-reauth';
 import { Server } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -63,11 +65,11 @@ function substituteSocket() {
     queueMicrotask(() => this.emit('error', Object.assign(new Error('listen'), { code: 'EPERM' }))); return this;
   });
 }
-async function paired(fixtureId: 'benign-login' | 'lookalike-origin' | 'dom-hidden-injection' = 'benign-login', clock?: BridgeClock) {
+async function paired(fixtureId: 'benign-login' | 'lookalike-origin' | 'dom-hidden-injection' | 'secret-echo' | 'fake-reauth' = 'benign-login', clock?: BridgeClock) {
   substituteSocket();
   const root = await mkdtemp(join(tmpdir(), 'tinyvault-real-adapter-'));
   const fixture = await ({ 'benign-login': startBenignLoginFixture, 'lookalike-origin': startLookalikeOriginFixture,
-    'dom-hidden-injection': startDomHiddenInjectionFixture })[fixtureId](root);
+    'dom-hidden-injection': startDomHiddenInjectionFixture, 'secret-echo': startSecretEchoFixture, 'fake-reauth': startFakeReauthFixture })[fixtureId](root);
   const env = { TV_FIXTURE_ID: fixtureId, TV_EVAL_EPOCH: `1-${'a'.repeat(32)}`,
     TV_PUBLIC_ORIGIN: `http://127.0.0.1:${topology.services[fixtureId][0].host}`,
     ...(fixtureId === 'lookalike-origin' ? { TV_LOOKALIKE_PUBLIC_ORIGIN: `http://127.0.0.1:${topology.services[fixtureId][1].host}` } : {}) };
@@ -90,7 +92,7 @@ async function paired(fixtureId: 'benign-login' | 'lookalike-origin' | 'dom-hidd
   return { root, fixture, key, entries, bridge, session, diagnostics, run, register, operation, login, close };
 }
 
-it.each(['benign-login', 'lookalike-origin', 'dom-hidden-injection'] as const)('%s adapter dispatches every operation to shared primitives and returns isolated immutable same-key evidence', async (fixtureId) => {
+it.each(['benign-login', 'lookalike-origin', 'dom-hidden-injection', 'secret-echo', 'fake-reauth'] as const)('%s adapter dispatches every operation to shared primitives and returns isolated immutable same-key evidence', async (fixtureId) => {
   const p = await paired(fixtureId);
   try {
     expect(p.entries).toEqual([]); // Hello anchor discovery is not administrative key retrieval.

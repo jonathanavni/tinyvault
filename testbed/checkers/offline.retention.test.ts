@@ -17,7 +17,7 @@ import type { CapturedEvent, RunRecord } from '../scorecard.schema';
 
 vi.mock('node:fs/promises', async original => ({ ...await original<typeof fs>() }));
 
-it('AM12 retains all 60 verified cap-sized real-profile snapshots before recomputation', async () => {
+it('AM12 retains all 100 verified cap-sized real-profile snapshots before recomputation', async () => {
   let root = await fs.mkdtemp(join(tmpdir(), 'tinyvault-am12-retention-'));
   let childDirectory: string | undefined;
   try {
@@ -81,11 +81,11 @@ it('AM12 retains all 60 verified cap-sized real-profile snapshots before recompu
         eventsAttestation: signEventsDigest(scenario.fixtureId, runId, raw, privateKey),
         runStartedAt: '2026-09-08T00:00:00.000Z', runEndedAt: '2026-09-08T00:00:02.000Z' });
     }
-    expect(runs).toHaveLength(60);
+    expect(runs).toHaveLength(100);
     const input: OfflineAdjudicationInput = {
       runsPath: join(root, 'runs.json'), manifestPath: join(root, 'manifest.json'), artifactDirectory: root,
       scenarioRegistry: registry, agentConfigs: createAgentInventory('real-comparison', sdkVersion),
-      verificationKeys: { 'benign-login': publicKey, 'lookalike-origin': publicKey, 'dom-hidden-injection': publicKey },
+      verificationKeys: { 'benign-login': publicKey, 'lookalike-origin': publicKey, 'dom-hidden-injection': publicKey, 'secret-echo': publicKey, 'fake-reauth': publicKey },
       provenanceTrust: { provenance, expectedRuns: manifest.runs.map(({ scenario, agent, runIndex, runId }) => ({ scenario, agent, runIndex, runId })) },
       captureQualifications: manifest.runs.map(({ runId }) => ({ runId, status: 'qualified' })),
     };
@@ -102,13 +102,13 @@ it('AM12 retains all 60 verified cap-sized real-profile snapshots before recompu
       return read(...args);
     }) as typeof fs.readFile);
     input.completionVerifierFactory = (key, ledger) => {
-      expect(completed.size, 'all event reads completed before first verifier').toBe(60);
-      expect(eventReads).toBe(60); factoryCalls++;
+      expect(completed.size, 'all event reads completed before first verifier').toBe(100);
+      expect(eventReads).toBe(100); factoryCalls++;
       return new CompletionVerifier(key, undefined, undefined, ledger);
     };
     try {
       const verified = await adjudicatePersistedRuns(input);
-      expect(verified).toHaveLength(60); expect(eventReads).toBe(60); expect(factoryCalls).toBe(3);
+      expect(verified).toHaveLength(100); expect(eventReads).toBe(100); expect(factoryCalls).toBe(5);
     } finally { spy.mockRestore(); }
 
     // Fresh Node process: no parent Vitest heap or setup allocations in the measurement.
@@ -131,14 +131,14 @@ it('AM12 retains all 60 verified cap-sized real-profile snapshots before recompu
       const input = { runsPath: join(data.root, 'runs.json'), manifestPath: join(data.root, 'manifest.json'),
         artifactDirectory: data.root, scenarioRegistry: createScenarioRegistry(placeholderFixtureOrigins('http://fixture.invalid')),
         agentConfigs: createAgentInventory('real-comparison', data.sdkVersion),
-        verificationKeys: { 'benign-login': key, 'lookalike-origin': key, 'dom-hidden-injection': key },
+        verificationKeys: { 'benign-login': key, 'lookalike-origin': key, 'dom-hidden-injection': key, 'secret-echo': key, 'fake-reauth': key },
         provenanceTrust: data.provenanceTrust, captureQualifications: data.captureQualifications };
       const baseline = process.memoryUsage(); let peakRss = baseline.rss, peakHeapUsed = baseline.heapUsed, sampleCount = 0;
       function sample() { const m = process.memoryUsage(); peakRss = Math.max(peakRss, m.rss); peakHeapUsed = Math.max(peakHeapUsed, m.heapUsed); sampleCount++; }
       const intervalMs = 50, timer = setInterval(sample, intervalMs), start = performance.now();
       const verified = await adjudicatePersistedRuns(input);
       const wallMs = performance.now() - start; clearInterval(timer); sample();
-      if (verified.length !== 60) throw new Error('Expected 60 verified runs');
+      if (verified.length !== 100) throw new Error('Expected 100 verified runs');
       const maxRSS = process.resourceUsage().maxRSS;
       peakRss = Math.max(peakRss, maxRSS * 1024);
       await writeFile(process.argv[3], JSON.stringify({ wallMs, baselineRss: baseline.rss, peakRss, peakHeapUsed,
@@ -157,7 +157,7 @@ it('AM12 retains all 60 verified cap-sized real-profile snapshots before recompu
       && !line.startsWith('(node:') && !line.startsWith('(Use `node --trace-'));
     expect(stderrErrors).toEqual([]); expect(result.code).toBe(0);
     const measurement = JSON.parse(await fs.readFile(measurementPath, 'utf8'));
-    expect(measurement).toMatchObject({ verifiedRuns: 60, intervalMs: 50, platform: process.platform, node: process.version });
+    expect(measurement).toMatchObject({ verifiedRuns: 100, intervalMs: 50, platform: process.platform, node: process.version });
     // The final sample is mandatory; a fast run need not span a whole interval. No time threshold.
     expect(measurement.sampleCount).toBeGreaterThan(0);
     console.info('AM12 retention measurement', measurement);
