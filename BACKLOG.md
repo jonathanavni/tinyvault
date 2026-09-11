@@ -177,6 +177,11 @@ work in flight, the rest stay parked here (register "Final5 round"):
   so no false green — but S5's failed-run retention must snapshot the evidence array before `#drop` so diagnostics survive a
   page-triggered abort. Residual (2) in the same register entry. (2026-09-07)
 
+## From the runtime fill-control packet (2026-09-11; `docs/m7-runtime-fill-control-packet.md` D-RC-7, R6)
+
+- **Same-document lure fixture** — a `fake-reauth` variant whose login is fetch-based and whose re-verification prompt is rendered in place (no document end), to measure what design A refuses by construction and design B would not; also the only fixture shape that could exercise the page-forced `transport` denial (§6.7 (d), R10). Deferred by the user; not part of the implementation slice or of any cohort it enables.
+- **Failed-login fixture** — a transient-failure / re-rendered-form path so rows 10–11 of the packet's case table stop being coverage gaps (user, O-RC-6: "coverage gaps, not evidence that these limitations are harmless").
+
 ## From the M7 final acceptance (2026-09-10)
 
 - **`StreamSecretScanner` sublinear in the secret count** (`testbed/docker/secretScan.ts`) — throughput is inversely proportional to
