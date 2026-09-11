@@ -319,11 +319,13 @@ import type { CredentialBackend } from '../backends/backend';
 import type { Browser } from '../browser/playwright';
 
 describe('T-RC-10 Unreachability pin', () => {
-  it('a/c/d/e/f confines authority and resolves composition calls through the AST', async () => {
+  // Each authorityGraph() builds a full TypeScript program over src + testbed; a cold clean clone took > 5 s for the
+  // five-variant test below (gate 4 on 12a4a08), so the program-building tests carry an explicit timeout.
+  it('a/c/d/e/f confines authority and resolves composition calls through the AST', { timeout: 60_000 }, async () => {
     const graph = await authorityGraph();
     assertAuthorityGraph(graph);
   });
-  it('a rejects computed keys, aliases and spreads of computed keys', async () => {
+  it('a rejects computed keys, aliases and spreads of computed keys', { timeout: 60_000 }, async () => {
     for (const access of [
       "const key = 'on' + 'FillAuthorization'; options[key]?.(() => {});",
       "const { onFillAuthorization: alias } = options; alias?.(() => {});",
@@ -350,7 +352,7 @@ describe('T-RC-10 Unreachability pin', () => {
       } finally { host.abort(); await host.closeAll(); }
     }
   });
-  it('g references the composer lifecycle exactly once, only as the hook argument', async () => {
+  it('g references the composer lifecycle exactly once, only as the hook argument', { timeout: 60_000 }, async () => {
     const graph = await authorityGraph();
     const file = graph.program.getSourceFile('src/supervisor/host.ts')!;
     const calls: ts.CallExpression[] = [];
