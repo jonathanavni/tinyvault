@@ -184,3 +184,11 @@ Codex dispatch, sandbox limits, job monitoring, model routing, the safety classi
   `status --json` nests the state under `.job.status` (the top level has none — an empty parse looks like "finished"), and
   `adversarial-review --background` still blocks the calling shell until the review ends (~10 min) — run it as a background
   Bash call. (2026-09-10)
+
+## Implementation-slice lessons from the runtime fill-control ladder (2026-09-11)
+
+- **The companion has no `--help`: `task --help` dispatches a Codex task whose prompt is "--help".** It ran 22 s read-only and answered with the CLI's help. Read `gotchas_codex.md` "Dispatch invocation" for the flag set instead of probing. (2026-09-11)
+- **A fresh Codex thread has no memory of a flagged or dead one.** After the classifier killed an `adversarial-review` mid-run (its log already listed "eleven mutations that pass the detectors"), a `task --fresh` re-dispatch that said "you previously reported eleven…" ended in two minutes asking for the list. State the mutation families to construct, never "your earlier findings". (2026-09-11)
+- **The classifier flags a review of *pin evasions* even in defensive framing when the prompt enumerates evasion techniques** ("Reflect.set, Proxy, getter, arguments capture…" reads as attack tooling). The `task --fresh --model gpt-6-astra` route in "what the test-gate is, which source forms it must report" framing completed; keep the technique list short and framed as detector coverage, and keep the report format explicit. (2026-09-11)
+- **A blind Claude subagent ran its probe mutation in the owner's mutant worktree instead of its own**, despite "work only in the worktree it names" — the harness cwd it inherited was the owner's last `cd`. Harmless (the table had finished; the probe was found by the quiescence/status check and restored), but every review packet now says "never run commands in or modify any other worktree", and the owner never `cd`s into a reviewer's worktree for a read. (2026-09-11)
+- **`git merge -F -` does not read the message from stdin** ("could not read file '-'"); write the message to a file. (2026-09-11)
