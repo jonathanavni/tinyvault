@@ -614,6 +614,24 @@ class ThrowingClearSecret extends Secret {
 }
 
 describe('T-RC-5 Fill-service order and settlement', () => {
+  it('a never-settled injection keeps the shared unit reserved (R10 / row 6)', async () => {
+    const observed = observedAuthorization();
+    let entered!: () => void;
+    const injecting = new Promise<void>(resolve => { entered = resolve; });
+    const setup = harness({ authorization: observed.authorization, inject: () => {
+      entered(); return new Promise<InjectOutcome>(() => {});
+    } });
+    let settled = false;
+    void setup.service.fill(request()).then(() => { settled = true; }, () => { settled = true; });
+    await injecting;
+    const fresh = harness({ authorization: observed.authorization });
+    expect((await fresh.service.fill(request())).result).toEqual({ ok: false, reason: 'handle-exhausted' });
+    expect(settled).toBe(false);
+    expect(setup.backend.resolveSecret).toHaveBeenCalledOnce();
+    expect(fresh.backend.resolveSecret).not.toHaveBeenCalled();
+    expect(observed.commit).not.toHaveBeenCalled();
+    expect(observed.release).not.toHaveBeenCalled();
+  });
   it('an exhausted handle never resolves a secret (Invariant S)', async () => {
     const domain = createFillAuthorizationDomain();
     domain.authorization.reserve(HANDLE)!.commit();

@@ -225,7 +225,7 @@ async function injectReserved(
     }
   } finally {
     // The recorded realm outcome decides even when result construction or clear throws.
-    if (recorded?.assigned || recorded?.reason === 'transport') reservation.commit();
+    if (recorded?.assigned === true || recorded?.reason === 'transport') reservation.commit();
     else reservation.release();
   }
 }

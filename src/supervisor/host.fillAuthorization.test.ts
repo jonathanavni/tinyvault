@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Browser } from '../browser/playwright';
 import type { CredentialBackend } from '../backends/backend';
 import type { BrowserSessionHost, SessionPage } from '../browser/session';
 import type { FillDestinationPort } from '../core/browserPort';
@@ -6,7 +7,7 @@ import { createFillService } from '../core/fillService';
 import { Secret } from '../core/redaction';
 import { createFillAuthorizationDomain } from './fillAuthorizationDomain';
 import { createLockdownDomain } from './lockdownDomain';
-import { composeSupervisedHost, EvidenceLease, OP_TIMEOUT_MS } from './host';
+import { createSupervisedHost, composeSupervisedHost, EvidenceLease, OP_TIMEOUT_MS } from './host';
 
 const ORIGIN = 'https://runtime.test';
 function gate() {
@@ -90,5 +91,26 @@ describe('T-RC-6b Fake-port concurrency and expiry', () => {
       expect(await host.tools.fill_from_vault(request('fresh'))).toEqual({ ok: false, reason: 'handle-exhausted' });
       expect(setup.backend.resolveSecret).toHaveBeenCalledOnce();
     } finally { held.release(); await operation; host.abort(); setup.host.abort(); await host.closeAll(); await setup.host.closeAll(); }
+  });
+});
+
+describe('Throwing fill-authorization hook cleanup', () => {
+  it.each([false, true])('closes only an owned browser (caller supplied: %s)', async supplied => {
+    const close = vi.fn(async () => {}), browser = { close } as unknown as Browser;
+    const launch = vi.fn(async () => browser), error = new Error('hook failed');
+    await expect(createSupervisedHost({ backend: {} as CredentialBackend, canary: 'TVC_hook_123456789',
+      launcher: { launch }, ...(supplied ? { browser } : {}),
+      onFillAuthorization: () => { throw error; },
+    })).rejects.toBe(error);
+    expect(launch).toHaveBeenCalledTimes(supplied ? 0 : 1);
+    expect(close).toHaveBeenCalledTimes(supplied ? 0 : 1);
+  });
+  it('preserves the hook error when owned-browser close rejects', async () => {
+    const error = new Error('hook failed'), close = vi.fn(async () => { throw new Error('close failed'); });
+    await expect(createSupervisedHost({ backend: {} as CredentialBackend, canary: 'TVC_hook_123456789',
+      launcher: { launch: async () => ({ close }) as unknown as Browser },
+      onFillAuthorization: () => { throw error; },
+    })).rejects.toBe(error);
+    expect(close).toHaveBeenCalledOnce();
   });
 });

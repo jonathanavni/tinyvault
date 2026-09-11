@@ -2,6 +2,9 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { createSupervisedHost } from '../supervisor/host';
+import type { CredentialBackend } from '../backends/backend';
+import type { Browser } from '../browser/playwright';
 
 describe('A/K fill-service structural confinement', () => {
   it('kills extra consume/expose sites, Secret.prototype access, and redaction importer expansion', async () => {
@@ -224,29 +227,7 @@ function resolveSourceModule(from: string, specifier: string, files: ReadonlySet
 
 function inspectComputedSecretAccesses(source: string, fileName: string): string[] {
   const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const secretTypes = new Set<string>(['Secret']);
-  walk(file, (node) => {
-    if (!ts.isImportDeclaration(node) || node.importClause === undefined) return;
-    for (const binding of node.importClause.namedBindings && ts.isNamedImports(node.importClause.namedBindings)
-      ? node.importClause.namedBindings.elements : []) {
-      if ((binding.propertyName ?? binding.name).text === 'Secret') secretTypes.add(binding.name.text);
-    }
-  });
-  let changed = true;
-  while (changed) {
-    changed = false;
-    walk(file, (node) => {
-      if (!ts.isClassDeclaration(node) || node.name === undefined || node.heritageClauses === undefined) return;
-      const extendsSecret = node.heritageClauses.some((clause) => clause.types.some((type) => {
-        const expression = unwrap(type.expression);
-        return ts.isIdentifier(expression) && secretTypes.has(expression.text);
-      }));
-      if (extendsSecret && !secretTypes.has(node.name.text)) {
-        secretTypes.add(node.name.text);
-        changed = true;
-      }
-    });
-  }
+  const secretTypes = secretTypeNames(file);
   const bindings = new Set<string>();
   const properties = new Set<string>();
   walk(file, (node) => {
@@ -273,6 +254,33 @@ function inspectComputedSecretAccesses(source: string, fileName: string): string
   return violations;
 }
 
+function secretTypeNames(file: ts.SourceFile): Set<string> {
+  const secretTypes = new Set<string>(['Secret']);
+  walk(file, (node) => {
+    if (!ts.isImportDeclaration(node) || node.importClause === undefined) return;
+    for (const binding of node.importClause.namedBindings && ts.isNamedImports(node.importClause.namedBindings)
+      ? node.importClause.namedBindings.elements : []) {
+      if ((binding.propertyName ?? binding.name).text === 'Secret') secretTypes.add(binding.name.text);
+    }
+  });
+  let changed = true;
+  while (changed) {
+    changed = false;
+    walk(file, (node) => {
+      if (!ts.isClassDeclaration(node) || node.name === undefined || node.heritageClauses === undefined) return;
+      const extendsSecret = node.heritageClauses.some((clause) => clause.types.some((type) => {
+        const expression = unwrap(type.expression);
+        return ts.isIdentifier(expression) && secretTypes.has(expression.text);
+      }));
+      if (extendsSecret && !secretTypes.has(node.name.text)) {
+        secretTypes.add(node.name.text);
+        changed = true;
+      }
+    });
+  }
+  return secretTypes;
+}
+
 function typeNames(type: ts.TypeNode): string[] {
   const names: string[] = [];
   walk(type, (node) => { if (ts.isIdentifier(node)) names.push(node.text); });
@@ -283,7 +291,7 @@ function typeAssertions(expression: ts.Expression): string[] {
   const names: string[] = [];
   let current = expression;
   while (ts.isParenthesizedExpression(current) || ts.isAsExpression(current)
-    || ts.isTypeAssertionExpression(current) || ts.isNonNullExpression(current)) {
+    || ts.isTypeAssertionExpression(current) || ts.isSatisfiesExpression(current) || ts.isNonNullExpression(current)) {
     if (ts.isAsExpression(current) || ts.isTypeAssertionExpression(current)) {
       names.push(...typeNames(current.type));
     }
@@ -295,7 +303,7 @@ function typeAssertions(expression: ts.Expression): string[] {
 function unwrap(expression: ts.Expression): ts.Expression {
   let current = expression;
   while (ts.isParenthesizedExpression(current) || ts.isAsExpression(current)
-    || ts.isTypeAssertionExpression(current) || ts.isNonNullExpression(current)) {
+    || ts.isTypeAssertionExpression(current) || ts.isSatisfiesExpression(current) || ts.isNonNullExpression(current)) {
     current = current.expression;
   }
   return current;
@@ -306,17 +314,13 @@ function walk(root: ts.Node, visit: (node: ts.Node) => void): void {
   root.forEachChild((child) => walk(child, visit));
 }
 
-const AUTHORITY_NAMES = ['FillAuthorizationLifecycle', 'onFillAuthorization', 'createFillAuthorizationDomain', 'FillAuthorization'];
+const AUTHORITY_NAMES = ['FillAuthorizationLifecycle', 'onFillAuthorization', 'createFillAuthorizationDomain', 'FillAuthorization', 'renew'];
 const AUTHORITY_FILES = ['src/core/fillAuthorization.ts', 'src/core/fillService.ts',
   'src/supervisor/fillAuthorizationDomain.ts', 'src/supervisor/host.ts'];
 const HOST_KEYS = ['tools', 'drainEvidence', 'setupReasonFor', 'abortedEvidence', 'settleEvidence',
   'quiesceEvidenceProducers', 'finish', 'abort', 'closeAll'];
 const TOOL_KEYS = ['list_vault', 'request_vault_setup', 'browser_open_session', 'browser_close_session',
   'browser_navigate', 'browser_click', 'browser_type', 'browser_snapshot', 'fill_from_vault'];
-
-import { createSupervisedHost } from '../supervisor/host';
-import type { CredentialBackend } from '../backends/backend';
-import type { Browser } from '../browser/playwright';
 
 describe('T-RC-10 Unreachability pin', () => {
   // Each authorityGraph() builds a full TypeScript program over src + testbed; a cold clean clone took > 5 s for the
@@ -338,6 +342,62 @@ describe('T-RC-10 Unreachability pin', () => {
       expect(inspectAuthorityAccess(graph)).not.toEqual([]);
     }
   });
+  it('g rejects G1 duplicate lifecycle bindings and wrapped authorization', { timeout: 60_000 }, async () => {
+    const file = 'src/supervisor/host.ts', source = await readFile(file, 'utf8');
+    expect(inspectDomainComposition(await authorityGraph())).toEqual([]);
+    const mutated = source.replace('{ authorization, lifecycle } = createFillAuthorizationDomain()',
+      '{ authorization, lifecycle, lifecycle: renewal } = createFillAuthorizationDomain()')
+      .replace('registry: domain.registry, authorization });',
+        'registry: domain.registry, authorization: { reserve(handle) { renewal.renew(handle); return authorization.reserve(handle); } } });');
+    expect(mutated).not.toBe(source);
+    const violations = inspectDomainComposition(await authorityGraph({ [file]: mutated }));
+    expect(violations).toContain('binding-element-count');
+    expect(violations).toContain('non-shorthand-binding');
+    expect(violations).toContain('authorization-not-forwarded-as-shorthand');
+  });
+  it('a/f reject G2 quoted hook names syntactically and by type', { timeout: 60_000 }, async () => {
+    const clean = await authorityGraph();
+    expect(authorityInventory(clean)).toEqual(AUTHORITY_FILES);
+    expect(inspectHostConstructions(clean)).toEqual([]);
+    const graph = await runnerMutation(`let grantMore: ((handle: string) => void) | undefined;
+      host = await input.createHost({ backend, canary: run.canary, browser: input.browser,
+        'onFillAuthorization': hook => { grantMore = handle => hook.renew(handle); } });
+      for (const item of await backend.listItems()) grantMore?.(item.handle);`);
+    expect(authorityInventory(graph)).toContain('testbed/runnerExecution.ts');
+    expect(inspectHostConstructions(graph)).toContain('testbed/runnerExecution.ts:syntactic-host-authority');
+    expect(inspectHostConstructions(graph)).toContain('testbed/runnerExecution.ts:typed-host-authority');
+  });
+  it.each(["['on','Fill','Authorization'].join('')", "`on${String('Fill')}Authorization`"])(
+    'a/f reject G2-prime non-foldable key %s and opaque spread', { timeout: 60_000 }, async key => {
+      const clean = await authorityGraph();
+      expect(inspectAuthorityAccess(clean)).toEqual([]);
+      expect(inspectHostConstructions(clean)).toEqual([]);
+      const graph = await runnerMutation(`const hookKey = ${key};
+        const extra: Record<string, unknown> = {}; extra[hookKey] = (value: unknown) => { (globalThis as any).__probe = value; };
+        host = await input.createHost({ backend, canary: run.canary, browser: input.browser, ...extra } as never);`);
+      expect(inspectAuthorityAccess(graph)).toContain('testbed/runnerExecution.ts:unknown-host-key');
+      expect(inspectHostConstructions(graph)).toContain('testbed/runnerExecution.ts:opaque-host-spread');
+      const computed = await runnerMutation(`const hookKey = ${key};
+        const extra = { [hookKey]: (value: unknown) => { (globalThis as any).__probe = value; } };
+        const alias = extra; let forwarded: Record<string, unknown>; forwarded = alias;
+        host = await input.createHost({ backend, canary: run.canary, browser: input.browser, ...forwarded } as never);`);
+      expect(inspectAuthorityAccess(computed)).toContain('testbed/runnerExecution.ts:unknown-host-key');
+      expect(inspectHostConstructions(computed)).toContain('testbed/runnerExecution.ts:opaque-host-spread');
+    });
+  it('f rejects G3 authorization under casts and other wrappers', { timeout: 60_000 }, async () => {
+    expect(inspectHostConstructions(await authorityGraph())).toEqual([]);
+    for (const argument of [
+      '({ backend, canary: run.canary, browser: input.browser, authorization: {} } as never)',
+      '(<never>({ backend, authorization: {} }))',
+      '({ backend, authorization: {} } satisfies Record<string, unknown>)',
+      '({ backend, ...({ onFillAuthorization() {} } as never) } as never)',
+    ]) {
+      const graph = await runnerMutation(`host = await input.createHost(${argument});`);
+      expect(inspectHostConstructions(graph)).toContain('testbed/runnerExecution.ts:syntactic-host-authority');
+      expect(inspectHostConstructions(graph)).toContain(argument.includes('...')
+        ? 'testbed/runnerExecution.ts:spread-host-authority' : 'testbed/runnerExecution.ts:typed-host-authority');
+    }
+  });
   it('b exposes no renewal through the host, tools or safe accessor results', async () => {
     for (const withOption of [false, true]) {
       let calls = 0;
@@ -354,31 +414,7 @@ describe('T-RC-10 Unreachability pin', () => {
   });
   it('g references the composer lifecycle exactly once, only as the hook argument', { timeout: 60_000 }, async () => {
     const graph = await authorityGraph();
-    const file = graph.program.getSourceFile('src/supervisor/host.ts')!;
-    const calls: ts.CallExpression[] = [];
-    walk(file, node => {
-      if (ts.isCallExpression(node) && resolvedName(graph.checker, node.expression) === 'createFillAuthorizationDomain') calls.push(node);
-    });
-    expect(calls).toHaveLength(1);
-    const declaration = calls[0]!.parent;
-    expect(ts.isVariableDeclaration(declaration)).toBe(true);
-    const binding = (declaration as ts.VariableDeclaration).name;
-    expect(ts.isObjectBindingPattern(binding)).toBe(true);
-    const lifecycle = (binding as ts.ObjectBindingPattern).elements.find(element =>
-      (element.propertyName ?? element.name).getText() === 'lifecycle')!;
-    expect(ts.isIdentifier(lifecycle.name)).toBe(true);
-    const symbol = graph.checker.getSymbolAtLocation(lifecycle.name);
-    expect(symbol).toBeDefined();
-    const references: ts.Identifier[] = [];
-    walk(file, node => {
-      if (ts.isIdentifier(node) && node !== lifecycle.name && graph.checker.getSymbolAtLocation(node) === symbol) references.push(node);
-    });
-    expect(references).toHaveLength(1);
-    const call = references[0]!.parent;
-    expect(ts.isCallExpression(call)).toBe(true);
-    expect((call as ts.CallExpression).arguments).toHaveLength(1);
-    expect((call as ts.CallExpression).arguments[0]).toBe(references[0]);
-    expect((call as ts.CallExpression).expression.getText()).toBe('options.onFillAuthorization');
+    expect(inspectDomainComposition(graph)).toEqual([]);
   });
 });
 
@@ -393,6 +429,12 @@ async function authorityGraph(overrides: Record<string, string> = {}) {
   const program = ts.createProgram(files, { ...options, allowJs: true }, host);
   return { files, production: files.filter(file => !/\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(file)),
     program, checker: program.getTypeChecker() };
+}
+async function runnerMutation(replacement: string): Promise<AuthorityGraph> {
+  const file = 'testbed/runnerExecution.ts', source = await readFile(file, 'utf8');
+  const original = 'host = await input.createHost({ backend, canary: run.canary, browser: input.browser });';
+  expect(source).toContain(original);
+  return authorityGraph({ [file]: source.replace(original, replacement) });
 }
 function unusedBackend(): CredentialBackend {
   return { probeAvailability: async () => ({ available: true }), listItems: async () => [],
@@ -426,20 +468,17 @@ function resolvedName(checker: ts.TypeChecker, expression: ts.Node, seen = new S
   return symbol.name;
 }
 function assertAuthorityGraph(graph: AuthorityGraph): void {
-  const inventory: string[] = [], composeCalls: string[] = [], composeImports: string[] = [], fillCalls: string[] = [];
+  const composeCalls: string[] = [], composeImports: string[] = [], fillCalls: string[] = [];
   const hostAuthorizations: string[] = [], kitImporters: string[] = [];
   for (const name of graph.files) {
     const file = graph.program.getSourceFile(name)!;
     if (relativeModuleSpecifiers(file).some(specifier => specifier.endsWith('/m7.browser.testkit'))) kitImporters.push(name);
     if (!graph.production.includes(name)) continue;
-    const named = new Set<string>();
     walk(file, node => {
-      if (ts.isIdentifier(node)) named.add(node.text);
       inspectCompositionNode(graph, node, name, { composeCalls, composeImports, fillCalls, hostAuthorizations });
     });
-    if (AUTHORITY_NAMES.some(key => named.has(key))) inventory.push(name);
   }
-  expect(inventory).toEqual(AUTHORITY_FILES);
+  expect(authorityInventory(graph)).toEqual(AUTHORITY_FILES);
   expect(inspectAuthorityAccess(graph)).toEqual([]);
   expect([...new Set(composeCalls)]).toEqual([]); expect([...new Set(composeImports)]).toEqual([]);
   expect([...new Set(fillCalls)]).toEqual(['src/supervisor/host.ts']);
@@ -463,11 +502,11 @@ function inspectCompositionNode(graph: AuthorityGraph, node: ts.Node, file: stri
   if (callee === 'createFillService') lists.fillCalls.push(file);
   if (callee !== 'createSupervisedHost' && callee !== 'createHost') return;
   for (const arg of node.arguments) {
-    if (graph.checker.getTypeAtLocation(arg).getProperty('authorization')) lists.hostAuthorizations.push(file);
+    lists.hostAuthorizations.push(...inspectHostArgument(graph, arg).map(reason => `${file}:${reason}`));
   }
 }
 function staticKey(node: ts.Node, checker: ts.TypeChecker, seen = new Set<ts.Symbol>()): string | undefined {
-  if (ts.isStringLiteralLike(node)) return node.text;
+  if (ts.isStringLiteralLike(node) || ts.isNumericLiteral(node)) return node.text;
   if (ts.isComputedPropertyName(node)) return staticKey(node.expression, checker, seen);
   if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
     const left = staticKey(node.left, checker, seen), right = staticKey(node.right, checker, seen);
@@ -483,12 +522,17 @@ function staticKey(node: ts.Node, checker: ts.TypeChecker, seen = new Set<ts.Sym
 }
 function inspectAuthorityAccess(graph: AuthorityGraph): string[] {
   const violations: string[] = [];
+  const hostInputs = hostArgumentFlow(graph);
   for (const name of graph.production) walk(graph.program.getSourceFile(name)!, node => {
     if (ts.isElementAccessExpression(node) || ts.isComputedPropertyName(node)) {
       const key = staticKey(ts.isElementAccessExpression(node) ? node.argumentExpression : node.expression, graph.checker);
       const sensitiveReceiver = ts.isElementAccessExpression(node)
         && graph.checker.getTypeAtLocation(node.expression).getProperties().some(symbol =>
           symbol.name === 'onFillAuthorization' || symbol.name === 'renew');
+      if (key === undefined && (hostInputs.has(node) || (ts.isElementAccessExpression(node)
+        && isElementWrite(node) && hostInputs.has(graph.checker.getSymbolAtLocation(unwrap(node.expression))!)))) {
+        violations.push(`${name}:unknown-host-key`);
+      }
       if (key === 'onFillAuthorization' || key === 'renew' || sensitiveReceiver) violations.push(`${name}:computed-authority`);
     }
     if (ts.isBindingElement(node) && ['onFillAuthorization', 'renew'].includes((node.propertyName ?? node.name).getText())) violations.push(`${name}:aliased-hook`);
@@ -502,6 +546,140 @@ function inspectAuthorityAccess(graph: AuthorityGraph): string[] {
       }
     }
   });
+  return violations;
+}
+
+function propertyText(name: ts.PropertyName, checker: ts.TypeChecker): string | undefined {
+  return ts.isIdentifier(name) || ts.isPrivateIdentifier(name) ? name.text : staticKey(name, checker);
+}
+function authorityInventory(graph: AuthorityGraph): string[] {
+  return graph.production.filter(name => {
+    let found = false;
+    walk(graph.program.getSourceFile(name)!, node => {
+      const text = ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isPrivateIdentifier(node)
+        ? node.text : ts.isComputedPropertyName(node) ? staticKey(node, graph.checker) : undefined;
+      if (text !== undefined && AUTHORITY_NAMES.includes(text)) found = true;
+    });
+    return found;
+  });
+}
+const HOST_AUTHORITY_KEYS = ['authorization', 'onFillAuthorization'];
+function carriesHostAuthority(type: ts.Type): boolean {
+  return HOST_AUTHORITY_KEYS.some(key => type.getProperty(key) !== undefined);
+}
+function opaqueSpread(type: ts.Type, checker: ts.TypeChecker): boolean {
+  if (type.isUnionOrIntersection()) return type.types.some(part => opaqueSpread(part, checker));
+  return (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never)) !== 0
+    || (type.getProperties().length === 0 && checker.getIndexInfosOfType(type).length > 0);
+}
+function inspectHostArgument(graph: AuthorityGraph, argument: ts.Expression): string[] {
+  const violations: string[] = [], arg = unwrap(argument), checker = graph.checker;
+  if (carriesHostAuthority(checker.getTypeAtLocation(argument))
+    || carriesHostAuthority(checker.getTypeAtLocation(arg))) violations.push('typed-host-authority');
+  walk(arg, node => {
+    if ((ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node) || ts.isMethodDeclaration(node))
+      && HOST_AUTHORITY_KEYS.includes(propertyText(node.name, checker) ?? '')) violations.push('syntactic-host-authority');
+    if (!ts.isSpreadAssignment(node)) return;
+    const types = [checker.getTypeAtLocation(node.expression), checker.getTypeAtLocation(unwrap(node.expression))];
+    if (types.some(carriesHostAuthority)) violations.push('spread-host-authority');
+    if (types.some(type => opaqueSpread(type, checker))) violations.push('opaque-host-spread');
+  });
+  return violations;
+}
+function inspectHostConstructions(graph: AuthorityGraph): string[] {
+  const lists = { composeCalls: [], composeImports: [], fillCalls: [], hostAuthorizations: [] };
+  for (const name of graph.production) walk(graph.program.getSourceFile(name)!, node => {
+    inspectCompositionNode(graph, node, name, lists);
+  });
+  return lists.hostAuthorizations;
+}
+function isElementWrite(node: ts.ElementAccessExpression): boolean {
+  let target: ts.Node = node;
+  while (ts.isParenthesizedExpression(target.parent) || ts.isAsExpression(target.parent)
+    || ts.isTypeAssertionExpression(target.parent) || ts.isSatisfiesExpression(target.parent)) target = target.parent;
+  const parent = target.parent;
+  return (ts.isBinaryExpression(parent) && parent.left === target
+    && parent.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && parent.operatorToken.kind <= ts.SyntaxKind.LastAssignment)
+    || ts.isDeleteExpression(parent) || ts.isPostfixUnaryExpression(parent)
+    || (ts.isPrefixUnaryExpression(parent) && [ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(parent.operator));
+}
+// Follow arguments back through local aliases, initializers and assignments, including spread sources.
+function hostArgumentFlow(graph: AuthorityGraph): Set<ts.Node | ts.Symbol> {
+  const reached = new Set<ts.Node | ts.Symbol>(), assignments = new Map<ts.Symbol, ts.Expression[]>();
+  const roots: ts.Expression[] = [], checker = graph.checker;
+  for (const name of graph.production) walk(graph.program.getSourceFile(name)!, node => {
+    if (ts.isCallExpression(node) && ['createSupervisedHost', 'createHost'].includes(resolvedName(checker, node.expression) ?? '')) {
+      roots.push(...node.arguments);
+    }
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+      const symbol = checker.getSymbolAtLocation(unwrap(node.left));
+      if (symbol) assignments.set(symbol, [...assignments.get(symbol) ?? [], node.right]);
+    }
+  });
+  const visit = (expression: ts.Expression): void => {
+    walk(unwrap(expression), node => {
+      if (reached.has(node)) return;
+      reached.add(node);
+      if (!ts.isIdentifier(node)) return;
+      const symbol = ts.isShorthandPropertyAssignment(node.parent)
+        ? checker.getShorthandAssignmentValueSymbol(node.parent) : checker.getSymbolAtLocation(node);
+      if (!symbol || reached.has(symbol)) return;
+      reached.add(symbol);
+      for (const declaration of symbol.declarations ?? []) {
+        if (ts.isVariableDeclaration(declaration) && declaration.initializer) visit(declaration.initializer);
+      }
+      for (const value of assignments.get(symbol) ?? []) visit(value);
+    });
+  };
+  roots.forEach(visit);
+  return reached;
+}
+function bindingReferences(graph: AuthorityGraph, file: ts.SourceFile, name: ts.Identifier): ts.Identifier[] {
+  const symbol = graph.checker.getSymbolAtLocation(name), references: ts.Identifier[] = [];
+  expect(symbol).toBeDefined();
+  walk(file, node => {
+    if (!ts.isIdentifier(node) || node === name) return;
+    const resolved = ts.isShorthandPropertyAssignment(node.parent)
+      ? graph.checker.getShorthandAssignmentValueSymbol(node.parent) : graph.checker.getSymbolAtLocation(node);
+    if (resolved === symbol) references.push(node);
+  });
+  return references;
+}
+function forwardedAuthorization(graph: AuthorityGraph, references: ts.Identifier[]): boolean {
+  if (references.length !== 1) return false;
+  const property = references[0]!.parent, object = property.parent, call = object.parent;
+  return ts.isShorthandPropertyAssignment(property) && property.name.text === 'authorization'
+    && ts.isObjectLiteralExpression(object) && ts.isCallExpression(call) && call.arguments[0] === object
+    && resolvedName(graph.checker, call.expression) === 'createFillService';
+}
+function inspectDomainComposition(graph: AuthorityGraph): string[] {
+  const file = graph.program.getSourceFile('src/supervisor/host.ts')!, calls: ts.CallExpression[] = [];
+  walk(file, node => {
+    if (ts.isCallExpression(node) && resolvedName(graph.checker, node.expression) === 'createFillAuthorizationDomain') calls.push(node);
+  });
+  if (calls.length !== 1) return ['domain-call-count'];
+  const declaration = calls[0]!.parent;
+  if (!ts.isVariableDeclaration(declaration) || declaration.initializer !== calls[0]
+    || !ts.isObjectBindingPattern(declaration.name)) return ['domain-only-consumer'];
+  const elements = declaration.name.elements, violations: string[] = [];
+  if (elements.length !== 2) violations.push('binding-element-count');
+  if (elements.some(element => element.propertyName || element.dotDotDotToken || element.initializer
+    || !ts.isIdentifier(element.name))) violations.push('non-shorthand-binding');
+  if (elements.map(element => element.name.getText()).sort().join(',') !== 'authorization,lifecycle') violations.push('binding-names');
+  for (const key of ['lifecycle', 'authorization']) {
+    const element = elements.find(element => element.name.getText() === key);
+    if (!element || !ts.isIdentifier(element.name)) { violations.push(`missing-${key}`); continue; }
+    const references = bindingReferences(graph, file, element.name);
+    if (key === 'authorization') {
+      if (!forwardedAuthorization(graph, references)) violations.push('authorization-not-forwarded-as-shorthand');
+    } else {
+      const call = references[0]?.parent;
+      if (references.length !== 1 || !call || !ts.isCallExpression(call) || call.arguments.length !== 1
+        || call.arguments[0] !== references[0] || call.expression.getText() !== 'options.onFillAuthorization') {
+        violations.push('lifecycle-not-sole-hook-argument');
+      }
+    }
+  }
   return violations;
 }
 

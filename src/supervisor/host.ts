@@ -74,7 +74,11 @@ export async function createSupervisedHost(options: Readonly<{
   const lease = new EvidenceLease(options.canary);
   const domain = createLockdownDomain();
   const { authorization, lifecycle } = createFillAuthorizationDomain();
-  options.onFillAuthorization?.(lifecycle);
+  try { options.onFillAuthorization?.(lifecycle); }
+  catch (error) {
+    if (launchedHere) { try { await browser.close(); } catch { /* Preserve the hook error. */ } }
+    throw error;
+  }
   const failures: { abort?: () => void; pending: boolean } = { pending: false };
   const sessions = createBrowserSessionHost({
     newContext: capturingContextFactory(browser, lease),
