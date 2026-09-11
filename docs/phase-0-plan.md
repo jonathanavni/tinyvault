@@ -134,6 +134,7 @@ type FillResult =
   | { ok: false; reason:
       | 'origin-not-authorized'   // live top-level frame ≠ credential's canonicalOrigin
       | 'handle-unavailable'
+      | 'handle-exhausted'
       | 'locked-field'
       | 'no-password-control'     // selector didn't resolve to a verified password input in the pinned frame
       | 'cross-origin-frame'      // target field lives in a cross-origin subframe → refused

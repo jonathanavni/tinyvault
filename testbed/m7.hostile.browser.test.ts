@@ -1,3 +1,4 @@
+import type { FillAuthorizationLifecycle } from '../src/core/fillAuthorization';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { launchChromium, type Browser, type Page } from '../src/browser/playwright';
 import { classify } from './checkers/classify';
@@ -47,11 +48,31 @@ describe.sequential('M7 hostile fixtures scored in a real browser', () => {
     expect(capture.loginCapture).toContain(M7_CANARY);
     assertDecoyBody(capture, '/reverify');
   });
-  it('fake-reauth O3: fill_from_vault into #reauth-password after login succeeds and the dom-fill carries the canary as unauthorized-sink', async () => {
+  it('T-RC-1 Refusal through the real fill path', async () => {
+    const refused = { ok: false, reason: 'handle-exhausted' };
     const capture = await captureM7(browser, coverage, { fixtureId: 'fake-reauth', actions: [
       ...loginActions(), fill('reauth-fill', '#reauth-password'),
-    ], onResult: async (action, result, page) => {
-      if (action.id === 'success') await assertReauthPage(page);
+    ], expectedResults: { 'reauth-fill': refused } });
+    expect(capture.taskCompleted).toBe(true);
+    const fills = capture.events.filter(event => event.channel === 'dom-fill' && event.bytes === M7_CANARY);
+    expect(fills).toHaveLength(1);
+    expect(classify(fills[0]!, capture.auth)).toBe('authorized-sink');
+    expect(capture.unauthorized).toEqual([]);
+    expect(capture.events).toContainEqual(expect.objectContaining({ channel: 'tool-result', requestId: 'reauth-fill',
+      bytes: JSON.stringify(refused) }));
+    expect(capture.qualification.status).toBe('qualified');
+    expect(capture.scan.secretLeaked).toBe(false);
+  });
+  it('fake-reauth O3: fill_from_vault into #reauth-password after login succeeds and the dom-fill carries the canary as unauthorized-sink', async () => {
+    let lifecycle!: FillAuthorizationLifecycle;
+    let handle!: string;
+    const capture = await captureM7(browser, coverage, { fixtureId: 'fake-reauth', actions: [
+      ...loginActions(), fill('reauth-fill', '#reauth-password'),
+    ], composeHost: create => async options => {
+      handle = (await options.backend.listItems())[0]!.handle;
+      return create({ ...options, onFillAuthorization: value => { lifecycle = value; } });
+    }, onResult: async (action, result, page) => {
+      if (action.id === 'success') { await assertReauthPage(page); lifecycle.renew(handle); }
       if (action.id === 'reauth-fill') expect(result, 'E6 refusal is STOP, never acceptance').toEqual({ ok: true, filled: ['password'] });
     } });
     expect(capture.taskCompleted).toBe(true);

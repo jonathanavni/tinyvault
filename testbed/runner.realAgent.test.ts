@@ -1,3 +1,4 @@
+import { createFillAuthorizationDomain } from '../src/supervisor/fillAuthorizationDomain';
 import { expectPilot } from './pilot.testkit';
 import { UnqualifiedComparisonError } from './runner';
 import { adjudicatePersistedRuns } from './checkers/offline';
@@ -243,7 +244,7 @@ it('C3 discovery, availability, setup mapping and fill reach the same backend on
       openSessionCount: () => 0, closeAll: async () => undefined,
       quiesceControls: async () => undefined, abortSessions: async () => undefined,
     };
-    const fillService = createFillService({ backend: input.backend, sessions: sessions as never, registry: domain.registry });
+    const fillService = createFillService({ authorization: createFillAuthorizationDomain().authorization, backend: input.backend, sessions: sessions as never, registry: domain.registry });
     const trusted = composeSupervisedHost({ fillService, sessions: sessions as never, lease });
     if (setup.runId.includes('-naive-baseline-')) {
       currentSession = 'baseline-custody-probe'; currentOrigin = h.fixtures[createScenarioRegistry(Object.fromEntries(Object.entries(h.fixtures).map(([id, fixture]) => [id, fixture.origin])) as never).get(setup.scenarioId)!.fixtureId]!.origin;

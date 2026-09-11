@@ -37,7 +37,7 @@ export const FUNCTION_ALLOWLISTS: Readonly<Record<string, readonly string[]>> = 
   'src/core/fillService.ts': [
     'createFillService', 'fill', 'listVault', 'requestSetup', 'setupReasonFor', 'disposeBackend',
     'fill', 'runExclusive#callback1', 'fillExclusive', 'continueWithPolicy', 'continueWithDestination',
-    'completeInjection', 'staleOutcome', 'refusedInjection', 'resolvePolicy', 'setupReasonFor',
+    'injectReserved', 'completeInjection', 'staleOutcome', 'refusedInjection', 'resolvePolicy', 'setupReasonFor',
     'validateRequest', 'boundaryFailure', 'readSessionId', 'safeEpoch', 'mapBackendFailure',
     'mapOuterFailure', 'emptyObservation', 'failedOutcome', 'successfulOutcome', 'finish',
     'freezeObservation', 'isRecord',

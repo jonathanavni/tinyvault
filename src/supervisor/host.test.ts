@@ -1,3 +1,4 @@
+import { createFillAuthorizationDomain } from './fillAuthorizationDomain';
 import { readFile } from 'node:fs/promises';
 import { inspect } from 'node:util';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -421,7 +422,7 @@ describe('lease finalization and composition cleanup', () => {
     const backend = fakeBackend();
     backend.listItems = vi.fn(async () => { throw new Error('/private/vault/account.json failed'); });
     const sessions = new FakeSessions();
-    const service = createFillService({ backend, sessions, registry: domain.registry });
+    const service = createFillService({ authorization: createFillAuthorizationDomain().authorization, backend, sessions, registry: domain.registry });
     const lease = new EvidenceLease(CANARY);
     const host = composeSupervisedHost({ fillService: service, sessions, lease });
     const rejection = await host.tools.list_vault().catch((error: unknown) => error);

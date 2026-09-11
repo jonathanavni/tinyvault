@@ -19,6 +19,7 @@ const FIELD_ROLES: ReadonlySet<string> = Object.freeze(new Set<FieldRole>([
 const FAILURE_REASONS: ReadonlySet<string> = Object.freeze(new Set<FillFailureReason>([
   'origin-not-authorized',
   'handle-unavailable',
+  'handle-exhausted',
   'locked-field',
   'no-password-control',
   'cross-origin-frame',

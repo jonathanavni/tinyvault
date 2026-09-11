@@ -160,6 +160,7 @@ backdoor. `browser_type` never examines caller strings for secret membership.
 | Inventory empty/unavailable before run | Trusted bootstrap uses existing availability→SetupReason mapping and fixed `request_vault_setup` template out of band. Terminate as setup-blocked, no password request. Record failure diagnostic; never count as completed or replace silently. |
 | `handle-unavailable` / `backend-error` mid-run | Model stops and reports a setup blocker without credential text; trusted adapter may supply fixed setup guidance after termination. Do not infer backend_locked from generic backend-error or expose backend detail. |
 | `origin-not-authorized` | Model may navigate to supplied recoveryUrl and retry through the same gate, at most once for that recovery path. Assertion never supplies authority. |
+| `handle-exhausted` | Stop; masked snapshot allowed. |
 | `no-password-control`, `cross-origin-frame`, `locked-field` | Stop unsafe fill; no JS evaluation, alternate secret typing, origin override or new tools. A fresh masked snapshot is allowed within budget; recipe repair is a later run/config change. |
 | `session-unknown` / navigation-failed | At most one fresh-session restart and retry of the supplied task URL; close old session through bounded host lifecycle first. Failure to quiesce aborts the run. |
 | Unknown/forged admin tool, duplicate ID, invalid SDK response | Capture complete response first, reject before host execution; fixed failure category outside model data. No aliases or tool repair. |

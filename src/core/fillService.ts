@@ -15,6 +15,7 @@ import {
 } from './lockdown';
 import { validateBareOrigin } from './originGuard';
 import type { Secret } from './redaction';
+import type { FillAuthorization, FillReservation } from './fillAuthorization';
 import {
   createFailedResult,
   createFilledResult,
@@ -60,6 +61,7 @@ export type FillServiceOptions = Readonly<{
   backend: CredentialBackend;
   sessions: SessionHost;
   registry: LockdownRegistry;
+  authorization: FillAuthorization;
 }>;
 
 type MutableObservation = {
@@ -172,34 +174,59 @@ async function continueWithDestination(
   if (safeEpoch(port) !== epoch0) return staleOutcome(port, canonicalOrigin, observation);
   try {
     if (options.registry.isLocked(destination.identity)) return finish('locked-field', observation);
-    options.registry.lock(destination.identity);
   } catch (error) {
     return error instanceof InvalidControlIdentityError
       ? staleOutcome(port, canonicalOrigin, observation)
       : finish('no-password-control', observation);
   }
-  let secret: Secret;
-  try {
-    secret = await options.backend.resolveSecret(request.handle, policy);
-  } catch (error) {
-    return finish(mapBackendFailure(error), observation);
-  }
+  const reservation = options.authorization.reserve(request.handle);
+  if (reservation === null) return finish('handle-exhausted', observation);
+  return injectReserved(options, request, policy, canonicalOrigin, port, observation, destination, reservation);
+}
+
+async function injectReserved(
+  options: FillServiceOptions, request: ValidRequest, policy: CredentialPolicy,
+  canonicalOrigin: Origin, port: FillDestinationPort, observation: MutableObservation,
+  destination: PinnedDestination,
+  reservation: FillReservation,
+): Promise<FillOutcome> {
+  let recorded: Awaited<ReturnType<PinnedDestination['inject']>> | undefined;
   try {
     try {
-      if (!options.registry.isLocked(destination.identity)) return finish('no-password-control', observation);
+      options.registry.lock(destination.identity);
     } catch (error) {
       return error instanceof InvalidControlIdentityError
         ? staleOutcome(port, canonicalOrigin, observation)
         : finish('no-password-control', observation);
     }
+    let secret: Secret;
     try {
-      const injected = await destination.inject(secret, canonicalOrigin);
-      return completeInjection(injected, observation);
-    } catch {
-      return finish('no-password-control', observation);
+      secret = await options.backend.resolveSecret(request.handle, policy);
+    } catch (error) {
+      return finish(mapBackendFailure(error), observation);
+    }
+    try {
+      try {
+        if (!options.registry.isLocked(destination.identity)) return finish('no-password-control', observation);
+      } catch (error) {
+        return error instanceof InvalidControlIdentityError
+          ? staleOutcome(port, canonicalOrigin, observation)
+          : finish('no-password-control', observation);
+      }
+      try {
+        const injected = await destination.inject(secret, canonicalOrigin);
+        recorded = injected;
+        return completeInjection(injected, observation);
+      } catch {
+        return finish('no-password-control', observation);
+      }
+    } finally {
+      secret.clear();
     }
   } finally {
-    secret.clear();
+    // The recorded realm outcome decides even when result construction or clear throws.
+    if (recorded?.assigned === true || recorded?.reason === 'transport') reservation.commit();
+    else reservation.release();
   }
 }
 
@@ -207,7 +234,7 @@ function completeInjection(
   injected: Awaited<ReturnType<PinnedDestination['inject']>>,
   observation: MutableObservation,
 ): FillOutcome {
-  if (!injected.assigned) return refusedInjection(injected, observation);
+  if (injected.assigned !== true) return refusedInjection(injected, observation);
   observation.assigned = Object.freeze({
     observedOrigin: injected.observedOrigin,
     controlToken: injected.controlToken,

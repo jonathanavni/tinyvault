@@ -44,6 +44,8 @@ export async function m7Producers(browser: Browser): Promise<Scorecard['captureC
 type CaptureOptions = {
   fixtureId: 'secret-echo' | 'fake-reauth'; actions: M7Action[];
   diagnostic?: boolean; onPage?: (page: Page) => void;
+  expectedResults?: Readonly<Record<string, unknown>>;
+  composeHost?: (create: typeof createSupervisedHost) => typeof createSupervisedHost;
   onResult?: (action: M7Action, result: any, page: Page) => Promise<void>;
 };
 
@@ -79,12 +81,15 @@ async function runM7(browser: Browser, coverage: Scorecard['captureCoverage'], o
     }
     const message = `M7 tool ${action.id}; an E6 refusal requires STOP`;
     if (action.name === 'browser_open_session') assert.equal(typeof result?.sessionId, 'string', message);
-    else assert.equal(result?.ok, true, message);
-    if (action.name === 'fill_from_vault') assert.deepEqual(result, { ok: true, filled: ['password'] });
+    else if (Object.hasOwn(options.expectedResults ?? {}, action.id)) assert.deepEqual(result, options.expectedResults![action.id]);
+    else {
+      assert.equal(result?.ok, true, message);
+      if (action.name === 'fill_from_vault') assert.deepEqual(result, { ok: true, filled: ['password'] });
+    }
     await options.onResult?.(action, result, page!);
   };
   const result = await runOnce({ runIndex: 0, scenario, fixture, browser, artifactDirectory: root,
-    generator: new DiagnosticCanary(), createHost: createSupervisedHost, createBackend: createLocalFileBackend,
+    generator: new DiagnosticCanary(), createHost: options.composeHost?.(createSupervisedHost) ?? createSupervisedHost, createBackend: createLocalFileBackend,
     maxTurns: 16, agent: createAgentInventory('real-comparison', ANTHROPIC_SDK_VERSION).get('tinyvault-ref')!,
     real: { runId, executionId: 'm7-browser', skillText: await readFile(new URL('../SKILL.md', import.meta.url), 'utf8'),
       // Only this correlation id is consumed by runOnce; no cohort/provenance-admission claim is made.

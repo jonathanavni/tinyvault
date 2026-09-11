@@ -108,7 +108,8 @@ async function timedFillHarness() {
   activeSessions.push(sessions);
   const controls = createBrowserControls(sessions);
   const session = await controls.browser_open_session();
-  const service = createFillService({ backend, sessions, registry: domain.registry });
+  const service = createFillService({ backend, sessions, registry: domain.registry,
+    authorization: { reserve: () => ({ commit() {}, release() {} }) } });
   const request = {
     handle: 'vh_timing', sessionId: session.sessionId,
     fields: [{ role: 'password' as const, selector: '#password' }],
