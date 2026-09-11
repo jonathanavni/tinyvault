@@ -45,3 +45,4 @@ zsh traps in the Bash tool, git footguns in shared checkouts, and authoring haza
   stale-token sweep looked clean. Run `file -b <doc>` after every authored write and before any grep sweep; the
   model's own tool calls render escape sequences into raw bytes, so spell the escape out (backslash, u, four
   zeros) or use `perl` to insert it. (2026-09-01)
+- **A background job launched from a non-interactive zsh shares the parent's process group, so `kill -0 -- -<pgid>` never turns false and `kill -TERM -- -<pgid>` hits the caller.** The first E8b watcher dry run looped forever for this reason. Launch a group-owning child with `perl -e 'setpgrp(0,0); exec @ARGV' zsh -c '…' &` (child pgid = child pid), `wait` on it in the launcher so it is reaped, and test liveness as "any non-zombie process in the group" (`ps -o stat= -g <pgid> | grep -qv '^Z'`) — an unreaped zombie keeps `kill -0` true. `setsid` does not exist on macOS. (2026-09-10)
