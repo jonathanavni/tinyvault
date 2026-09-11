@@ -234,7 +234,7 @@ function completeInjection(
   injected: Awaited<ReturnType<PinnedDestination['inject']>>,
   observation: MutableObservation,
 ): FillOutcome {
-  if (!injected.assigned) return refusedInjection(injected, observation);
+  if (injected.assigned !== true) return refusedInjection(injected, observation);
   observation.assigned = Object.freeze({
     observedOrigin: injected.observedOrigin,
     controlToken: injected.controlToken,

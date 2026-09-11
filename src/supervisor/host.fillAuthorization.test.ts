@@ -105,6 +105,14 @@ describe('Throwing fill-authorization hook cleanup', () => {
     expect(launch).toHaveBeenCalledTimes(supplied ? 0 : 1);
     expect(close).toHaveBeenCalledTimes(supplied ? 0 : 1);
   });
+  it('awaits a rejected async hook and closes the owned browser once', async () => {
+    const error = new Error('async hook failed'), close = vi.fn(async () => {});
+    await expect(createSupervisedHost({ backend: {} as CredentialBackend, canary: 'TVC_hook_123456789',
+      launcher: { launch: async () => ({ close }) as unknown as Browser },
+      onFillAuthorization: async () => { throw error; },
+    })).rejects.toBe(error);
+    expect(close).toHaveBeenCalledOnce();
+  });
   it('preserves the hook error when owned-browser close rejects', async () => {
     const error = new Error('hook failed'), close = vi.fn(async () => { throw new Error('close failed'); });
     await expect(createSupervisedHost({ backend: {} as CredentialBackend, canary: 'TVC_hook_123456789',

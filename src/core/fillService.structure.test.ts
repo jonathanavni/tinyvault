@@ -5,31 +5,19 @@ import { describe, expect, it } from 'vitest';
 import { createSupervisedHost } from '../supervisor/host';
 import type { CredentialBackend } from '../backends/backend';
 import type { Browser } from '../browser/playwright';
-
 describe('A/K fill-service structural confinement', () => {
   it('kills extra consume/expose sites, Secret.prototype access, and redaction importer expansion', async () => {
     const files = await sourceFiles('src');
     const production = files.filter((file) => !/\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(file));
     const texts = await Promise.all(production.map(async (file) => [file, await readFile(file, 'utf8')] as const));
     const valueSites = texts.flatMap(([file, source]) => inspectSecretValueSites(source, file));
-    expect(valueSites).toEqual([
-      'src/browser/session.ts:.consume()',
-      'src/core/redaction.ts:.expose()',
-    ]);
-    expect(texts.flatMap(([file, source]) => source.includes('Secret.prototype') ? [file] : []))
-      .toEqual([]);
-
+    expect(valueSites).toEqual(['src/browser/session.ts:.consume()', 'src/core/redaction.ts:.expose()']);
+    expect(texts.flatMap(([file, source]) => source.includes('Secret.prototype') ? [file] : [])).toEqual([]);
     const importers = texts.flatMap(([file, source]) =>
       /from\s+['"][^'"]*redaction['"]/u.test(source) ? [file] : []);
-    expect(importers).toEqual([
-      'src/backends/backend.ts',
-      'src/backends/localFile.ts',
-      'src/browser/session.ts',
-      'src/core/browserPort.ts',
-      'src/core/fillService.ts',
-    ]);
+    expect(importers).toEqual(['src/backends/backend.ts', 'src/backends/localFile.ts', 'src/browser/session.ts',
+      'src/core/browserPort.ts', 'src/core/fillService.ts']);
   });
-
   it('kills computed or aliased access to a Secret object with an AST assertion', async () => {
     const file = 'src/browser/session.ts';
     const source = await readFile(file, 'utf8');
@@ -40,23 +28,14 @@ describe('A/K fill-service structural confinement', () => {
     expect(inspectSecretValueSites(mutant, file)).toContain(`${file}:computed-secret-access`);
     expect(inspectComputedSecretAccesses(mutant, file)).toContain(`${file}:computed-secret-access`);
   });
-
   it('pins every sensitive module importer and computed Secret access across the src import graph', async () => {
     const files = (await sourceFiles('src'))
       .filter((file) => !/\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(file));
     const sources = new Map(await Promise.all(files.map(async (file) =>
       [file, await readFile(file, 'utf8')] as const)));
-    const fileSet = new Set([
-      ...files,
-      ...await sourceFiles('testbed'),
-      ...await sourceFiles('scripts'),
-    ]);
+    const fileSet = new Set([...files, ...await sourceFiles('testbed'), ...await sourceFiles('scripts')]);
     const unresolved: string[] = [];
-    const sensitiveRoots = new Set([
-      'src/core/redaction.ts',
-      'src/backends/localFileSodium.ts',
-      'src/backends/localFileFormat.ts',
-    ]);
+    const sensitiveRoots = new Set(['src/core/redaction.ts', 'src/backends/localFileSodium.ts', 'src/backends/localFileFormat.ts']);
     const importers: string[] = [];
     for (const [file, source] of sources) {
       const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
@@ -71,24 +50,14 @@ describe('A/K fill-service structural confinement', () => {
     }
     expect(unresolved).toEqual([]);
     expect(importers.sort()).toEqual([
-      'src/backends/backend.ts',
-      'src/backends/localFile.ts',
-      'src/backends/localFileFormat.ts',
-      'src/backends/localFileWriter.ts',
-      'src/browser/session.ts',
-      'src/core/browserPort.ts',
+      'src/backends/backend.ts', 'src/backends/localFile.ts', 'src/backends/localFileFormat.ts',
+      'src/backends/localFileWriter.ts', 'src/browser/session.ts', 'src/core/browserPort.ts',
       'src/core/fillService.ts',
     ]);
     const fixedSixPlusKnownConsumers = new Set([
-      'src/browser/session.ts',
-      'src/core/fillService.ts',
-      'src/backends/localFile.ts',
-      'src/backends/localFileSodium.ts',
-      'src/backends/localFileFormat.ts',
-      'src/core/redaction.ts',
-      'src/backends/backend.ts',
-      'src/backends/localFileWriter.ts',
-      'src/core/browserPort.ts',
+      'src/browser/session.ts', 'src/core/fillService.ts', 'src/backends/localFile.ts',
+      'src/backends/localFileSodium.ts', 'src/backends/localFileFormat.ts', 'src/core/redaction.ts',
+      'src/backends/backend.ts', 'src/backends/localFileWriter.ts', 'src/core/browserPort.ts',
     ]);
     expect(importers.every((file) => fixedSixPlusKnownConsumers.has(file))).toBe(true);
     expect([...sources].flatMap(([file, source]) => inspectComputedSecretAccesses(source, file))).toEqual([]);
@@ -108,7 +77,6 @@ describe('A/K fill-service structural confinement', () => {
       ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
     expect(importsNamedSecret(relayed)).toBe(true);
   });
-
   it('kills a core-to-browser edge and a value import of redaction in fillService.ts', async () => {
     const source = await readFile('src/core/fillService.ts', 'utf8');
     expect(source).not.toMatch(/from\s+['"][^'"]*(?:\/|^)browser(?:\/|['"])/u);
@@ -116,22 +84,13 @@ describe('A/K fill-service structural confinement', () => {
     expect(source).not.toMatch(/import\s+\{[^}]*Secret[^}]*\}\s+from\s+['"]\.\/redaction['"]/u);
     expect(source).toContain('observation.unobserved && observation.topOrigin !== null');
   });
-
   it('kills source growth beyond the locked auditability limits', async () => {
     for (const file of [
-      'src/core/fillService.ts',
-      'src/supervisor/host.ts',
-      'src/supervisor/evidenceLease.ts',
-      'src/browser/session.ts',
-      'src/supervisor/host.evidence.test.ts',
-      'testbed/runner.finalization.browser.test.ts',
-      'src/core/fillService.test.ts',
-      'src/core/fillService.browser.test.ts',
-      'src/supervisor/host.test.ts',
-      'src/supervisor/host.browser.test.ts',
-      'src/supervisor/host.timing.browser.test.ts',
-      'testbed/runner.ts',
-      'testbed/checkers/leakDecoders.ts',
+      'src/core/fillService.structure.test.ts', 'src/core/fillService.ts', 'src/supervisor/host.ts', 'src/supervisor/evidenceLease.ts',
+      'src/browser/session.ts', 'src/supervisor/host.evidence.test.ts',
+      'testbed/runner.finalization.browser.test.ts', 'src/core/fillService.test.ts',
+      'src/core/fillService.browser.test.ts', 'src/supervisor/host.test.ts', 'src/supervisor/host.browser.test.ts',
+      'src/supervisor/host.timing.browser.test.ts', 'testbed/runner.ts', 'testbed/checkers/leakDecoders.ts',
       'scripts/retention/rules.ts',
     ]) {
       const lines = (await readFile(file, 'utf8')).split('\n').length;
@@ -139,7 +98,6 @@ describe('A/K fill-service structural confinement', () => {
     }
   });
 });
-
 async function sourceFiles(root: string): Promise<string[]> {
   const files: string[] = [];
   for (const entry of await readdir(root, { withFileTypes: true })) {
@@ -149,7 +107,6 @@ async function sourceFiles(root: string): Promise<string[]> {
   }
   return files.sort();
 }
-
 function inspectSecretValueSites(source: string, fileName: string): string[] {
   const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const secretBindings = new Set<string>();
@@ -181,7 +138,6 @@ function inspectSecretValueSites(source: string, fileName: string): string[] {
   });
   return sites;
 }
-
 function relativeModuleSpecifiers(file: ts.SourceFile): string[] {
   const specifiers = new Set<string>();
   walk(file, (node) => {
@@ -200,7 +156,6 @@ function relativeModuleSpecifiers(file: ts.SourceFile): string[] {
   });
   return [...specifiers];
 }
-
 function importsNamedSecret(file: ts.SourceFile): boolean {
   let found = false;
   walk(file, (node) => {
@@ -212,19 +167,12 @@ function importsNamedSecret(file: ts.SourceFile): boolean {
   });
   return found;
 }
-
 function resolveSourceModule(from: string, specifier: string, files: ReadonlySet<string>): string | undefined {
   const unresolved = path.posix.normalize(path.posix.join(path.posix.dirname(from), specifier))
     .replace(/\.js$/u, '');
-  return [
-    unresolved,
-    `${unresolved}.ts`,
-    `${unresolved}.tsx`,
-    `${unresolved}/index.ts`,
-    `${unresolved}/index.tsx`,
-  ].find((candidate) => files.has(candidate));
+  return [unresolved, `${unresolved}.ts`, `${unresolved}.tsx`, `${unresolved}/index.ts`, `${unresolved}/index.tsx`]
+    .find((candidate) => files.has(candidate));
 }
-
 function inspectComputedSecretAccesses(source: string, fileName: string): string[] {
   const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const secretTypes = secretTypeNames(file);
@@ -253,7 +201,6 @@ function inspectComputedSecretAccesses(source: string, fileName: string): string
   });
   return violations;
 }
-
 function secretTypeNames(file: ts.SourceFile): Set<string> {
   const secretTypes = new Set<string>(['Secret']);
   walk(file, (node) => {
@@ -280,13 +227,11 @@ function secretTypeNames(file: ts.SourceFile): Set<string> {
   }
   return secretTypes;
 }
-
 function typeNames(type: ts.TypeNode): string[] {
   const names: string[] = [];
   walk(type, (node) => { if (ts.isIdentifier(node)) names.push(node.text); });
   return names;
 }
-
 function typeAssertions(expression: ts.Expression): string[] {
   const names: string[] = [];
   let current = expression;
@@ -299,7 +244,6 @@ function typeAssertions(expression: ts.Expression): string[] {
   }
   return names;
 }
-
 function unwrap(expression: ts.Expression): ts.Expression {
   let current = expression;
   while (ts.isParenthesizedExpression(current) || ts.isAsExpression(current)
@@ -308,12 +252,10 @@ function unwrap(expression: ts.Expression): ts.Expression {
   }
   return current;
 }
-
 function walk(root: ts.Node, visit: (node: ts.Node) => void): void {
   visit(root);
   root.forEachChild((child) => walk(child, visit));
 }
-
 const AUTHORITY_NAMES = ['FillAuthorizationLifecycle', 'onFillAuthorization', 'createFillAuthorizationDomain', 'FillAuthorization', 'renew'];
 const AUTHORITY_FILES = ['src/core/fillAuthorization.ts', 'src/core/fillService.ts',
   'src/supervisor/fillAuthorizationDomain.ts', 'src/supervisor/host.ts'];
@@ -321,7 +263,49 @@ const HOST_KEYS = ['tools', 'drainEvidence', 'setupReasonFor', 'abortedEvidence'
   'quiesceEvidenceProducers', 'finish', 'abort', 'closeAll'];
 const TOOL_KEYS = ['list_vault', 'request_vault_setup', 'browser_open_session', 'browser_close_session',
   'browser_navigate', 'browser_click', 'browser_type', 'browser_snapshot', 'fill_from_vault'];
-
+const PLANTED_KEY = "['on','Fill','Authorization'].join('')";
+const CAPTURE = '(hook: any) => { (globalThis as any).__grant = Object.values(hook)[0]; }';
+const BASE_OPTIONS = '{ backend, canary: run.canary, browser: input.browser }';
+const SAVED_HOOK = 'const saved = { ...options };';
+const FORWARD_HOOK = '(value: { renew(handle: string): void }) => { Object.assign(globalThis, { __rc: value }); saved.onFillAuthorization?.(value); }';
+const R3_CASES: [string, string, string, string[]][] = [
+  ['unresolved receiver', 'runner', `Object.create(null)[String('key')] = 1; host = await input.createHost(${BASE_OPTIONS});`, ['unresolved-receiver']],
+  ['assign separate options', 'runner', `const hostOptions = ${BASE_OPTIONS}; Object.assign(hostOptions, { [${PLANTED_KEY}]: ${CAPTURE} });
+    host = await input.createHost(hostOptions as never);`, ['host-argument-shape']],
+  ['defineProperty and assign', 'runner', `const planted = {}; Object.defineProperty(planted, ${PLANTED_KEY}, { value: ${CAPTURE}, enumerable: true });
+    host = await input.createHost(Object.assign(${BASE_OPTIONS}, planted));`, ['host-argument-shape']],
+  ['Proxy', 'runner', `host = await input.createHost(new Proxy(${BASE_OPTIONS}, {
+    get(target, key, receiver) { return key === ${PLANTED_KEY} ? ${CAPTURE} : Reflect.get(target, key, receiver); } }));`, ['host-argument-shape']],
+  ['helper parameter', 'agent', `function decorateOptions(t: object, v: unknown) { (t as Record<string, unknown>)[${PLANTED_KEY}] = v; }
+    const hostOptions = { backend, canary: input.canary, browser: input.browser }; decorateOptions(hostOptions, ${CAPTURE});
+    host = await input.createHost(hostOptions as never);`, ['host-argument-shape']],
+  ['index signature', 'runner', `const hostOptions: Record<string, unknown> = ${BASE_OPTIONS};
+    hostOptions['authorization'] = { reserve() { return { commit() {}, release() {} }; } };
+    host = await input.createHost(hostOptions as never);`, ['host-argument-shape']],
+  ['wrapped createHost', 'agent', `const inner = input.createHost; host = await inner(Object.assign(
+    { backend, canary: input.canary, browser: input.browser }, { [${PLANTED_KEY}]: ${CAPTURE} }));
+    if (!host) { host = await input.createHost({ backend, canary: input.canary, browser: input.browser }); }`, ['host-argument-shape']],
+  ['S1', 'host', `${SAVED_HOOK} Reflect.set(options, 'onFillAuthorization', ${FORWARD_HOOK});`, ['options-escape:src/supervisor/host.ts:CallExpression']],
+  ['S2', 'host', `${SAVED_HOOK} Object.assign(options, { onFillAuthorization: ${FORWARD_HOOK} });`, ['options-escape:src/supervisor/host.ts:CallExpression']],
+  ['S3', 'host', `${SAVED_HOOK} Object.defineProperty(options, 'onFillAuthorization', { value: ${FORWARD_HOOK} });`, ['options-escape:src/supervisor/host.ts:CallExpression']],
+  ['S4', 'runner', `const args = ${BASE_OPTIONS}; Reflect.set(args, ${PLANTED_KEY}, (value: unknown) => { (globalThis as any).__rc = value; });
+    host = await input.createHost(args);`, ['host-argument-shape']],
+  ['S5', 'runner', `const args = ${BASE_OPTIONS}; host = await input.createHost(new Proxy(args, {
+    get(target, key, receiver) { return key === ${PLANTED_KEY} ? (value: unknown) => { (globalThis as any).__rc = value; }
+      : Reflect.get(target, key, receiver); } }));`, ['host-argument-shape']],
+  ['S6', 'host', `${SAVED_HOOK} function install(hook = (value: unknown) => { Object.assign(globalThis, { __rc: value }); }) {
+    Object.assign(options, { onFillAuthorization(value: FillAuthorizationLifecycle) { hook(value); saved.onFillAuthorization?.(value); } }); }
+    install();`, ['options-escape:src/supervisor/host.ts:CallExpression']],
+  ['S7', 'host', `${SAVED_HOOK} function install(hook = saved.onFillAuthorization) { Object.assign(options, {
+    onFillAuthorization(value: FillAuthorizationLifecycle) { Object.assign(globalThis, { __rc: value }); hook?.(value); } }); } install();`,
+    ['options-escape:src/supervisor/host.ts:CallExpression', 'aliased-authority']],
+  ['S8', 'host', `function capture(...args: unknown[]) { (globalThis as any).__rc = arguments[0]; }
+    ${SAVED_HOOK} Object.assign(options, { onFillAuthorization(value: { renew(handle: string): void }) { capture(value); saved.onFillAuthorization?.(value); } });`,
+    ['options-escape:src/supervisor/host.ts:CallExpression', 'arguments-capture']],
+  ['S9', 'fill', `Reflect.set(options, 'authorization', { reserve() { return { commit() {}, release() {} }; } });`, ['options-escape:src/core/fillService.ts:CallExpression']],
+  ['S10', 'fill', `const extra = createFillAuthorizationDomain(); Object.assign(globalThis, { __rc: extra.lifecycle });
+    options = { ...options, authorization: extra.authorization };`, ['options-escape:src/core/fillService.ts:BinaryExpression', 'global-domain-call-inventory', 'core-supervisor-import']],
+];
 describe('T-RC-10 Unreachability pin', () => {
   // Each authorityGraph() builds a full TypeScript program over src + testbed; a cold clean clone took > 5 s for the
   // five-variant test below (gate 4 on 12a4a08), so the program-building tests carry an explicit timeout.
@@ -330,16 +314,16 @@ describe('T-RC-10 Unreachability pin', () => {
     assertAuthorityGraph(graph);
   });
   it('a rejects computed keys, aliases and spreads of computed keys', { timeout: 60_000 }, async () => {
-    for (const access of [
-      "const key = 'on' + 'FillAuthorization'; options[key]?.(() => {});",
-      "const { onFillAuthorization: alias } = options; alias?.(() => {});",
-      "const copied = lifecycle;",
-      "const { renew: copied } = lifecycle;",
-      "const key = 'on' + 'FillAuthorization'; const extra = { [key]: () => {} }; const spread = { ...extra };",
-    ]) {
+    for (const [access, reason] of [
+      ["const key = 'on' + 'FillAuthorization'; options[key]?.(() => {});", "computed-authority"],
+      ["const { onFillAuthorization: alias } = options; alias?.(() => {});", "aliased-hook"],
+      ["const copied = lifecycle;", "aliased-authority"],
+      ["const { renew: copied } = lifecycle;", "aliased-hook"],
+      ["const key = 'on' + 'FillAuthorization'; const extra = { [key]: () => {} }; const spread = { ...extra };", "computed-authority"],
+    ] as const) {
       const graph = await authorityGraph({ 'src/supervisor/host.ts':
         (await readFile('src/supervisor/host.ts', 'utf8')).replace('  const launchedHere', `${access}\n  const launchedHere`) });
-      expect(inspectAuthorityAccess(graph)).not.toEqual([]);
+      expect(inspectAuthorityAccess(graph)).toContain(`src/supervisor/host.ts:${reason}`);
     }
   });
   it('g rejects G1 duplicate lifecycle bindings and wrapped authorization', { timeout: 60_000 }, async () => {
@@ -366,6 +350,7 @@ describe('T-RC-10 Unreachability pin', () => {
     expect(authorityInventory(graph)).toContain('testbed/runnerExecution.ts');
     expect(inspectHostConstructions(graph)).toContain('testbed/runnerExecution.ts:syntactic-host-authority');
     expect(inspectHostConstructions(graph)).toContain('testbed/runnerExecution.ts:typed-host-authority');
+    expect(inspectHostConstructions(graph)).toContain('testbed/runnerExecution.ts:host-argument-key:onFillAuthorization');
   });
   it.each(["['on','Fill','Authorization'].join('')", "`on${String('Fill')}Authorization`"])(
     'a/f reject G2-prime non-foldable key %s and opaque spread', { timeout: 60_000 }, async key => {
@@ -377,6 +362,7 @@ describe('T-RC-10 Unreachability pin', () => {
         host = await input.createHost({ backend, canary: run.canary, browser: input.browser, ...extra } as never);`);
       expect(inspectAuthorityAccess(graph)).toContain('testbed/runnerExecution.ts:unknown-host-key');
       expect(inspectHostConstructions(graph)).toContain('testbed/runnerExecution.ts:opaque-host-spread');
+      expect(inspectHostConstructions(graph)).toContain('testbed/runnerExecution.ts:host-argument-key:SpreadAssignment');
       const computed = await runnerMutation(`const hookKey = ${key};
         const extra = { [hookKey]: (value: unknown) => { (globalThis as any).__probe = value; } };
         const alias = extra; let forwarded: Record<string, unknown>; forwarded = alias;
@@ -394,8 +380,21 @@ describe('T-RC-10 Unreachability pin', () => {
     ]) {
       const graph = await runnerMutation(`host = await input.createHost(${argument});`);
       expect(inspectHostConstructions(graph)).toContain('testbed/runnerExecution.ts:syntactic-host-authority');
+      expect(inspectHostConstructions(graph)).toContain(`testbed/runnerExecution.ts:host-argument-key:${argument.includes('...') ? 'SpreadAssignment' : 'authorization'}`);
       expect(inspectHostConstructions(graph)).toContain(argument.includes('...')
         ? 'testbed/runnerExecution.ts:spread-host-authority' : 'testbed/runnerExecution.ts:typed-host-authority');
+    }
+  });
+  it.each(R3_CASES)('h rejects %s', { timeout: 60_000 }, async (_id, target, code, reasons) => {
+    const clean = await authorityGraph();
+    assertAuthorityGraph(clean); expect(inspectDomainComposition(clean)).toEqual([]);
+    const graph = await ({ runner: runnerMutation, agent: realAgentMutation, host: hostMutation, fill: fillMutation }[target]!(code));
+    const file = { runner: 'testbed/runnerExecution.ts', agent: 'testbed/realAgentRun.ts', host: 'src/supervisor/host.ts' }[target];
+    for (const reason of reasons) {
+      const actual = reason.startsWith('options-escape:') ? inspectOptionsEscapes(graph)
+        : reason.startsWith('host-argument-') ? inspectHostConstructions(graph)
+        : ['aliased-authority', 'arguments-capture', 'unresolved-receiver'].includes(reason) ? inspectAuthorityAccess(graph) : inspectGlobalComposition(graph);
+      expect(actual).toContain(reason.startsWith('host-argument-') || ['aliased-authority', 'arguments-capture', 'unresolved-receiver'].includes(reason) ? `${file}:${reason}` : reason);
     }
   });
   it('b exposes no renewal through the host, tools or safe accessor results', async () => {
@@ -417,7 +416,6 @@ describe('T-RC-10 Unreachability pin', () => {
     expect(inspectDomainComposition(graph)).toEqual([]);
   });
 });
-
 type AuthorityGraph = Awaited<ReturnType<typeof authorityGraph>>;
 async function authorityGraph(overrides: Record<string, string> = {}) {
   const files = [...await sourceFiles('src'), ...await sourceFiles('testbed')].sort();
@@ -431,10 +429,24 @@ async function authorityGraph(overrides: Record<string, string> = {}) {
     program, checker: program.getTypeChecker() };
 }
 async function runnerMutation(replacement: string): Promise<AuthorityGraph> {
-  const file = 'testbed/runnerExecution.ts', source = await readFile(file, 'utf8');
-  const original = 'host = await input.createHost({ backend, canary: run.canary, browser: input.browser });';
+  return sourceMutation('testbed/runnerExecution.ts',
+    'host = await input.createHost({ backend, canary: run.canary, browser: input.browser });', replacement);
+}
+async function realAgentMutation(replacement: string): Promise<AuthorityGraph> {
+  return sourceMutation('testbed/realAgentRun.ts',
+    'host = await input.createHost({ backend, canary: input.canary, browser: input.browser });', replacement);
+}
+async function hostMutation(insertion: string): Promise<AuthorityGraph> {
+  return sourceMutation('src/supervisor/host.ts', '  const browser = options.browser', `${insertion}\n  const browser = options.browser`);
+}
+async function fillMutation(insertion: string): Promise<AuthorityGraph> {
+  return sourceMutation('src/core/fillService.ts', '  const service: FillService', `${insertion}\n  const service: FillService`,
+    insertion.includes('createFillAuthorizationDomain') ? "import { createFillAuthorizationDomain } from '../supervisor/fillAuthorizationDomain';\n" : '');
+}
+async function sourceMutation(file: string, original: string, replacement: string, prefix = ''): Promise<AuthorityGraph> {
+  const source = await readFile(file, 'utf8');
   expect(source).toContain(original);
-  return authorityGraph({ [file]: source.replace(original, replacement) });
+  return authorityGraph({ [file]: prefix + source.replace(original, replacement) });
 }
 function unusedBackend(): CredentialBackend {
   return { probeAvailability: async () => ({ available: true }), listItems: async () => [],
@@ -478,6 +490,9 @@ function assertAuthorityGraph(graph: AuthorityGraph): void {
       inspectCompositionNode(graph, node, name, { composeCalls, composeImports, fillCalls, hostAuthorizations });
     });
   }
+  expect(inspectOptionsEscapes(graph)).toEqual([]);
+  expect(inspectGlobalComposition(graph)).toEqual([]);
+  expect([...new Set(callSites(graph, ['createSupervisedHost', 'createHost']))].sort()).toEqual(HOST_CALL_FILES);
   expect(authorityInventory(graph)).toEqual(AUTHORITY_FILES);
   expect(inspectAuthorityAccess(graph)).toEqual([]);
   expect([...new Set(composeCalls)]).toEqual([]); expect([...new Set(composeImports)]).toEqual([]);
@@ -501,6 +516,7 @@ function inspectCompositionNode(graph: AuthorityGraph, node: ts.Node, file: stri
   if (callee === 'composeSupervisedHost') lists.composeCalls.push(file);
   if (callee === 'createFillService') lists.fillCalls.push(file);
   if (callee !== 'createSupervisedHost' && callee !== 'createHost') return;
+  lists.hostAuthorizations.push(...inspectHostShape(graph, node).map(reason => `${file}:${reason}`));
   for (const arg of node.arguments) {
     lists.hostAuthorizations.push(...inspectHostArgument(graph, arg).map(reason => `${file}:${reason}`));
   }
@@ -522,25 +538,30 @@ function staticKey(node: ts.Node, checker: ts.TypeChecker, seen = new Set<ts.Sym
 }
 function inspectAuthorityAccess(graph: AuthorityGraph): string[] {
   const violations: string[] = [];
-  const hostInputs = hostArgumentFlow(graph);
+  const hostInputs = hostArgumentFlow(graph), hostFiles = new Set(callSites(graph, ['createSupervisedHost', 'createHost']));
   for (const name of graph.production) walk(graph.program.getSourceFile(name)!, node => {
     if (ts.isElementAccessExpression(node) || ts.isComputedPropertyName(node)) {
       const key = staticKey(ts.isElementAccessExpression(node) ? node.argumentExpression : node.expression, graph.checker);
       const sensitiveReceiver = ts.isElementAccessExpression(node)
         && graph.checker.getTypeAtLocation(node.expression).getProperties().some(symbol =>
           symbol.name === 'onFillAuthorization' || symbol.name === 'renew');
+      const receiver = ts.isElementAccessExpression(node) ? graph.checker.getSymbolAtLocation(unwrap(node.expression)) : undefined;
+      if (key === undefined && ts.isElementAccessExpression(node) && isElementWrite(node)
+        && receiver === undefined && hostFiles.has(name)) violations.push(`${name}:unresolved-receiver`);
       if (key === undefined && (hostInputs.has(node) || (ts.isElementAccessExpression(node)
-        && isElementWrite(node) && hostInputs.has(graph.checker.getSymbolAtLocation(unwrap(node.expression))!)))) {
+        && isElementWrite(node) && receiver !== undefined && hostInputs.has(receiver)))) {
         violations.push(`${name}:unknown-host-key`);
       }
       if (key === 'onFillAuthorization' || key === 'renew' || sensitiveReceiver) violations.push(`${name}:computed-authority`);
     }
     if (ts.isBindingElement(node) && ['onFillAuthorization', 'renew'].includes((node.propertyName ?? node.name).getText())) violations.push(`${name}:aliased-hook`);
-    const value = ts.isVariableDeclaration(node) ? node.initializer
+    if (ts.isIdentifier(node) && node.text === 'arguments'
+      && ['src/supervisor/host.ts', 'src/core/fillService.ts'].includes(name)) violations.push(`${name}:arguments-capture`);
+    const value = ts.isVariableDeclaration(node) || ts.isParameter(node) ? node.initializer
       : ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken ? node.right : undefined;
     if (value && (ts.isIdentifier(unwrap(value)) || ts.isPropertyAccessExpression(unwrap(value)))) {
       const source = unwrap(value), type = graph.checker.getTypeAtLocation(source);
-      const member = ts.isPropertyAccessExpression(source) ? source.name.text : undefined;
+      const member = ts.isPropertyAccessExpression(source) ? source.name.text : source.getText();
       if (member === 'onFillAuthorization' || member === 'renew' || type.getProperty('renew')) {
         violations.push(`${name}:aliased-authority`);
       }
@@ -548,7 +569,6 @@ function inspectAuthorityAccess(graph: AuthorityGraph): string[] {
   });
   return violations;
 }
-
 function propertyText(name: ts.PropertyName, checker: ts.TypeChecker): string | undefined {
   return ts.isIdentifier(name) || ts.isPrivateIdentifier(name) ? name.text : staticKey(name, checker);
 }
@@ -572,6 +592,68 @@ function opaqueSpread(type: ts.Type, checker: ts.TypeChecker): boolean {
   return (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never)) !== 0
     || (type.getProperties().length === 0 && checker.getIndexInfosOfType(type).length > 0);
 }
+const HOST_CALL_FILES = ['testbed/docker/integrationProbes.ts', 'testbed/harnessGate.ts',
+  'testbed/realAgentRun.ts', 'testbed/runnerExecution.ts'];
+function callSites(graph: AuthorityGraph, names: string[]): string[] {
+  const sites: string[] = [];
+  for (const file of graph.production) walk(graph.program.getSourceFile(file)!, node => {
+    if (ts.isCallExpression(node) && names.includes(resolvedName(graph.checker, node.expression) ?? '')) sites.push(file);
+  });
+  return sites;
+}
+function inspectHostShape(graph: AuthorityGraph, call: ts.CallExpression): string[] {
+  const arg = call.arguments[0] && unwrap(call.arguments[0]);
+  if (call.arguments.length !== 1 || !arg || !ts.isObjectLiteralExpression(arg)) return ['host-argument-shape'];
+  return arg.properties.flatMap(property => {
+    const key = property.name && propertyText(property.name, graph.checker);
+    return (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property))
+      && key !== undefined && ['backend', 'canary', 'browser', 'launcher'].includes(key)
+      ? [] : [`host-argument-key:${key ?? ts.SyntaxKind[property.kind]}`];
+  });
+}
+function inspectGlobalComposition(graph: AuthorityGraph): string[] {
+  const violations = callSites(graph, ['createFillAuthorizationDomain']).join(',') === 'src/supervisor/host.ts'
+    ? [] : ['global-domain-call-inventory'];
+  const file = graph.program.getSourceFile('src/core/fillService.ts')!;
+  walk(file, node => {
+    if (!ts.isImportDeclaration(node) || !ts.isStringLiteralLike(node.moduleSpecifier)) return;
+    const resolved = ts.resolveModuleName(node.moduleSpecifier.text, file.fileName, graph.program.getCompilerOptions(), ts.sys).resolvedModule;
+    if (resolved && path.resolve(resolved.resolvedFileName).startsWith(path.resolve('src/supervisor') + path.sep)) {
+      violations.push('core-supervisor-import');
+    }
+  });
+  return violations;
+}
+function optionsReferenceKind(graph: AuthorityGraph, reference: ts.Identifier, file: ts.SourceFile): string | undefined {
+  let context: ts.Node = reference;
+  while (context !== file) {
+    if (ts.isParameter(context) && context.initializer) return 'ParameterInitializer';
+    context = context.parent;
+  }
+  const parent = reference.parent;
+  if (ts.isPropertyAccessExpression(parent) && parent.expression === reference && !isElementWrite(parent)) return;
+  if (file.fileName.endsWith('src/core/fillService.ts') && ts.isCallExpression(parent)
+    && parent.arguments.some(arg => arg === reference)) {
+    const declaration = graph.checker.getResolvedSignature(parent)?.getDeclaration();
+    if (declaration && (ts.isFunctionDeclaration(declaration) || ts.isFunctionExpression(declaration) || ts.isArrowFunction(declaration))
+      && declaration.getSourceFile() === file) return;
+  }
+  return ts.SyntaxKind[parent.kind];
+}
+function inspectOptionsEscapes(graph: AuthorityGraph): string[] {
+  const violations: string[] = [];
+  for (const [name, factory] of [['src/supervisor/host.ts', 'createSupervisedHost'], ['src/core/fillService.ts', 'createFillService']]) {
+    const file = graph.program.getSourceFile(name!)!;
+    const fn = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === factory) as ts.FunctionDeclaration;
+    const parameter = fn.parameters[0]!.name;
+    expect(ts.isIdentifier(parameter)).toBe(true);
+    for (const reference of bindingReferences(graph, file, parameter as ts.Identifier)) {
+      const kind = optionsReferenceKind(graph, reference, file);
+      if (kind) violations.push(`options-escape:${name}:${kind}`);
+    }
+  }
+  return violations;
+}
 function inspectHostArgument(graph: AuthorityGraph, argument: ts.Expression): string[] {
   const violations: string[] = [], arg = unwrap(argument), checker = graph.checker;
   if (carriesHostAuthority(checker.getTypeAtLocation(argument))
@@ -593,13 +675,19 @@ function inspectHostConstructions(graph: AuthorityGraph): string[] {
   });
   return lists.hostAuthorizations;
 }
-function isElementWrite(node: ts.ElementAccessExpression): boolean {
+function isElementWrite(node: ts.ElementAccessExpression | ts.PropertyAccessExpression): boolean {
   let target: ts.Node = node;
   while (ts.isParenthesizedExpression(target.parent) || ts.isAsExpression(target.parent)
-    || ts.isTypeAssertionExpression(target.parent) || ts.isSatisfiesExpression(target.parent)) target = target.parent;
+    || ts.isTypeAssertionExpression(target.parent) || ts.isSatisfiesExpression(target.parent)
+    || ts.isNonNullExpression(target.parent) || ts.isArrayLiteralExpression(target.parent)
+    || ts.isObjectLiteralExpression(target.parent) || ts.isSpreadAssignment(target.parent) || ts.isSpreadElement(target.parent)
+    || (ts.isPropertyAssignment(target.parent) && target.parent.initializer === target)
+    || ((ts.isPropertyAccessExpression(target.parent) || ts.isElementAccessExpression(target.parent))
+      && target.parent.expression === target)) target = target.parent;
   const parent = target.parent;
   return (ts.isBinaryExpression(parent) && parent.left === target
     && parent.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && parent.operatorToken.kind <= ts.SyntaxKind.LastAssignment)
+    || ((ts.isForInStatement(parent) || ts.isForOfStatement(parent)) && parent.initializer === target)
     || ts.isDeleteExpression(parent) || ts.isPostfixUnaryExpression(parent)
     || (ts.isPrefixUnaryExpression(parent) && [ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(parent.operator));
 }
@@ -682,7 +770,6 @@ function inspectDomainComposition(graph: AuthorityGraph): string[] {
   }
   return violations;
 }
-
 describe('T-RC-5 Port contract structure', () => {
   it('pins consume before the protected CDP call and swallowing disposal', async () => {
     const source = await readFile('src/browser/session.ts', 'utf8');

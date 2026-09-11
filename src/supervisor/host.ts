@@ -74,7 +74,7 @@ export async function createSupervisedHost(options: Readonly<{
   const lease = new EvidenceLease(options.canary);
   const domain = createLockdownDomain();
   const { authorization, lifecycle } = createFillAuthorizationDomain();
-  try { options.onFillAuthorization?.(lifecycle); }
+  try { await options.onFillAuthorization?.(lifecycle); }
   catch (error) {
     if (launchedHere) { try { await browser.close(); } catch { /* Preserve the hook error. */ } }
     throw error;
