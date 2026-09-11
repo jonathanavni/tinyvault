@@ -1,3 +1,4 @@
+import { createFillAuthorizationDomain } from '../supervisor/fillAuthorizationDomain';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -205,7 +206,7 @@ describe('S3 reference profile adapter', () => {
   ])('uses actual fill-service availability mapping for $name', async row => {
     const backend = { probeAvailability: vi.fn(async () => row.status as BackendStatus),
       listItems: vi.fn(async () => row.items as ItemMeta[]), resolvePolicy: vi.fn(), resolveSecret: vi.fn() };
-    const service = createFillService({ backend: backend as unknown as CredentialBackend, sessions: {} as never, registry: {} as never });
+    const service = createFillService({ authorization: createFillAuthorizationDomain().authorization, backend: backend as unknown as CredentialBackend, sessions: {} as never, registry: {} as never });
     const request = vi.fn(service.requestSetup);
     const profile = await createReferenceProfile({ runId: 'run_A', task, skillText: 'instructions',
       probeAvailability: backend.probeAvailability, vault: { list_vault: service.listVault, request_vault_setup: request }, setupReasonFor: service.setupReasonFor });
@@ -223,7 +224,7 @@ describe('S3 reference profile adapter', () => {
     expect(profile).toMatchObject({ status: 'setup-blocked', reason: 'backend_unavailable' });
     expect(JSON.stringify(profile)).not.toContain('PRIVATE_BACKEND_DETAIL');
   });
-  it.each(['origin-not-authorized', 'handle-unavailable', 'backend-error', 'no-password-control', 'cross-origin-frame', 'locked-field', 'session-unknown', 'navigation-failed'])(
+  it.each(['origin-not-authorized', 'handle-unavailable', 'backend-error', 'no-password-control', 'cross-origin-frame', 'locked-field', 'session-unknown', 'navigation-failed', 'handle-exhausted'])(
     'preserves the model decision and failed attempt for %s without scripted repair', async reason => {
       const profile = await ready(); if (profile.status !== 'ready') throw new Error('not ready');
       const first: ToolCall = reason === 'navigation-failed'

@@ -24,6 +24,8 @@ import { validateBareOrigin } from '../core/originGuard';
 import type { BrowserControls, FillRequest, Origin, VaultTools } from '../core/types';
 import type { CapturedEventInput } from '../agents/transcript';
 import { serializeExact } from '../agents/transcript';
+import type { FillAuthorizationLifecycle } from '../core/fillAuthorization';
+import { createFillAuthorizationDomain } from './fillAuthorizationDomain';
 import { createLockdownDomain } from './lockdownDomain';
 import {
   TripwireRun,
@@ -65,11 +67,14 @@ export async function createSupervisedHost(options: Readonly<{
   canary: string;
   browser?: Browser;
   launcher?: ChromiumLauncher;
+  onFillAuthorization?(lifecycle: FillAuthorizationLifecycle): void;
 }>): Promise<SupervisedHost> {
   const browser = options.browser ?? await launchChromium(options.launcher);
   const launchedHere = options.browser === undefined;
   const lease = new EvidenceLease(options.canary);
   const domain = createLockdownDomain();
+  const { authorization, lifecycle } = createFillAuthorizationDomain();
+  options.onFillAuthorization?.(lifecycle);
   const failures: { abort?: () => void; pending: boolean } = { pending: false };
   const sessions = createBrowserSessionHost({
     newContext: capturingContextFactory(browser, lease),
@@ -82,7 +87,7 @@ export async function createSupervisedHost(options: Readonly<{
       failures.pending = true; failures.abort?.();
     },
   });
-  const fillService = createFillService({ backend: options.backend, sessions, registry: domain.registry });
+  const fillService = createFillService({ backend: options.backend, sessions, registry: domain.registry, authorization });
   const host = compose(parts(fillService, sessions, lease), launchedHere ? browser : undefined);
   failures.abort = host.abort;
   if (failures.pending) failures.abort();

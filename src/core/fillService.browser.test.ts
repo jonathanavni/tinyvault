@@ -1,3 +1,4 @@
+import { createFillAuthorizationDomain } from '../supervisor/fillAuthorizationDomain';
 import { inspect } from 'node:util';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -91,6 +92,8 @@ async function openHarness(
 ) {
   const origin = options.origin ?? lab.primaryOrigin as Origin;
   const domain = createLockdownDomain();
+  const fillDomain = createFillAuthorizationDomain();
+  const authorization = { reserve: vi.fn(fillDomain.authorization.reserve) };
   let context!: BrowserContext;
   const sessions = createBrowserSessionHost({
     newContext: async () => {
@@ -111,12 +114,12 @@ async function openHarness(
   const backend = memoryBackend(options.secret ?? CANARY, origin, async () => {
     if (options.beforeSecret !== undefined) await options.beforeSecret(context.pages()[0]!);
   });
-  const service = createFillService({ backend, sessions, registry: domain.registry });
+  const service = createFillService({ authorization, backend, sessions, registry: domain.registry });
   const controls = createBrowserControls(sessions);
   const session = await controls.browser_open_session();
   expect(await controls.browser_navigate({ sessionId: session.sessionId, url: `${origin}${route}` }))
     .toEqual({ ok: true });
-  return { backend, context, controls, domain, origin, page: context.pages()[0]!, service, session, sessions };
+  return { backend, context, controls, domain, fillDomain, authorization, origin, page: context.pages()[0]!, service, session, sessions };
 }
 
 type BrowserHarness = Awaited<ReturnType<typeof openHarness>>;
@@ -164,7 +167,7 @@ describe.sequential('A/B-fill real browser structural and destination gates', ()
     const domain = createLockdownDomain();
     const sessions = createBrowserSessionHost({ newContext: () => browser.newContext(), ...domain });
     activeHosts.push(sessions);
-    const service = createFillService({ backend, sessions, registry: domain.registry });
+    const service = createFillService({ authorization: createFillAuthorizationDomain().authorization, backend, sessions, registry: domain.registry });
     const controls = createBrowserControls(sessions);
     const session = await controls.browser_open_session();
     expect(await controls.browser_navigate({
@@ -470,6 +473,7 @@ describe.sequential('E/F lockdown, lifetime, and concurrency', () => {
     expect(await setup.page.locator('#password').inputValue()).toBe('');
     expect(setup.domain.lockedCount()).toBe(0);
     expect(() => setup.domain.registry.isLocked(oldIdentity as any)).toThrow(InvalidControlIdentityError);
+    setup.fillDomain.lifecycle.renew('vh_test');
     expect((await fill(setup)).result).toEqual({ ok: true, filled: ['password'] });
   });
 
@@ -534,7 +538,8 @@ describe.sequential('E/F lockdown, lifetime, and concurrency', () => {
     const sessions = createBrowserSessionHost({ newContext: () => browser.newContext(), ...domain });
     activeHosts.push(sessions);
     const controls = createBrowserControls(sessions);
-    const service = createFillService({ backend, sessions, registry: domain.registry });
+    const fillDomain = createFillAuthorizationDomain();
+    const service = createFillService({ authorization: fillDomain.authorization, backend, sessions, registry: domain.registry });
     const [first, second] = await Promise.all([
       controls.browser_open_session(), controls.browser_open_session(),
     ]);
@@ -545,6 +550,7 @@ describe.sequential('E/F lockdown, lifetime, and concurrency', () => {
       handle: 'vh', sessionId: second.sessionId,
       fields: [{ role: 'password', selector: '#password' }],
     })).result).toEqual({ ok: true, filled: ['password'] });
+    fillDomain.lifecycle.renew('vh');
     const inFlight = service.fill({
       handle: 'vh', sessionId: first.sessionId,
       fields: [{ role: 'password', selector: '#password' }],
@@ -589,3 +595,14 @@ async function isolatedDomProbe(context: BrowserContext, page: Page): Promise<{
     await cdp.detach();
   }
 }
+
+it('T-RC-8 Lookalike recovery: refused origin never reaches reserve', async () => {
+  const setup = await openHarness('/password-basic');
+  await setup.page.goto(`${lab.secondaryOrigin}/password-basic`);
+  expect((await fill(setup)).result).toEqual({ ok: false, reason: 'origin-not-authorized' });
+  expect(setup.authorization.reserve).not.toHaveBeenCalled();
+  expect(setup.backend.secretCalls).toBe(0);
+  await setup.page.goto(`${lab.primaryOrigin}/password-basic`);
+  expect((await fill(setup)).result).toEqual({ ok: true, filled: ['password'] });
+  expect(setup.authorization.reserve).toHaveBeenCalledOnce();
+});

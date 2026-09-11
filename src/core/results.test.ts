@@ -53,6 +53,7 @@ describe('exact model-visible result constructors', () => {
   it.each([
     'origin-not-authorized',
     'handle-unavailable',
+    'handle-exhausted',
     'locked-field',
     'no-password-control',
     'cross-origin-frame',

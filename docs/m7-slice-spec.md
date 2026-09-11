@@ -395,6 +395,7 @@ testbed content. Claude owns this plan, the integration, the gates and the commi
   `{ ok: true, filled: ['password'] }` for the untokened `#reauth-password` and then observe the
   unauthorized same-origin `dom-fill` carrying the canary (`src/browser/inRealm.ts:109-128`,
   `src/supervisor/evidenceLease.ts:520-528`, `testbed/checkers/classify.ts:40-47,59-68`).
+  From the runtime fill-control slice onward the O3 test obtains `{ ok: true }` only because the test holds a trusted renewal; the lock-clearing mechanism alone no longer suffices.
 - **O4 — prompt budget headroom (measured by the Sol round from `src/agents/prompt.test.ts:16-39`):** the
   largest current reference prompt is **1,018 bytes**; with the new ids the estimates are ~~~1,012
   (`secret-echo-probe`) and ~1,014 (`fake-reauth-prompt`)~~ *(rev 4, corrected in round 2: with the locked E8a wording, −6 bytes, the new reference rows are 1,006

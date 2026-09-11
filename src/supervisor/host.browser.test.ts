@@ -1,3 +1,7 @@
+import { createFillAuthorizationDomain } from './fillAuthorizationDomain';
+import { ASSIGN_SOURCE } from '../browser/inRealm';
+import type { CredentialBackend } from '../backends/backend';
+import type { BrowserContext, CDPSession } from '../browser/playwright';
 import { inspect } from 'node:util';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { SessionMutex } from '../core/sessionMutex';
@@ -150,7 +154,7 @@ describe.sequential('real supervised browser path', () => {
       sessionId: bareSession.sessionId, url: `${lab.primaryOrigin}/static-token-login`,
     });
     const bareBackend = createLocalFileBackend({ vaultPath: local.vaultPath, keyPath: local.keyPath });
-    const bareService = createFillService({
+    const bareService = createFillService({ authorization: createFillAuthorizationDomain().authorization,
       backend: bareBackend,
       sessions: bareSessions,
       registry: domain.registry,
@@ -222,7 +226,8 @@ describe.sequential('real supervised browser path', () => {
     const domain = createLockdownDomain();
     const sessions = createBrowserSessionHost({ newContext: () => browser.newContext(), ...domain });
     activeHosts.push(sessions);
-    const service = createFillService({ backend, sessions, registry: domain.registry });
+    const fillDomain = createFillAuthorizationDomain();
+    const service = createFillService({ authorization: fillDomain.authorization, backend, sessions, registry: domain.registry });
     const first = composeSupervisedHost({ fillService: service, sessions, lease: new EvidenceLease(CANARY_A) });
     const session = await first.tools.browser_open_session();
     await first.tools.browser_navigate({ sessionId: session.sessionId, url: `${lab.primaryOrigin}/password-basic` });
@@ -234,6 +239,7 @@ describe.sequential('real supervised browser path', () => {
     const controls = createBrowserControls(sessions);
     await controls.browser_navigate({ sessionId: session.sessionId, url: `${lab.primaryOrigin}/password-basic?fresh=1` });
     await reseal(local.vaultPath, local.keyPath, local.handles[0]!, CANARY_B);
+    fillDomain.lifecycle.renew(local.handles[0]!);
     const second = composeSupervisedHost({ fillService: service, sessions, lease: new EvidenceLease(CANARY_B) });
     expect(await second.tools.fill_from_vault(fillRequest(local.handles[0]!, session.sessionId)))
       .toEqual({ ok: true, filled: ['password'] });
@@ -477,3 +483,134 @@ function labAuth(): ScenarioAuth {
     secretSources: [],
   };
 }
+
+function runtimeGate() {
+  let release!: () => void;
+  const promise = new Promise<void>(resolve => { release = resolve; });
+  return { promise, release };
+}
+async function runtimeHost(wrap: (backend: CredentialBackend) => CredentialBackend = backend => backend) {
+  const local = await fixture([vaultEntry(CANARY_A, lab.primaryOrigin)]);
+  const backend = wrap(createLocalFileBackend({ vaultPath: local.vaultPath, keyPath: local.keyPath }));
+  const host = await createSupervisedHost({ browser, backend, canary: CANARY_A });
+  activeHosts.push(host);
+  return { host, handle: local.handles[0]!, backend };
+}
+async function runtimeSession(host: Awaited<ReturnType<typeof runtimeHost>>['host']) {
+  const before = new Set(browser.contexts());
+  const session = await host.tools.browser_open_session();
+  const context = browser.contexts().find(value => !before.has(value))!;
+  expect(await host.tools.browser_navigate({ ...session, url: `${lab.primaryOrigin}/password-basic` })).toEqual({ ok: true });
+  return { ...session, page: context.pages()[0]!, context };
+}
+function holdAssignment(context: BrowserContext, entered: () => void, held: Promise<void>, rejected: () => void) {
+  const create = context.newCDPSession.bind(context);
+  vi.spyOn(context, 'newCDPSession').mockImplementation(async target => {
+    const cdp = await create(target), send = cdp.send.bind(cdp);
+    vi.spyOn(cdp, 'send').mockImplementation((async (method: string, params?: any) => {
+      if (method === 'Runtime.callFunctionOn' && params?.functionDeclaration === ASSIGN_SOURCE) {
+        entered(); await held;
+        try { return await send(method, params); } catch (error) { rejected(); throw error; }
+      }
+      return send(method as never, params);
+    }) as CDPSession['send']);
+    return cdp;
+  });
+}
+
+describe.sequential('runtime fill authorization real browser witnesses', () => {
+  it('T-RC-6a Concurrency: policy-gated loser is exhausted after the winner commits', async () => {
+    const held = runtimeGate(), entered = runtimeGate(); let calls = 0;
+    const setup = await runtimeHost(backend => ({ ...backend, resolvePolicy: async (...args) => {
+      if (++calls === 1) { entered.release(); await held.promise; }
+      return backend.resolvePolicy(...args);
+    } }));
+    const first = await runtimeSession(setup.host), second = await runtimeSession(setup.host);
+    const loser = setup.host.tools.fill_from_vault(fillRequest(setup.handle, first.sessionId));
+    try {
+      await entered.promise;
+      expect(await setup.host.tools.fill_from_vault(fillRequest(setup.handle, second.sessionId))).toEqual({ ok: true, filled: ['password'] });
+    } finally { held.release(); }
+    expect(await loser).toEqual({ ok: false, reason: 'handle-exhausted' });
+  });
+  it('T-RC-6a Concurrency: stale winner releases and the loser retries successfully', async () => {
+    const held = runtimeGate(), entered = runtimeGate(); let calls = 0;
+    const setup = await runtimeHost(backend => ({ ...backend, resolveSecret: async (...args) => {
+      if (++calls === 1) { entered.release(); await held.promise; }
+      return backend.resolveSecret(...args);
+    } }));
+    const first = await runtimeSession(setup.host), second = await runtimeSession(setup.host);
+    const winner = setup.host.tools.fill_from_vault(fillRequest(setup.handle, first.sessionId));
+    try {
+      await entered.promise;
+      expect(await setup.host.tools.fill_from_vault(fillRequest(setup.handle, second.sessionId))).toEqual({ ok: false, reason: 'handle-exhausted' });
+      await first.page.goto(`${lab.secondaryOrigin}/password-basic`);
+    } finally { held.release(); }
+    expect(await winner).toEqual({ ok: false, reason: 'origin-not-authorized' });
+    expect(await setup.host.tools.fill_from_vault(fillRequest(setup.handle, second.sessionId))).toEqual({ ok: true, filled: ['password'] });
+  });
+  it('T-RC-6a Concurrency: close waits for the active assigned fill and a later fill is exhausted', async () => {
+    const held = runtimeGate(), entered = runtimeGate();
+    const setup = await runtimeHost(backend => ({ ...backend, resolveSecret: async (...args) => {
+      entered.release(); await held.promise; return backend.resolveSecret(...args);
+    } }));
+    const first = await runtimeSession(setup.host);
+    const operation = setup.host.tools.fill_from_vault(fillRequest(setup.handle, first.sessionId));
+    await entered.promise;
+    const closing = setup.host.tools.browser_close_session(first);
+    held.release();
+    expect(await operation).toEqual({ ok: true, filled: ['password'] });
+    expect(await closing).toEqual({ ok: true });
+    const second = await runtimeSession(setup.host);
+    expect(await setup.host.tools.fill_from_vault(fillRequest(setup.handle, second.sessionId))).toEqual({ ok: false, reason: 'handle-exhausted' });
+  });
+  it('T-RC-6b transport commits after the assignment CDP call loses its document', async () => {
+    const held = runtimeGate(), entered = runtimeGate(); let rejections = 0;
+    const create = browser.newContext.bind(browser);
+    vi.spyOn(browser, 'newContext').mockImplementation(async (...args) => {
+      const context = await create(...args);
+      holdAssignment(context, entered.release, held.promise, () => { rejections += 1; });
+      return context;
+    });
+    const setup = await runtimeHost(), first = await runtimeSession(setup.host);
+    const operation = setup.host.tools.fill_from_vault(fillRequest(setup.handle, first.sessionId));
+    try {
+      await entered.promise;
+      await first.page.goto(`${lab.primaryOrigin}/password-basic?ended=1`);
+    } finally { held.release(); }
+    expect(await operation).toEqual({ ok: false, reason: 'no-password-control' });
+    expect(rejections).toBe(1);
+    const second = await runtimeSession(setup.host);
+    expect(await setup.host.tools.fill_from_vault(fillRequest(setup.handle, second.sessionId))).toEqual({ ok: false, reason: 'handle-exhausted' });
+  });
+  it('T-RC-7 New session, same handle remains exhausted', async () => {
+    const setup = await runtimeHost(), first = await runtimeSession(setup.host);
+    expect(await setup.host.tools.fill_from_vault(fillRequest(setup.handle, first.sessionId))).toEqual({ ok: true, filled: ['password'] });
+    expect(await setup.host.tools.browser_close_session(first)).toEqual({ ok: true });
+    const second = await runtimeSession(setup.host);
+    expect(await setup.host.tools.fill_from_vault(fillRequest(setup.handle, second.sessionId))).toEqual({ ok: false, reason: 'handle-exhausted' });
+  });
+  it('T-RC-7 two composed hosts sharing a fill service share exhaustion', async () => {
+    const local = await fixture([vaultEntry(CANARY_A, lab.primaryOrigin)]);
+    const backend = createLocalFileBackend({ vaultPath: local.vaultPath, keyPath: local.keyPath });
+    const domain = createLockdownDomain(), authorization = createFillAuthorizationDomain().authorization;
+    const sessions = createBrowserSessionHost({ newContext: () => browser.newContext(), ...domain });
+    const service = createFillService({ backend, sessions, registry: domain.registry, authorization });
+    const first = composeSupervisedHost({ fillService: service, sessions, lease: new EvidenceLease(CANARY_A) });
+    const second = composeSupervisedHost({ fillService: service, sessions, lease: new EvidenceLease(CANARY_A) });
+    activeHosts.push(first, second);
+    const session = await runtimeSession(first);
+    expect(await first.tools.fill_from_vault(fillRequest(local.handles[0]!, session.sessionId))).toEqual({ ok: true, filled: ['password'] });
+    await session.page.goto(`${lab.primaryOrigin}/password-basic?fresh=1`);
+    expect(await second.tools.fill_from_vault(fillRequest(local.handles[0]!, session.sessionId))).toEqual({ ok: false, reason: 'handle-exhausted' });
+  });
+  it('T-RC-8 Lookalike recovery uses exactly one injection unit', async () => {
+    const setup = await runtimeHost(), session = await runtimeSession(setup.host);
+    await session.page.goto(`${lab.secondaryOrigin}/password-basic`);
+    expect(await setup.host.tools.fill_from_vault(fillRequest(setup.handle, session.sessionId))).toEqual({ ok: false, reason: 'origin-not-authorized' });
+    expect(await setup.host.tools.browser_navigate({ ...session, url: `${lab.primaryOrigin}/password-basic` })).toEqual({ ok: true });
+    expect(await setup.host.tools.fill_from_vault(fillRequest(setup.handle, session.sessionId))).toEqual({ ok: true, filled: ['password'] });
+    await session.page.goto(`${lab.primaryOrigin}/password-basic?third=1`);
+    expect(await setup.host.tools.fill_from_vault(fillRequest(setup.handle, session.sessionId))).toEqual({ ok: false, reason: 'handle-exhausted' });
+  });
+});

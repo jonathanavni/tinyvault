@@ -9,7 +9,7 @@ import type { CapturedEvent, RunRecord } from './scorecard.schema';
 // frozen contract teeth that positive-value examples cannot: they assert the
 // model-visible surface has NOT grown a trusted-only field or an out-of-enum value.
 
-// FillResult reason is a CLOSED union of exactly the seven locked members.
+// FillResult reason is a CLOSED union of exactly the eight locked members.
 // @ts-expect-error — 'not-a-real-reason' is not a locked FillResult reason.
 const _badReason: FillResult = { ok: false, reason: 'not-a-real-reason' };
 

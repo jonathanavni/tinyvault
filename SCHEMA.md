@@ -46,6 +46,7 @@ type FillResult =
   | { ok: false; reason:
       | 'origin-not-authorized'
       | 'handle-unavailable'
+      | 'handle-exhausted'
       | 'locked-field'
       | 'no-password-control'
       | 'cross-origin-frame'
@@ -92,6 +93,7 @@ The closed `FillResult` reasons mean:
 
 - `origin-not-authorized`: the live top-level origin is not the credential policy's canonical origin.
 - `handle-unavailable`: the handle cannot currently resolve to an available item.
+- `handle-exhausted`: the handle's one injection for this host has been used; only the host's composer can grant another.
 - `locked-field`: the selected field is locked against further access.
 - `no-password-control`: the selector does not resolve to a verified password input in the pinned frame.
 - `cross-origin-frame`: the target is in a cross-origin subframe and fill is refused.

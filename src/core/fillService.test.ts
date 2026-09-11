@@ -6,6 +6,8 @@ import {
   type BackendStatus,
   type CredentialBackend,
 } from '../backends/backend';
+import type { FillAuthorization } from './fillAuthorization';
+import { createFillAuthorizationDomain } from '../supervisor/fillAuthorizationDomain';
 import { createLockdownDomain } from '../supervisor/lockdownDomain';
 import {
   SessionHostError,
@@ -32,6 +34,7 @@ class TrackedSecret extends Secret {
 }
 
 type HarnessOptions = Readonly<{
+  authorization?: FillAuthorization;
   origin?: Origin | null;
   reobserved?: Origin | null;
   epochReads?: readonly number[];
@@ -132,6 +135,7 @@ function harness(options: HarnessOptions = {}) {
   };
   const service = createFillService({
     backend,
+    authorization: options.authorization ?? createFillAuthorizationDomain().authorization,
     sessions,
     registry: options.registry ?? tracingRegistry(domain.registry, log),
   });
@@ -254,7 +258,7 @@ describe('origin, staleness, and backend mapping', () => {
       }),
     };
     const sessions: SessionHost = { runExclusive: async (_id, operation) => operation(impossiblePort) };
-    const service = createFillService({ backend: setup.backend, sessions, registry: setup.domain.registry });
+    const service = createFillService({ authorization: createFillAuthorizationDomain().authorization, backend: setup.backend, sessions, registry: setup.domain.registry });
 
     const outcome = await service.fill(request());
     expect(outcome).toEqual({
@@ -351,7 +355,7 @@ describe('origin, staleness, and backend mapping', () => {
       documentEpoch: (() => { let epoch = 0; return () => epoch++; })(),
     };
     const sessions: SessionHost = { runExclusive: async (_id, op) => op(throwingPort) };
-    const service = createFillService({ backend: setup.backend, sessions, registry: setup.domain.registry });
+    const service = createFillService({ authorization: createFillAuthorizationDomain().authorization, backend: setup.backend, sessions, registry: setup.domain.registry });
     expect((await service.fill(request())).result).toEqual({ ok: false, reason: 'no-password-control' });
   });
 
@@ -368,7 +372,7 @@ describe('origin, staleness, and backend mapping', () => {
       documentEpoch: (() => { let epoch = 0; return () => epoch++; })(),
     };
     const sessions: SessionHost = { runExclusive: async (_id, op) => op(stalePort) };
-    const service = createFillService({ backend: setup.backend, sessions, registry: setup.domain.registry });
+    const service = createFillService({ authorization: createFillAuthorizationDomain().authorization, backend: setup.backend, sessions, registry: setup.domain.registry });
     expect((await service.fill(request())).result).toEqual({ ok: false, reason: 'session-unknown' });
     expect(setup.backend.resolveSecret).not.toHaveBeenCalled();
   });
@@ -434,6 +438,7 @@ describe('noninterference, setup, and structural surface', () => {
       ['frame refusal', { pinKind: 'cross-origin-frame' }, request(), 'cross-origin-frame'],
       ['epoch', { epochReads: [0, 1] }, request(), 'no-password-control'],
       ['locked', { preLocked: true }, request(), 'locked-field'],
+      ['exhausted', { authorization: { reserve: () => null } }, request(), 'handle-exhausted'],
     ] as const;
     for (const [name, options, input, reason] of cases) {
       const bytes: string[] = [];
@@ -592,3 +597,96 @@ if (false) {
   // @ts-expect-error FillDestinationPort exposes no CDP session.
   setup.port.cdp;
 }
+
+const ASSIGNED = { assigned: true, observedOrigin: ORIGIN_A, controlToken: 'control', documentToken: 'document' } as const;
+function observedAuthorization() {
+  const domain = createFillAuthorizationDomain();
+  const commit = vi.fn(), release = vi.fn();
+  const reserve = vi.fn((handle: string) => {
+    const reservation = domain.authorization.reserve(handle);
+    if (reservation === null) return null;
+    return { commit: () => { commit(); reservation.commit(); }, release: () => { release(); reservation.release(); } };
+  });
+  return { authorization: { reserve }, reserve, commit, release };
+}
+class ThrowingClearSecret extends Secret {
+  override clear(): void { super.clear(); throw new Error('clear failed'); }
+}
+
+describe('T-RC-5 Fill-service order and settlement', () => {
+  it('an exhausted handle never resolves a secret (Invariant S)', async () => {
+    const domain = createFillAuthorizationDomain();
+    domain.authorization.reserve(HANDLE)!.commit();
+    const setup = harness({ authorization: domain.authorization });
+    expect((await setup.service.fill(request())).result).toEqual({ ok: false, reason: 'handle-exhausted' });
+    expect(setup.backend.resolveSecret).not.toHaveBeenCalled();
+    expect(setup.log).not.toContain('lock');
+  });
+  it.each([
+    ['locked-field', { preLocked: true }], ['origin-not-authorized', { origin: ORIGIN_B }],
+    ['no-password-control', { pinKind: 'no-password-control' }],
+    ['cross-origin-frame', { pinKind: 'cross-origin-frame' }],
+    ['no-password-control', { epochReads: [0, 1] }],
+  ] as const)('pre-reservation %s consumes nothing', async (reason, options) => {
+    const observed = observedAuthorization();
+    const setup = harness({ ...options, authorization: observed.authorization });
+    expect((await setup.service.fill(request())).result).toEqual({ ok: false, reason });
+    expect(observed.reserve).not.toHaveBeenCalled();
+    expect((await harness({ authorization: observed.authorization }).service.fill(request())).result)
+      .toEqual({ ok: true, filled: ['password'] });
+  });
+  it.each([
+    { assigned: false, reason: 'origin', observedOrigin: ORIGIN_B },
+    { assigned: false, reason: 'identity' }, { assigned: false, reason: 'too-long' },
+    { assigned: false, reason: 'unplaceable' },
+  ] as const)('inject $reason releases exactly once (Invariant R)', async injected => {
+    const observed = observedAuthorization();
+    const setup = harness({ authorization: observed.authorization, inject: async () => injected });
+    expect((await setup.service.fill(request())).result.ok).toBe(false);
+    expect(observed.release).toHaveBeenCalledOnce(); expect(observed.commit).not.toHaveBeenCalled();
+    expect((await harness({ authorization: observed.authorization }).service.fill(request())).result)
+      .toEqual({ ok: true, filled: ['password'] });
+  });
+  it.each(['assigned', 'transport'] as const)('%s commits with identical exhausted bytes across secrets', async kind => {
+    const bytes: string[] = [];
+    for (const secretValue of ['s', 'x'.repeat(4096)]) {
+      const observed = observedAuthorization();
+      const injected = kind === 'assigned' ? ASSIGNED : { assigned: false, reason: 'transport' } as const;
+      const setup = harness({ secretValue, authorization: observed.authorization, inject: async () => injected });
+      expect((await setup.service.fill(request())).result).toEqual(kind === 'assigned'
+        ? { ok: true, filled: ['password'] } : { ok: false, reason: 'no-password-control' });
+      expect(observed.commit).toHaveBeenCalledOnce(); expect(observed.release).not.toHaveBeenCalled();
+      const next = harness({ secretValue, authorization: observed.authorization });
+      bytes.push(serializeExact((await next.service.fill(request())).result));
+      expect(next.backend.resolveSecret).not.toHaveBeenCalled();
+    }
+    expect(bytes).toEqual(Array(2).fill('{"ok":false,"reason":"handle-exhausted"}'));
+  });
+  it.each(['inject', 'resolveSecret', 'lock'] as const)('%s throwing releases before a fresh-control retry', async fault => {
+    const observed = observedAuthorization();
+    const options: HarnessOptions = fault === 'inject' ? { inject: async () => { throw new Error('pre-call'); } }
+      : fault === 'resolveSecret' ? { resolveSecretError: new Error('backend') }
+      : { registry: { isLocked: () => false, lock: () => { throw new InvalidControlIdentityError(); } } };
+    const setup = harness({ ...options, authorization: observed.authorization });
+    expect((await setup.service.fill(request())).result.ok).toBe(false);
+    expect(observed.release).toHaveBeenCalledOnce(); expect(observed.commit).not.toHaveBeenCalled();
+    expect((await harness({ authorization: observed.authorization }).service.fill(request())).result)
+      .toEqual({ ok: true, filled: ['password'] });
+  });
+  it.each(['origin', 'assigned'] as const)('throwing clear after %s preserves recorded settlement', async kind => {
+    const observed = observedAuthorization();
+    const setup = harness({ authorization: observed.authorization,
+      inject: async () => kind === 'assigned' ? ASSIGNED : { assigned: false, reason: 'origin', observedOrigin: ORIGIN_B } });
+    vi.mocked(setup.backend.resolveSecret).mockResolvedValue(new ThrowingClearSecret('test'));
+    expect((await setup.service.fill(request())).result).toEqual({ ok: false, reason: 'no-password-control' });
+    expect(observed.commit).toHaveBeenCalledTimes(kind === 'assigned' ? 1 : 0);
+    expect(observed.release).toHaveBeenCalledTimes(kind === 'origin' ? 1 : 0);
+    expect((await harness({ authorization: observed.authorization }).service.fill(request())).result)
+      .toEqual(kind === 'assigned' ? { ok: false, reason: 'handle-exhausted' } : { ok: true, filled: ['password'] });
+  });
+  it('T-RC-9 handle-exhausted is never a setup condition', async () => {
+    const setup = harness();
+    expect(await setup.service.setupReasonFor({ ok: false, reason: 'handle-exhausted' })).toBeNull();
+    expect(setup.backend.probeAvailability).not.toHaveBeenCalled();
+  });
+});
