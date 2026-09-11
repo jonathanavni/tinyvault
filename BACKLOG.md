@@ -74,7 +74,7 @@ work in flight, the rest stay parked here (register "Final5 round"):
   deliberate gate change, together with per-fixture capture applicability, exposure checks, recovery recipes, positive controls
   and adversarial admission cases (Codex rec. 3). Requalify prompt and capture budgets for longer M7 recipes/traces
   (`src/agents/prompt.ts:14-17`; Codex rec. 4). **2026-09-10:** exposure-oracle rows, positive controls, adversarial admission cases and the
-  prompt budget (E8a, ten rows strictly < 1,024) shipped in M7 (`b7889d3`); capture-budget requalification under live traces is E8b.
+  prompt budget (E8a, ten rows strictly < 1,024) shipped in M7 (`b7889d3`); capture-budget requalification under live traces was E8b (executed 2026-09-11: unqualified — reference leak 10/10 on `fake-reauth-prompt`; capture limits all 0; register "E8b — attempt `E8b-A1-N10`"). **New candidate item from that finding:** a runtime post-completion / single-use fill rule (a handle or session stops being fillable once the completion receipt or the post-submit top-level navigation has been observed) — the measured gap that `SKILL.md` wording did not close; needs a user decision and a full-ladder packet.
 - ~~**[M7 fixture target] Drive a declared limit rather than another origin/DOM variant:** a chunked/streamed exfil body
   (`P-LIM-CHUNKED`, `src/supervisor/bodyCorrelation.ts:61-77`) or the console budget (`CONSOLE_EVENT_LIMIT = 1000`,
   `src/supervisor/evidenceLease.ts:24`), converting "declared" into "measured" (security rec. 4).~~ **CLOSED 2026-09-10** (M7 E7:
