@@ -97,9 +97,20 @@ it('T-HOST: one process host, two connections, legacy state and concurrent eras'
   await send(pair2, 10, 'tools/call', { name: 'list_vault' });
   await send(pair2, 11, 'tools/call', { _meta: META, name: 'list_vault' }); await send(pair2, 12, 'initialize', init);
   pair2.end(); expect(await ended2).toBe('eof'); await server.idle();
+  expect(factory).toHaveBeenCalledTimes(1); expect(create).toHaveBeenCalledTimes(1);
   expect(JSON.parse(output1.trim().split('\n').find(line => JSON.parse(line).id === 5)!).error.code).toBe(-32600);
   expect(JSON.parse(output2.trim().split('\n').at(-1)!).error.code).toBe(-32600);
   expect(identity).toHaveLength(7); identity.forEach(seen => expect(seen).toBe(host));
-  expect(factory).toHaveBeenCalledTimes(1); expect(create).toHaveBeenCalledTimes(1);
   events.emit('SIGTERM'); expect(await running).toBe(0); expect(err).toBe('');
+});
+
+it('createServer(host) supports the locked one-argument factory API', async () => {
+  const f = fixture(); const server = createServer(f.host);
+  const input = new PassThrough(); const output = new PassThrough(); let raw = '';
+  output.on('data', bytes => { raw += bytes.toString(); });
+  const ended = serve(server, input, output);
+  input.end(JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'server/discover', params: { _meta: META } }) + '\n');
+  expect(await ended).toBe('eof'); await server.idle();
+  expect(JSON.parse(raw).result._meta['io.modelcontextprotocol/serverInfo']).toEqual({ name: 'tinyvault', version: '0.0.0' });
+  f.host.abort();
 });

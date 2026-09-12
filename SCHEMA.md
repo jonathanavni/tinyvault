@@ -586,6 +586,7 @@ shutdown. The abandoned trusted operation may still finish against a dropped lea
 timing is unbounded as an information channel; no Probe P timing claim is made.
 
 Launch from an installed checkout with Node 24:
+Set the server process's working directory (`cwd`) to this checkout's root, including when launching an absolute bundle path.
 
 ```sh
 make mcp
@@ -602,6 +603,9 @@ default is legacy `2025-11-25`; modern `2026-07-28` uses the one-off client envi
 `MCP_PROTOCOL_NEGOTIATION=auto`. A present `TINYVAULT_TRIPWIRE_CANARY` must be nonempty; otherwise
 startup mints 32 random bytes as a base64url token. There is no credential-derived reference
 value, persisted verdict or verdict consumer: the randomly minted production canary does not establish detection of actual credential leaks.
+
+T-STDIO and the default `make test` gate additionally require `/bin/ps` accepting
+`-axo pid=,ppid=,comm=` for their test-only descendant inventory.
 
 Other accepted limits remain in the M8 packet §9: hand-written framing is unfuzzed; snapshot
 keeps its exemption; a slow tool blocks modern requests without a liveness probe; cancellation

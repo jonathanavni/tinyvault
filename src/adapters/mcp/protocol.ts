@@ -355,14 +355,14 @@ export class Protocol {
   async #reply(request: Request, result?: JsonObject, code?: number, data?: JsonObject): Promise<void> {
     if (request.cancelled) return;
     await this.#send(request.connection, code === undefined ? { jsonrpc: '2.0', id: request.id, result } :
-      error(request.id, code, MESSAGES[code], data));
+      error(request.id, code, MESSAGES[code], data), request);
   }
 
-  #send(connection: Connection, response: JsonObject): Promise<void> {
+  #send(connection: Connection, response: JsonObject, request?: Request): Promise<void> {
     if (connection.failed) return Promise.resolve();
     const line = `${JSON.stringify(response)}\n`;
     const write = async () => {
-      if (connection.failed) return;
+      if (connection.failed || request?.cancelled) return;
       await new Promise<void>((resolve, reject) => {
         let callbackDone = false;
         let drained = false;

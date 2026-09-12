@@ -71,6 +71,7 @@ export async function start(runtime: Runtime = process): Promise<number> {
   runtime.on('uncaughtException', uncaught);
   runtime.on('unhandledRejection', uncaught);
   for (const event of events) runtime.on(event, shutdown);
+  // Before serve: reject an unterminated EOF fragment after admission closes.
   runtime.stdin.on('end', shutdown);
   runtime.stdout.on('error', outputError);
   // Detect an early EOF without starting the protocol reader before the host exists.

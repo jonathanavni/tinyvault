@@ -88,6 +88,17 @@ function request(r: ReturnType<typeof runtime>, name = 'list_vault') {
 function inactive(f: ReturnType<typeof tracked>) { expect(() => f.host.finish()).toThrow(); }
 
 describe('T-LIFE actual entry lifecycle with real evidence lease', () => {
+  it('rejects an unterminated EOF request after entry admission closes', async () => {
+    const f = tracked(); vi.spyOn(hostModule, 'createSupervisedHost').mockResolvedValue(f.host);
+    const r = runtime(); const running = start(r.value); await tick();
+    r.input.end(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
+      params: { _meta: META, name: 'list_vault', arguments: {} } }));
+    expect(await running).toBe(0);
+    expect(f.service.listVault).not.toHaveBeenCalled();
+    expect(JSON.parse(r.stdout())).toEqual({ jsonrpc: '2.0', id: 1,
+      error: { code: -32600, message: 'Invalid request' } });
+    expect(r.stderr()).toBe('');
+  });
   it.each(['EOF', 'SIGINT', 'SIGTERM', 'SIGHUP'])('%s closes two sessions through host quiesce hooks', async trigger => {
     const f = tracked(); await f.host.tools.browser_open_session(); await f.host.tools.browser_open_session();
     const closeTool = vi.fn(f.host.tools.browser_close_session);

@@ -17,6 +17,55 @@ const options = { version: '0.0.0', tools: [tool], matchesSchema: () => true,
     structuredContent: { items: [] }, isError: false }) };
 
 describe('T-STDOUT line inventory and failure signals', () => {
+  for (const era of ['legacy', 'modern'] as const) {
+    const wireRequest = (id: number, method = 'tools/list', params: Record<string, unknown> = {}) =>
+      era === 'modern' ? request(id, method, params) : { jsonrpc: '2.0', id, method, params };
+    const cancellation = (id: number) => ({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: id } });
+    const encode = (...messages: unknown[]) => messages.map(value => JSON.stringify(value) + '\n').join('');
+    const initialize = async (input: PassThrough, protocol: ReturnType<typeof createProtocol>) => {
+      if (era === 'legacy') {
+        input.write(encode({ jsonrpc: '2.0', id: 99, method: 'initialize', params: {
+          protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'test', version: '1' },
+        } }));
+        await protocol.idle();
+      }
+    };
+
+    it(`suppresses a same-chunk cancellation before its deferred write in ${era}`, async () => {
+      const input = new PassThrough(); const lines: Array<{ id: number | null }> = [];
+      const output = new Writable({ write(bytes, _encoding, callback) { lines.push(JSON.parse(bytes.toString())); callback(); } });
+      const protocol = createProtocol(options); const served = protocol.serve(input, output);
+      await initialize(input, protocol); lines.length = 0;
+      input.end(encode(wireRequest(1), cancellation(1), wireRequest(2)));
+      expect(lines).toEqual([]);
+      await served; await protocol.idle();
+      expect(lines.map(line => line.id)).toEqual([2]);
+    });
+
+    it(`suppresses a completed host response cancelled behind an earlier write in ${era}`, async () => {
+      const input = new PassThrough(); const lines: Array<{ id: number | null; error?: { code: number } }> = [];
+      let hold = false; let release!: () => void;
+      const output = new Writable({ highWaterMark: 1, write(bytes, _encoding, callback) {
+        lines.push(JSON.parse(bytes.toString()));
+        if (hold) { hold = false; release = () => callback(); } else callback();
+      } });
+      const dispatch = vi.fn(options.dispatch);
+      const protocol = createProtocol({ ...options, dispatch }); const served = protocol.serve(input, output);
+      await initialize(input, protocol); lines.length = 0; hold = true;
+      input.write('?\n'); await new Promise(resolve => setImmediate(resolve));
+      expect(release).toBeTypeOf('function');
+      input.write(encode(wireRequest(1, 'tools/call', { name: 'list_vault' })));
+      await new Promise(resolve => setImmediate(resolve));
+      expect(dispatch).toHaveBeenCalledOnce();
+      expect(lines.map(line => line.id)).toEqual([null]);
+      input.end(encode(cancellation(1), wireRequest(2))); release();
+      await served; await protocol.idle();
+      expect(lines.map(line => line.id)).toEqual([null, 2]);
+      expect(lines[0]).toMatchObject({ error: { code: -32700 } });
+      expect(dispatch).toHaveBeenCalledOnce();
+    });
+  }
+
   it('writes exactly one JSON-RPC line per accepted request and nothing else', async () => {
     const input = new PassThrough();
     const output = new PassThrough();

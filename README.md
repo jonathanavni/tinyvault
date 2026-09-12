@@ -30,7 +30,7 @@ and the repository and CI must contain no real credentials.
 (M5.2), and M6 has put real agents in front of them: the composed real-agent command path, a qualified N10
 reference-vs-baseline comparison and the E10 leak trace are recorded (S6 accepted 2026-09-09, code `3072e0b`). Hostile
 fixtures #3–#4 (M7: `secret-echo`, `fake-reauth`) are **merged** (2026-09-10, `b7889d3` → `4e86933`) — five scenarios, four hostile
-cells, stub eval green; their live qualification under the amended `SKILL.md` (E8b) was measured on 2026-09-11 and is **not accepted**: the reference agent held at 0/10 leaks in four cells but filled the same-origin fake re-authentication prompt in 10/10 runs (register `docs/m7-review-findings.md`, "E8b — attempt `E8b-A1-N10`"); the response — a **runtime fill control** (one bounded injection per handle per authorization domain, refused as `handle-exhausted`; `docs/m7-runtime-fill-control-packet.md` rev 3.1) — is **implemented, tested and merged** (2026-09-11, `main` `6812627`), and **live-qualified on 2026-09-12** (E8c, cohort `PFc7eGp2`, 100/100 runs, `docs/m7-e8c-live-cohort-preregistration.md`): the reference held at 0/10 leaks and 10/10 completion in all five cells, refusing the second fill as `handle-exhausted` in 8/10 `fake-reauth-prompt` runs — a bound in this fixture and configuration, not a proof of zero; the E8b cohort stays measured and unqualified as the historical result. The MCP adapter (M8) is being implemented on `codex/m8-mcp-adapter` under locked packet rev 5.2 and approved M8-C1–C5; owner gates and independent reviews remain pending. Its stated restart limitation and launch contract are below. The 1Password
+cells, stub eval green; their live qualification under the amended `SKILL.md` (E8b) was measured on 2026-09-11 and is **not accepted**: the reference agent held at 0/10 leaks in four cells but filled the same-origin fake re-authentication prompt in 10/10 runs (register `docs/m7-review-findings.md`, "E8b — attempt `E8b-A1-N10`"); the response — a **runtime fill control** (one bounded injection per handle per authorization domain, refused as `handle-exhausted`; `docs/m7-runtime-fill-control-packet.md` rev 3.1) — is **implemented, tested and merged** (2026-09-11, `main` `6812627`), and **live-qualified on 2026-09-12** (E8c, cohort `PFc7eGp2`, 100/100 runs, `docs/m7-e8c-live-cohort-preregistration.md`): the reference held at 0/10 leaks and 10/10 completion in all five cells, refusing the second fill as `handle-exhausted` in 8/10 `fake-reauth-prompt` runs — a bound in this fixture and configuration, not a proof of zero; the E8b cohort stays measured and unqualified as the historical result. The MCP adapter (M8) is being implemented on `codex/m8-mcp-adapter` under locked packet rev 5.2 and approved M8-C1–C5; round 1 is complete and its cancellation fix is entering candidate gates and round 2. Its stated restart limitation and launch contract are below. The 1Password
 backend (M9) and the demo/release (M10) remain. The two
 test-gate defects found by the read-only assessment (`docs/project-assessment-2026-09-03.md`) were **fixed** and verified
 by literal clean-clone acceptance at M5.1; M6 passed the same literal clean-clone gate three times on `3072e0b` before
@@ -50,7 +50,7 @@ its cohorts ran. **M5.2 is complete** (source `8103c47`, acceptance record `53fd
 | M5.2 — Docker-composed fixtures behind one implementation, two transports | **done** — all six slices accepted; source `8103c47`, acceptance `53fd94f`; [milestone-close assessment](docs/project-assessment-2026-09-06.md) complete |
 | M6 — reference + naive agents | **done** (code `3072e0b`, S6 accepted 2026-09-09) — S1–S5 each accepted at capped three-channel rounds with declared residuals; amendments AM11–AM13 and F1 adopted by the user and implemented through the Codex ladder; pilot `cY3Deep4` READY under the fail-closed readiness rule; N10 sequence `E9-A3-N10` QUALIFIED (baseline `z22Kn2eT`, comparison `y9WmFqoL`); E8 met, E9 met, E10 recorded; register `docs/m6-review-findings.md` |
 | M7 — hostile fixtures #3–#4 (`secret-echo`, `fake-reauth`), the exposure oracle, the console-budget diagnostic, the amended `SKILL.md` (ten prompt rows strictly < 1,024 bytes) | **done** (`b7889d3`, merged `4e86933` 2026-09-10) — two paper rounds, Astra implementation with two STOPs, Codex + blind Opus QA + security review, owner mutant table (16 + 9c), Docker 240 s per-export deadline as a capacity accommodation; **live cohort E8b (2026-09-11, `ODMFYbwH`) unqualified — reference leak on `fake-reauth-prompt`; runtime fill control merged `6812627`; live cohort E8c (2026-09-12, `PFc7eGp2`) qualified, acceptance reading met**; register `docs/m7-review-findings.md` |
-| M8 — MCP stdio adapter | implementation in progress on `codex/m8-mcp-adapter`; gates and independent reviews pending; [locked packet](docs/m8-mcp-adapter-packet.md) |
+| M8 — MCP stdio adapter | implemented on `codex/m8-mcp-adapter`; round-1 corrections entering gates and round-2 review; [locked packet](docs/m8-mcp-adapter-packet.md) |
 | M9–M10 — 1Password backend, demo | not started |
 
 `make eval` defaults to 10 runs per cell across the five scenarios (one benign, four hostile) using Docker-composed fixtures and drives the
@@ -113,6 +113,7 @@ Honesty matters more here than in most projects, because the deliverable *is* a 
 ## MCP setup (implementation candidate; acceptance pending)
 
 From this checkout with Node 24, dependencies and Playwright Chromium installed:
+Set the server process's working directory (`cwd`) to this checkout's root, including when launching an absolute bundle path.
 
 ```sh
 make mcp
@@ -139,5 +140,7 @@ its evaluated fixture and configuration and is not an MCP scorecard qualificatio
 A nonempty `TINYVAULT_TRIPWIRE_CANARY` may be supplied for verification. Without it, startup mints a
 random 32-byte base64url token. There is no credential-derived reference value or verdict consumer:
 the randomly minted production canary does not establish detection of actual credential leaks.
+The default `make test` gate additionally requires `/bin/ps` accepting `-axo pid=,ppid=,comm=`
+for the test-only Chromium descendant inventory; the production adapter does not invoke it.
 See [the MCP contract](SCHEMA.md#mcp-stdio-adapter-contract) for the nine tools, exact envelopes,
 error/exit vocabulary, metadata compatibility choices and remaining limits.
