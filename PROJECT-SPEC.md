@@ -138,6 +138,8 @@ Key structural decisions to preserve (they make later integrations free):
 
 ## 6. Requirements checklist (initial — refine in Phase 0)
 
+This initial checklist is not a reconciled completion ledger for older milestones; see the build status in [`docs/phase-0-plan.md`](docs/phase-0-plan.md). The M8 checkbox below is updated at its authorized closure; other boxes retain their prior state.
+
 **Must-have for launch (v0.1):**
 - [ ] Three-tool interface spec + threat-model README (the trust-boundary statement written down first).
 - [ ] `fill_from_vault` working end-to-end against a local login page via Playwright, with the local-file (libsodium) backend.
@@ -146,7 +148,7 @@ Key structural decisions to preserve (they make later integrations free):
 - [ ] Redaction guarantee verified by test: `grep` the full transcript/logs for the secret → zero matches.
 - [ ] ≥3 hostile fixtures Docker-composed and running offline; a runner that produces a scorecard.
 - [ ] Naive baseline agent that leaks, for the "before" half of the demo.
-- [ ] MCP server adapter exposing the three tools.
+- [x] MCP server adapter exposing the three vault tools plus six browser controls (nine total, approved M8 O-6; M8 accepted 2026-09-12).
 - [ ] README with the leak-rate table, the threat model, the one-line WebMCP positioning sentence (§7), and the `make`/`npm` reproduce command.
 - [ ] The 60-second demo recorded (see below).
 
