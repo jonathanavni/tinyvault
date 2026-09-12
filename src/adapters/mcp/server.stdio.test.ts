@@ -178,6 +178,15 @@ describe.sequential('T-STDIO checkout bundle with real Chromium', () => {
     assertInventory(client, [reply(id, discoverResult)]);
   }, 45_000);
 
+  it.each(['SIGINT', 'SIGTERM', 'SIGHUP'] as const)('%s preserves the entry-owned zero exit', async signal => {
+    const client = launch(); client.request(0, 'server/discover'); await client.response(0);
+    const opened = await client.call(1, 'browser_open_session');
+    expect(opened.result.structuredContent.sessionId).toEqual(expect.any(String));
+    expect(client.child.kill(signal)).toBe(true);
+    expect(await within(client.closed, 15_000, 'signal shutdown timeout')).toEqual({ code: 0, signal: null });
+    assertInventory(client, [reply(0, discoverResult), opened]);
+  }, 45_000);
+
   it('actually receives SIGKILL at the 500ms grace and leaves no captured Chromium descendant', async () => {
     const client = launch(); client.request(0, 'server/discover'); await client.response(0);
     const before = descendants(client.child.pid!, inventory());

@@ -68,9 +68,10 @@ export async function createSupervisedHost(options: Readonly<{
   canary: string;
   browser?: Browser;
   launcher?: ChromiumLauncher;
+  handleSignals?: false;
   onFillAuthorization?(lifecycle: FillAuthorizationLifecycle): void;
 }>): Promise<SupervisedHost> {
-  const browser = options.browser ?? await launchChromium(options.launcher);
+  const browser = options.browser ?? await launchChromium(options.launcher, [], options.handleSignals);
   const launchedHere = options.browser === undefined;
   const lease = new EvidenceLease(options.canary);
   const domain = createLockdownDomain();

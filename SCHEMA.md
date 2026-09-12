@@ -557,7 +557,7 @@ permitted. Stdout contains only awaited JSON-RPC lines. Stderr contains only `ti
 internal error` or `tinyvault-mcp: framing error`, each terminated by a newline.
 
 Exactly one supervised host and one fill authorization domain are created per adapter process,
-with exactly `{backend, canary}` supplied at startup. No adapter renewal method, member or
+with exactly `{backend, canary, handleSignals:false}` supplied at startup. No adapter renewal method, member or
 option exists. A consumed handle remains exhausted for that process, including after fixed
 setup guidance. Process restart creates fresh authorization; the parent harness determines
 who can cause it. The tested Claude Code 2.1.258 automatically respawned a dead stdio server
@@ -569,7 +569,9 @@ fixture and configuration; MCP interoperability evidence is separate and does no
 MCP scorecard row. Exhaustion is neither task completion nor a leak; any future scorecard uses
 the existing receipt/max-turns completion oracle.
 
-EOF, SIGINT, SIGTERM and SIGHUP initiate one shutdown sequence, including signals received
+The MCP host explicitly disables Playwright signal handlers so the entry owns shutdown;
+other host callers retain their existing defaults. EOF, SIGINT, SIGTERM and SIGHUP initiate
+one shutdown sequence, including signals received
 during host creation. Admission stops, queued requests receive `-32600`, and the active handler
 has 30 seconds to finish. Deadline expiry cancels its response, attaches a rejection handler,
 aborts the host and closes it. Normal shutdown calls the host's own quiesce with settle/drain

@@ -40,9 +40,12 @@ function inspect(file: string, text: string): string[] {
     for (const call of calls) {
       const arg = call.arguments[0];
       if (call.arguments.length !== 1 || !arg || !ts.isObjectLiteralExpression(arg) ||
-        arg.properties.length !== 2 || !arg.properties.every(prop =>
+        arg.properties.length !== 3 || !arg.properties.every(prop =>
           (ts.isPropertyAssignment(prop) || ts.isShorthandPropertyAssignment(prop)) && ts.isIdentifier(prop.name)) ||
-        arg.properties.map(prop => prop.name?.getText(source)).sort().join(',') !== 'backend,canary') errors.push('host-options');
+        arg.properties.map(prop => prop.name?.getText(source)).sort().join(',') !== 'backend,canary,handleSignals') errors.push('host-options');
+      const signal = arg && ts.isObjectLiteralExpression(arg) && arg.properties.find(prop =>
+        ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.name) && prop.name.text === 'handleSignals');
+      if (!signal || !ts.isPropertyAssignment(signal) || signal.initializer.kind !== ts.SyntaxKind.FalseKeyword) errors.push('signal-option');
       let parent: ts.Node | undefined = call.parent;
       while (parent && !ts.isFunctionDeclaration(parent) && !ts.isArrowFunction(parent) && !ts.isFunctionExpression(parent)) parent = parent.parent;
       if (!parent || !ts.isFunctionDeclaration(parent) || parent.name?.text !== 'start') errors.push('startup-function');
@@ -76,6 +79,14 @@ describe('T-STRUCT adapter source pins', () => {
       'src/adapters/mcp/main.ts', 'src/adapters/mcp/protocol.ts', 'src/adapters/mcp/server.ts', 'src/adapters/mcp/tools.ts']);
     for (const file of all) expect(inspect(file, readFileSync(file, 'utf8')), file).toEqual([]);
   });
+  it('requires the exact C5 signal option', () => {
+    const file = 'src/adapters/mcp/main.ts'; const source = readFileSync(file, 'utf8');
+    for (const replacement of ['handleSignals: true', 'handleSignals: false && false',
+      "['handleSignals']: false", 'handleSignals', '...{ handleSignals: false }']) {
+      expect(inspect(file, source.replace('handleSignals: false', replacement)).length).toBeGreaterThan(0);
+    }
+    expect(inspect(file, source.replace(', handleSignals: false', ''))).toContain('host-options');
+  });
   it('rejects a local tool map in place of the injected host', () => {
     const file = 'src/adapters/mcp/tools.ts'; const source = readFileSync(file, 'utf8');
     expect(inspect(file, source)).toEqual([]);
@@ -83,7 +94,7 @@ describe('T-STRUCT adapter source pins', () => {
   });
   it('rejects factory relocation, extra options and an unawaited factory', () => {
     const file = 'src/adapters/mcp/main.ts'; const source = readFileSync(file, 'utf8');
-    expect(inspect(file, source.replace('{ backend, canary }', '{ backend, canary, browser: fake }'))).toContain('host-options');
+    expect(inspect(file, source.replace('{ backend, canary, handleSignals: false }', '{ backend, canary, handleSignals: false, browser: fake }'))).toContain('host-options');
     expect(inspect(file, source.replace('await createSupervisedHost', 'createSupervisedHost'))).toContain('host-result');
     expect(inspect(file, source.replace('function start(', 'function perCall('))).toContain('startup-function');
   });

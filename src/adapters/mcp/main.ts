@@ -84,7 +84,7 @@ export async function start(runtime: Runtime = process): Promise<number> {
     const canary = override ?? randomBytes(32).toString('base64url');
     const backend = createLocalFileBackend({ vaultPath, keyPath });
     const version = JSON.parse(readFileSync(resolve('package.json'), 'utf8')).version as string;
-    host = await createSupervisedHost({ backend, canary });
+    host = await createSupervisedHost({ backend, canary, handleSignals: false });
     if (aborting) abort();
     server = createServer(host, { version, onInternalError: diagnostic, onOutputError: outputError });
     if (typeof host.quiesceEvidenceProducers !== 'function') { observe(4); abort(); shutdown(); }
