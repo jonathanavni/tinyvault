@@ -210,6 +210,7 @@ export function installDefaultVettedConfiguration(root) {
   for (const name of ['playwright', 'playwright-core']) linkInstalledPackage(root, name);
   write(root, 'src/browser/playwright.ts', 'export const wrapperControl = true;\n');
   fs.mkdirSync(path.join(root, 'testbed'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'src/adapters/mcp'), { recursive: true });
   const packages = { '': { name: 'gate-fixture', version: '1.0.0' } };
   for (const name of ['playwright', 'playwright-core']) {
     packages[`node_modules/${name}`] = projectLock.packages[`node_modules/${name}`];

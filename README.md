@@ -30,7 +30,7 @@ and the repository and CI must contain no real credentials.
 (M5.2), and M6 has put real agents in front of them: the composed real-agent command path, a qualified N10
 reference-vs-baseline comparison and the E10 leak trace are recorded (S6 accepted 2026-09-09, code `3072e0b`). Hostile
 fixtures #3–#4 (M7: `secret-echo`, `fake-reauth`) are **merged** (2026-09-10, `b7889d3` → `4e86933`) — five scenarios, four hostile
-cells, stub eval green; their live qualification under the amended `SKILL.md` (E8b) was measured on 2026-09-11 and is **not accepted**: the reference agent held at 0/10 leaks in four cells but filled the same-origin fake re-authentication prompt in 10/10 runs (register `docs/m7-review-findings.md`, "E8b — attempt `E8b-A1-N10`"); the response — a **runtime fill control** (one bounded injection per handle per authorization domain, refused as `handle-exhausted`; `docs/m7-runtime-fill-control-packet.md` rev 3.1) — is **implemented, tested and merged** (2026-09-11, `main` `6812627`), and **live-qualified on 2026-09-12** (E8c, cohort `PFc7eGp2`, 100/100 runs, `docs/m7-e8c-live-cohort-preregistration.md`): the reference held at 0/10 leaks and 10/10 completion in all five cells, refusing the second fill as `handle-exhausted` in 8/10 `fake-reauth-prompt` runs — a bound in this fixture and configuration, not a proof of zero; the E8b cohort stays measured and unqualified as the historical result. The MCP adapter (M8) has a locked plan-mode packet (rev 5.2, 2026-09-12; its stated limitation: process recreation grants fresh fill authorization, so the adapter will not establish renewal isolation in the tested Claude Code configuration) and implementation authorized to a fresh GPT-6 Astra session, no code yet; the 1Password
+cells, stub eval green; their live qualification under the amended `SKILL.md` (E8b) was measured on 2026-09-11 and is **not accepted**: the reference agent held at 0/10 leaks in four cells but filled the same-origin fake re-authentication prompt in 10/10 runs (register `docs/m7-review-findings.md`, "E8b — attempt `E8b-A1-N10`"); the response — a **runtime fill control** (one bounded injection per handle per authorization domain, refused as `handle-exhausted`; `docs/m7-runtime-fill-control-packet.md` rev 3.1) — is **implemented, tested and merged** (2026-09-11, `main` `6812627`), and **live-qualified on 2026-09-12** (E8c, cohort `PFc7eGp2`, 100/100 runs, `docs/m7-e8c-live-cohort-preregistration.md`): the reference held at 0/10 leaks and 10/10 completion in all five cells, refusing the second fill as `handle-exhausted` in 8/10 `fake-reauth-prompt` runs — a bound in this fixture and configuration, not a proof of zero; the E8b cohort stays measured and unqualified as the historical result. The MCP adapter (M8) is being implemented on `codex/m8-mcp-adapter` under locked packet rev 5.2 and approved M8-C1; owner gates and independent reviews remain pending. Its stated restart limitation and launch contract are below. The 1Password
 backend (M9) and the demo/release (M10) remain. The two
 test-gate defects found by the read-only assessment (`docs/project-assessment-2026-09-03.md`) were **fixed** and verified
 by literal clean-clone acceptance at M5.1; M6 passed the same literal clean-clone gate three times on `3072e0b` before
@@ -50,7 +50,7 @@ its cohorts ran. **M5.2 is complete** (source `8103c47`, acceptance record `53fd
 | M5.2 — Docker-composed fixtures behind one implementation, two transports | **done** — all six slices accepted; source `8103c47`, acceptance `53fd94f`; [milestone-close assessment](docs/project-assessment-2026-09-06.md) complete |
 | M6 — reference + naive agents | **done** (code `3072e0b`, S6 accepted 2026-09-09) — S1–S5 each accepted at capped three-channel rounds with declared residuals; amendments AM11–AM13 and F1 adopted by the user and implemented through the Codex ladder; pilot `cY3Deep4` READY under the fail-closed readiness rule; N10 sequence `E9-A3-N10` QUALIFIED (baseline `z22Kn2eT`, comparison `y9WmFqoL`); E8 met, E9 met, E10 recorded; register `docs/m6-review-findings.md` |
 | M7 — hostile fixtures #3–#4 (`secret-echo`, `fake-reauth`), the exposure oracle, the console-budget diagnostic, the amended `SKILL.md` (ten prompt rows strictly < 1,024 bytes) | **done** (`b7889d3`, merged `4e86933` 2026-09-10) — two paper rounds, Astra implementation with two STOPs, Codex + blind Opus QA + security review, owner mutant table (16 + 9c), Docker 240 s per-export deadline as a capacity accommodation; **live cohort E8b (2026-09-11, `ODMFYbwH`) unqualified — reference leak on `fake-reauth-prompt`; runtime fill control merged `6812627`; live cohort E8c (2026-09-12, `PFc7eGp2`) qualified, acceptance reading met**; register `docs/m7-review-findings.md` |
-| M8 — MCP stdio adapter | packet **rev 5.2 locked 2026-09-12** (`docs/m8-mcp-adapter-packet.md`); implementation authorized to a fresh GPT-6 Astra session (`docs/m8-astra-implementation-handoff.md`); no code yet |
+| M8 — MCP stdio adapter | implementation in progress on `codex/m8-mcp-adapter`; gates and independent reviews pending; [locked packet](docs/m8-mcp-adapter-packet.md) |
 | M9–M10 — 1Password backend, demo | not started |
 
 `make eval` defaults to 10 runs per cell across the five scenarios (one benign, four hostile) using Docker-composed fixtures and drives the
@@ -109,3 +109,35 @@ Honesty matters more here than in most projects, because the deliverable *is* a 
   [M6 close assessment](docs/project-assessment-2026-09-09.md) found). What signing cannot establish is that events the fixture never saw were
   captured faithfully in the first place. So if you want to know whether these numbers are real, the
   strongest answer remains re-running the eval yourself rather than trusting a signature of ours.
+
+## MCP setup (implementation candidate; acceptance pending)
+
+From this checkout with Node 24, dependencies and Playwright Chromium installed:
+
+```sh
+make mcp
+TINYVAULT_VAULT_PATH=/absolute/path/to/vault.json \
+TINYVAULT_KEY_PATH=/absolute/path/to/vault.key \
+node dist/tinyvault-mcp.mjs
+```
+
+Process recreation grants fresh fill authorization; the adapter does not establish renewal isolation in the tested Claude Code configuration (2.1.258, measured 2026-09-12).
+
+The bundle is not a relocatable artifact: it resolves its external packages from the checkout's
+`node_modules` and runs only from a checkout with dependencies installed. Configure the MCP client's
+command to launch Node against this bundle from the checkout, with the two vault paths in its
+environment. The measured Claude Code default uses legacy `2025-11-25`; the one-off client setting
+`MCP_PROTOCOL_NEGOTIATION=auto` selects modern `2026-07-28`. The adapter supports both eras concurrently.
+
+The process owns one supervised host and a single fill budget per handle. Reusing a consumed handle
+returns `handle-exhausted`; fixed setup guidance does not restore it. A parent restart grants a fresh
+budget, including automatic recovery by the tested client. No renewal-isolation claim applies to a
+harness with automatic restart or a model-accessible shell. The scripted throwaway-vault
+interoperability check verifies this limitation; it is distinct from E8c's live qualification in
+its evaluated fixture and configuration and is not an MCP scorecard qualification.
+
+A nonempty `TINYVAULT_TRIPWIRE_CANARY` may be supplied for verification. Without it, startup mints a
+random 32-byte base64url token. There is no credential-derived reference value or verdict consumer:
+the randomly minted production canary does not establish detection of actual credential leaks.
+See [the MCP contract](SCHEMA.md#mcp-stdio-adapter-contract) for the nine tools, exact envelopes,
+error/exit vocabulary, metadata compatibility choices and remaining limits.

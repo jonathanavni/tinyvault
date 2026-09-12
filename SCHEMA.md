@@ -1091,3 +1091,144 @@ the invalid evaluation publishes no current scorecard or measurement fields.
 leaks and full task completion; a do-nothing agent does not pass. See
 [`docs/phase-0-plan.md` §5](docs/phase-0-plan.md#5-testbed-scorecard--leak-checker-contract-build-the-spine-first-8).
 <!-- TV-CLAIM-SPAN:s129 END -->
+
+
+## MCP stdio adapter contract
+
+The M8 adapter exposes nine tools, in this order: `list_vault`, `fill_from_vault`,
+`request_vault_setup`, `browser_open_session`, `browser_close_session`, `browser_navigate`,
+`browser_click`, `browser_type`, `browser_snapshot`. The seven evaluated tool definitions are
+the frozen `EVALUATED_AGENT_TOOLS` objects by reference; the two additional definitions use
+`TinyVault supervised <name> operation.` descriptions. `list_vault` accepts an empty object
+only; `request_vault_setup` requires only `reason`, one of `missing_item`, `backend_locked`,
+`backend_unavailable`. All nine validate through the existing `matchesSchema`; absent tool
+arguments become `{}`, and null, non-object, extra, missing or schema-invalid arguments are
+rejected before host dispatch. `browser_open_session` receives no argument.
+
+Every successful host payload over MCP is obtained through `host.tools`: eight tools pass the
+existing tripwire capture wrappers and `browser_snapshot` retains its deliberate uncaptured
+exemption. The adapter then returns the host result `R` unchanged as `structuredContent`, with
+`content: [{type: 'text', text: serializeExact(R)}]` and `isError: false`. This includes ordinary
+refusals such as `handle-exhausted`; they are not tool exceptions. The adapter drains evidence
+exactly once after computing each successful envelope; a drain rejection does not alter those
+bytes. No `outputSchema` is advertised. A rejection equal to either fixed host error, `Vault
+operation failed` or `Browser session could not be opened`, becomes a text-only `isError: true`
+tool result with that message. All other tool rejections become `tinyvault: internal error`
+and the fixed stderr line `tinyvault-mcp: internal error`. Exception details are never echoed.
+
+Modern `2026-07-28` and legacy `2025-11-25` / `2025-06-18` are served concurrently. A request is
+modern exactly when its object `params._meta` has an `io.modelcontextprotocol/protocolVersion`
+member. Modern handling is stateless and independent of legacy initialization; legacy state
+persists for the adapter process, including across sequential stream connections.
+
+Validation order is framing, JSON, request shape/ID/queue limit, shutdown admission, era,
+modern metadata/version, method, method parameters, tool/schema, then dispatch. Fatal UTF-8
+or more than 1 MiB before decoding ends framing; JSON parse failure and non-object scalar
+values yield `-32700` with null ID, while batches yield `-32600`. Requests require JSON-RPC
+`2.0` and a string or integer ID (including `0`); null/missing/invalid IDs, duplicate outstanding
+IDs, more than 64 outstanding requests and requests after shutdown yield `-32600`. Legacy IDs
+cannot be reused after a successful initialization. Inbound response objects are ignored.
+Methods beginning `notifications/` are notifications; invalid, unknown or ID-bearing
+notifications are ignored without response or action (approved M8-C1). Valid cancellation is
+handled immediately: queued work is removed; active host work completes but its response is
+suppressed. No cancelled request receives an adapter message. Dispatch otherwise remains FIFO
+with one host operation in flight, using the host's existing session mutex.
+
+Legacy `initialize` requires a protocol version string, capabilities object and clientInfo
+object with string name/version; extra members inside those two objects are ignored. A supported
+requested version is echoed; otherwise the selected legacy version is `2025-11-25`. A repeat
+initialization yields `-32600`. Legacy `ping` returns `{}` at any time; other legacy requests
+before the initialization response yield `-32600`, and afterward do not require the initialized
+notification. A request without modern metadata or an active legacy session yields `-32602`.
+
+Modern metadata must contain a protocolVersion string of at most 64 UTF-8 bytes and an object
+`io.modelcontextprotocol/clientCapabilities`; malformed required fields yield `-32602` before
+method lookup. An unsupported version yields `-32022` with `data.supported: ['2026-07-28']`
+and the validated `data.requested`. Every other `_meta` key, including namespaced clientInfo,
+logLevel, progressToken, trace and vendor keys, is accepted and ignored without inspecting its
+value in both eras. This is the locked compatibility choice: the pinned specification forbids
+assumptions about reserved values while typing optional fields, leaving a stated conformance
+uncertainty about malformed optional values. No method requires a client capability, and
+`-32021` is never emitted. Modern `inputResponses` and `requestState` are rejected with
+`-32602`. Modern `ping` and `initialize` are unknown methods (`-32601`). `server/discover`
+accepts no other parameter, `tools/list` permits only an optional string cursor, and
+`tools/call` permits only name and optional arguments; `_meta` is permitted on every request.
+
+Every modern result, including a tool error, has `resultType: 'complete'` and exactly one
+adapter-originated metadata key: `_meta: {'io.modelcontextprotocol/serverInfo': {name:
+'tinyvault', version}}`. Discovery adds `supportedVersions: ['2026-07-28']` and
+`capabilities: {tools: {}}`; discovery and tools/list add `ttlMs: 0`, `cacheScope: 'public'`.
+Legacy initialize returns `{protocolVersion, capabilities: {tools: {}}, serverInfo: {name:
+'tinyvault', version}}`; legacy tools/list returns `{tools: [...]}`. JSON-RPC errors carry
+`error` only, without modern result metadata.
+
+The complete fixed adapter vocabulary consists of JSON-RPC members `jsonrpc`, `id`, `method`,
+`params`, `result`, `error`, `code`, `message`, `data`, `supported`, `requested`; MCP members
+`_meta`, `resultType`, `supportedVersions`, `capabilities`, `ttlMs`, `cacheScope`,
+`protocolVersion`, `serverInfo`, `tools`, `name`, `version`, `description`, `inputSchema`,
+`content`, `type`, `text`, `structuredContent`, `isError`; the metadata keys, version strings
+and fixed values specified above; the nine tool definitions; and methods `server/discover`,
+`tools/list`, `tools/call`, `notifications/cancelled`, legacy `ping`, `initialize`,
+`notifications/initialized`. Error code/message pairs are `-32700` / `Parse error`, `-32600`
+/ `Invalid request`, `-32601` / `Method not found`, `-32602` / `Invalid params`, `-32603` /
+`tinyvault-mcp: internal error`, `-32022` / `Unsupported protocol version`. `-32603` is reserved
+for adapter failures outside tool calls. Other caller-visible values are the echoed request
+ID, validated unsupported-version string, package.json version, seven frozen definitions,
+and exact SCHEMA-permitted host values: `items`, `handle`, `label`, `kind`, `account`,
+`available`, `ok`, `filled`, `reason`, `instruction`, `sessionId`, `snapshot`, `url`, `nodes`,
+`tag`, `masked`, `role`, `name`, `value`. Adapter envelopes are fixed constants outside the
+host capture seam; no other adapter-originated output member, method, string or exit code is
+permitted. Stdout contains only awaited JSON-RPC lines. Stderr contains only `tinyvault-mcp:
+internal error` or `tinyvault-mcp: framing error`, each terminated by a newline.
+
+Exactly one supervised host and one fill authorization domain are created per adapter process,
+with exactly `{backend, canary}` supplied at startup. No adapter renewal method, member or
+option exists. A consumed handle remains exhausted for that process, including after fixed
+setup guidance. Process restart creates fresh authorization; the parent harness determines
+who can cause it. The tested Claude Code 2.1.258 automatically respawned a dead stdio server
+(measured 2026-09-12, contradicting its documentation). The adapter makes no claim that renewal
+is inaccessible to the model under automatic restart or a model-accessible shell. Any backend
+must state handle→record injectivity (R20); M9 carries this requirement. No renewal audit record
+is added. E8c live qualification remains the runtime-control packet §8.3 bound in its evaluated
+fixture and configuration; MCP interoperability evidence is separate and does not qualify an
+MCP scorecard row. Exhaustion is neither task completion nor a leak; any future scorecard uses
+the existing receipt/max-turns completion oracle.
+
+EOF, SIGINT, SIGTERM and SIGHUP initiate one shutdown sequence, including signals received
+during host creation. Admission stops, queued requests receive `-32600`, and the active handler
+has 30 seconds to finish. Deadline expiry cancels its response, attaches a rejection handler,
+aborts the host and closes it. Normal shutdown calls the host's own quiesce with settle/drain
+hooks before and after session close, discards `finish()`'s result, and finally closes all.
+Quiesce/finish failures abort before close. Stdout failure aborts and closes the host. Missing
+quiesce support aborts/closes the already-created host as a startup contract failure. Uncaught
+exceptions and unhandled rejections use the same fixed diagnostic, never exception text.
+Observed terminal conditions have priority `4 > 6 > 3 > 5 > 0`: startup failure, stdout failure,
+finalization failure, framing failure, success. The verdict never affects output or exit status.
+SIGKILL yields no exit code; the tested client's inferred 0.5–0.75 second kill grace can truncate
+shutdown. The abandoned trusted operation may still finish against a dropped lease. Shutdown
+timing is unbounded as an information channel; no Probe P timing claim is made.
+
+Launch from an installed checkout with Node 24:
+
+```sh
+make mcp
+TINYVAULT_VAULT_PATH=/absolute/path/to/vault.json \
+TINYVAULT_KEY_PATH=/absolute/path/to/vault.key \
+node dist/tinyvault-mcp.mjs
+```
+
+Process recreation grants fresh fill authorization; the adapter does not establish renewal isolation in the tested Claude Code configuration (2.1.258, measured 2026-09-12).
+
+The bundle is not a relocatable artifact: it resolves external packages from the checkout's
+`node_modules` and runs from a checkout with dependencies installed. Claude Code's measured
+default is legacy `2025-11-25`; modern `2026-07-28` uses the one-off client environment setting
+`MCP_PROTOCOL_NEGOTIATION=auto`. A present `TINYVAULT_TRIPWIRE_CANARY` must be nonempty; otherwise
+startup mints 32 random bytes as a base64url token. There is no credential-derived reference
+value, persisted verdict or verdict consumer: the randomly minted production canary does not establish detection of actual credential leaks.
+
+Other accepted limits remain in the M8 packet §9: hand-written framing is unfuzzed; snapshot
+keeps its exemption; a slow tool blocks modern requests without a liveness probe; cancellation
+does not stop host work; `settleAttach` rejections use the generic error; generated `dist/` is
+unscanned; the static dependency graph is hygiene rather than containment; the spawn pin proves
+syntax rather than behavior; C3 cannot rule pruned edge classes or script/testbed roots; the
+two unadmitted vault tools and caller-supplied finalization order remain a narrowed A4 residual.

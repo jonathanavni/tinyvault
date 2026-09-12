@@ -55,7 +55,7 @@ assert.deepEqual(VETTED_EXTERNAL_PACKAGES, [
     version: '1.62.1',
     importerFiles: ['src/browser/playwright.ts'],
     directImportOnly: ['playwright'],
-    reachableFrom: ['src/browser', 'testbed'],
+    reachableFrom: ['src/browser', 'testbed', 'src/adapters/mcp'],
     opaqueFiles: [
       'playwright-core/lib/coreBundle.js',
       'playwright-core/lib/utilsBundle.js',
@@ -650,3 +650,62 @@ console.log(
   + `runtime resolver matrix: 11 fixtures, ${getRuntimeMatrixOutcomes()} import/require outcomes; `
   + 'M4 vetted/importer/reachability/evaluator/real-graph fixtures)',
 );
+
+// M8 C0-C6. New composition cases preserve every pre-existing case and verdict.
+const adapterPath = 'src/adapters/mcp/probe.ts';
+const compositionReason = 'composition-reached-from-production';
+function mcpReason(root, reason) {
+  const result = checkDependencyBoundary(root);
+  assert(result.violations.some(v => v.syntax.includes(reason)), `${reason} absent: ${JSON.stringify(result.violations)}`);
+  assertCliStatus(root, 1, reason);
+}
+for (const source of [
+  "import '../adapters/mcp/probe';", "export * from '../adapters/mcp/probe';",
+  "const load = () => import('../adapters/mcp/probe');", "const loaded = require('../adapters/mcp/probe');",
+  "const loaded = module.require('../adapters/mcp/probe');", "import loaded = require('../adapters/mcp/probe');",
+  "import type { Probe } from '../adapters/mcp/probe';",
+]) withFixture(source, root => {
+  write(root, adapterPath, 'export type Probe = string;'); mcpReason(root, compositionReason);
+});
+withFixture('export {};', root => {
+  write(root, adapterPath, "import '../../supervisor/evaluator';");
+  assert.deepEqual(checkDependencyBoundary(root).violations, []); assertCliStatus(root, 0, 'C1 composition supervisor');
+  write(root, 'src/supervisor/evaluator.ts', "import '../browser/playwright';");
+  write(root, 'src/browser/playwright.ts', "import 'playwright';");
+  assert.deepEqual(checkDependencyBoundary(root).violations, []); assertCliStatus(root, 0, 'C2 composition vetted reach');
+});
+withFixture("import 'mcp-relay';", root => {
+  write(root, adapterPath, 'export const value = 1;');
+  writePackage(root, 'mcp-relay', "export * from '../../src/adapters/mcp/probe.ts';");
+  mcpReason(root, compositionReason);
+});
+withFixture("import '../../testbed/relay';", root => {
+  write(root, 'testbed/relay.ts', "export * from '../src/adapters/mcp/probe';");
+  write(root, adapterPath, 'export const value = 1;'); mcpReason(root, compositionReason);
+});
+withFixture("import '@mcp/probe';", root => {
+  write(root, adapterPath, 'export const value = 1;'); mcpReason(root, compositionReason);
+}, { baseUrl: '.', paths: { '@mcp/*': ['src/adapters/mcp/*'] } });
+withFixture("import '@mcp/probe';", root => {
+  write(root, adapterPath, 'export const value = 1;');
+  fs.mkdirSync(path.join(root, 'lib'), { recursive: true });
+  fs.symlinkSync(path.join(root, adapterPath), path.join(root, 'lib/probe.ts'));
+  mcpReason(root, compositionReason);
+}, { baseUrl: '.', paths: { '@mcp/*': ['lib/*'] } });
+for (const [target, reason] of [['testbed/probe.ts', 'production-to-evaluator'], ['src/browser/probe.ts', 'data-plane-to-browser']]) {
+  withFixture('export {};', root => {
+    write(root, target, 'export {};');
+    write(root, adapterPath, `import '${path.relative(path.dirname(adapterPath), target)}';`);
+    mcpReason(root, reason);
+  });
+}
+for (const entry of ['src/core/probe.ts', 'src/adapters/other/probe.ts']) withFixture('export {};', root => {
+  write(root, entry, `import '${path.relative(path.dirname(entry), 'src/supervisor/evaluator')}';`);
+  mcpReason(root, 'static import');
+});
+withFixture('export {};', root => {
+  write(root, adapterPath, 'export {};');
+  fs.symlinkSync(path.join(root, adapterPath), path.join(root, 'src/core/alias.ts'));
+  mcpReason(root, 'source file resolves across zones');
+});
+console.log('M8 composition C0-C6 PASS (entry-rooted relay and direct-edge reasons, prior verdicts preserved)');

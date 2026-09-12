@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
-import { checkDockerInvocation, DOCKER_CAPABILITY_ALLOWLIST, CAPABILITY_RULES } from './docker-invocation.mjs';
+import { checkDockerInvocation, DOCKER_CAPABILITY_ALLOWLIST, CAPABILITY_RULES, reviewProfiles } from './docker-invocation.mjs';
 import { gateCliSelftest } from './gate-cli.selftest.mjs';
 const cli = fileURLToPath(new URL('./check-docker-invocation.mjs', import.meta.url));
 function withFixture(source, run, relative = 'src/probe.ts') {
@@ -54,8 +54,10 @@ for (const extension of ['ts', 'mts', 'cts', 'js', 'mjs', 'cjs']) {
   rejected("import 'node:child_process';", 'capability-import', `nested/probe.${extension}`);
 }
 for (const [relative, specs] of Object.entries(DOCKER_CAPABILITY_ALLOWLIST)) {
-  const source = reviewSources.get(relative) ?? specs.map((spec) => relative.startsWith('scripts/') && spec === 'node:child_process'
-    ? "import { spawnSync } from 'node:child_process'; spawnSync(process.execPath, []);" : `import '${spec}';`).join('\n');
+  const source = reviewSources.get(relative) ?? specs.map((spec) => (reviewProfiles[relative] !== undefined || relative.startsWith('scripts/')) && spec === 'node:child_process'
+    ? reviewProfiles[relative] !== undefined
+      ? "import { spawn } from 'node:child_process'; spawn(process.execPath, [], { env: {}, stdio: 'pipe', shell: false });"
+      : "import { spawnSync } from 'node:child_process'; spawnSync(process.execPath, []);" : `import '${spec}';`).join('\n');
   withFixture(source, (root) => { assert.deepEqual(checkDockerInvocation(root), []); assertCli(root, 0); }, relative);
 }
 // Job B's two fixture tests receive only their exact socket primitives. The generic
@@ -274,3 +276,18 @@ gateCliSelftest((script, root, status, extra = []) => {
   assert.match(status ? result.stderr : result.stdout, status ? /gate FAIL/ : /PASS/);
 });
 console.log('B2 production CLI selftest PASS (entry, compose, execution and claim-linkage callers proved)');
+
+const mcpPath = 'src/adapters/mcp/server.stdio.test.ts';
+const mcpSource = "import { spawn } from 'node:child_process'; spawn(process.execPath, [], { env: {}, stdio: 'pipe', shell: false });";
+for (const [source, code] of [
+  [mcpSource.replace('process.execPath', "'docker'"), 'spawn-executable'],
+  [mcpSource.replace('[],', '{ shell: true },'), 'spawn-argv'],
+  [mcpSource.replace('shell: false', 'shell: true'), 'spawn-options'],
+  [mcpSource.replace('spawn(process', 'spawn.call(null, process'), 'spawn-reference'],
+  [mcpSource + "\nspawn(process.execPath, [], { env: {}, stdio: 'pipe', shell: false });", 'spawn-call-count'],
+]) withFixture(source, root => {
+  assert(checkDockerInvocation(root).some(v => v.code === code), code); assertCli(root, 1);
+  fs.writeFileSync(path.join(root, mcpPath), mcpSource);
+  assert.deepEqual(checkDockerInvocation(root), []); assertCli(root, 0);
+}, mcpPath);
+console.log('M8 exact-path spawn profile PASS (executable, argv, options, reference and count mutants)');

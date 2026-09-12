@@ -1,7 +1,7 @@
 // T-WIRE provenance: https://modelcontextprotocol.io/specification/2026-07-28/basic/index
 // (Requests, Notifications, _meta), /server/discover (DiscoverResult), /server/tools
-// (Calling Tools), /basic/versioning (Serving Multiple Protocol Versions),
-// /server/utilities/caching (Caching Hints), and
+// (Calling Tools), /basic/versioning (Protocol Version Negotiation; Backward Compatibility with Initialization-Based Versions),
+// /server/utilities/caching (Cacheable Model; Time-to-Live (TTL) Field; Cache Scope Field), and
 // https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle
 // (Initialization). Preserved at
 // artifacts/review-evidence/tinyvault-m8-rev5-20260911/spec/; wire shapes below

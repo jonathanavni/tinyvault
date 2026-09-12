@@ -592,7 +592,7 @@ function opaqueSpread(type: ts.Type, checker: ts.TypeChecker): boolean {
   return (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never)) !== 0
     || (type.getProperties().length === 0 && checker.getIndexInfosOfType(type).length > 0);
 }
-const HOST_CALL_FILES = ['testbed/docker/integrationProbes.ts', 'testbed/harnessGate.ts',
+const HOST_CALL_FILES = ['src/adapters/mcp/main.ts', 'testbed/docker/integrationProbes.ts', 'testbed/harnessGate.ts',
   'testbed/realAgentRun.ts', 'testbed/runnerExecution.ts'];
 function callSites(graph: AuthorityGraph, names: string[]): string[] {
   const sites: string[] = [];

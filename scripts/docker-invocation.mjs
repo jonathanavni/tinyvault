@@ -10,6 +10,7 @@ import ts from 'typescript';
 
 // Exact repo-relative path -> exact capability specifiers, never a directory exemption.
 export const DOCKER_CAPABILITY_ALLOWLIST = Object.freeze({
+  'src/adapters/mcp/server.stdio.test.ts': ['node:child_process'],
   'testbed/evalEntry.test.ts': ['node:child_process'],
   'testbed/checkers/offline.retention.test.ts': ['node:child_process'],
   'testbed/docker/exec.ts': ['node:child_process'],
@@ -76,7 +77,10 @@ function specifier(node) {
 // These two profiles describe the reviewed syntax, not a general subprocess permission.
 // execFileSync defaults to shell:false; spawn must spell it explicitly. Option keys are
 // closed to prevent inherited shell values, spreads, accessors and later overrides.
-const reviewProfiles = {
+export const reviewProfiles = {
+  'src/adapters/mcp/server.stdio.test.ts': {
+    spawn: { executable: 'node', options: ['env', 'stdio', 'shell'] },
+  },
   'scripts/claude-review.mjs': {
     execFileSync: { executable: 'git', options: ['encoding', 'maxBuffer', 'stdio'] },
     spawn: { executable: 'claude', options: ['cwd', 'shell', 'detached', 'stdio'] },
@@ -162,7 +166,7 @@ export function inspectSource(text, relative) {
     if (load?.value && ts.isStringLiteral(load.value) && capabilities.has(load.value.text.replace(/^node:/, ''))) {
       const spec = load.value.text;
       if (!(DOCKER_CAPABILITY_ALLOWLIST[relative] ?? []).includes(spec)) add(node, 'capability-import', spec);
-      else if (relative.startsWith('scripts/') && spec === 'node:child_process') scriptBinding(node, bindings, add, profile);
+      else if ((profile !== undefined || relative.startsWith('scripts/')) && spec === 'node:child_process') scriptBinding(node, bindings, add, profile);
     }
     ts.forEachChild(node, visit);
   }

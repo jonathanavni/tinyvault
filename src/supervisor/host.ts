@@ -40,6 +40,7 @@ export const OP_STOP_GRACE_MS = 3_000;
 export const QUIESCE_TIMEOUT_MS = 5_000;
 export const VAULT_TOOL_FAILURE_MESSAGE = 'Vault operation failed';
 const supervisedHostLeases = new WeakMap<object, EvidenceLease>();
+export { BROWSER_OPEN_FAILURE_MESSAGE } from '../browser/controls';
 export { CONSOLE_BUDGET_EXCEEDED } from './consoleSerialization';
 export { BODY_UNAVAILABLE_NOT_ATTACHED, BODY_UNAVAILABLE_TARGET_DETACHED } from './bodyCorrelation';
 import { EvidenceLease, CAPTURE_FAILED_MESSAGE, FINISH_PRECONDITION_MESSAGE,
