@@ -758,8 +758,9 @@ async function delayedLoginProxy(upstream: string, requested: () => void): Promi
 
 function holdActualBodyUntilDisposal(context: BrowserContext, captured: () => void, settled: () => void): void {
   forceDeferredBody(context, async (native, cdp) => {
-    // Both genuine CDP round trips remain owned until they settle; disposal rejects the wedged renderer.
-    const captures = Promise.allSettled([native, cdp.send('Runtime.evaluate', { expression: '0' })]);
+    // Retain the awaited promise in the renderer so collection cannot settle this CDP command.
+    const captures = Promise.allSettled([native, cdp.send('Runtime.evaluate',
+      { expression: 'globalThis.__tinyvaultFinalizationPending = new Promise(() => {})', awaitPromise: true })]);
     captured();
     try {
       const [body, roundTrip] = await captures;
