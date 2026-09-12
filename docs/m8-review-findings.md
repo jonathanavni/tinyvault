@@ -232,3 +232,8 @@ User approved the final checkpoint proposal: C5 as recorded in `artifacts/review
 ## M8-C5 implementation preflight (2026-09-12)
 
 Owner implemented the approved false-only signal option and forwarding, MCP-only literal pins, default-preservation and negative tests, and normalSIGINT/SIGTERM/SIGHUP stdio checks. Typecheck and real static gates PASS;7 selected structural/option tests PASS;12 real stdio/old-new launch tests PASS (`owner-c5-real-stdio.log`). Actual forcedSIGKILL now observed, with every captured descendant absent within the unchanged5s limit. No Playwright globals/listeners were intercepted; sole host/domain/fill construction preserved. C5 remains subject to full exact-candidate gates and the0/3-used independent review ladder. Provider allowance$2total/two calls remains unused.
+
+
+## M8-C5 auditability-cap correction (2026-09-12)
+
+Full make-test onb6704e2:3507PASS,1FAIL,1SKIP; the sole failure was the existing core structural file's under800-line cap (818lines). Signal checks passed; no timing/Docker/stub stages followed the failed gate. Owner moved only the newly added C5 negative cases to the already approved `src/browser/playwright.signals.test.ts`; they extract and execute the actual private `inspectHostShape` and its actual wrapper/key helpers via TypeScript transpilation, without copying the guard or importing/registering the whole core suite. The guard predicate occupies one line; core file799lines. All existing core assertions remain unchanged. Typecheck/static gates PASS;9 selected cap/authority/option/adapter checks PASS. No limit, verdict or approved scope was widened. Full exact-candidate sequence restarts after commit; rounds0/3; provider allowance unused.

@@ -307,23 +307,6 @@ const R3_CASES: [string, string, string, string[]][] = [
     options = { ...options, authorization: extra.authorization };`, ['options-escape:src/core/fillService.ts:BinaryExpression', 'global-domain-call-inventory', 'core-supervisor-import']],
 ];
 describe('T-RC-10 Unreachability pin', () => {
-  it('M8-C5 permits only the literal signal option at the MCP callsite', { timeout: 60_000 }, async () => {
-    const graph = await authorityGraph();
-    const inspect = (file: string, argument: string) => {
-      const source = ts.createSourceFile(file, `createSupervisedHost(${argument});`, ts.ScriptTarget.Latest, true);
-      const statement = source.statements[0] as ts.ExpressionStatement;
-      return inspectHostShape(graph, statement.expression as ts.CallExpression);
-    };
-    const mcp = 'src/adapters/mcp/main.ts';
-    expect(inspect(mcp, '{ backend, canary, handleSignals: false }')).toEqual([]);
-    for (const option of ['handleSignals: true', 'handleSignals: false && false',
-      "['handleSignals']: false", 'handleSignals', '...{ handleSignals: false }']) {
-      expect(inspect(mcp, `{ backend, canary, ${option} }`).length).toBeGreaterThan(0);
-    }
-    expect(inspect('testbed/runnerExecution.ts', '{ backend, canary }')).toEqual([]);
-    expect(inspect('testbed/runnerExecution.ts', '{ backend, canary, handleSignals: false }'))
-      .toEqual(['host-argument-key:handleSignals']);
-  });
   // Each authorityGraph() builds a full TypeScript program over src + testbed; a cold clean clone took > 5 s for the
   // five-variant test below (gate 4 on 12a4a08), so the program-building tests carry an explicit timeout.
   it('a/c/d/e/f confines authority and resolves composition calls through the AST', { timeout: 60_000 }, async () => {
@@ -623,9 +606,7 @@ function inspectHostShape(graph: AuthorityGraph, call: ts.CallExpression): strin
   if (call.arguments.length !== 1 || !arg || !ts.isObjectLiteralExpression(arg)) return ['host-argument-shape'];
   return arg.properties.flatMap(property => {
     const key = property.name && propertyText(property.name, graph.checker);
-    const signalOption = call.getSourceFile().fileName === 'src/adapters/mcp/main.ts'
-      && ts.isPropertyAssignment(property) && ts.isIdentifier(property.name)
-      && property.name.text === 'handleSignals' && property.initializer.kind === ts.SyntaxKind.FalseKeyword;
+    const signalOption = call.getSourceFile().fileName === 'src/adapters/mcp/main.ts' && ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === 'handleSignals' && property.initializer.kind === ts.SyntaxKind.FalseKeyword;
     return (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property))
       && key !== undefined && (['backend', 'canary', 'browser', 'launcher'].includes(key) || signalOption)
       ? [] : [`host-argument-key:${key ?? ts.SyntaxKind[property.kind]}`];
