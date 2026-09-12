@@ -758,11 +758,9 @@ async function delayedLoginProxy(upstream: string, requested: () => void): Promi
 
 function holdActualBodyUntilDisposal(context: BrowserContext, captured: () => void, settled: () => void): void {
   forceDeferredBody(context, async (native, cdp) => {
-    // Keep real renderer work pending even if the black-hole navigation resumes.
-    // Retain the promise in the renderer so collection cannot settle the awaited CDP command.
-    const captures = Promise.allSettled([native, cdp.send('Runtime.evaluate', {
-      expression: 'globalThis.__tinyvaultFinalizationPending = new Promise(() => {})', awaitPromise: true,
-    })]);
+    // Retain the awaited promise in the renderer so collection cannot settle this CDP command.
+    const captures = Promise.allSettled([native, cdp.send('Runtime.evaluate',
+      { expression: 'globalThis.__tinyvaultFinalizationPending = new Promise(() => {})', awaitPromise: true })]);
     captured();
     try {
       const [body, roundTrip] = await captures;
