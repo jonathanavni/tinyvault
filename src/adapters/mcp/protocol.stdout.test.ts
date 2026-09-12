@@ -64,6 +64,29 @@ describe('T-STDOUT line inventory and failure signals', () => {
       expect(lines[0]).toMatchObject({ error: { code: -32700 } });
       expect(dispatch).toHaveBeenCalledOnce();
     });
+
+    it(`suppresses a queued shutdown rejection cancelled before its write in ${era}`, async () => {
+      const input = new PassThrough(); const lines: Array<{ id: number; error?: { code: number } }> = [];
+      let hold = false; let release!: () => void;
+      const output = new Writable({ highWaterMark: 1, write(bytes, _encoding, callback) {
+        lines.push(JSON.parse(bytes.toString()));
+        if (hold) { hold = false; release = () => callback(); } else callback();
+      } });
+      const dispatch = vi.fn(options.dispatch);
+      const protocol = createProtocol({ ...options, dispatch }); const served = protocol.serve(input, output);
+      await initialize(input, protocol); lines.length = 0; hold = true;
+      input.write(encode(wireRequest(1, 'tools/call', { name: 'list_vault' }),
+        wireRequest(2, 'tools/call', { name: 'list_vault' }), wireRequest(3)));
+      await new Promise(resolve => setImmediate(resolve));
+      expect(lines.map(line => line.id)).toEqual([1]); expect(dispatch).toHaveBeenCalledOnce();
+      protocol.stopAdmission();
+      input.end(encode(cancellation(2), wireRequest(4))); release();
+      await served; await protocol.idle();
+      expect(lines.map(line => line.id)).toEqual([1, 3, 4]);
+      expect(lines.slice(1)).toEqual([3, 4].map(id => ({ jsonrpc: '2.0', id,
+        error: { code: -32600, message: 'Invalid request' } })));
+      expect(dispatch).toHaveBeenCalledOnce();
+    });
   }
 
   it('writes exactly one JSON-RPC line per accepted request and nothing else', async () => {

@@ -651,7 +651,7 @@ function toleratesTraversalIssue(entry, currentFile, syntax, context) {
 }
 
 function isCompositionEntry(file, context) {
-  return fileLocations(file, context.locationsByRealPath).some(location =>
+  return fileLocations(file, context.locationsByRealPath).every(location =>
     COMPOSITION_DIRECTORIES.some(directory => isWithin(location, path.join(context.absoluteRoot, directory))));
 }
 

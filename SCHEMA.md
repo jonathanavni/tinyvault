@@ -585,7 +585,7 @@ SIGKILL yields no exit code; the tested client's inferred 0.5–0.75 second kill
 shutdown. The abandoned trusted operation may still finish against a dropped lease. Shutdown
 timing is unbounded as an information channel; no Probe P timing claim is made.
 
-Launch from an installed checkout with Node 24:
+Launch from an installed checkout with Node 24.
 Set the server process's working directory (`cwd`) to this checkout's root, including when launching an absolute bundle path.
 
 ```sh

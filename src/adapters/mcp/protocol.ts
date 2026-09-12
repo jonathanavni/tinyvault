@@ -149,8 +149,7 @@ export class Protocol {
     if (this.#stopped) return;
     this.#stopped = true;
     for (const request of this.#queue.splice(0)) {
-      this.#outstanding.delete(key(request.id));
-      if (!request.cancelled) this.#send(request.connection, error(request.id, -32600, MESSAGES[-32600]));
+      void this.#replyError(request, -32600).then(() => this.#outstanding.delete(key(request.id)));
     }
   }
 

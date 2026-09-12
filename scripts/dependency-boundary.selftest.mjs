@@ -709,3 +709,11 @@ withFixture('export {};', root => {
   mcpReason(root, 'source file resolves across zones');
 });
 console.log('M8 composition C0-C6 PASS (entry-rooted relay and direct-edge reasons, prior verdicts preserved)');
+
+// An unzoned real path must not inherit composition authority through an alias.
+withFixture('export {};', root => {
+  write(root, 'lib/probe.ts', "import '../src/supervisor/evaluator';");
+  fs.mkdirSync(path.join(root, 'src/adapters/mcp'), { recursive: true });
+  fs.symlinkSync(path.join(root, 'lib/probe.ts'), path.join(root, adapterPath));
+  mcpReason(root, 'static import');
+});
