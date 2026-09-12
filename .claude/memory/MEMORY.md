@@ -9,8 +9,8 @@
 - [Product & Architecture Decisions](decisions_product.md) — standing product/architecture decisions and their current rationale
 - [Gotchas — index](gotchas.md) — four topic files, consolidated 2026-09-09; the repeat offenders in one paragraph
   - [Codex and review channels](gotchas_codex.md) — pinned dispatch invocation, model routing, sandbox limits, job monitoring, classifier, review helper
-  - [Verification, gates and mutants](gotchas_verif.md) — blind-spot lessons, owner-gate and commit-chain discipline, mutant hygiene, evidence, measurement claims
-  - [Chromium / Docker / Node runtime](gotchas_runtime.md) — Playwright/CDP quirks, Docker Desktop on macOS, Node resolution and encoding
+  - [Verification, gates and mutants](gotchas_verif.md) — blind-spot lessons, owner-gate and commit-chain discipline, mutant hygiene, exact-SHA evidence carry, timeout-kill precision, measurement claims
+  - [Chromium / Docker / Node runtime](gotchas_runtime.md) — Playwright/CDP quirks, Docker Desktop on macOS, Node resolution and encoding, renderer-promise finalization witness
   - [Shell, git and authoring](gotchas_shell.md) — zsh traps, git in shared checkouts, control characters in authored docs
 - [Conventions](conventions.md) — naming, structure, and workflow conventions established for this project
 - [Sessions Archive](sessions-archive.md) — one-line-per-session history index (not day-to-day memory)
