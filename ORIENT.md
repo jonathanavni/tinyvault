@@ -8,7 +8,7 @@ TinyVault is a harness-agnostic, model-blind credential-fill library for browser
 
 ## How It Works
 
-Three tools are all the model ever sees: `list_vault` (opaque handles + labels, never secrets), `fill_from_vault`
+The vault interface has three tools: `list_vault` (opaque handles + labels, never secrets), `fill_from_vault`
 (handle + session + field roles → origin-pinned fill, closed result), and `request_vault_setup` (the refusal path — never
 "ask the user for the password in chat"). The trusted fill service (`src/core`, `src/supervisor`) resolves a handle at fill
 time through a backend (`src/backends`, libsodium local file today), validates the live page against the credential's
@@ -20,6 +20,14 @@ naive baseline (Haiku 4.5, `temperature: 0`) against the benign fixture and the 
 `dom-hidden-injection`, `secret-echo`, `fake-reauth` — the last two merged 2026-09-10, live qualification pending) in Docker-composed fixtures and prints a leak-rate table with Wilson intervals plus the
 capture-coverage line; `make eval-stub` runs the scripted stub agent through the same harness. The claims are exactly the honest-claims sentences in
 `docs/m4-slice-spec.md` and `docs/m5-slice-spec.md`; every declared blind spot is in `SCHEMA.md`.
+
+M8 adds a stdio MCP adapter over the same supervised host: three vault tools plus six browser
+controls, with one host and fill budget per process. It is an implementation candidate, pending
+gates and independent reviews. Build with `make mcp` and launch from the installed checkout; the
+bundle resolves external dependencies there and is not relocatable. Process recreation grants
+fresh fill authorization, so the tested Claude Code configuration does not provide renewal isolation.
+The exact launch instructions and limitation are in README and SCHEMA. E8c's in-process evaluated
+configuration is distinct from the adapter's scripted/client interoperability evidence.
 
 ## Working On It
 

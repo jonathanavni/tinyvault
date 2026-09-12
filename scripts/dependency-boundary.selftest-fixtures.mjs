@@ -210,6 +210,7 @@ export function installDefaultVettedConfiguration(root) {
   for (const name of ['playwright', 'playwright-core']) linkInstalledPackage(root, name);
   write(root, 'src/browser/playwright.ts', 'export const wrapperControl = true;\n');
   fs.mkdirSync(path.join(root, 'testbed'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'src/adapters/mcp'), { recursive: true });
   const packages = { '': { name: 'gate-fixture', version: '1.0.0' } };
   for (const name of ['playwright', 'playwright-core']) {
     packages[`node_modules/${name}`] = projectLock.packages[`node_modules/${name}`];
@@ -628,6 +629,7 @@ function runSymlinkedNodeModulesFixture() {
     fs.symlinkSync(path.join(projectRoot, 'node_modules'), path.join(root, 'node_modules'), 'dir');
     write(root, 'package-lock.json', JSON.stringify(projectLock));
 
+    fs.mkdirSync(path.join(root, 'src/adapters/mcp'), { recursive: true });
     assertPass(root, undefined, 'gate rejected a root whose node_modules is a directory symlink');
     assertCliStatus(root, 0, 'real gate CLI rejected a root with symlinked node_modules');
 

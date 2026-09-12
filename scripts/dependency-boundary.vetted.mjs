@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+export const COMPOSITION_DIRECTORIES = ['src/adapters/mcp'];
+
 const PROTECTED_DIRECTORIES = ['src/supervisor'];
 
 export const VETTED_EXTERNAL_PACKAGES = [
@@ -9,7 +11,7 @@ export const VETTED_EXTERNAL_PACKAGES = [
     version: '1.62.1',
     importerFiles: ['src/browser/playwright.ts'],
     directImportOnly: ['playwright'],
-    reachableFrom: ['src/browser', 'testbed'],
+    reachableFrom: ['src/browser', 'testbed', 'src/adapters/mcp'],
     opaqueFiles: [
       'playwright-core/lib/coreBundle.js',
       'playwright-core/lib/utilsBundle.js',
@@ -187,6 +189,7 @@ export function zoneConfigurationErrors(root, locationsByRealPath) {
 }
 
 function sourceZone(file, root) {
+  if (COMPOSITION_DIRECTORIES.some((directory) => isWithin(file, path.join(root, directory)))) return 'composition';
   if (PROTECTED_DIRECTORIES.some((directory) => isWithin(file, path.join(root, directory)))) {
     return 'protected';
   }

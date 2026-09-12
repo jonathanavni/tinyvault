@@ -502,7 +502,7 @@ function assertAuthorityGraph(graph: AuthorityGraph): void {
   const host = graph.program.getSourceFile('src/supervisor/host.ts')!;
   const factory = host.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'createSupervisedHost') as ts.FunctionDeclaration;
   const optionType = graph.checker.getTypeAtLocation(factory.parameters[0]!);
-  expect(optionType.getProperties().map(symbol => symbol.name)).toEqual(['backend', 'canary', 'browser', 'launcher', 'onFillAuthorization']);
+  expect(optionType.getProperties().map(symbol => symbol.name)).toEqual(['backend', 'canary', 'browser', 'launcher', 'handleSignals', 'onFillAuthorization']);
 }
 function inspectCompositionNode(graph: AuthorityGraph, node: ts.Node, file: string,
   lists: { composeCalls: string[]; composeImports: string[]; fillCalls: string[]; hostAuthorizations: string[] }): void {
@@ -592,7 +592,7 @@ function opaqueSpread(type: ts.Type, checker: ts.TypeChecker): boolean {
   return (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never)) !== 0
     || (type.getProperties().length === 0 && checker.getIndexInfosOfType(type).length > 0);
 }
-const HOST_CALL_FILES = ['testbed/docker/integrationProbes.ts', 'testbed/harnessGate.ts',
+const HOST_CALL_FILES = ['src/adapters/mcp/main.ts', 'testbed/docker/integrationProbes.ts', 'testbed/harnessGate.ts',
   'testbed/realAgentRun.ts', 'testbed/runnerExecution.ts'];
 function callSites(graph: AuthorityGraph, names: string[]): string[] {
   const sites: string[] = [];
@@ -606,8 +606,9 @@ function inspectHostShape(graph: AuthorityGraph, call: ts.CallExpression): strin
   if (call.arguments.length !== 1 || !arg || !ts.isObjectLiteralExpression(arg)) return ['host-argument-shape'];
   return arg.properties.flatMap(property => {
     const key = property.name && propertyText(property.name, graph.checker);
+    const signalOption = call.getSourceFile().fileName === 'src/adapters/mcp/main.ts' && ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === 'handleSignals' && property.initializer.kind === ts.SyntaxKind.FalseKeyword;
     return (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property))
-      && key !== undefined && ['backend', 'canary', 'browser', 'launcher'].includes(key)
+      && key !== undefined && (['backend', 'canary', 'browser', 'launcher'].includes(key) || signalOption)
       ? [] : [`host-argument-key:${key ?? ts.SyntaxKind[property.kind]}`];
   });
 }

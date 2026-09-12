@@ -10,6 +10,7 @@ import ts from 'typescript';
 
 // Exact repo-relative path -> exact capability specifiers, never a directory exemption.
 export const DOCKER_CAPABILITY_ALLOWLIST = Object.freeze({
+  'src/adapters/mcp/server.stdio.test.ts': ['node:child_process'],
   'testbed/evalEntry.test.ts': ['node:child_process'],
   'testbed/checkers/offline.retention.test.ts': ['node:child_process'],
   'testbed/docker/exec.ts': ['node:child_process'],
@@ -76,7 +77,11 @@ function specifier(node) {
 // These two profiles describe the reviewed syntax, not a general subprocess permission.
 // execFileSync defaults to shell:false; spawn must spell it explicitly. Option keys are
 // closed to prevent inherited shell values, spreads, accessors and later overrides.
-const reviewProfiles = {
+export const reviewProfiles = {
+  'src/adapters/mcp/server.stdio.test.ts': {
+    spawn: { executable: 'node', options: ['env', 'stdio', 'shell'] },
+    execFileSync: { executable: '/bin/ps', options: ['encoding', 'shell'], argv: ['-axo', 'pid=,ppid=,comm='] },
+  },
   'scripts/claude-review.mjs': {
     execFileSync: { executable: 'git', options: ['encoding', 'maxBuffer', 'stdio'] },
     spawn: { executable: 'claude', options: ['cwd', 'shell', 'detached', 'stdio'] },
@@ -121,9 +126,20 @@ function pinOptions(call, pin, add) {
 // Node promotes a non-array argv value to options, discarding the checked third slot.
 // Exact executable/argv/options shapes and arity reject call-level spreads. Inner array
 // spreads remain valid and always construct an array before the subprocess API runs.
-function pinArgv(call, add) {
+function pinArgv(call, add, pin) {
   const argv = call.arguments[1];
   if (!argv || !ts.isArrayLiteralExpression(argv)) add(call, 'spawn-argv');
+  if (pin.argv && (!argv || !ts.isArrayLiteralExpression(argv) || argv.elements.length !== pin.argv.length
+    || argv.elements.some((element, index) => !ts.isStringLiteral(element) || element.text !== pin.argv[index]))) {
+    add(call, 'spawn-argv');
+  }
+  if (pin.executable === '/bin/ps') {
+    const options = call.arguments[2];
+    const encoding = options && ts.isObjectLiteralExpression(options) && options.properties.find(property =>
+      ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === 'encoding');
+    if (!encoding || !ts.isPropertyAssignment(encoding) || !ts.isStringLiteral(encoding.initializer)
+      || encoding.initializer.text !== 'utf8') add(call, 'spawn-options');
+  }
 }
 function pinReferences(source, bindings, add, profile) {
   const counts = new Map();
@@ -141,7 +157,7 @@ function pinReferences(source, bindings, add, profile) {
             && first.expression.text === 'process' && first.name.text === 'execPath' && !first.questionDotToken;
         if (!allowed) add(node, 'spawn-executable');
         if (pin) pinOptions(call, pin, add);
-        if (pin) pinArgv(call, add);
+        if (pin) pinArgv(call, add, pin);
       }
     }
     ts.forEachChild(node, visit);
@@ -162,7 +178,7 @@ export function inspectSource(text, relative) {
     if (load?.value && ts.isStringLiteral(load.value) && capabilities.has(load.value.text.replace(/^node:/, ''))) {
       const spec = load.value.text;
       if (!(DOCKER_CAPABILITY_ALLOWLIST[relative] ?? []).includes(spec)) add(node, 'capability-import', spec);
-      else if (relative.startsWith('scripts/') && spec === 'node:child_process') scriptBinding(node, bindings, add, profile);
+      else if ((profile !== undefined || relative.startsWith('scripts/')) && spec === 'node:child_process') scriptBinding(node, bindings, add, profile);
     }
     ts.forEachChild(node, visit);
   }

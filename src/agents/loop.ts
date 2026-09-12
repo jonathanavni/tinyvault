@@ -475,7 +475,7 @@ function validateToolCall(call: ToolCall): void {
   }
 }
 
-function matchesSchema(value: unknown, schema: Readonly<Record<string, unknown>>): boolean {
+export function matchesSchema(value: unknown, schema: Readonly<Record<string, unknown>>): boolean {
   if (schema.type === 'string') return typeof value === 'string'
     && (!Array.isArray(schema.enum) || schema.enum.includes(value));
   if (schema.type === 'array') return Array.isArray(value)

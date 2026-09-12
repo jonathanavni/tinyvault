@@ -21,3 +21,7 @@ demo:
 .PHONY: eval-stub
 eval-stub:
 	npm run eval:stub
+
+.PHONY: mcp
+mcp:
+	npm run build:mcp

@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
 
 import {
+  COMPOSITION_DIRECTORIES,
   configureVettedPackages,
   isAtOrWithin,
   isWithin,
@@ -211,6 +212,17 @@ function classifyEdge(edge, entry, currentFile, dependencyPath, context) {
       entry, edge.target, `production-to-tooling ${edge.syntax}`, dependencyPath,
     ));
   }
+  if (isWithin(entry, path.join(absoluteRoot, 'src')) && !isCompositionEntry(entry, context)
+    && fileLocations(edge.target, context.locationsByRealPath).some(location =>
+      isWithin(location, path.join(absoluteRoot, 'src/adapters')))) {
+    violations.push(edgeViolation(entry, edge.target,
+      `composition-reached-from-production ${edge.syntax}`, dependencyPath));
+  }
+  if (isCompositionEntry(currentFile, context)
+    && fileLocations(edge.target, context.locationsByRealPath).some(location =>
+      isWithin(location, path.join(absoluteRoot, 'testbed')))) {
+    violations.push(edgeViolation(entry, edge.target, `production-to-evaluator ${edge.syntax}`, dependencyPath));
+  }
   violations.push(...classifyVettedReach(
     edge, entry, dependencyPath, context,
   ));
@@ -237,7 +249,7 @@ function classifyEdge(edge, entry, currentFile, dependencyPath, context) {
     return { violations, traverse: false };
   }
   if (isProtected(edge.target, absoluteRoot, protectedRealPaths)) {
-    if (!isEvaluatorEntry(entry, context)) {
+    if (!isEvaluatorEntry(entry, context) && !isCompositionEntry(entry, context)) {
       violations.push(edgeViolation(entry, edge.target, edge.syntax, dependencyPath));
       return { violations, traverse: false };
     }
@@ -638,8 +650,13 @@ function toleratesTraversalIssue(entry, currentFile, syntax, context) {
   return toleratesToolchainIssue(entry, currentFile, context.scriptsDirectory, syntax);
 }
 
+function isCompositionEntry(file, context) {
+  return fileLocations(file, context.locationsByRealPath).every(location =>
+    COMPOSITION_DIRECTORIES.some(directory => isWithin(location, path.join(context.absoluteRoot, directory))));
+}
+
 function isForbiddenBrowserZoneEdge(currentFile, target, context) {
-  const restricted = ['src/core', 'src/backends', 'src/agents', 'src/shared']
+  const restricted = ['src/core', 'src/backends', 'src/agents', 'src/shared', 'src/adapters/mcp']
     .map((directory) => path.join(context.absoluteRoot, directory));
   const browser = path.join(context.absoluteRoot, 'src/browser');
   const currentLocations = fileLocations(currentFile, context.locationsByRealPath);
