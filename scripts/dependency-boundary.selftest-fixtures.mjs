@@ -629,6 +629,7 @@ function runSymlinkedNodeModulesFixture() {
     fs.symlinkSync(path.join(projectRoot, 'node_modules'), path.join(root, 'node_modules'), 'dir');
     write(root, 'package-lock.json', JSON.stringify(projectLock));
 
+    fs.mkdirSync(path.join(root, 'src/adapters/mcp'), { recursive: true });
     assertPass(root, undefined, 'gate rejected a root whose node_modules is a directory symlink');
     assertCliStatus(root, 0, 'real gate CLI rejected a root with symlinked node_modules');
 
