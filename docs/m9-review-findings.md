@@ -3176,3 +3176,123 @@ incomplete. No universal liveness, instant revocation, all-OS support or E8c-fro
 operational card with explicit executable/classifier readiness blockers, not an executable approval
 request; final small paper clarifications are same-family-confirmed and Claude literal verdicts retained.
 The new109-reservation/two-account/15s-spaced design is proposed only, not provider authorization.
+
+
+## Entry 73 — 2026-09-14 package A approved, exact commit and literal clean clone PASS
+
+User replies “I approve” to Entry72's concrete packages. Owner explicitly applies this to execution-ready
+package A only: exact36-path commit, one independent local clone, isolated locked npm/Chromium install
+and one full default gate. B was explicitly not execution-ready; no V1/provider/private setup/new token
+is authorized by this reply. Same owner/session `2026-09-14-m9-approval-prep`; no ownership transfer.
+
+**Exact approved commit:** main `7c400abd508be2711c07613bdcf55f2f5f6d4bde`, parent
+87e81b8168703e5b76e0b1659543a4b4ec80f988, tree bf7a23635662aa17d770eef05bdb2a06ba6938fe.
+Message: “Implement reviewed M9 offline adapter and scoped M5 marker-wait repair”. All36explicit paths
+committed together:8940insertions/568deletions. Before staging, all475files/modes, full dirty status and
+complete816213-byte candidate patch matched the frozen approval manifest/patch. No staged changes
+were inherited. Owner verified all staged blobs/modes and every complete diff section against approved
+bytes (section order differs between the tracked-plus-untracked preparation patch and Git's staged
+patch); staged whitespace passed, no non-sample hook existed. Commit ran separately after that evidence
+was read; no amend, hook bypass, branch switch or additional commit. All475committed blobs/modes were
+then verified against the approved manifest; integration checkout clean before cloning.
+
+**Literal independent clone:** `git clone --no-local --no-hardlinks /Users/jonathanavni/Documents/Coding/tinyvault /private/tmp/tinyvault-m9-clean-clone-20260914-01/repo`.
+New clone HEAD equals7c400ab;475files match; no alternates, overlays, copied node_modules, dist,
+.vitest, artifacts, .env or private configuration. Separate0700home/tmp/npm-cache/browsers/evidence
+siblings, constructed child environment exactly packageA's7keys. Host remains macOS15.6.1/build24G90
+arm64, Node24.19.0/npm11.17.0. Executable identities and installed browser metadata/hashes retained.
+No private/global configuration or credential file was manually inspected or copied.
+
+Execution wrapper outside checkout: `/private/tmp/tinyvault-m9-approval-a-execution-20260914/run-step.py`,
+SHA2566588a7ad1d05c4e29f44fcfb674168d09ba623f06dae111f02a1c47d27b72fca. One separately invoked
+step at a time; exclusive started/receipt files prevent automatic retry, prerequisites checked, no
+inherited environment forwarding. Exact argv/cwd/environment/PID/start/end/exit/log hashes in native
+receipts. Each completed result/log was read before the next action. Browser/timing suites serial;
+no other owner worker/review/gate ran. Process-name checks found no competing TinyVault/Vitest/
+ms-playwright match before launch; this is not proof of machine-wide idleness.
+
+- `python3 /private/tmp/tinyvault-m9-approval-a-execution-20260914/run-step.py install` executes
+  `npm ci` in the clone: PASS exit0,2.177s.62packages installed. npm11.17.0 emitted allow-scripts
+  warnings for esbuild0.28.2 and fsevents2.3.2/2.3.3; preserved as observations, no additional script
+  approval, npm upgrade or fallback install performed. Later gates actually passed under that result.
+- Same wrapper `browsers` executes `npm run browsers`: PASS exit0,11.427s. Playwright1.62.1,
+  Chromium/headless-shell revision1234 (151.0.7922.34), ffmpeg1011, installed into isolated cache.
+- Same wrapper `test` executes exactly ONE `make test`: PASS exit0,772.168s,2026-09-14
+  14:10:47.454701Z–14:23:39.616352Z. Main3761passed/0failed/1existing intentional skip;
+  timing-1 5/5, timing-2 26/26; log ends `test execution PASS`. Main includes the repaired M5
+  missing-body case passing2050.054625ms. No per-case subtype or universal liveness inference.
+
+**Retained fresh evidence:** `/private/tmp/tinyvault-m9-clean-clone-20260914-01/evidence/`:
+clone-verification.json; install/browsers/test started,PID,receipt and log files; installed-runtime.json;
+15native report/diagnostic files copied intact to native-reports with native-report-manifest.json;
+verification.json and generated-ignored-status.txt. Owner independently rehashed receipts/logs/native
+reports and checked native counts/status. Main SHA256aa0ba3ad821353bb52f55afaf1af9c770bbfaf98217faf0af8232336e5d26525;
+timing1 b171678eb8bd173f7eff5dad0d0dae7a2270c62916d81b41ba6df1c4bf6e29c0;
+timing2 6cd1200b8a5a03b8c1854bc56b305199aa400c886bf9811bfaca37e152613e37;
+full log3b37cf70d3dd5f7b0fb7b5924d75d16c26cc82b0d1b32efa1942215bdfa13b89.
+Commit/staging/full-approved-patch verification and report are under
+`/private/tmp/tinyvault-m9-approval-a-execution-20260914/`. Original approval index/artifacts stay
+unchanged as historical approved inputs; original Entry65/70 evidence retained, no cleanup anywhere.
+
+Post-gate both source checkout and clone were clean, sameHEAD, and every475file hash/executable bit
+matched the approved manifest. Then owner writes only this append-only register and current status
+in PLAN/README/docs index/phase-plan. Those follow-up continuity edits remain UNCOMMITTED: packageA
+approved one exact commit, not an automatic second commit/amend. Clone remains clean on7c400ab;
+its acceptance belongs to that commit. No source/test/gate/runtime change after the passing clone.
+All owned gate/install jobs completed; no new review or mutation campaign.
+
+**Acceptance/limits:** A is complete. This is actual fresh literal clean-clone default acceptance on
+7c400ab, not an overlay/reused-dependency inference. M9 is NOT complete: Bobserver/tap/classifier/
+readiness/exact-launch artifacts, separately authorized V1/private setup, expiry and supported-OS
+qualification, separately authorized integration gates and whole-codebase audit/assessment remain.
+Darwin alone supplies no Linux qualification. Earlier Docker7/7, stub1/1 and MCP37/37 remain Entry65
+unchanged-runtime evidence, not reruns on this commit. Entry65 security literal NEEDS-ATTENTION,
+Entry70/M5 verdicts, both operational-review NEEDS-ATTENTION verdicts and every coverage limit remain.
+Historical reds are not diagnosed/erased by this pass. R20, exact M8 metadata/restart limitation,
+D8/D9 and both historical cohorts stay unchanged; MCP interoperability is not E8c qualification.
+
+**Not run:** extra default run or diagnostic retry, standalone mutation campaign, Docker/stub/MCP
+build/gates beyond the default suite's already-declared tests, V1observer implementation/provider/
+credential/token work, paid agents/cohorts, Linux/expiry qualification, integration/audit, merge/push/
+release or cleanup. No token needed/created/read; old private V0 cleanup remains operator-unconfirmed.
+
+**Deviations From Handoff:** none in approved execution scope. Normal npm warnings retained without
+policy changes; one exact commit, one literal clone, one install/browser setup and one full gate.
+Routine post-result continuity edits are disclosed and left uncommitted, not folded into the approved
+candidate or relabelled as part of its full-file gate identity.
+
+
+## Entry 74 — 2026-09-14 continuity checkpoint commit and push authorized
+
+User asks whether to proceed to the next checkpoint and push, then explicitly accepts the owner's
+three-step recommendation: commit the five continuity documents, verify live remote divergence and
+push the implementation plus continuity commits. This supersedes Entry73's no-second-commit/no-push
+boundary only for this checkpoint. Same Codex owner; no branch merge is needed because implementation
+7c400abd508be2711c07613bdcf55f2f5f6d4bde is already on local main.
+
+Incoming five-file diff exactly matches the prior saved continuity.diff SHA256
+b0e31a6fd0aa49f05cd7270c713908c8012f42052d2e35ac713a4c36471b3585. The final continuity
+commit contains only PLAN.md, README.md, docs/README.md, docs/phase-0-plan.md and this register.
+This entry and the current PLAN additionally record the new authorization; Entries1–73 remain a
+byte-identical prefix. All implementation, test, gate, locked packet and approval-card bytes stay
+unchanged. The literal clean-clone gate was run on7c400ab, not rerun on the documentation child.
+
+Live `git ls-remote --heads origin refs/heads/main` returned
+87e81b8168703e5b76e0b1659543a4b4ec80f988, the implementation parent. Initial sandbox DNS
+lookup failed; the normal approved network escalation succeeded. Intended push is a normal
+fast-forward to the existing origin main, without force, branch switch, merge or release.
+
+Evidence is retained at `/private/tmp/tinyvault-m9-checkpoint-push-20260914/`: incoming and final
+documentation patches, prefix/hash checks, staged verification, commit receipt, push log and final
+`result.json` with live remote SHA and checkout status. This entry records authorization and the
+pre-push checkpoint; it does not assert a push has succeeded before the external receipt exists.
+No extra bookkeeping commit is needed to insert this commit's own SHA or future push result.
+
+**Not run:** new tests/installations, V1/provider/private-token operations, paid cohorts, integration
+acceptance or audit, Linux/expiry qualification, merge or release. Documentation-only hash/path/
+whitespace checks verify this child; all earlier test results and historical limits retain their
+original scope. Next substantive milestone work is offline V1 readiness, with provider execution
+separately gated. M9 remains incomplete; no release or provider approval is inferred from this push.
+
+**Deviations From Handoff:** none from the user's newly authorized checkpoint scope. The two Git
+commits preserve the implementation gate identity and its subsequent documentation-only record.
