@@ -211,3 +211,23 @@ work in flight, the rest stay parked here (register "Final5 round"):
 - **Size-cap planning:** preserve all existing assertions and gates when planning any split. In addition to the structural-test follow-up above, `testbed/runner.finalization.browser.test.ts` has one additional line of headroom (798, `<800`); MCP `protocol.ts` has two (397, `<400`). No refactor is authorized by this entry.
 - **Shared MCP test fixtures:** the 49-line preamble at lines9–57 is byte-identical in `server.seam.test.ts`, `server.host.test.ts` and `tools.errors.test.ts`. Consider a narrowly scoped helper before the next contract change; preserve independent assertions and all mutation evidence.
 - **M9/M10 review inputs:** unfuzzed MCP framing, missing subprocess cancellation/backpressure and default-manifest isolation witnesses, suite-resident MCP real-fill scan and Linux descendant proof remain coverage limits. No cohort leak-rate measurement covers the nine-tool MCP surface. M10 still owns the WebMCP positioning sentence and demo; a new cohort, client spend or public flip requires separate authorization. Full accepted residuals and the environment-dependent M6 witness limit are in `docs/project-assessment-2026-09-12-m8.md` and the append-only M8 register.
+
+
+## M9 approved scope and remaining acceptance work (2026-09-13)
+
+The [approved CLI backend](docs/m9-onepassword-packet.md) scopes bounded work to this adapter; it
+does not close the existing arbitrary trusted-backend stall residual. R20 identity is now a locked
+implementation requirement, not yet verified acceptance. V1 removal-attribution controls, supported-OS
+qualification, literal clean-clone/integration gates and integrated audit remain open. Keep Bitwarden
+post-launch. Do not broaden the sampled schema or raise caps silently when a provider response changes.
+
+M9 offline checkpoint follow-ups (Entry65; no new implementation authorization):
+- Diagnose the full-test03 M5 terminate-before-delivery red under the separately proposed two-run scope. Full02/full04 passes do not establish its cause; preserve the exact marker/body assertions and timeout.
+- Declared finite proof limits: T5 detector mutations select detail-exit only; other rows share those assertions. Typed error sensitivity distinguishes not-found from the other closed kinds. Native escape mutation covers stderr, without a separate stdout-secret witness. Shared-backing late-chunk runtime witness and shared-discovery fate-sharing remain unpinned; allocation classifier and OS-reaping tolerance can false-red.
+- Keep the permanent3900ms latch disclosure and4000ms bound intact. Packet§6's local enumeration is incomplete but §5/SCHEMA/setup state the latch; this is a documentation asymmetry, not permission to relax it.
+
+M5 diagnostic follow-up (Entry67): the approved base/current runs completed; candidate reproduced a timeout with a valid not-attached marker already present. Replace the overly specific wait only under the separately proposed one-file gate repair. Preserve exact one-missing-body/zero-receipt assertions and10s deadline; no body-or-marker alternative. Historical full03 cause remains unproven; no M9 causation claim or automatic retry. Concrete external repair proposal is recorded in Entry67.
+
+M5 repair plan-review residual (Entry69): `testbed/scorecard.schema.ts`'s `bodiesUnobserved` comment names only target-detached, while SCHEMA and the classifier declare both target-detached and not-attached. Pre-existing comment drift; record for a later scoped documentation correction, not a change to the current one-file source repair.
+
+M5 repair outcome (Entry70): the separately approved one-file wait correction is verified; earlier proposed-repair wording above is historical. Both old full-suite causes remain unproven. Scoped review limits retained: actual browser call-site rewiring is checked statically, no deterministic browser absence witness, no harness-marker not-attached-suffix negative, subtype not logged, and arbitrarily late receipts lie outside the current assertion window. These do not authorize additional repairs or mutations.

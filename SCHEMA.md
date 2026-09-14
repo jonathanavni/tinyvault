@@ -614,6 +614,56 @@ unscanned; the static dependency graph is hygiene rather than containment; the s
 syntax rather than behavior; C3 cannot rule pruned edge classes or script/testbed roots; the
 two unadmitted vault tools and caller-supplied finalization order remain a narrowed A4 residual.
 
+## 1Password backend contract (M9 approved; implementation acceptance pending)
+
+The approved [M9 contract](docs/m9-onepassword-packet.md) adds a CLI2.39.0 service-account backend
+behind the unchanged CredentialBackend interface and unchanged MCP tools/results/metadata.
+Local-file stays the default. [Human setup](docs/onepassword-setup.md) uses each operator's own
+private token file/configuration; no credential, account ID or raw provider response belongs in public evidence.
+
+- R20: one fixed account/vault,1–64 unique configured item IDs, one opaque handle per record.
+  Handles/eligibility/policy freeze at successful discovery, including empty discovery. Renames,
+  repeated list/setup, rotation or archive/restore never create another same-process budget. A copy
+  with another ID is another record; plaintext equality is not tested for deduplication.
+- D2: only after trusted fill admission, the CLI decrypts full item detail in trusted memory.
+  Identity/category/D8 state/current origin/built-in password are validated before Secret construction.
+  This explicitly weakens the before-decrypt timing requirement for1Password; local-file retains it.
+  No atomic snapshot, version-conditional read or no-decryption-on-policy-drift claim is made.
+- D9: exact location grammar, fatalUTF8/decoded duplicate-key checks, byte/depth/node limits and fixed
+  refusal mapping; unknown keys reject. All website origins must agree; primary/first URL is not
+  sufficient. Provider strings, including metadata, may be sensitive and are discarded after parsing.
+  Only configured labels and opaque handles reach ItemMeta; no provider title/username/notes/ref values.
+- D4:4s per backend method including cleanup on a responsive event loop,4 simultaneous methods and
+ 64 lifetime CLI spawns, version included; no queue/retry or cache. Limits can deny legitimate use.
+  Work still pending at the3,900ms final cutoff permanently latches unavailable until restart,
+  including stalled local filesystem work. No bound for arbitrary backends or universal OS containment
+  is implied. Token changes latch refusal;
+  disposal drops owned state and removes only the owned temporary tree. Memory clearing is best effort.
+- D5: remote provider latency is excluded from the existing timing-security measurement; the
+ 4s availability bound is not timing normalization. Supported passwords are1–4096 UTF16 units/no CRLF,
+  preserving supported whitespace. Refusal of missing/unsupported values exposes support eligibility;
+  noninterference compares supported values, not invalid versus usable credentials.
+
+**Archiving a 1Password item does not revoke TinyVault access in an already-running process.**
+Items initially archived are excluded. A previously eligible item may still resolve after archiving
+under its original identity/origin/field checks and remaining budget. Absent detail state is unspecified;
+ACTIVE/ARCHIVED are admissible, DELETED denies, malformed present state rejects. A raw CLI refusal
+is unavailable, not a typed deletion/revocation diagnosis. V1 must verify intended removal workflows;
+no immediate cancellation of already admitted work is promised.
+
+Fixed error mapping remains: not-found → handle-unavailable, all other BackendError kinds → backend-error;
+probe missing/empty/changed token → not_authenticated, missing executable → not_installed, unsupported
+version/platform/unsafe config/malformed response/failure → error. No raw native exception text is exposed.
+Explicit DETAIL DELETED is evaluated after grammar/identity but before origin; malformed grammar still
+rejects integrity. Exact precedence and resource caps are in §3.1/§7 of the locked packet.
+
+**Process recreation grants fresh fill authorization; the adapter does not establish renewal isolation in the tested Claude Code configuration (2.1.258, measured 2026-09-12).**
+
+V0's finite synthetic Darwin observations retain INCONCLUSIVE and are not real-adapter acceptance.
+Linux remains unqualified; supported-OS V1, implementation/clean-clone/integration gates and the
+whole-codebase audit remain required. MCP interoperability is not cohort qualification: E8c PFc7eGp2
+retains only its measured fixture/configuration scope; E8b ODMFYbwH remains unqualified.
+
 ## Testbed evidence and scorecard contracts
 
 ```ts

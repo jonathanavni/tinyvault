@@ -32,6 +32,8 @@ const mcpPath = 'src/adapters/mcp/server.stdio.test.ts';
 const mcpSource = "import { spawn, execFileSync } from 'node:child_process';\n"
   + "spawn(process.execPath, [], { env: {}, stdio: 'pipe', shell: false });\n"
   + "execFileSync('/bin/ps', ['-axo', 'pid=,ppid=,comm='], { encoding: 'utf8', shell: false });";
+const m9McpPath = 'src/adapters/mcp/server.onepassword.stdio.test.ts';
+const m9McpSource = mcpSource.replace('[],', '[bundlePath],').replace('env: {}', 'env: env');
 const script = 'scripts/check-acceptance-j-results.mjs';
 const reviewFiles = ['scripts/claude-review.mjs', 'scripts/claude-review.test.mjs'];
 const repo = fileURLToPath(new URL('../', import.meta.url));
@@ -58,7 +60,7 @@ for (const extension of ['ts', 'mts', 'cts', 'js', 'mjs', 'cjs']) {
   rejected("import 'node:child_process';", 'capability-import', `nested/probe.${extension}`);
 }
 for (const [relative, specs] of Object.entries(DOCKER_CAPABILITY_ALLOWLIST)) {
-  const source = relative === mcpPath ? mcpSource : reviewSources.get(relative) ?? specs.map((spec) => (reviewProfiles[relative] !== undefined || relative.startsWith('scripts/')) && spec === 'node:child_process'
+  const source = relative === mcpPath ? mcpSource : relative === m9McpPath ? m9McpSource : reviewSources.get(relative) ?? specs.map((spec) => (reviewProfiles[relative] !== undefined || relative.startsWith('scripts/')) && spec === 'node:child_process'
     ? reviewProfiles[relative] !== undefined
       ? "import { spawn } from 'node:child_process'; spawn(process.execPath, [], { env: {}, stdio: 'pipe', shell: false });"
       : "import { spawnSync } from 'node:child_process'; spawnSync(process.execPath, []);" : `import '${spec}';`).join('\n');
@@ -349,7 +351,9 @@ withFixture(mcpSource, target => {
     assertCli(target, 0, command);
     for (const [needle, replacement] of [
       [`  '${mcpPath}': ['node:child_process'],\n`, ''],
-      ["    execFileSync: { executable: '/bin/ps', options: ['encoding', 'shell'], argv: ['-axo', 'pid=,ppid=,comm='] },\n", ''],
+      [`  '${mcpPath}': {\n    spawn: { executable: 'node', options: ['env', 'stdio', 'shell'] },\n`
+        + "    execFileSync: { executable: '/bin/ps', options: ['encoding', 'shell'], argv: ['-axo', 'pid=,ppid=,comm='] },\n  },",
+        `  '${mcpPath}': {\n    spawn: { executable: 'node', options: ['env', 'stdio', 'shell'] },\n  },`],
     ]) {
       fs.writeFileSync(module, replaceOnce(original, needle, replacement)); assertCli(target, 1, command);
       fs.writeFileSync(module, original); assertCli(target, 0, command);
@@ -371,3 +375,81 @@ withFixture(mcpSource, target => {
   } finally { fs.rmSync(commandRoot, { recursive: true, force: true }); }
 }, mcpPath);
 console.log(`M8-C2/C4 MCP profile PASS (${mcpMutants.length} source mutants; ${mcpGuards.length} guard deletions; capability/profile/ps-binding deletions; C4 shorthand remains red)`);
+
+// M9 permissions travel with the runtime shape gate; preserve the old MCP counts above.
+const m9Rows = {
+  'src/backends/onepasswordProcess.ts': ['node:child_process'],
+  'src/backends/onepassword.testSupport.ts': ['node:http'],
+  'src/adapters/mcp/server.onepassword.stdio.test.ts': ['node:child_process'],
+};
+for (const [relative, allowed] of Object.entries(m9Rows)) {
+  assert.deepEqual(DOCKER_CAPABILITY_ALLOWLIST[relative], allowed);
+  for (const spec of allowed) {
+    rejected(`import '${spec}';`, 'capability-import', relative.replace('.ts', '.neighbor.ts'));
+    rejected(`import '${spec.replace('node:', '')}';`, 'capability-import', relative.replace('.ts', '.neighbor.ts'));
+  }
+  for (const spec of ['node:net', 'node:process', 'node:tls', ...allowed.map(value => value.replace('node:', ''))]) {
+    const clean = relative === m9McpPath ? m9McpSource : allowed.map(value => `import '${value}';`).join('\n');
+    withFixture(`${clean}\nimport '${spec}';`, root => {
+      assert(checkDockerInvocation(root).some(v => v.code === 'capability-import')); assertCli(root, 1);
+      fs.writeFileSync(path.join(root, relative), clean);
+      assert.deepEqual(checkDockerInvocation(root), []); assertCli(root, 0);
+    }, relative);
+  }
+}
+for (const source of [m9McpSource, fs.readFileSync(path.join(repo, m9McpPath), 'utf8')]) withFixture(source, root => {
+  assert.deepEqual(checkDockerInvocation(root), []); assertCli(root, 0);
+}, m9McpPath);
+for (const [name, source, code] of mcpMutants) withFixture(m9McpSource, root => {
+  const fixture = path.join(root, m9McpPath);
+  const original = fs.readFileSync(fixture);
+  assert.deepEqual(checkDockerInvocation(root), []); assertCli(root, 0);
+  try {
+    fs.writeFileSync(fixture, source);
+    assert(checkDockerInvocation(root).some(v => v.code === code), `M9 ${name}`); assertCli(root, 1);
+  } finally {
+    fs.writeFileSync(fixture, original);
+    assert.deepEqual(fs.readFileSync(fixture), original, `M9 ${name}: exact fixture restoration`);
+    assert.deepEqual(checkDockerInvocation(root), []); assertCli(root, 0);
+  }
+}, m9McpPath);
+withFixture(m9McpSource, target => {
+  const commandRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tinyvault-m9-gate-copy-'));
+  try {
+    fs.cpSync(path.join(repo, 'scripts'), path.join(commandRoot, 'scripts'), { recursive: true });
+    fs.symlinkSync(path.join(repo, 'node_modules'), path.join(commandRoot, 'node_modules'));
+    const module = path.join(commandRoot, 'scripts/docker-invocation.mjs');
+    const original = fs.readFileSync(module, 'utf8');
+    const command = path.join(commandRoot, 'scripts/check-docker-invocation.mjs');
+    assertCli(target, 0, command);
+    for (const [relative, allowed] of Object.entries(m9Rows)) {
+      const positive = relative === m9McpPath ? m9McpSource : `import '${allowed[0]}';`;
+      withFixture(positive, fixture => {
+        assertCli(fixture, 0, command);
+        fs.writeFileSync(module, replaceOnce(original, `  '${relative}': ['${allowed[0]}'],\n`, ''));
+        assertCli(fixture, 1, command);
+        fs.writeFileSync(module, original); assertCli(fixture, 0, command);
+      }, relative);
+    }
+    const psProfile = `  '${m9McpPath}': {\n    spawn: { executable: 'node', options: ['env', 'stdio', 'shell'] },\n`
+      + "    execFileSync: { executable: '/bin/ps', options: ['encoding', 'shell'], argv: ['-axo', 'pid=,ppid=,comm='] },\n  },";
+    fs.writeFileSync(module, replaceOnce(original, psProfile,
+      `  '${m9McpPath}': {\n    spawn: { executable: 'node', options: ['env', 'stdio', 'shell'] },\n  },`));
+    assertCli(target, 1, command);
+    fs.writeFileSync(module, original); assertCli(target, 0, command);
+    // Absence detector: unchanged negative fixture becomes accepted when its profile is absent.
+    fs.writeFileSync(path.join(target, m9McpPath), m9McpSource.replace("'/bin/ps'", "'docker'"));
+    assertCli(target, 1, command);
+    fs.writeFileSync(module, replaceOnce(original, `  '${m9McpPath}': {`, `  'removed/${m9McpPath}': {`));
+    assertCli(target, 0, command);
+    fs.writeFileSync(module, original); assertCli(target, 1, command);
+    fs.writeFileSync(path.join(target, m9McpPath), m9McpSource); assertCli(target, 0, command);
+    for (const [mutant, guard] of mcpGuards) {
+      fs.writeFileSync(path.join(target, m9McpPath), mutant); assertCli(target, 1, command);
+      fs.writeFileSync(module, replaceOnce(original, guard, '')); assertCli(target, 0, command);
+      fs.writeFileSync(module, original); assertCli(target, 1, command);
+      fs.writeFileSync(path.join(target, m9McpPath), m9McpSource); assertCli(target, 0, command);
+    }
+  } finally { fs.rmSync(commandRoot, { recursive: true, force: true }); }
+}, m9McpPath);
+console.log(`M9 MCP profile PASS (${mcpMutants.length} source mutants; ${mcpGuards.length} guard deletions; three exact capability rows; profile/ps-binding deletions)`);

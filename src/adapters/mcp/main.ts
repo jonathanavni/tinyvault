@@ -1,9 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Readable, Writable } from 'node:stream';
 import { createLocalFileBackend } from '../../backends/localFile';
+import { createOnePasswordBackend } from '../../backends/onepassword';
+import type { CredentialBackend } from '../../backends/backend';
 import { createSupervisedHost, type SupervisedHost } from '../../supervisor/host';
 import { createServer, serve } from './server';
 import type { Protocol } from './protocol';
@@ -19,6 +21,8 @@ const priority = [0, 5, 3, 6, 4];
 
 /** One invocation is one process lifetime. Tests inject streams and process events. */
 export async function start(runtime: Runtime = process): Promise<number> {
+  let backend: CredentialBackend | undefined;
+  let backendClosing: Promise<void> | undefined;
   let host: SupervisedHost | undefined;
   let server: Protocol | undefined;
   let code = 0;
@@ -32,7 +36,15 @@ export async function start(runtime: Runtime = process): Promise<number> {
   const done = new Promise<void>(resolveDone => { finish = resolveDone; });
   const observe = (next: number) => { if (priority.indexOf(next) > priority.indexOf(code)) code = next; };
   const diagnostic = () => { try { runtime.stderr.write('tinyvault-mcp: internal error\n'); } catch { /* Closed stderr. */ } };
+  const closeBackend = () => {
+    if (backend && !backendClosing) {
+      try { backendClosing = backend.dispose().catch(() => { observe(3); }); }
+      catch { observe(3); backendClosing = Promise.resolve(); }
+    }
+    return backendClosing;
+  };
   const abort = () => {
+    void closeBackend();
     aborting = true; releaseAbort();
     server?.cancelHandler();
     try { host?.abort(); } catch { observe(3); }
@@ -52,6 +64,7 @@ export async function start(runtime: Runtime = process): Promise<number> {
     } catch { observe(3); abort(); }
     finally {
       try { await host!.closeAll(); } catch { observe(3); abort(); }
+      await closeBackend();
       if (!aborting) await Promise.race([server?.flush(), aborted]);
       if (server?.outputFailed) observe(6);
       finish();
@@ -81,9 +94,18 @@ export async function start(runtime: Runtime = process): Promise<number> {
     const vaultPath = runtime.env.TINYVAULT_VAULT_PATH;
     const keyPath = runtime.env.TINYVAULT_KEY_PATH;
     const override = runtime.env.TINYVAULT_TRIPWIRE_CANARY;
-    if (!vaultPath || !keyPath || override === '') throw new Error('tinyvault-mcp: internal error');
+    const selected = runtime.env.TINYVAULT_BACKEND ?? 'local-file';
+    const configPath = runtime.env.TINYVAULT_1PASSWORD_CONFIG;
+    if (override === '') throw new Error('tinyvault-mcp: internal error');
     const canary = override ?? randomBytes(32).toString('base64url');
-    const backend = createLocalFileBackend({ vaultPath, keyPath });
+    if (selected === 'local-file') {
+      if (!vaultPath || !keyPath || configPath !== undefined) throw new Error('tinyvault-mcp: internal error');
+      backend = createLocalFileBackend({ vaultPath, keyPath });
+    } else if (selected === 'onepassword') {
+      if (!configPath || !isAbsolute(configPath) || vaultPath !== undefined || keyPath !== undefined ||
+        runtime.env.OP_SERVICE_ACCOUNT_TOKEN !== undefined) throw new Error('tinyvault-mcp: internal error');
+      backend = createOnePasswordBackend(JSON.parse(readFileSync(configPath, 'utf8')));
+    } else throw new Error('tinyvault-mcp: internal error');
     const version = JSON.parse(readFileSync(resolve('package.json'), 'utf8')).version as string;
     host = await createSupervisedHost({ backend, canary, handleSignals: false });
     if (aborting) abort();
@@ -105,6 +127,7 @@ export async function start(runtime: Runtime = process): Promise<number> {
   } catch { diagnostic(); observe(4); if (host) { abort(); shutdown(); } else finish(); }
   await done;
   await finalizing;
+  await closeBackend();
   runtime.stdin.off('end', shutdown);
   runtime.stdin.off('readable', earlyReadable);
   runtime.stdout.off('error', outputError);

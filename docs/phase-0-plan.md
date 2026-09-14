@@ -68,7 +68,7 @@ Round 3 (the capped final pass) returned four findings — **implementation-leve
 | 1 | Language + browser | **TypeScript + Playwright** (CDP under it) | Spec-locked; adapters (MCP/eve/dsh) + Playwright are TS-native. |
 | 2 | Agent-loop substrate | **Hand-rolled loop on `@anthropic-ai/sdk`** (`messages.create`, not Agent SDK, not beta tool-runner) | The loop IS the auditable artifact; transcript is byte-exact wire I/O; the Agent SDK puts a closed Claude Code subprocess inside the measurement boundary. |
 | 3 | Pinned eval model | **`claude-haiku-4-5-20251001`, `temperature: 0`**, N runs/scenario | Newest tier where `temperature` is still legal; 5–10× cheaper for sweeps; no `seed` exists so the eval is statistical by design (matches "measure leak *rate*"). |
-| 4 | First real backend | **1Password** via `@1password/sdk` (`op read` documented equivalent); Bitwarden second | `op item list` returns metadata-only natively **and each item carries its canonical URL** (now load-bearing for origin authorization, §2); `bw list items` emits plaintext + has 2026 unlock regressions. |
+| 4 | First real backend | **1Password CLI 2.39.0 with service-account read access** (approved M9 D1–D9); Bitwarden deferred | Exact bounded LIST/detail grammar is locked from synthetic V0 evidence; stored website URLs derive one origin. Full detail decryption precedes current-policy validation only under the explicit D2 exception. See §6 and the M9 packet; SDK/op-read equivalence is superseded. |
 | 5 | Guaranteed fallback backend | **libsodium sealed local-file adapter**, implemented FIRST; its records carry an explicit canonical-origin + field-recipe | Zero-cost, offline, deterministic default; must carry the origin-binding metadata §2 now requires. |
 | 6 | Redaction enforcement | **Structural absence (primary) + trusted-output-only fail-closed tripwire + out-of-band typed-sink checker** — see §4 | Revised post-review: the tripwire never inspects caller input (oracle, finding #2); proof is the typed-sink checker, not a raw grep (finding #4). |
 | 7 | Scorecard + checkers | Typed source/sink event model in §5; deterministic completion oracle; planted-leak **matrix** + negative controls gate the checker | The checker's own correctness is a first-class artifact; one planted case is insufficient (finding #4/#5). |
@@ -478,6 +478,23 @@ type Scorecard = {
 
 ## 6. Backend interface (from research)
 
+**M9 approved amendments (2026-09-13; implementation acceptance pending).** D1/D3 choose CLI over SDK,
+with D9's closed sampled schema. D2's decryption-before-policy exception applies only to1Password;
+local-file's stronger guarantee remains. D4 bounds this adapter, not arbitrary trusted backends.
+D5 excludes remote fetch latency from the existing six-probe timing-security claim; historical Probe P
+results/thresholds are unchanged. D6/D7 authorize only the packet's named AST/retention/capability rows
+and production-path proofs, not general exemptions. D8 permits archive-after-discovery resolution.
+
+**Archiving a 1Password item does not revoke TinyVault access in an already-running process.**
+Initial archive exclusion, frozen eligibility/identity/origin checks and fill budget remain enforced.
+Deletion/revocation require V1 verification; no instantaneous in-flight interruption is claimed.
+Methods are bounded to4s on a responsive event loop,4 in flight and64 lifetime CLI spawns (not wire
+requests); stdout1MiB list/detail or16KiB probe/version, stderr16KiB; no automatic retry/cache. A valid
+empty snapshot stays empty. Probe uses only the fixed §7 taxonomy, not guessed stderr meanings.
+Supported passwords are1–4096 UTF16 units/no CRLF; unsupported-domain refusal reveals eligibility.
+The exact frozen metadata/state/retention/grammar contract and all limits live in the linked packet.
+
+
 ```ts
 // src/backends/backend.ts — AS LANDED IN M3 (amended 2026-09-01 from the research sketch; see m3-slice-spec.md D5)
 interface CredentialBackend {
@@ -486,8 +503,9 @@ interface CredentialBackend {
   resolvePolicy(handle: Handle): Promise<CredentialPolicy>;  // trusted-side, deep-frozen; used by the fill gate step 1
   resolveSecret(handle: Handle, authorizedPolicy: CredentialPolicy): Promise<Secret>;
       // trusted-side, called ONLY after the origin gate passes, and ONLY for the policy the gate authorized:
-      // the backend compares the record's current policy to `authorizedPolicy` before decrypting (mismatch →
-      // 'integrity', no decrypt) — closes the policy/secret TOCTOU between the two calls. Returns the core
+      // local-file compares current policy before decrypting (mismatch → 'integrity', no decrypt).
+      // Approved M9/D2: 1Password CLI decrypts a full item after admission, then validates current
+      // identity/policy before Secret construction; no atomic vendor snapshot is established. Returns the core
       // `Secret`; typed `BackendError.kind`: 'not-found'|'locked'|'auth-expired'|'unavailable'|'integrity'.
   dispose(): Promise<void>;                      // REQUIRED. Drops backend AUTH-SESSION material only (an op/bw token) —
                                                  // never a secret, which no conforming backend retains between calls (B1 slice 2/3).
@@ -498,7 +516,7 @@ interface CredentialBackend {
 - `localFile` (libsodium sealed file) — **landed M3**: per-record XChaCha20-Poly1305-IETF sealing with
   additional data binding each ciphertext to `[handle, canonicalOrigin, fieldRecipe]`; metadata cleartext
   at rest (stated tradeoff); 32-byte raw key file read per call, never cached; no KDF in v0.1.
-- `onepassword` — `@1password/sdk` (`op read` equivalent); `canonicalOrigin` derived from the item's stored URL; `handle` maps to an `op://vault/item/field` reference held trusted-side.
+- `onepassword` — approved M9 CLI/service-account contract, offline candidate implemented with acceptance pending: fixed custom vault/item allowlist, injective opaque handles, archive-excluding frozen discovery, all stored website URLs must derive one canonical origin. No secret-reference/name lookup or `op read`; fixed-ID detail validates identity/category/D8 state/policy/built-in password after admission. See [M9 locked packet](m9-onepassword-packet.md) and [operator setup](onepassword-setup.md).
 - `bitwarden` — later; adapter MUST strip plaintext from `bw list items` output and a test MUST assert the stripped metadata carries no secret.
 
 **BackendStatus → SetupReason mapping (one place, alignment-review #13):** the fill service maps backend probe reasons to the caller-visible setup enum as `not_installed | error → backend_unavailable`; `not_authenticated | locked → backend_locked`; item-level `not-found → missing_item`. **`BackendError.kind → FillResult.reason` (M4):** `not-found → handle-unavailable`; every other kind, including `integrity`, → `backend-error` (never an unlock instruction — m3 register B/#8). The two enums stay separate on purpose — backend detail is trusted-side; the caller sees only the coarser closed enum.
@@ -535,7 +553,7 @@ tinyvault/
 
 ## 8. Milestone sequence (executable; eval spine before security core — finding #6)
 
-> **Build status (updated 2026-09-12):** **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅**
+> **Build status (updated 2026-09-13):** **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅**
 > (`07996a2`, closing the Opus 5 audit) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) · **M4 ✅** (`b8a9396`) · **M5 ✅**
 > (`96e3ea3`) · **M5.1 ✅** · **M5.2 ✅** — spec LOCKED at revision 4 (`60520d9`), all six slices integrated
 > (final source `8103c47`, acceptance record `53fd94f`); whole-milestone assessment complete
@@ -544,6 +562,7 @@ tinyvault/
 > S1 provenance/profile contracts are complete at the implementation round3 cap with recorded evidence limits; D-BUDGET entry is resolved by user-approved AM11 (M6 plan §4.3.1); S2 SDK sizing is accepted; the approved review-helper repair is verified at final fix round3, with full default gate and three independent review channels PASS; S3 module profiles/recipes and exact sizing are complete after R2 with recorded P3 limits; checkpoint `db78a1c` is pushed after exact-commit full default gate PASS; D-CANCEL resolved (`2bcfbbd`); S4, S5 and S6 accepted at capped rounds with declared residuals; AM12, AM13 and F1 adopted and implemented; the literal clean-clone gate passed three times on `3072e0b`; pilot `cY3Deep4` READY and the N10 sequence `E9-A3-N10` QUALIFIED — **M6 ✅** (S6 accepted 2026-09-09; [milestone-close assessment](project-assessment-2026-09-09.md), [register](m6-review-findings.md)) · **M6.1 ✅** (`7ae23be`, receiptless-row canary authentication — the assessment's P1, closed the same day). M7 merged `4e86933`; runtime fill control merged `6812627`, live-qualified only in E8c’s evaluated fixture/configuration (`PFc7eGp2`). **M8 ✅**: capped implementation reviews complete with accepted residuals; merged `a40bbd65` includes the separately approved M6 finalization witness repair. Corrected candidate and merged default/Docker/stub gates passed, as did the literal candidate clone. [Close assessment and owner dispositions](project-assessment-2026-09-12-m8.md) complete; earlier gate reds remain in the M8 register. Private push authorized; no public release authorized. M4 and M5 carry deferred
 > audit items — see their Verify columns. Post-lock contract amendments (`'benign'` AttackClass,
 > `canaryCommitment`, per-scenario `leakRateCI95`) are recorded in the `PLAN.md` Decisions Log.
+> **M9 implementation:** approved D1–D9/N1–N8/S1–S4 and narrow gate amendment implemented; current default/Docker/stub/MCP gates pass and three implementation review rounds are complete (Entry65). All literal verdicts/limits and earlier reds preserved. Separately approved M5 marker-wait repair verified by full default gate and three scoped reviews (Entry70), with historical failure causes still unproven; V1, supported-OS qualification, literal clean-clone/integration gates and audit remain pending. No provider/commit/release authorization. [Locked contract](m9-onepassword-packet.md), [findings](m9-review-findings.md).
 
 **Risk tier** drives the Codex ladder (handoff-pattern §4): 🔴 = full ladder, Codex implements; 🟡 = plan + post-impl Codex pass; 🟢 = Claude-only. Re-ordered so nothing depends on a later milestone.
 
@@ -558,7 +577,7 @@ tinyvault/
 | M6 | **Reference agent + naive baseline**; baseline leaks on camera | `agents/reference.ts`, `agents/naiveBaseline.ts` | `make baseline` shows a leak; reference passes BOTH 0-leak AND full completion on #1–#2. *Sequencing note (alignment-review #4): the baseline needs a hostile fixture to leak against, so M6 directly follows M5 (first fixtures) — the earliest slot that produces the on-camera leak; record it immediately, before M7–M10.* | 🟡 |
 | M7 ✅ (`b7889d3`, merged `4e86933` 2026-09-10; **runtime fill control** merged `6812627` 2026-09-11 — one bounded injection per handle per authorization domain, `handle-exhausted` added to the locked `FillResult` union above per the §2 amendment rule; **live-qualified 2026-09-12**: E8c cohort `PFc7eGp2`, reference 0/50 leaks, 50/50 completed) | Hostile fixtures #3–#4 (`secret-echo`, `fake-reauth`) → **≥3 shipped (spec §6)** | `testbed/fixtures/{secret-echo,fake-reauth}` | scored (five scenarios in `make eval`, four hostile cells); per-sink exact-event tests with executed killing mutants; exposure oracle (E5); console-budget diagnostic (E7); `SKILL.md` ten rows strictly < 1,024 (E8a); Docker 240 s per-export deadline (capacity accommodation); **reference passes both clauses on the stub eval; live cohort E8b executed 2026-09-11 — unqualified: reference 0/10 leaks in four cells, 10/10 in `fake-reauth-prompt` (same-origin second fill after login), not accepted; **E8c 2026-09-12 (`PFc7eGp2`): qualified — reference 0/10 leaks and 10/10 completion in all five cells, `handle-exhausted` recorded in 8/10 `fake-reauth-prompt` runs, acceptance reading met**; register `docs/m7-review-findings.md` | ✅ |
 | M8 | MCP stdio adapter (mutex-guarded) | `adapters/mcp/server.ts` | MCP client lists tools; fill via MCP goes through the same gate + choke-point; no secret in any MCP result; **[pre-impl review #1] MCP results traverse the same capture/tripwire seam as direct calls** — proved by test, not assumed by construction | ✅ **complete 2026-09-12**, locked rev 5.2 under C1–C5; merged `a40bbd65` with approved M6 test repair; candidate/merged full gates, literal clone and close assessment complete. Capped residuals and preserved reds: `docs/m8-review-findings.md` |
-| M9 | 1Password backend | `backends/onepassword.ts` | `listItems` metadata-only; `canonicalOrigin` from item URL; resolve via service-account token; probe distinguishes states | 🔴 |
+| M9 | 1Password CLI backend (D1–D9 approved; offline candidate verified, acceptance pending) | `backends/onepassword.ts` | Closed metadata LIST/schema, frozen injective identity/policy, fixed-ID service-account detail, limited §7 probe taxonomy,4s/4-in-flight/64-spawn bounds; exact D8 archive limitation; V0 observed, offline gates pass; scoped M5 wait repair verified; V1 and clean-clone/integration/audit gates pending | 🔴 |
 | M10 | README leak-rate table (+CIs) + WebMCP positioning line + **`make eval` reproduce command in README** (spec §6) + **`SKILL.md` launch packaging/full library guidance** (minimal evaluated seven-tool instruction source introduced at M6 S3 under AM06; library three-tool flow, refusal semantics and never-ask-for-the-password norm) + 60s demo | `README.md`, `SKILL.md`, demo recording | table shows naive vs vaulted with CIs; typed-sink checker confirms zero unauthorized-sink hits on vaulted; README's reproduce command reproduces the table from a clean checkout; **the reference agent's testbed system prompt is derived from `SKILL.md`**, so the scorecard measures the published usage instructions, not a bespoke prompt; SKILL.md contains no example secrets or credential-echo patterns; rerun sizing/evaluation after any instruction change | 🟢 |
 
 Spec §9 first-week target maps to **M0–M6** (spine + core + first two fixtures + the leaking baseline on camera). M7–M10 complete the v0.1 launch checklist (spec §6), which requires **≥3 fixtures** and the MCP adapter — so v0.1 is **not** complete before M8–M9 (correcting the round-1 M6-M8 claim).

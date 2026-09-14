@@ -43,6 +43,16 @@ Runtime quirks of the harness's substrate: Chromium/Playwright/CDP behaviour, Do
   body would make the count 0. The current evidence does not authorize changing that assertion. Treat a lone red
   here the way the probe-P entry above requires: not as a code defect **without the other channel's numbers**, and
   not as a load report either. (2026-09-04)
+- **2026-09-13 M5 marker-wait clarification (M9 register Entries67–69):** the separately approved
+  two-run diagnosis reproduced a candidate timeout despite one valid `not-attached` marker on the target
+  route; base produced `target-detached` and passed. The old wait recognized only the latter, while the
+  existing classifier/SCHEMA declare both. A poll timeout proves absence of a matching event, not absence
+  of every declared marker. This does **not** explain the historical 2026-09-04 or full-test03 timeout,
+  whose original traces remain unavailable, or establish M9 causation or universal race liveness.
+  The user-approved test-only repair accepts either exact declared marker on the exact slow-worker route;
+  it preserves `bodiesUnobserved(events) === 1`, zero completed endpoint receipts and the10s deadline.
+  It no longer requires this browser case to observe the child-session-specific `target-detached` path.
+  The prohibition on a body-or-marker substitution and the historical cause-unknown status above remain.
 - **`ps | grep chrom` misses Chromium (`Chromium`/`Chrome for Testing`, capital C) and a 20 s sampling interval misses
   every short-lived Docker CLI call.** Half an hour of slice-3 hang diagnosis was spent on the false conclusion "no
   Chromium, no exec processes" before the instrumented-copy technique found the real stall in ~1 minute. When a test

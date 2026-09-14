@@ -97,13 +97,34 @@ describe('positive secret-retention structure', () => {
     expect(retentionViolations(source, 'src/browser/session.ts')).toEqual([]);
   });
 
+  it('M9 retention gate file exists', async () => {
+    expect((await readFile('src/backends/onepassword.structure.test.ts', 'utf8')).trim()).not.toBe('');
+  });
+
   it('keeps every secret-opening primitive reference inside the fixed file set', async () => {
     const files = await sourceFiles('src');
     const outside = files.filter((file) => !RETENTION_SOURCE_FILES.includes(file as never));
     const references: string[] = [];
     for (const file of outside) {
       const source = await readFile(file, 'utf8');
-      if (/new\s+Secret\s*\(|\.consume\s*\(|\.expose\s*\(|\b(?:primitives|defaultSealingPrimitives)\.open\s*\(|crypto_aead_\w*decrypt/u
+      if (file === 'src/backends/onepassword.ts') {
+        const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+        const constructors: ts.NewExpression[] = [];
+        const imports: ts.ImportDeclaration[] = [];
+        const visit = (node: ts.Node): void => {
+          if (ts.isNewExpression(node) && node.expression.getText() === 'Secret') constructors.push(node);
+          if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
+            && node.moduleSpecifier.text === '../core/redaction') imports.push(node);
+          node.forEachChild(visit);
+        };
+        visit(parsed);
+        expect(constructors, 'M9 sole direct Secret constructor').toHaveLength(1);
+        expect(imports.map(node => node.getText()), 'M9 direct Secret import')
+          .toEqual(["import { Secret } from '../core/redaction';"]);
+        expect(source.match(/new\s+Secret\s*\(/gu), 'M9 textual constructor inventory').toHaveLength(1);
+        if (/\.consume\s*\(|\.expose\s*\(|\b(?:primitives|defaultSealingPrimitives)\.open\s*\(|crypto_aead_\w*decrypt/u
+          .test(source)) references.push(file);
+      } else if (/new\s+Secret\s*\(|\.consume\s*\(|\.expose\s*\(|\b(?:primitives|defaultSealingPrimitives)\.open\s*\(|crypto_aead_\w*decrypt/u
         .test(source)) references.push(file);
     }
     expect(references).toEqual([]);

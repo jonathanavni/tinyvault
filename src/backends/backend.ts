@@ -46,8 +46,15 @@ export interface CredentialBackend {
   listItems(): Promise<readonly ItemMeta[]>;
   /** Returns trusted-side policy metadata, deeply frozen. */
   resolvePolicy(handle: Handle): Promise<CredentialPolicy>;
-  /** Resolves only the policy the caller already authorized. */
+  /** Resolves only the policy the caller already authorized.
+   * Local-file checks current policy before decryption. Approved M9/D2 permits 1Password's
+   * trusted CLI to decrypt a full item after admission, then checks identity/current policy
+   * before Secret construction. Neither that fetch nor two separate reads prove an atomic
+   * vendor snapshot. No credential plaintext is cached between calls.
+   */
   resolveSecret(handle: Handle, authorizedPolicy: CredentialPolicy): Promise<Secret>;
-  /** Drops backend auth-session material only; backends must not retain a secret. */
+  /** Drops owned auth/lifecycle state; backends must not retain credential plaintext.
+   * 1Password additionally cancels its bounded children and removes its owned runtime tree.
+   */
   dispose(): Promise<void>;
 }

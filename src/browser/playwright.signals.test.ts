@@ -25,7 +25,7 @@ describe('M8-C5 browser signal ownership', () => {
 // the core test module (which would register its entire suite a second time). Source is
 // trusted repository code, never model/page data; no guard implementation is copied.
 it('M8-C5 permits only the literal signal option at the MCP callsite', () => {
-  const file = 'src/core/fillService.structure.test.ts';
+  const file = 'src/core/fillService.authority.structure.test.ts';
   const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
   const names = ['unwrap', 'staticKey', 'propertyText', 'inspectHostShape'];
   const functions = source.statements.filter(ts.isFunctionDeclaration).filter(node => names.includes(node.name?.text ?? ''));

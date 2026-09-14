@@ -17,6 +17,7 @@ import {
 } from '../src/supervisor/host';
 import {
   BODY_UNAVAILABLE_MARKER,
+  BODY_UNAVAILABLE_NOT_ATTACHED_MARKER,
   bodiesUnobserved,
   isUnavailableBodyMarker,
 } from './checkers/bodiesUnobserved';
@@ -179,11 +180,26 @@ describe.sequential('M5 harness coverage gate', () => {
     await setup.host.closeAll();
   });
 
-  it('records a detach marker and one unobserved body for terminate-before-delivery', async () => {
+  it.each([BODY_UNAVAILABLE_MARKER, BODY_UNAVAILABLE_NOT_ATTACHED_MARKER])(
+    'slow-worker wait accepts the declared missing-body reason: %s', (bytes) => {
+      expect(isSlowWorkerMissingBody({ t: 0, channel: 'network-body', direction: 'outbound',
+        initiator: 'harness-marker', route: '/terminate-worker-slow-receive', bytes })).toBe(true);
+    },
+  );
+
+  it.each([
+    { route: '/other-receive' }, { channel: 'url' }, { initiator: 'browser' },
+    { bytes: CANARY }, { bytes: `${BODY_UNAVAILABLE_MARKER} extra` },
+  ] as Partial<CapturedEvent>[])('slow-worker wait rejects an unrelated or non-marker event: %j', (overrides) => {
+    expect(isSlowWorkerMissingBody({ t: 0, channel: 'network-body', direction: 'outbound',
+      initiator: 'harness-marker', route: '/terminate-worker-slow-receive',
+      bytes: BODY_UNAVAILABLE_MARKER, ...overrides })).toBe(false);
+  });
+
+  it('records one missing-body marker for terminate-before-delivery', async () => {
     const before = lab.secondaryRequests().length;
     const setup = await captureRoute('/terminate-worker-slow');
-    const events = await collectUntil(setup.host, (all) => all.some((event) =>
-      event.initiator === 'harness-marker' && event.bytes === BODY_UNAVAILABLE_MARKER));
+    const events = await collectUntil(setup.host, (all) => all.some(isSlowWorkerMissingBody));
     expect(bodiesUnobserved(events)).toBe(1);
     expect(lab.secondaryRequests().slice(before).filter((request) =>
       request.path === '/terminate-worker-slow-receive')).toEqual([]);
@@ -380,6 +396,10 @@ async function assertChannel(channel: Channel): Promise<void> {
     channel, status: 'instrumented', producers: coverage.producers,
     observedAt: expect.any(String),
   }]);
+}
+
+function isSlowWorkerMissingBody(event: CapturedEvent): boolean {
+  return event.route === '/terminate-worker-slow-receive' && isUnavailableBodyMarker(event);
 }
 
 async function captureRoute(route: string, keepEvidence = true) {

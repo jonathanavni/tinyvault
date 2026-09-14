@@ -29,21 +29,25 @@ See `PROJECT-SPEC.md` §4 (the mechanism/invariants) and §11 (model/safeguards)
   so events it never observed have integrity but not independent authenticity. The honest answer to "did you
   fake this number" is "re-run it", which is why the reproduce command is a launch requirement.
 - **Never cache the *secret*; backend *auth sessions* may be cached.** Distinct things — conflating them makes
-  the invariant either false or forces pointless re-auth. Rotation/revocation are then honored by construction.
+  the invariant either false or forces pointless re-auth. M9 keeps only a token fingerprint and bounded
+  lifecycle/metadata state: rotation at unchanged identity is fetched after admission; real-provider
+  revocation/deletion timing still requires V1 evidence, and archiving is not revocation under D8.
 - **Payments are a non-goal** (triaged 2026-08-31): rail owners solve that class upstream (Stripe Link's
   one-time cards). Sign-in has no rail owner — that is TinyVault's class.
 
 
 *(Added 2026-09-01, after M3 — enforced in code and mutation-tested.)*
 
-- **A secret is released only for the policy the fill gate authorized.** `resolveSecret(handle,
-  authorizedPolicy)` compares the record's *current* policy to the authorized one before decrypting and seals
-  each secret with additional data bound to `[handle, origin, recipe]`. The compare closes the policy/secret
-  TOCTOU between the gate's two backend calls; the AD stops re-pointing by metadata edit. Computing the AD from
-  the caller's argument is *not* equivalent (it never authenticates the cleartext beside the ciphertext).
-- **Backends hold nothing between calls — not even the key.** Local-file reads the 32-byte key per call and
-  zeroes it in a nested `finally`. `dispose()` exists for session-token backends (M9) and is a documented
-  no-op where there is nothing to drop.
+- **A secret is released only for the policy the fill gate authorized (M3; M9/D2 amendment2026-09-13).**
+  Local-file compares current policy before decrypting and binds ciphertext to handle/origin/recipe.
+  1Password, under approved D2, retrieves a full item only after fill admission and validates returned
+  identity/current policy before Secret construction; no atomic vendor snapshot guarantee is established.
+  Local-file's additional-data guarantee and rejection of caller-derived authentication data remain.
+- **No credential plaintext is cached between calls (M3; M9 retention clarification2026-09-13).**
+  Local-file reads/zeroes its key per call. 1Password keeps only enumerated frozen operator/identity/policy
+  metadata, token fingerprint and bounded lifecycle state; token bytes/strings, raw provider payloads
+  and Secret values are not retained. Disposal cancels owned work and removes only owned runtime state.
+  D8 explicitly permits archive-after-discovery resolution under the original eligibility/budget.
 - **The dependency gate follows runtime modules with Node's own resolvers and is two-tier:** data-plane roots
   tolerate nothing; scripts-rooted walks tolerate unsupported/unscanned/unresolved loads *inside
   `node_modules`* only, keyed on the entry root; production may not import `scripts/`, directly or

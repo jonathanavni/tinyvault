@@ -10,6 +10,9 @@ import ts from 'typescript';
 
 // Exact repo-relative path -> exact capability specifiers, never a directory exemption.
 export const DOCKER_CAPABILITY_ALLOWLIST = Object.freeze({
+  'src/backends/onepasswordProcess.ts': ['node:child_process'],
+  'src/backends/onepassword.testSupport.ts': ['node:http'],
+  'src/adapters/mcp/server.onepassword.stdio.test.ts': ['node:child_process'],
   'src/adapters/mcp/server.stdio.test.ts': ['node:child_process'],
   'testbed/evalEntry.test.ts': ['node:child_process'],
   'testbed/checkers/offline.retention.test.ts': ['node:child_process'],
@@ -78,6 +81,10 @@ function specifier(node) {
 // execFileSync defaults to shell:false; spawn must spell it explicitly. Option keys are
 // closed to prevent inherited shell values, spreads, accessors and later overrides.
 export const reviewProfiles = {
+  'src/adapters/mcp/server.onepassword.stdio.test.ts': {
+    spawn: { executable: 'node', options: ['env', 'stdio', 'shell'] },
+    execFileSync: { executable: '/bin/ps', options: ['encoding', 'shell'], argv: ['-axo', 'pid=,ppid=,comm='] },
+  },
   'src/adapters/mcp/server.stdio.test.ts': {
     spawn: { executable: 'node', options: ['env', 'stdio', 'shell'] },
     execFileSync: { executable: '/bin/ps', options: ['encoding', 'shell'], argv: ['-axo', 'pid=,ppid=,comm='] },
