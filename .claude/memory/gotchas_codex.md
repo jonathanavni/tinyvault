@@ -39,6 +39,9 @@ Codex dispatch, sandbox limits, job monitoring, model routing, the safety classi
 - **Codex-sandbox `make test` on this repo reliably shows ~70 failures** (loopback `listen EPERM`, Chromium mach-port denial,
   occasionally a container-startup readiness `vi.waitFor`) — all host-only; the owner rerun is the gate. (2026-09-08)
 
+- **Codex `task --write` CAN write under `/private/tmp` and run the pinned Node there** (probed 2026-09-15 with a Sol task before dispatching Astra: mkdir 0700, file write, `node -e` write — all exit 0). Read-only `task` runs cannot: a shell heredoc that needs a temp file is denied and Git launcher cache writes fail; tell read-only reviewers to use `python3 -c` for parsing. External candidate roots under `/private/tmp` are therefore fine for `--write` implementation slices; cheap Sol probe first when in doubt. (2026-09-15)
+- **The Codex companion's `result --json` puts the final message in `storedJob.result.rawOutput`**, not in `job.summary` (which is only the first line). Save `rawOutput` to a report file and copy the job log from `~/.claude/plugins/data/codex-openai-codex/state/<ws>/jobs/<id>.log` into the evidence directory before the plugin rotates it. (2026-09-15)
+
 ## Job monitoring — silence is the failure mode
 
 - **A Codex job marked `failed` can mean a model-capacity error AFTER the work is done.** Inspect the tree
@@ -184,6 +187,9 @@ Codex dispatch, sandbox limits, job monitoring, model routing, the safety classi
   `status --json` nests the state under `.job.status` (the top level has none — an empty parse looks like "finished"), and
   `adversarial-review --background` still blocks the calling shell until the review ends (~10 min) — run it as a background
   Bash call. (2026-09-10)
+
+- **The review helper invalidates the whole run on any non-allowed tool call — even one denied `ls` through Bash.** `scripts/claude-review.mjs` exits 1 ("Unexpected tool call: Bash") after the reviewer has finished, and a PASS-labelled report inside `events.jsonl` is then NOT a verdict. Opus 5 reached for Bash once in a 38-turn security review despite the prompt's tool list. Put an explicit line in every packet: "you have ONLY Read, Glob and Grep; use Glob for listings; a single attempted call to any other tool invalidates this review." With that line, three later reviews made zero non-allowed calls. Preserve the invalid run's text as an extract and re-dispatch once as a tooling re-run (not verdict shopping). (2026-09-15)
+- **Verify each Opus review's init event as soon as it starts** (`model claude-opus-5`, tools exactly Glob/Grep/Read, `dontAsk`, no MCP) and count non-allowed tool calls mid-run from `events.jsonl`; that catches a doomed run ~15 minutes and ~$4 early. (2026-09-15)
 
 ## Implementation-slice lessons from the runtime fill-control ladder (2026-09-11)
 

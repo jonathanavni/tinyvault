@@ -292,7 +292,7 @@ A CONTROL Tfailure blocks attribution and stops; do not substitute/retry it or w
 Two additional least-privilege negative controls, after P3 and before Q/F, use a separately reviewed
 trusted observer launcher with the same binary/token isolation and bounded process runner: one
 LIST against DENIED and one attempted title-only edit of C in GRANTED
-(`item edit <C-ID> --vault <GRANTED-ID> title=V1-DENY-CONTROL`). Both must refuse. The edit targets
+(`item edit <C-ID> --vault <GRANTED-ID> --title V1-DENY-CONTROL`). Both must refuse. The edit targets
 only the disposable control; a success stops immediately, is retained as least-privilege failure and
 operator deletes it with the already-budgeted vault cleanup; no unlisted restoration command. Exactly2additional authenticated CLI reservations, total109including
 negative controls. These operations are outside the production adapter command vocabulary and must
@@ -330,6 +330,12 @@ grants/token and other records stay intact; for REVOKE Tstays active, same ID/or
 no token-file replacement/deletion. Q establishes target-specific successful detail/fill compatibility before destructive work.
 The Cpositive in each removal domain demonstrates an operational fill path; its target handle
 is separately checked present, correct policy, never attempted and unconsumed.
+The10prepared domains (MOVE1, DELETE3, REVOKE6) each make one explicitly counted cached
+resolvePolicy call for that unused target before acknowledgement. This is a cached backend
+policy read after discovery, not a fill attempt; it does not consume the host handle. These
+add10policyFor method observations and0CLI reservations; no extra secret/probe/discovery. The completed foundation
+ledger has a narrower prepare schema; the full driver uses a separately reviewed schema that
+records these calls, without changing the frozen foundation or hiding method activity.
 The fixture uses a fresh unlocked password control, unchanged document/origin and valid session.
 Before each target attempt validate these conditions; observer records the actual matching DETAIL spawn, close observed, signal=null, exit code in a fixed class
 (zero/nonzero/absent), preserved capacity, no cancel/deadline/poison/overflow/cleanup fault,

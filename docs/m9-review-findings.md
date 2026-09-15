@@ -3296,3 +3296,521 @@ separately gated. M9 remains incomplete; no release or provider approval is infe
 
 **Deviations From Handoff:** none from the user's newly authorized checkpoint scope. The two Git
 commits preserve the implementation gate identity and its subsequent documentation-only record.
+
+
+## Entry 75 — 2026-09-14 offline V1 foundation checkpoint and scoped review closure
+
+User “let's continue” after the approved Entry74 push authorizes the scoped offline V1 readiness
+foundation, fake-only verification and independent reviews. Same Codex owner and checkout,
+main/HEAD39a554d26d63f561464a62126852f1c7cd839a61. Entry74 push completed at that SHA; receipt remains
+`/private/tmp/tinyvault-m9-checkpoint-push-20260914/result.json`. No new commit/push, private setup,
+provider operation, installation or token permission is inferred. M9 acceptance remains pending.
+
+**Scope:** reusable external observer primitives, not the full live seventeen-domain executable.
+All executable work lives under `/private/tmp/tinyvault-m9-v1-readiness-20260914/`: literal immutable
+17-domain/17-cold-list/36-fill/109-CLI-reservation ledger, closed reports, actual builtin-ESM spawn tap,
+removal row scheduler and paired-control classifier, minted fake-fixture guard and production-path
+host/MCP witnesses. Two negative rows remain blocked; providerLaunch throws. No repository runtime,
+test, gate, locked contract or approval-card bytes changed. Shared edits are only PLAN Current State
+and this appended entry. README/docs index/phase-plan were checked; their V1 acceptance-pending
+statements remain accurate, with the complete executable/readiness release still a prerequisite.
+
+**Final evidence:** 60/60 targeted tests (tap8/core45/host3/faults3/MCP1), all11copied-source mutants
+killed at the exact selected test and intended TAP detector, all11restored positive witnesses pass.
+Each gate pins source/test/runner and all three generated bundles before/after. Actual host0/15/30s
+rows,2850ms fake CLI delays and unchanged3s production cancellation passed with only94.08–98.96ms
+minimum-method margin and3257.89–3286.93ms row margin. The12s row abort joins the stalled production
+CDP callback at13255.93ms, no later row; a callback ignoring abort/cleanup can still block return.
+No provider-latency or bounded-full-driver guarantee. Actual ignored-TERM/KILL, cleanup-failure,
+overflow, DELETED/nonzero target signatures, positive control and built-MCP/EOF proofs are retained.
+
+Final26-file external digest `194a19fdad3a389e4b95d2fb19c32c787b77e4c468484ecc77d00436b8e48e2a`;
+`evidence/review-candidate-r3.json`, `verification-r3.json`, native gate/mutation logs, build manifests
+and `owner-preservation-r3.json` bind the exact code/evidence. Both build manifests are frozen inputs.
+Runtime imports still come from the clean7c400ab clone; all475tracked bytes unchanged. Runtime bridge
+`518cb6daeed8b8df465d87e010c88fe44130c941dd8e8de4cc329b9ec1bee574`; separate test fixture bridge
+`70d1983ec1028415f46cc4c61c207b91c063f19ef7478dacab57ba128e9e5e7c`; literal make-mcp output
+`fbf0101772bf31d389767afba1173936d34debe864295ceb80536db4f295d4d7`. No reinstall or full default rerun.
+
+**Review ladder:** independent plan NEEDS-ATTENTION was dispositioned before implementation. New
+foundation R1: Claude QA/security and fresh adversarial NEEDS-ATTENTION. R2: Claude QA/security PASS,
+adversarial NEEDS-ATTENTION. Owner independently reproduced a hidden cleanup-field raw export;
+security had categorized its truthy-nonboolean form P3, but owner accepted the demonstrated output
+leak as P2. R3 required enumerable data fields and explicit boolean validation with both cleanup
+paths tested and two exact mutants. R3 Claude QA PASS (session17366311-0523-419b-a38a-cd84d3f7ddb7), security PASS
+(session06acb7a5-0e08-49a7-ad67-b95f5657b001), fresh same-family adversarial PASS. Three-round foundation cap is reached;
+no M9/M8/M5 review restart. R1's DELETED mutant was killed, but its named receipt-completeness witness
+had passed; R2/R3 correct attribution to the actual DELETED test. All old logs/verdicts, sandbox EPERM,
+initial TMPDIR rejection and earlier failing test evidence remain unchanged and separately identified.
+
+**Limits and next handoff:** complete live driver/exact launch release still absent. Public-source
+research found no documented stable CLI2.39.0 permission-denial format; generic nonzero/403/substring
+or empty-list is inconclusive. Official item-edit docs use `--title`; the unchanged card's `title=...`
+is field assignment. Prepare a scoped card disposition and defensible signal contract (or separately
+approved bounded calibration proposal) before any provider release/private setup. No new token now.
+`next-checkpoint.md` and final `report.md` preserve concrete next actions. Keep17/109caps, no retry/
+refund, removal/production bounds, all inherited D8/D9/R20/M8/cohort limits. Caller-derived preconditions
+and unused constructed diagnostic flags are distinguished; cleanup samples real fake-process groups/
+directories. Tap flowing-mode/same-tick listener dependence, shared path pin, timing, TOCTOU and
+trusted-process/Proxy boundaries, unobserved poison and incomplete individual-guard mutant coverage
+remain disclosed. MCP counts are not live backend traces. Scoped offline foundation evidence supplies
+no V1, natural expiry, Linux, integration or audit acceptance. Preserve external artifacts.
+
+**Not run:** real provider/CLI/private V0/V1 files, new token, installation, paid cohorts, full default
+suite (external-only changes), integration Docker/stub, expiry/Linux qualification, whole-codebase
+audit, commit/stage/merge/push/release or cleanup of old artifacts. Prior clean-clone acceptance remains
+attached to7c400ab;39a554d is the already-pushed documentation child.
+
+**Deviations From Handoff:** none from the locked offline foundation scope. This is a bounded reusable
+foundation checkpoint, explicitly not the full V1 execution package. R2's confirmed new defect
+justified R3 repair/reverification; old passing tests were not relabeled as covering that input.
+
+## Entry 76 — 2026-09-14 full offline V1 driver checkpoint
+
+User “let's continue” advances Entry75's external offline preparation. Codex retains owner
+`2026-09-14-m9-approval-prep`, sole checkout/worktree on `main`, HEAD
+`39a554d26d63f561464a62126852f1c7cd839a61`. The earlier implementation commit, literal clean clone
+and documentation push are complete under Entries73–74. This continuation authorizes no new
+commit/stage/push/merge, installation, private setup, real provider operation or real token.
+
+**Scope and card disposition:** `/private/tmp/tinyvault-m9-v1-next-20260914/` contains the new
+full offline driver, fixtures, actual-host/MCP bindings, report validator, pins, tests and copied-source
+mutation runner. Entry75's26-file foundation remains byte-identical; its completed review cap is not
+reopened. Public runtime imports still use the clean `7c400ab` clone and existing bundles/browser.
+D10 records ten cached backend-policy reads during preparation (one MOVE, three DELETE, six REVOKE):
+zero CLI reservations and no host fill consumption. D11 corrects title-only argv to documented `--title`.
+Neither changes V1's17 domains/109 CLI reservations/25 logical admin actions or establishes native
+CLI2.39.0 permission semantics. The approval card remains proposed. Only the card, PLAN and this
+append-only register are dirty in the repository; no production source/test/gate change.
+
+**Verified final candidate:**24 external files, digest
+`efb425221b0c7c08019b462b418fa47972ce8b4544a800017c6a00622fe8ea4f`.
+`evidence/review-candidate-r3.json` and `evidence/verification-r3.json` bind all final source, test,
+runner, receipt and report inputs.65/65 focused tests pass, zero skipped/cancelled: driver20, pins2,
+report15, failure6, fixtures10, host6, MCP4, timing2. The actual17-domain fake-only CLI rehearsal
+passed in64.530108s (`runs/run-EbrVgz/report.json`):104 observed non-permission rows, two blocked,
+107 charged of109 planned reservations,73 observed host-tap CLI calls, ten preparePolicyCalls,
+seven canonical pairs,25 synthetic admin events and confirmed cleanup/pins/fault absence. MCP
+internal CLI remains explicitly not dynamically observed; method totals are
+list19/policyFor52/getSecret35/setupReasonFor5/probe6/fill42/setup2/dispose17. All31copied-source
+mutants were killed at the exact named TAP assertion/detector; all31byte/hash restorations and
+restored positives passed (`mutations-yzgr7c5x/`). Source/bundle inputs remain unchanged.
+
+**Review history and disposition:** independent plan NEEDS-ATTENTION was dispositioned before
+implementation. Driver R1: Astra/security NEEDS-ATTENTION; QA timeout124 after900s, no verdict.
+R2: all three NEEDS-ATTENTION. R3: fresh Astra adversarial PASS, Claude Opus5 QA PASS
+(session40602f2c-d265-4d64-9ce5-2a47978e311a) and security PASS
+(session6b562711-4d9d-4a99-94a0-efbd1b6f3585) under the fixed final-round P1 criteria.
+Claude repository digest626909fdef05166dcc09c3a569b80993bd70a384887c6b1621b69df2c2d88b6d;
+both helpers completed exit0 with stable candidate/model checks. Claude read source/supplied evidence;
+Astra independently checked24 candidate hashes, nine receipts/logs with19 gate inputs each, and31
+restored trees. No reviewer reran candidate code. `final-dispositions.md` records owner acceptance
+of the narrow successful synthetic-path checkpoint and retained non-P1 limits. The three-round cap
+is closed, with no new executable change after review.
+
+**Repair evidence:** owner reproduced both R2 malformed-input defects before repair: a nested
+toJSON accessor was invoked/accepted, and an absent diagnostic exit admitted a control before final
+rejection. Final reproduction rejects without invoking the accessor or control. These demonstrate
+in-memory validator boundaries, not a normal CLI/provider exploit. Final report guards type-check
+primitive positions before serialization, bind pairs to canonical rows and recompute classifications.
+The actual driver checks acknowledgement/in-flight/deadline state before control or destructive
+admission. Missing/duplicate/late ack guards have direct tests and individual omission mutants;
+in-flight has an actual driver witness and mutant. Non-timeout pair cleanup is inconclusive, not a
+timeout. Failure tests preserve charged reservations/missing rows, safe startup stages and aggregate
+fallback behavior. A test-only latched host fault injects a synthetic secret into an unmasked node
+of an actual snapshot: the producer detector rejects it and its omission mutant is killed. MCP's
+shared scanner has direct reaching-input/mutation proof; actual child-output leak injection is not
+claimed. Normal CLI execution has no test-fault controls.
+
+**Preserved reds and evidence limits:** all R1/R2 reports and the R1 QA900s timeout124/no verdict
+remain literal. Earlier host sandbox, MCP envelope/marker, manifest-path, fixture-count and full-run
+failures remain in `verification-report.md`. Full-02's native cause remains unrecorded; an early-wake
+hypothesis is not established by later passes. R3's wrong host filename failed before execution;
+corrected host-domain gate passed. R2 QA reported incidental exposure to one grep line from an R1
+security report; retain that independence limitation. R3 channels use explicit scoped paths. R2's
+mutation environment used operator HOME; final mutations select the gate's isolated HOME/TMPDIR
+and existing browser directory. This is not cryptographic attestation of every browser/OS input.
+
+The actual near-bound row took8718.984625ms; timeout cleanup joined at13283.844083ms. Twelve seconds
+bounds observation/admission, not return; cleanup-ignoring work can remain unresolved. Local row
+setup and synthetic delays are not provider-latency qualification. Same-process observer/Proxy,
+source TOCTOU and flowing-mode tap limits remain. Zero-receipt group/directory booleans mean no
+contradicting receipt, not an independent filesystem/process sample; dispose rows have separate facts.
+Failed preparation may remain reserved/invalid-observation. Unexpected internal driver/report CLI
+failures can only report admission UNKNOWN and rows null. Normal driver stops retain rows/charges;
+aggregate fallback can withhold all pairs/admin events. QA Medium/security Low specifically retain
+that run.mjs drops the in-memory terminalFailure discriminator: persisted empty admin/pair lists on
+an INCOMPLETE artifact must never be read as zero activity. Failed-run administrative provenance is
+not qualified here; a live package needs its own qualified failure-accounting contract. The absent-exit
+guard is scoped to removal targets; forged same-process non-pair receipts remain outside it. MCP scanner
+call-site deletion/real child-output injection and MCP overlap have no dynamic witness. Host scanning
+covers nine granted roles, not denied-role U. Mutation PATH is smaller than gate PATH; only the stated
+HOME/TMPDIR/browser settings match. Runner self-drift is not atomically attested. Exhaustive individual redundant-guard,
+runtime/bundle mismatch and unexpected-CLI-stage mutant coverage is not claimed. No missing activity
+is relabeled zero and no historical gate is relabeled fresh.
+
+**Next handoff:** `next-checkpoint.md` and `report.md` in the external package preserve the exact
+candidate, literal final verdicts, residuals and next preparation boundary. Public sources still do
+not establish a stable pinned permission-denial classifier. Generic nonzero/403/substring/empty-list
+signals remain inconclusive. `calibration-proposal.md` is a non-executable, unapproved possible
+experiment (13 CLI/10 admin, separate from V1): first prepare a reviewed privacy-safe observer,
+operator-only diagnostics/sanitized release contract, exact negative-edit launcher, resource caps,
+source/config/report inventory and failure proofs. No private setup or new token now. Provider,
+permission/full-card, natural expiry, Linux, integration and audit acceptance remain pending.
+README, docs index and phase-plan acceptance-pending statements were checked and remain accurate.
+
+**Not run:** real provider/native permission/negative edit, private V0/V1 files, new real token,
+installation, calibration execution, paid cohort, default/Docker/stub/integration gates, natural
+expiry/Linux, whole-codebase audit or commit/stage/merge/push. No old artifact cleanup. Prior literal
+clean-clone default acceptance remains attached to7c400ab, pushed documentation to39a554d.
+
+**Deviations From Handoff:** scoped D10/D11 card corrections and a new coordinator over immutable
+foundation primitives; explicitly bounded unexpected CLI accounting and aggregate-provenance limits
+above. MCP scanner rejection proof is direct to the shared guard. No foundation cap reset or provider
+acceptance expansion. Final driver review is round3/maximum3; preserve its literal outcomes and owner
+residual disposition rather than opening a fourth round.
+
+
+## Entry 77 — 2026-09-14 session wrapup and live-verification preparation handoff
+
+User asked to wrap up here and use a fresh session for the live verification package. Codex closes
+owner `2026-09-14-m9-approval-prep` and relinquishes continuity. No active workers, reviews or gates
+remain. Same sole checkout/worktree, main, HEAD39a554d26d63f561464a62126852f1c7cd839a61.
+No branch/worktree/commit/push/provider action. Entry76's outcomes and limits remain unchanged.
+
+Wrapup rechecked ownership and the exact prior checkpoint diff/files, reverified frozen inventories,
+preserved register/archive/index prefixes, and archived pre-wrapup Current State verbatim. Decisions
+Log unchanged. The sessions index adds only this handoff pointer. Outgoing evidence:
+`/private/tmp/tinyvault-m9-v1-next-20260914/wrapup-20260914/`; final-checkpoint.json binds the outgoing
+dirty diff/shared-file hashes, and next-session.md holds the ready-to-paste prompt. The parent
+final-checkpoint.json remains the historical Entry76 snapshot, not the post-wrapup docs inventory.
+
+**Fresh-session entry order:** tinyvault-start; Current State and this entry; Entry76 and the approval
+card; external report.md, final-dispositions.md, next-checkpoint.md, calibration-proposal.md and
+`evidence/review-candidate-r3.json`. Verify HEAD, sole worktree, five dirty paths, wrapup diff/prefix
+and immutable artifacts before writing. The successor may take continuity for agreed preparation
+after confirming this closed checkpoint; app/session entry alone grants no broader execution scope.
+
+**Next bounded package:** prepare and independently review the privacy-safe permission-signal observer
+contract and exact live-verification executable/config/report package. Current research establishes
+no stable pinned CLI2.39.0 permission-denial classifier. Prefer authoritative version-pinned evidence;
+otherwise assess the separate finite calibration proposal without executing it. Specify operator-only
+diagnostics, sanitized release, negative-edit launcher, process/resource caps, no retries/refunds,
+reliable failure accounting and actual-caller privacy/rejection proofs. Later execution approval must
+name a concrete reviewed attempt. Preparation grants no provider/private configuration access,
+installation, real token/account creation or calibration execution. Calibration13CLI/10admin and
+V1's109CLI/25admin are separate budgets. All old V0 tokens are operator-revoked; other cleanup remains
+unconfirmed and is not authority to inspect private files. No new token now.
+
+**Frozen evidence:** Entry75 foundation26-file digest
+194a19fdad3a389e4b95d2fb19c32c787b77e4c468484ecc77d00436b8e48e2a; Entry76 driver24-file digest
+efb425221b0c7c08019b462b418fa47972ce8b4544a800017c6a00622fe8ea4f; approved clone7c400ab. Their caps
+stay closed. Preserve all reports/reds, R1 QA timeout/no verdict, incidental R2 QA cross-review line
+exposure and Full-02's unrecorded cause. The persisted failed-run admin list may be withheld without
+a distinct marker: never infer zero activity or complete live failure provenance. All trusted-process,
+TOCTOU, scanner/guard coverage and cleanup limits remain in final-dispositions.md. No provider,
+full-card, expiry/Linux/integration/audit acceptance is supplied by this checkpoint.
+
+**Outgoing dirty files:** PLAN.md, PLAN-archive.md, docs/m9-review-findings.md,
+docs/m9-acceptance-approval.md, .claude/memory/sessions-archive.md. Original three dirty paths preserved;
+the two added paths are archival/index updates only. Leave all five uncommitted. Preserve temporary
+artifacts. README, docs index and phase-plan still correctly mark M9 acceptance pending.
+
+**Not run:** tests/mutants/reviews (documentation-only wrapup; prior evidence remains Entry76),
+provider/private V0/V1 access, tokens/install/calibration, default/Docker/stub/cohorts,
+expiry/Linux/integration/audit, staging/commit/merge/push or publication. **Deviations From Handoff:**
+none. This closes continuity and prepares a fresh-session entry point, not V1 execution release.
+
+
+## Entry 78 — 2026-09-14 Entry77 verification and permission-observer preparation
+
+User invokes tinyvault-start and Entry77: verify dirty checkout, prepare and independently review
+live verification package beginning with permission-signal observer; preparation only, no
+provider/private access, installation, real token, calibration execution, commit/push. Codex takes
+continuity after confirmed closed Entry77, same sole checkout/main/HEAD39a554d26d63f561464a62126852f1c7cd839a61.
+
+Entry verification matched the five dirty paths, complete outgoing diff SHAeaa31d634f2337ad1f3a19be91641b914fa83e46d27b10dabb5f423c5b28d896,
+wrapup shared-file/evidence hashes, driver24/foundation26manifest digests and all55pins; approved
+7c400ab clone clean. Actual values in external entry-observed-values.json, initial booleans in
+entry-verification.json. One initial script used digest instead of foundation files_digest and
+raised KeyError; corrected by reading the recorded field, without replacing any artifact. Incoming
+files copied exactly to external incoming/; no reset, clean, branch/worktree/index/object writes.
+
+Public primary research (fresh Sol) found no version-pinned CLI2.39.0 denial/error schema for
+inaccessible vault/read-only edit/revoked token. Sources document permission policy and argv,
+not a unique native classifier. Generic nonzero/403/substring/emptylist remain inconclusive.
+The new standalone Python calibration observer is external at
+/private/tmp/tinyvault-m9-permission-prep-20260914/; production/frozen packages untouched. Separate
+13CLI/10admin proposal, never funded by or expanding V1's109/25. No provider/permission/fullV1 PASS
+can be emitted. Raw diagnostic bytes remain operator-only; released report is a closed fixed schema.
+Human grammar transfer remains a separate reviewed disclosure/claim prerequisite.
+
+Independent Opus5 plan NEEDS-ATTENTION was dispositioned before implementation; sandbox dispatch
+first failed model identity with no verdict, preserved, and authorized host retry completed.
+Astra implementation worker supplied fixed launcher including title-edit, exact per-row controls,
+immutable private input checks, account-home root, binary/runtime/package pins, bounded private
+pipes/process-group cleanup and catchable parentSIGTERM. Journal reservations precede CLI/admin
+admission; one-shot latch survives failures, unknown outcomes never become zero or auto-retry.
+Admin statuses are operator attestations; cleanup is separate from observation completion.
+Row7 edit stdout is opaque; row8 exact title readback is required, per owner clarification.
+
+R1closed candidate inventoryc1754811463e22cbca0e333f74e6b5bed9cb301d5f6b84f565f5782985400908,
+sourcea2c8e0b18d9444606549fb07a3e48ed532ba6ca4d009b666649d6c6a5718f33c:40synthetic tests,
+19assertion-killed/restored mutants, actual fake main rehearsal. Fresh Opus5QA
+0f80000a-d504-47e0-9f80-b90d7ba8a32d/securityffec01a9-c623-41d5-b1e2-f8d975b0f3b8 and
+freshAstraadversarial all NEEDS-ATTENTION. Their exact67source/evidence files are preserved in
+candidate-r1/. Owner dispositions added authoritative report-file selection, acknowledgment framing,
+pre-admin binary preflight, closed isolated release, per-row binary replacement checks, cleanup
+reset/abort handling and journal-fsync ordering evidence. Owner reproduced late-fsync ambiguous
+report selection and stale cleanup using synthetic fixtures; historical failures remain.
+
+R2closed release-r2 inventoryd3367da72b9ff0cbb8cd1073fb13d790cf12497da2fd3ccae71166ac3a311b3e,
+source4892ca757eb500ec0c28bb1b66285080cca739331d60839d28111f2d204104d1:65owner testsPASS28.675s,
+29assertion-killed/restored mutants, isolated13CLI/10ack fake main rehearsal. Exact91source/evidence
+files retained in candidate-r2/. Fresh Opus5QA ecbcc8e2-f992-4203-95dd-77c8a4d80dd3 and freshAstra
+adversarial NEEDS-ATTENTION. The R2security helper failed with Unexpected tool call: Bash
+(public candidate.diff size check); exit1, no valid verdict, retained without credit. Completed
+Claude reviews bind repository digest8b7f04a9671e56df411b2f97fb4947031bea94bd25998e5c433c69081fdcca63;
+external manifests separately owner-verified. Auxiliary model usage remains in native summaries.
+
+Owner reproduced R2durable-reservation/caller-update interruption with actual catchableSIGTERM:
+selected COMPLETEaccounting understated CLI reservation; admin6 could receive duplicate journal
+reservation. An actual canonicalPTY also hid an unfinished trailing input byte during the quiet
+frame and admitted post-revoke rows. These are preparation defects, not observed provider behavior.
+Final bounded R3repair stages conservative intent before append (fsync still before process/prompt),
+uses saved/restored noncanonical terminal input without flushing, and clarifies600seconds includes
+all six setup actions/configauthoring. No timing/cap widening. P3PLANstaleness is corrected at this
+continuity update; misleading required/optional package constant is reconciled. Maximum3rounds
+for this new slice remains; prior Entry75/76caps are not restarted.
+
+Final R3release-r3 inventory3c95fc47fd27d0f4575cd777c09d51006e64b65ff083114ae329d48157029daa,
+sourceaabdc1613c26311ada82ac3465e2ca75cffc9bfd88dcad376cf2d419d7fdeccb:76owner testsPASS30.564s,
+76worker testsPASS30.673s,34assertion-killed/restored mutation cases, isolated13fakeCLI/10ack
+main rehearsal. review-evidence-r3.json binds107files. FinalfreshOpus5QA
+1633f8ba-4171-4a64-a6e6-8eb24da43c28/security5687c01a-6e28-45be-b313-0682eaf26ebd and freshAstra
+adversarial all NEEDS-ATTENTION. Both validClaudehelpers exit2 with the same repository digest
+above; actualOpus5identity checked, auxiliaryusage preserved. No activeworker/review remains.
+
+**BLOCKED at the final3round cap:** AstraP2terminalflow-control finding independently reproduced by
+owner on frozenR3actualmain/package/runtime gates with syntheticPTY/fakeCLI only. IXON consumed
+VSTART(Ctrl-Q,0x11) sent50msafterCONFIRM6newline inside250msquietframe; main returned0 with
+OBSERVATIONS_COMPLETE REPORT_JSON and13calls/admin6confirmed. This violates the promised
+no-trailing-input framing. It is not provider behavior or a demonstratedcredentialleak. QAP2also
+retains missingoperatorwarning that echo/editing aredisabled and backspaceis literal. No fourth
+patch/reviewround, sourcefix, implicitclaimnarrowing or executionapproval. Follow§5: redesign the
+input primitive under an explicit new bounded scope. P3schema/producerbreadth, validatedprojection,
+nonblockingprompt EAGAIN, same-userpackageFIFO, same-directorydiagnostics wording and bounded
+cleanup afterSIGTERM are dispositioned in externalfinal-dispositions.md, not claimedfixed. All
+reviewer verdicts/limits remain literal; confidentframingstatements in otherchannels do not override
+the reachingAstra/owner counterexample.
+
+DarwinPTYrestoration exposed only kernelPENDIN difference after exactsavedattributes submitted;
+owner independently observed it. Narrowimplementationdisposition permits onlythatbit difference in
+restorationcomparison, allotherfields/controlchars exact, oneTCSANOW/no retry/poll/read/flush. The
+nativeintermediatefailure and laterwitnesses are retained; no realuserterminal/providerqualification.
+Originalmutationbytes were restoredinplace; afterfinalreviews owner reconstructed34mutants/diffs
+and matched everyoriginalmutantSha256, with no execution. Mainrehearsalackcallbacks, standalone
+PTYcap/deadlinetests, helper-levelreportvalidatorproof and selectedcoverage limits are explicit.
+
+Full report: /private/tmp/tinyvault-m9-permission-prep-20260914/final-report.md; exactfinaldispositions,
+review reports/summaries, nativefailures/reproductions, inertcommand and allsource/manifests remain
+there. OnlyPLANCurrentState and thisappend were written inrepository duringthissession; original
+registerprefix, other3dirtyfiles, DecisionsLog, HEAD/index/soleworktree and frozenpackages preserved.
+Final preservation evidence: preservation-final.json; no newrepositoryuntrackedfiles.
+
+Full V1 readiness remains materially incomplete. The fresh Sol source check establishes run.mjs
+is offline-only, fixture/admin/host/MCP bindings require fake inputs, negatives are skipped and the
+report schema is synthetic-only. An accurate new V1 readiness ledger and inert production-key-shaped
+PRIMARY/CONTROL templates were prepared; live entrypoint/command/report/classifier hashes are null,
+not waived. A live coordinator and reliable live admin-failure accounting remain necessary in
+addition to unavailable native permission/removal attribution evidence. No fake artifact is relabeled
+live-ready, and no executable V1 launch is fabricated. Further provider evidence cannot be obtained
+under this turn's execution prohibitions. M9 acceptance and all later gates remain pending.
+
+Not run:1Password provider/private V0/V1 access, real tokens/accounts, installation/download,
+calibration/V1, browser/default/Docker/stub/cohort/expiry/Linux/integration/audit, staging/commit/
+merge/push or publication. Existing V0 token revocations/unknown cleanup unchanged; no private
+inspection or old temporary-artifact removal. Entry75/76caps remain closed and literal older
+reds/timeouts/independence/coverage/TOCTOU limits remain in their canonical evidence.
+
+Deviations From Handoff: the permission observer preparation is concrete; the full V1 executable
+package is still blocked/incomplete for the explicit wiring, live-failure and classifier dependencies
+above. This is not completion of all live readiness. No execution authorization requested or inferred.
+
+
+## Entry 79 — 2026-09-14 proposed AR1 acknowledgment redesign
+
+User says “Let's continue” after Entry78's blocked three-round observer checkpoint. Codex retains ownership and interprets continuation as preparation/review of the next bounded redesign. All prior prohibitions remain: no1Password/private access, installation, real tokens, calibration/V1, commit or push. The instruction does not silently replace a locked acknowledgment claim or reopen the closed R3 loop.
+
+Verified same sole main checkout/HEAD39a554d26d63f561464a62126852f1c7cd839a61, five dirty paths, prior166checkpoint files and outgoing diff f6be5a8c1ec83c3a44513ca94962d438a55baa095818c9181990a72daf037e42. Exact evidence: /private/tmp/tinyvault-m9-ack-redesign-20260914/entry-verification.json. Original five files captured in its incoming/ directory. Earlier candidates, reports, pins and source remain unchanged.
+
+Fresh Sol research recommends replacing terminal-byte framing with action-bound filesystem receipts. A separate exact-argv invocation of the same pinned program would have a no-provider/no-config/token-read acknowledgment branch. A complete request binds runId/package/ordinal/action; observer-issued eligibility preserves the scheduled five-second minimum; an exclusive durable writer claim and same-filesystem atomic no-replace hard link publish one complete receipt. Observer validates it once and journals the outcome before admission. Helper output is submission status, never observer acceptance/provider truth/retry authority; late receipts cannot reopen closed slots. Ordinary shell echo/editing is restored by removing /dev/tty and termios from the proposed path, not by another flag patch.
+
+Owner adopted research's early-publication/late-first-poll correction, claim-fsync ordering, two non-retry helper outcomes and simpler opened-descriptor exact-byte validation. Owner declined a post-abort receipt-recovery sweep as additional behavior outside this redesign. Apple primary link/fsync documentation supports namespace publication and retained power-loss limits; direct POSIXopenfetch403 is recorded, not treated as verified content. Research and proposal remain paper, with no local protocol implementation/execution.
+
+The changed claim would cover a complete canonical receipt for the pending reserved action, not physical keystrokes, all local command attempts, future input or malicious-same-user resistance. Operator receipts remain attestations. Existing13CLI/10admin,600/120seconds,3second row/5second minimum, private report selection and all provider/native-classifier limits remain. FullV1still needs live wiring/failureaccounting/executable/report/native-attribution artifacts. No production or frozen observer source changed.
+
+Independent paper review: freshOpus5 plan NEEDS-ATTENTION (027e9e63-2758-4577-bba4-32414533caa5,exit2), followed by the single bounded delta PASS (2e6c367e-b511-44be-9ec0-9440c585b92e,exit0). Both repo digests93f74dff867a26c92b7caf2485bf819f0530aeb12ac6e9fb8884bd17427c79d4. ActualOpus5identity checked; auxiliaryusage retained. Reviewers used Read/Glob/Grep only and did not execute/hash/test; externalpaperhashes owner-verified. Originalpaper and findings preserved in paper-r1/ and claude-plan/.
+
+Revision2designSHA475d0759c776904dc697afbc3d0a42dd7f35b670b48a7d9bae8c2fa437d39c83; revieweddecisioncardSHAefba347ef79111081a6cfdc9aaa57c15235be649c75b9393e0004ccb0cbe69a5. Paper-inventory-r2.json binds them. Final approval-card.md summarizes this scope and review-outcome.md records precise dispositions. PASS means approval-ready paper, not tested implementation or live readiness.
+
+Three initialP2s absorbed: purepreflight rejection before any claim attempt permits manual argumentcorrection for the same intended pending action; all post-claim-attempt errors/EEXIST/ambiguity areUNKNOWN with no resubmission. Helper creates onlywriter-claim and refuses missingparents beforemutation. Positiveprocess evidence labels its synthetic account-root wrapper and retainsactualpackage/runtime gates; separateunpatchedrefusal processesstop beforeprivaterootaccess. env-i clears inheritedenvironment in the proposedoperatorcommand. No claim of unpatched positive execution. P3clarifications: constantRunId suppliesnofreshness; root/ordinalnonreuse does. Completedinstructionemission isauthoritative5sbase;120scleanupfeasibilityremainsunqualified.
+
+Final nonblockingP3 disposition: unchanged resubmission is not authorized, even after purepreflight rejection; only correctedarguments areallowed. The normalcommand appears onlyaftereligibility, so a premature guessedcommand may conservatively forfeit the ordinal. FixedLANG=C.UTF-8 isretained but newlyunqualified; implementation must verifyfixedASCIIbehavior. If the requiredaccount-root seam cannotretainpackage/runtimegates, stop and reporttheproofgap. No sourcechange, newtest, caprelaxation or provideraccess performed toresolvepaperfindings.
+
+The proposed decision card asks for explicit acceptance of AR1's changed contract and bounded offline implementation, at most two post-implementation review rounds with fresh QA/security/Astra. This is a named redesign under handoff§5, not an unlabeled fourth R3round or automatic new budget. Per handoff§0, locked contract changes require explicit disposition. AR1 implementation has not begun and no user contract acceptance is recorded here.
+
+Not run: code changes, new synthetic protocol tests/mutants, provider/private access, real tokens, installation, calibration/V1, existing browser/default/Docker/stub/cohort/expiry/Linux/integration/audit gates, staging/commit/push/publication. Paper review is not implementation proof or live readiness.
+
+Deviations From Handoff: none in this preparation continuation. Entry78 remains blocked and its cap closed; new contract/implementation approval remains pending. Exact proposed decision, design, research, review and final preservation evidence are in /private/tmp/tinyvault-m9-ack-redesign-20260914/.
+
+
+## Entry 80 — 2026-09-14 AR1 contract and offline implementation approved
+
+User explicitly says “Approved” to Entry79’s final approval card. This accepts designSHA475d0759c776904dc697afbc3d0a42dd7f35b670b48a7d9bae8c2fa437d39c83 and its retained no-unchanged-retry disposition, plus bounded external implementation and synthetic proof. At most two fresh QA/security/Astra post-implementation rounds; reaching violated requirements block readiness regardless of severity. Old R3 remains immutable and blocked at its closed cap.
+
+Same sole main HEAD39a554d26d63f561464a62126852f1c7cd839a61; incoming five dirty documents/all47 proposal checkpoint files verified. Owner Codex. Working package and incoming copies: /private/tmp/tinyvault-m9-ar1-implementation-20260914/. No provider/private access, installation, real token, calibration/V1, commit/push/publication or broader V1 implementation. Implementation/proofs/reviews pending; approval is not acceptance evidence.
+
+
+## Entry 81 — 2026-09-14 AR1 round1 review and bounded proof completion
+
+Approved AR1 implemented in /private/tmp/tinyvault-m9-ar1-implementation-20260914/candidate/. SourceSHA23ca004e71aa93f4e39645c21cce9161183d7867687f34f52f3cffd0dc55d7e5; R1inventory9abaf87f12e6ad460a141006b0d5d766c85859c5b9682c9b9c62f2dbe28df7c7. Owner ran66retainedregressions,18receiptmethods,14processmethods (98distinctPASS) and22selectedomissionmutants withnativeassertionfailures/exactrestoration/positivepasses. Actualmain full13fakeCLI10separateackprocess rehearsal retains5sminimum; package/runtimegates remain real, account-home wrapper/fakeparentsettings areexplicit. No unpatchedpositive, realroot/provider/binary/private/token/calibration access. Original76testinventory has10explicitlyreplacedTTY-onlymethods; no nonTTYassertiondropped. Initialfixturefailures retained.
+
+FreshOpus5QA NEEDS-ATTENTION sessionfcd5dcfe-a138-46d4-96ad-126ad7472781; freshOpus5security NEEDS-ATTENTION session4903f3cd-3d57-4bc9-91ca-d2f4c8f165c8; both completedexit2, actualmodelchecked, repo digestb6fc36cc96cc2d24b7b6e3322033dbdb844b17df4e27f91b163c80e279d4e78d. FreshAstra NEEDS-ATTENTION astra-r1.md. No reachingruntimecode defect/P1identified. QAmandatoryproofgap: observerreceiptpoll lacksnonregular/oversize/mode/symlinkfiniteterminationwitnesses. SecurityP3: parentdirectoryandstaleEMPTYslotguardtestsnotloadbearing. AstraP3: verificationcontractmustdistinguishduplicatehelperUNKNOWNfromobserveracceptanceofavalidreceipt. Furthernamedtestgaps/requestpublication/prequeue/postreceiptbinding anddeadtestresidue areboundedcorrections; no sourcechange. Round1literalreports/candidate/evidence preserved in release-r1/, round1-evidence/, round1-snapshot.json.
+
+Owner disposition: absorb theseproof/documentgaps, addreachingmutants andfinalround2review. AdditionalownerfileUIDwitness keepsdirectoryownershipvalid and variesonlyfstatUID, withnativeomissionkill/restoration; earliergetuidtestfailedatrootfirst. Preservejointprocessdeadlinewitnesslabel and addseparatehelper/callerseamdeadlineproof; no equivalentminimumguardkillclaim. Helpermissingstdout/crash remainsambiguous, no cosmeticsourcechange. Minimum0incleanup isapprovedoutsideCLIadmission; unchangedretryrestriction remainsoperatorprocedure. No newcontractamendment orprimitiveredesign.
+
+At mosttwoAR1postimplementationrounds; finalround2pending. OldR3capclosed/blocked unchanged. Other164oldcheckpointfiles and45proposalcheckpointfiles match, excludingonlythetwoauthorizedcontinuitydocs. No production/browser/default/Docker/stub/cohort/expiry/Linux/integration/audit/live gates executed orimplied. Exactproofseams/findings/commands anddispositions: owner-evidence.md, round1-dispositions.md, owner-supplemental-uid.md. M9/fullV1remainincomplete.
+
+Deviations From Handoff: none; requiredproofcompletioniswithinapprovedoffline scope. No provider/private/install/realtoken/calibration/V1/commit/push/publication.
+
+
+## Entry 82 — 2026-09-14 AR1 offline preparation complete
+
+The explicitly approved AR1 receipt observer is implemented and independently reviewed. Final offline preparation PASS; no calibration or provider qualification is implied. Owner: Codex. Same sole main checkout and HEAD `39a554d26d63f561464a62126852f1c7cd839a61`; the original five dirty paths remain, with only PLAN and this register changed by this turn.
+
+Final package: `/private/tmp/tinyvault-m9-ar1-implementation-20260914/candidate/`. Inventory SHA256 `a95e093db6539fbf92267875c54028026ef8f92ad9bde69f3171641bd7832aff`; observer SHA256 `23ca004e71aa93f4e39645c21cce9161183d7867687f34f52f3cffd0dc55d7e5`. The observer source is unchanged from round1. Full report, native command index and final checkpoint are in the parent directory as `result.md`, `final-verification.json` and `final-checkpoint.json`.
+
+Final review round2 of2: Opus5 QA PASS, session `3fb48fc2-3040-48fb-8f74-118f68f7eb4a`; separate Opus5 security PASS, session `99dbdfff-7a77-447c-a15b-dcba6f232af2`; both completed exit0 with actual model identity checked and auxiliary usage retained. Both repo digests were `ee040ab7827c3c1e1c6abb0bf10719462732f27d7d5168881621d43081183969`; external round2 inventory separately binds the code/evidence. Fresh Astra final PASS independently verified every final inventory entry, unchanged observer bytes, and all twelve new/supplemental mutation artifacts. Opus reviewed supplied native evidence only. No final reviewer reran tests. The approved AR1 two-round cap is now closed; no third round or fourth R3 round is authorized.
+
+Owner verification: 66 retained regression methods, 26 receipt methods, 16 process methods and one file-UID method all passed (109 distinct). After QA noted that most earlier tests preceded the final wording-only manifest change, the owner reran all109 on the exact final manifest: final-regression.log 66/24.973s; final-contract.log 26/0.179s; final-process.log 16/24.886s; final-file-uid.log 1/0.048s. The full actual-main fake-provider case performs exactly13CLI calls and10 separate acknowledgment processes, with the scheduled five-second minimum. This post-review rerun changed no candidate bytes and is verification, not a new review round.
+
+There are34 selected omission witnesses:22 initial, one supplemental fileUID and11 final-round cases. Every mutant has preserved source/diff before execution, a native assertion failure, exact source restoration and a passing restored test. Earlier witnesses were retained against identical observer source rather than wholesale rerun. No exhaustive independent-clause coverage is claimed. Round1's failed verdicts, old tests and all earlier artifacts remain immutable in release-r1/round1-evidence and the original package directories.
+
+All named mandatory proof/document findings are absorbed: observer nonregular/symlink/oversize/mode/UID receipt rejection with finite termination; unsafe existing parents and empty stale slots; request publication ordering; lone prequeued temp; observer post-receipt binding; separately labelled receipt/caller deadline witnesses. Verification text distinguishes helper UNKNOWN from observer acceptance of a valid receipt. Four unused TTY imports and the unused external inventory writer were removed. No runtime repair or new contract amendment was needed after round1.
+
+Owner retains final-review precision limits: direct-call parent/slot witnesses, selected rather than exhaustive clause mutants, monotonic-redundant minimum recheck, legacy callback caller-deadline witness, inherited absence of an actual-main stdout ordering assertion, process-wide test instrumentation and load-sensitive watchdog/short fixture deadlines. The frozen-clock test could hang under unrelated mutations, but the selected mutation run is externally bounded and passed/restored as recorded. Harmless pre-existing unused imports remain; no post-cap cleanup loop. These are scoped evidence/residual limits, not unmet mandatory proofs or live readiness.
+
+Positive ack processes retain real main/package/runtime gates through the explicit synthetic account-home resolver; parent fixtures additionally substitute fake binary pins and documented durations. No unpatched positive, literal operator command, real account-home route or installed provider binary was qualified. Receipt success is trusted operator attestation, not provider truth. All13CLI/10admin/600s setup-inclusive observation/120s cleanup/3s row/5s scheduled revoke limits remain. Same-user forgery/latch deletion and power loss remain excluded; source-package FIFO, diagnostics in the same private attempt, and cleanup/human/provider timing limits remain.
+
+Full V1 still requires separately scoped live coordination, failure accounting, executable/report bindings, native classifier/attribution and later acceptance gates. The broader V1 implementation was excluded from this approval. README, docs/README and the phase-0 M9 status row were checked and still correctly state M9 acceptance pending; no roadmap/status rewrite is needed for this external preparation slice.
+
+Not run: provider/private access, installation, real-token creation, calibration/V1 execution, browser/default/Docker/stub/cohort/expiry/Linux/integration/audit gates, staging/commit/push/publication. Other164 R3 checkpoint files and45 proposal checkpoint files remain unchanged, excluding only the two authorized continuity documents; final preservation/checkpoint evidence records the refreshed checks. No owned worker or review process remains active.
+
+Deviations From Handoff: none. User approval preceded the changed receipt contract and bounded offline implementation; all original restrictions remain.
+
+
+## Entry 83 — 2026-09-14 FA1 failure-accounting paper package
+
+User continuation authorizes preparation under Entry77 and the completed Entry82 boundary. Owner Codex retains `2026-09-14-m9-permission-prep`. No broader V1 implementation is inferred. Current sole main HEAD `39a554d26d63f561464a62126852f1c7cd839a61`; empty index, no untracked files, five incoming dirty documents. All725 files in the Entry82 checkpoint matched before work. Prior checkpoint SHA256 `11b494784e3cfb083c4ba2912844d925f8fb05f655738cec4da62d552fe1735e`. Only PLAN and this append-only register changed in the repository this turn.
+
+New external paper package: `/private/tmp/tinyvault-m9-v1-accounting-prep-20260914/`. Canonical proposal `design.md`, scope decision `approval-card.md`, full result `result.md`, exact final disposition `final-dispositions.md`. Final proposed contract SHA256 `fc7d9c8105b2b33699c21834d24118597c9939ea9a7abe34e2205698ff48cba6`. No FA1 candidate implementation exists.
+
+Read-only Sol worker `v1_gap_map` and owner source inspection confirmed the accepted driver gap: driver.mjs:133–137 returns terminalFailure separately and can withhold pair/admin arrays; run.mjs:16–20 persists only report. Empty failed-run arrays cannot prove zero actions. Owner narrowed the proposed wrapper to a standalone synthetic accounting component because wrapping the old result cannot durably interpose on its internal callbacks. Actual host/MCP/admin integration remains a later gate; no closed artifact was modified or rerun.
+
+FA1 proposes an exclusive external eleven-file candidate, closed per-action reservation journal, conservative replay, bounded publication/inspection, actual fake-callback CLI failure/privacy tests and selected native omission proofs. No provider implementation, private input reader, AR1 invocation, browser/MCP run, classifier or release path. Both negative rows stay BLOCKED; normal prefix stops before them. Test-only prerequisite sets stay visibly PREREGISTERED, never observed or charged. Charges count consumed reservations, not instructions/effects. Inspector proves consistency only, not authenticity. All provider/permission/fullCard fields remain BLOCKED and liveCoverage NONE.
+
+Read-only literal extraction verified106unique canonical rows,109CLIreservations,17domains and12prefix reservations; no schedule module was executed. V1 remains109CLI/25admin, calibration13/10 separately. Pinned dirty acceptance card SHA256 `6295c00f57ae92c4d638f56a915cddfa4b4438af8e170e0a22a7acb76e629a20`; pinned schedule source SHA256 `89269669bb598dfba23859389d1a1dc3e8e81bcfdf71d0048a539d4c36661a7d`. Future changes invalidate these bindings and require explicit disposition.
+
+Independent paper round1: Opus5 plan NEEDS-ATTENTION, exit2, session `f352056a-73e2-45bb-8049-f1e51d21903e`. Seven Medium contract gaps and smaller proof/wording gaps absorbed. Original candidate, literal report and owner arithmetic corrections retained. Round2: fresh Opus5 plan NEEDS-ATTENTION, exit2, session `098342d7-e968-4ed3-9968-531ac0ce5ded`. It confirmed all original Mediums resolved, then identified a possible preregistration-size/line-cap conflict and smaller closed-schema/reentrancy/proof inconsistencies. Both repo digests `2712d0ae9b0f16d31c0307c0a80acb2025890dc2f88ccb588cbb6be851f8085f`; actual models checked, auxiliary usage retained. External review-input inventories were verified separately before/after each review. Reviewers read evidence only and did not independently execute hashes/tests.
+
+The final reviewer explicitly recommended owner-applied corrections without a third round. Owner applied exactly those dispositions: minimal fixed prerequisite sets with full-envelope size validation; mandatory schema fields and consumed-reservation wording; reentrancy closes all callback admission including cleanup;106/109/25 precision; named prerequisite/scope/order/latch mutants and largest-event boundary proof. Exact delta `design-r2-to-final.diff`; reviewed-r2 source preserved with SHA256 `4ef242d8d7ccc86bc6e8df3bc7a1657cfe3457c6667ac3e0bc6bb1c52c247be6`. Final text was NOT independently re-reviewed. Both literal NEEDS-ATTENTION verdicts remain; do not claim a final independent PASS. Owner considers the proposed scope ready for explicit approval with all implementation proofs still mandatory. The two-round paper cap is closed; the proposed two-round implementation ladder is separate and unapproved.
+
+Remaining: explicit FA1 contract/implementation-scope decision, then actual-caller integration and the rest of Entry77's live executable/config/report package. Full V1 and M9 acceptance remain incomplete. Foundation/driver/AR1 caps and every prior residual remain unchanged. No new approval for live operations or cleanup is inferred.
+
+Not run: FA1 implementation/tests/mutations, provider/private access, installation, real-token creation, calibration/V1, browser/default/Docker/stub/cohort/expiry/Linux/integration/audit gates, staging/commit/push/publication. Read-only Git/hash/document checks and two authorized independent paper reviews only. Final preservation evidence and refreshed checkpoint are in the new package; no owned workers/review processes remain.
+
+Deviations From Handoff: no execution expansion. The final reviewer-requested owner corrections are recorded without post-correction independent PASS; no third paper round. Entry77's full live package is not complete, and FA1 is only its bounded proposed accounting prerequisite.
+
+
+## Entry 84 — 2026-09-14 FA1 offline implementation approved
+
+User explicitly “Approved” the concrete FA1 approval card after Entry83. This locks the final owner-corrected contract `/private/tmp/tinyvault-m9-v1-accounting-prep-20260914/design.md`, SHA256 `fc7d9c8105b2b33699c21834d24118597c9939ea9a7abe34e2205698ff48cba6`, and authorizes only the named eleven-file external offline component, fake callbacks, local command-line failure/privacy/mutation proofs and at most two independent implementation-review rounds. Historical proposed/awaiting-approval wording in the immutable paper package is superseded by this explicit approval; no paper artifact is rewritten. Both paper NEEDS-ATTENTION verdicts and the unreviewed final owner delta remain disclosed, not converted to PASS.
+
+Entry verification: all771 prior checkpoint files matched; prior checkpoint SHA256 `781498c1e36b815e06899172915adf7b9e3615453812ebf98391865e28c897a1`. Same sole main HEAD `39a554d26d63f561464a62126852f1c7cd839a61`, five dirty docs, empty index/no untracked files. New exclusive root `/private/tmp/tinyvault-m9-v1-accounting-implementation-20260914/` created without collision. Entry-verification.json and implementation-packet.md retain exact scope and baseline.
+
+Codex retains continuity. Fresh Astra worker `fa1_implementation` owns only the candidate and worker-evidence; Sol `fa1_table_oracle` supplies an independent read-only source/card oracle under owner-evidence. Owner verifies the final artifacts and dispatches fresh Opus5 QA/security and fresh Astra adversarial review on stable candidate bytes. Required proofs and caps are unchanged; neither worker may edit shared project state or old packages.
+
+No approval for provider/private access, installation, new token, calibration, AR1/driver/foundation execution, live coordinator, browser/MCP, production changes, commit/push or release. V1 remains109CLI/25admin; calibration13/10 separately; no native classifier or live accounting claim. All older caps stay closed. Not run at this checkpoint: FA1 tests/mutations/reviews (implementation in progress) and all prohibited/live/acceptance gates.
+
+Deviations From Handoff: none. Explicit approval preceded the new accounting implementation; no broader V1 scope is inferred.
+
+
+## Entry 85 — 2026-09-15 FA1 implementation checkpoint and Claude Code handoff
+
+User requested tinyvault-wrapup and a handoff to Claude Code after pausing for a Codex content-restriction notice. Codex closes/relinquishes `2026-09-14-m9-permission-prep`; receiving Claude Code becomes continuity owner on verified entry. No active worker/review process remains. Sole main HEAD `39a554d26d63f561464a62126852f1c7cd839a61`, empty index, no untracked files, same five dirty docs. No source in the repository was changed for FA1; all candidate work is external. Entry84's explicit FA1 approval persists within its exact bounds.
+
+Canonical external root `/private/tmp/tinyvault-m9-v1-accounting-implementation-20260914/`; approved design `/private/tmp/tinyvault-m9-v1-accounting-prep-20260914/design.md`, SHA256 `fc7d9c8105b2b33699c21834d24118597c9939ea9a7abe34e2205698ff48cba6`. Final candidate package `7b21163bb1e051561d6d6865d32b0094c3e6e196e622cc3bb1c794b7a6f6e2b2`; inventory file SHA256 `59ced9c5f20e88d16e556cf44fbf8d5139446a567f21b6c37380fc9885d278bc`; contract file SHA256 `963a6ebe81c9ac52d9940cf061e1270b4756072c84a3048ee3ccfe20b3daa6a5`, unchanged. Dirty card hash `6295c00f57ae92c4d638f56a915cddfa4b4438af8e170e0a22a7acb76e629a20`, schedule hash `89269669bb598dfba23859389d1a1dc3e8e81bcfdf71d0048a539d4c36661a7d`, Node24.19.0 binary hash `1f08f0e5b8d9a0136c6219f4cea4d3b4fb8ffa4d96e0ff64869ce0dda6dd6a35` remain pinned. Eleven-file allowlist and all live card budgets are unchanged.
+
+**R1 evidence:** owner independently ran46/46 serial native tests and literal normal/inspection commands on package `465754f214069098d3ce3d59a8588ec3329c1fdb3806f18856b7e54295f8ef4b`; audited21selected omission logs/restored bytes and25distinct native admin-case artifacts. The same-family fresh Astra review and cross-family Opus5 QA/security all returned literal NEEDS-ATTENTION. QA exit2/session `ce08cfde-a240-48be-80df-ee631520eae0`; security exit2/session `0b2c9534-d21c-442a-b135-9f7c84108b4a`. Both helper repository digests `8c7d8298bc9a4b2c4dac5ba419fd72020ac16fd5a7517708e049464a8e523f45`; actual Opus5 identities and auxiliary usage retained. All1339 frozen external inputs matched after reviews. Reports: `opus-qa-r1/report.md`, `opus-security-r1/report.md`, `astra-r1.md`; source snapshot `round1-candidate/`. Reviewers did not execute tests; Astra independently hashed inputs. Owner separately reproduced the malformed terminal digest array yielding false COMPLETE accounting while artifact refusal remained correct (`owner-evidence/r1-digest-reproduction/result.json`).
+
+**Unified R1 disposition:** typed digest and prospective/replay comparison proof gap are blocking FA1 issues; retain QA's differing literal mandatory-proof assessment without adopting it over the concrete missing detector witness. Correct the native oversize preflight tautology, MCP replay/write mismatch, unavailable zero lower bounds and healthy-admission failure category. Add targeted missing witnesses. Bounded idempotent duplicate stops, redundant coincident caps, explicitly conservative isolated-unit cleanup facts and previously dispositioned minimal prerequisites are accepted residuals, not grounds for protocol redesign. Full details and source/evidence locations are in `worker-evidence/round2/report.md` and its diff; these dispositions do not assert final independent acceptance.
+
+**Corrected candidate / evidence boundary:** Astra implementer reports59/59 final serial native tests (38accounting/replay+21process/storage, no skips/cancel/todo;59314.816ms),32selected reaching native omission failures with exact restored passes (21rerun+11new),25unique native admin runs plus25inspectors,4package-boundary refusals. `worker-evidence/round2/evidence-index.json` pins report/logs/indices/support; `selected-omissions-index.json` is the effective mutation selection. The initial oversize mutation setup failed before child launch on both mutant/restored candidates and is explicitly not counted; a preserved new proof with an owned empty runs directory reaches the preflight and supplies the selected kill/restored pass. No old evidence was overwritten. Worker test counts are not independent owner R2 execution or final review acceptance.
+
+Wrapup freshly verified all11candidate hashes,18R2 evidence-index hashes, canonical package identity, and769unchanged prior-checkpoint files excluding only the two earlier authorized continuity edits. Read the native59/59log and full worker report. Entry inventory covers5513regular files;16nonregular synthetic fixtures recorded without content reads. Wrapup only updates PLAN Current State, appends this register/project session index, and archives prior Current State verbatim. Acceptance-card bytes, archive/register incoming prefixes and Decisions Log are verified preserved. Exact final preservation/checkpoint: `wrapup-20260915/final-verification.json`, `final-checkpoint.json`, checksum sidecar. No new runtime/test/mutation execution during wrapup.
+
+**Next and ownership:** `wrapup-20260915/claude-code-handoff.md` is the complete receiving prompt. Claude verifies dirty checkout and external checkpoint, reviews/audits final artifacts, executes approved final owner offline checks, then freezes inputs for fresh independent Opus5 QA, Opus5 security and Astra adversarial **implementation round2 of2**. Owner change does not reset the cap or waive independence. Any unmet mandatory invariant/proof blocks FA1 completion regardless of severity; final-round P1 convention retained, no default pass/red inferred. Final owner verification, final independent reviews and acceptance remain pending. No third round/unreviewed repair loop or general milestone restart.
+
+The user supplied a Codex banner “This content can't be shown” suggesting Daybreak and asked to pause changes, then explicitly requested this handoff. It establishes withheld content, not a diagnosed account entitlement or loss of saved artifacts. Worker corrections had already completed. No workaround, identity verification, installation, policy change or attempt to bypass a platform restriction was performed. The receiving owner must honor platform restrictions and record any unavailable required gate.
+
+Not run: final owner R2 native checks/audit; final R2 independent reviews; provider/private access, installation, real-token creation, calibration/V1, old-package execution, live coordinator/browser/MCP, default/whole-repo/typecheck/Docker/stub/cohort/expiry/Linux/integration/audit gates, staging/commit/push/publication. All prior gates remain historical. Full V1 still needs actual-caller integration, classifier/command validity, continuous coordination, operator/account-root and executable/config/report binding; M9 acceptance remains incomplete. No new approval for those operations follows from handoff.
+
+Deviations From Handoff: session closes before final owner verification and final review because the user paused and requested transfer. All evidence and the unfinished gate are explicitly handed to Claude Code. No scope expansion, cap reset, false PASS or credential/private access.
+
+## Entry 86 — 2026-09-15 FA1 final owner verification and implementation round 2 of 2 (Claude Code, receiving owner)
+
+User directed Claude Code to proceed as receiving continuity owner per Entry85 and `wrapup-20260915/claude-code-handoff.md`. Owner session `2026-09-15-fa1-r2-claude` stamped in PLAN Current State after read-only entry verification. Same sole `main`, HEAD `39a554d26d63f561464a62126852f1c7cd839a61`, empty index, the five inherited dirty documentation files plus this session's PLAN/register/index edits only. No repository source changed; the candidate remains external. No commit/push/provider/private/token/install/calibration/browser/MCP/old-package/default-gate action.
+
+**Entry verification (PASS):** `claude-owner-r2-20260915/entry-verification.json` (script `verify-entry.py`). All 5522 regular files in `wrapup-20260915/final-checkpoint.json` unchanged (checkpoint checksum matched its sidecar; 16 nonregular fixtures not read). Candidate: exactly eleven files, every hash equal to `worker-evidence/round2/final-file-hashes.json`; package identity recomputed `7b21163bb1e051561d6d6865d32b0094c3e6e196e622cc3bb1c794b7a6f6e2b2`; inventory `59ced9c5…`; contract file `963a6ebe…`; canonical table hash `0ad56525…`; design `fc7d9c81…`; Node binary `1f08f0e5…` v24.19.0 Darwin arm64. 18/18 R2 evidence-index hashes matched. 32/32 selected omission witnesses audited: mutant exit 1 with a reaching assertion, restored exit 0, restored directory byte-identical to the final candidate, preserved mutant differing, command inside the proof directory (`skip-inventory` is the documented standalone external witness asserting on stderr). The original non-reaching `omissions/oversize-prereg-native` remains unselected and uncounted. 25/25 native admin cases audited: child and inspector exit 0, VALID_ARTIFACT/COMPLETE, lower bounds {cli:0,admin:1}, null whole-run totals, case-folder journal/report bytes identical to the physical run directories, 25 distinct runs and admin identities, report package identity matching. Round-1 package identity `465754f2…` recomputed from the preserved round-1 candidate; the three round-1 reports hashed and unchanged.
+
+**Owner offline verification (PASS, fresh execution):** serial `/usr/local/bin/node --test --test-concurrency=1` on the final candidate: 59 tests / 59 pass / 0 fail / 0 skipped / 0 cancelled / 0 todo, exit 0, 63.7 s (`tests-owner.log`, `.exit`, `.started`/`.finished` 2026-09-15T13:59:58Z–14:01:01Z; stderr holds only `time` output). Candidate hashes re-verified unchanged after the run; the run appended 250 new uniquely named files under `runs/` and `worker-evidence/process-artifacts/` only (`generated-files-before/after-tests.txt`). Literal clean-environment witness `normal-command-owner-r2.json` (script `verify-normal-owner.py`): four invalid launches (`--live`, `--offline extra`, `--offline` with `FA1_EXTRA`, no arguments) refused exit 2 with no run created; normal `env -i … run.mjs --offline` published `run-05f77a4f03ea6eeba67c7afcb6d7f1ef` (65 events, blocked-control at `NEG.denied-list`, 12 CLI / 19 admin, rows 0–11 CONFIRMED with null observations, NEG rows BLOCKED, remainder NOT_ATTEMPTED, cleanup facts UNKNOWN, terminal digest equal to SHA256 of the report bytes, 0700 run directory, 0600 single-link journal, all release fields BLOCKED); literal inspector VALID_ARTIFACT/COMPLETE with no run byte changed; nonexistent-run inspection UNAVAILABLE with null lower bounds, exit 1. Contract rows compared equal to the independent Sol table oracle (`owner-evidence/table-oracle.json`), 109 CLI / 106 rows / 25 admin.
+
+**Round-2 dispatch:** external inputs frozen in `review-inputs-r2.json` (2866 regular files, SHA256 `bb358c96de5154de9cad4c37fe48e6f52ea36890d00301f07a2e3f74a68d41ac`; `runs/` and `process-artifacts/` excluded except the 52 referenced run files). Shared blind core packet `r2-core.md` with channel suffixes: `qa-r2-packet.md` `31c511b7…`, `security-r2-packet.md` `7ea8e6d0…`, `astra-r2-packet.md` `968eaa02…`. Packets state the final-round P1 convention and that any unmet mandatory FA1 invariant/proof blocks completion regardless of severity; round-1 findings are shared history, no current round-2 findings were cross-supplied. Opus 5 QA and Opus 5 security dispatched through `scripts/claude-review.mjs` (pinned `claude-opus-5`, Read/Glob/Grep only, base=head `39a554d`, 2400 s timeout, outputs `opus-qa-r2/`, `opus-security-r2/`); init events verified `claude-opus-5`, dontAsk, no MCP. Fresh GPT-6 Astra adversarial dispatched read-only via the Codex companion `task --fresh --model gpt-6-astra --effort xhigh` (job `task-mu2quf4h-3l9qrs`, Codex session `01a0a562-ac46-7bc1-b411-febf4aa687a2`, `astra-r2-dispatch.log`). The checkout was held stable during all three reviews.
+
+**Round-2 verdicts (literal, preserved):**
+- **Opus 5 QA — PASS** (`opus-qa-r2/report.md` SHA256 `e88b052b63695957dd91bf2204b7dffc5f26d3eab9d4acb7b5dc43d66c4c79ae`; session `5a9f5525-358f-4c37-8e0f-13c482db6332`; helper exit 0; assistant model verified `claude-opus-5`; repository digest `75a196c4c32e6f19ae06b4d03e1be7e5ad6e660fc850a5f0d24b1c0bae2e1679`, differing from round 1 only by this session's PLAN stamp; $5.09 list). Walked design §7 item by item: no unmet mandatory proof; both round-1 blockers closed with reaching witnesses; the four corrections real and reaching; no regression in the round-1→2 diff. Two new LOW category-truthfulness items recorded as residuals: a storage failure inside the conservative fallback is published as `report-failure` (report.mjs:44–48, reachable only with a test hook plus a storage fault), and an invalid-data refusal before the recorder exists is labelled `storage-failure` (run.mjs:32 / accounting.mjs:313, unreachable from the normal CLI and pinned entrypoints). Test gaps recorded: subtotal-level in-suite contract oracle (per-row fields/bindings rest on the external Sol oracle and the Astra R1 parse), no `failureReason` priority-order assertion, the carried inventory-boundary/byte-cap gaps already declared in README.
+- **Opus 5 security — first dispatch INVALID, not a verdict:** helper exit 1 "Unexpected tool call: Bash" (one denied `ls` attempt); the run's PASS-labelled text is preserved as `opus-security-r2-INVALID-extract.md` for the record only. Re-dispatched once as a tooling re-run with an explicit tool-restriction suffix (`security-r2b-packet.md` SHA256 `da16d2898ed16572947e810c44c0c63247a1ad8fdb4d824ca7df3db73f6b5524`, identical review content). **Re-run (valid) — PASS** (`opus-security-r2b/report.md` SHA256 `3ca81fa2301c6ca9000436c0b67464fd613a0ca3a4e5b70c11ef0a766113b12a`; session `3128cb74-b915-4571-bbdf-e641ec5c7d52`; helper exit 0; 37 tool calls, none outside Read/Glob/Grep; assistant model verified `claude-opus-5`; same repository digest; $3.65 list). Traced every design §7 mandatory proof present with a reaching witness; both round-1 blockers closed (typed digest closed on every coercion path at replay and inspector; the force-refusal boolean gone and the named round-1 mutant now killed); production comparisons exact with no hooks and unreachable from the normal CLI; completion-after-latch exposes no second callback; exit 0 not forgeable for card-prefix. Three new Low attribution-only defects recorded as residuals: S1 storage failure inside the conservative fallback reported as `report-failure` (report.mjs:44/48); S2 an accounting-validity probe rejection in `appendNow` latches `failed` and is then reported as `storage-failure` (accounting.mjs:251/313 — the general form of Astra F2 below); S3 `failureReason(undefined)` for a construction refusal before the recorder exists (run.mjs:32). Test gaps recorded: a surviving mutant at report.mjs:60 (replacing the production `finalDigest` source with `hash(encode(final))` leaves all 59 tests green because both post-seal seams overwrite it, so the post-digest witness proves the predicate's shape, not its production input; clause 1 of the same comparison and the inspector-side digest check remain witnessed); dead `richFailure`/`conservativeFailure` seams; the carried non-isolable inspector byte predicate; per-row `chargedCli:0` under UNAVAILABLE beside the null aggregate (not a defect under design §4's observation wording).
+- **GPT-6 Astra adversarial — NEEDS-ATTENTION** (`astra-r2-report.md` SHA256 `1cd541908d96c0eddbb10053dee39697324b567ee6737c8974ca575fd5f17bcf`; job `task-mu2quf4h-3l9qrs`, Codex session `01a0a562-ac46-7bc1-b411-febf4aa687a2`, model `gpt-6-astra` effort xhigh, read-only, 9 m 23 s; full job log `astra-r2-job.log`). Independently re-hashed all 2866 frozen inputs, the candidate identity, 18 evidence hashes, 32 mutant/restore inventories, 25 native runs and all 106 rows/25 admin against the oracle. **F1 [P2]: replay does not enforce the contract's cleanup order** — `expectedAdmission` (accounting.mjs:102) checks only that the run is stopped and the identity is in `contract.cleanup`, so a hostile journal that reorders complete cleanup pairs replays COMPLETE and the existing report validates. Classified by Astra as a newly identified pre-existing defect and an unmet mandatory invariant, not a round-2 regression. **F2 [P3]: reentrancy latched between a linked row reservation and its admin reservation is labelled `storage-failure`** because the probe-replay rejection in `appendNow` (accounting.mjs:251) sets `failed` before any store operation; attribution only, no second callback, refund or publication; reachable via the `afterRow` test seam or a concurrent external caller, not the normal CLI. Astra established all round-2 corrections within scope (typed digest closed on every path; projection seams change compared data with independently killed predicates; no normal-CLI route to hooks; oversize witness discriminates; MCP symmetry, null UNAVAILABLE bounds, inspector digest independence; completion-after-latch invokes no second callback).
+
+**Owner reproduction of Astra F1 — CONFIRMED:** `reproduce-astra-r2-f1.py` / `reproduce-astra-r2-f1.json`. In an isolated byte-identical candidate copy (hashes re-verified), the owner's normal run `run-05f77a4f…` journal was copied with the `delete-vault-GRANTED` reservation/completion pair moved ahead of both revoke pairs (contract order revoke-PRIMARY, revoke-CONTROL, delete-vault-GRANTED, delete-vault-DENIED), sequences renumbered, all other bytes and the published report unchanged. The literal clean-environment inspector returned `VALID_ARTIFACT` / `COMPLETE` / 12 CLI / 19 admin / exit 0 for the hostile journal, identical to the untouched control copy. Charges, states, totals and release fields are unchanged by the reorder; the defect is a consistency-validation gap inside the explicitly in-scope hostile-journal boundary (design §5: replay "stops at the first … unexpected event"; §4 pins the cleanup order), not an authenticity or release claim. The selected `reordered-admission` witness covers schedule-row order only.
+
+**Owner reading of Astra F2 — CONFIRMED by source, reachability as stated:** in `admit`, the latch check precedes the callback (accounting.mjs:282) but follows the `reserve-admin` append; a latch durably appended by a reentrant caller during the row→admin window makes the admin-reservation probe refuse, and `appendNow` sets `failed=true` on a probe mismatch, so `failureReason` reports `storage-failure` though no storage operation failed. In production only the delegate can reenter and it is not yet running in that window, so the path needs the `afterRow` seam or a concurrent same-process caller. Direction conservative (PARTIAL, no publication, latch retained).
+
+**Disposition at the cap (owner synthesis; no third round):** QA PASS and security PASS and Astra NEEDS-ATTENTION are all retained literally; neither is relabelled. Under the packet's rule that any unmet mandatory FA1 invariant blocks completion regardless of severity, and with F1 owner-confirmed by literal inspection, **FA1 is BLOCKED at the two-round cap**, not accepted and not failed-by-P1 (no layers-1–2 leak, no undeclared layer-4 blind spot, no default gate executed). Recorded blockers/residuals: F1 (blocking, unmet cleanup-order replay invariant; fix shape: enforce the next unreserved `contract.cleanup` position in `expectedAdmission` for cleanup reservations, add a reordered-cleanup replay and literal-inspector witness with a selected omission of that predicate, preserve legitimate skips and already-reserved PRIMARY handling); F2 (P3 attribution residual; fix shape: check the latch before the admin reservation or distinguish probe rejection from store failure, with an owned linked-reservation/latch witness); QA's two LOW and security's three Low attribution residuals (S2 corroborates F2 across channels), the security surviving-mutant and dead-seam test gaps, and both channels' listed gaps; all previously accepted residuals unchanged. A repair of F1/F2 would be a **separately authorized, narrowly scoped correction with its own independent re-review**, outside this closed cap — the user's decision, not inferred here. The round-1 conflicting assessments (QA "no mandatory proof unmet" vs. security/Astra) remain preserved in their reports.
+
+Not run: provider/private access, installation, real token, calibration/V1, old-package execution, live coordinator/browser/MCP, default/whole-repo/typecheck/Docker/stub/cohort/expiry/Linux/integration/audit gates, staging/commit/push/publication. Full V1 and M9 acceptance remain incomplete; nothing here supplies provider permission, card completion or release. Deviations From Handoff: the security channel needed one tooling re-dispatch after a helper-invalidated first run (preserved, not counted); the owner reproduced Astra F1 by inspection in an isolated copy rather than accepting it statically; no scope expansion, cap reset, candidate edit, repair loop or false PASS.
+
+
+All owner scripts, logs, packets, dispatch logs, reports, the invalid-run extract, the F1 reproduction and `r2-channel-summary.json` are preserved under `/private/tmp/tinyvault-m9-v1-accounting-implementation-20260914/claude-owner-r2-20260915/`; missing artifacts are missing proof. Prior round-1 evidence, the round-1 candidate and the round-2 worker evidence were not modified. Old foundation/driver/observer/AR1 and paper caps stay closed.
+
+## Entry 87 — 2026-09-15 FA1 F1 correction: implementation, owner verification and single review round (Claude Code owner)
+
+User decision after Entry86 (PLAN Decisions Log "2026-09-15 (F1 correction APPROVED — narrow scope, one round)"): correct Astra round-2 F1 only, on a new external root, with full reseal and exactly one fresh QA/security/Astra review round; F2/S2, S1, S3, the QA Lows and the report.mjs:60 surviving mutant stay recorded residuals. No contract/design/card change. Owner session `2026-09-15-fa1-r2-claude`; same sole `main`, HEAD `39a554d26d63f561464a62126852f1c7cd839a61`, empty index; only PLAN and this register changed in the repository. No commit/push/provider/private/token/install/calibration/live action.
+
+**Environment probe and packet:** a Sol write task (`task --write --model gpt-5.6-sol`) verified that a Codex write task can create the new root `/private/tmp/tinyvault-m9-fa1-f1-correction-20260915` (N), write there and run the pinned Node (probe artifacts kept under `N/owner/`). Implementation packet `N/implementation-packet.md` (SHA256 `e96352c0df70eb2718772580c5b721c6da988a3801c733fda65fd056a5486537`): required behaviour (a cleanup-phase reservation or cleanup-skip is valid only for the first unresolved identity in `contract.cleanup` order, a schedule-reserved PRIMARY counting as resolved), allowed files (accounting.mjs, both test files, README, inventory), forbidden files, red-before-fix, full reseal, new `cleanup-order` omission, F1-inverse witness, stop conditions.
+
+**Implementation (fresh GPT-6 Astra, `task --write --fresh --model gpt-6-astra --effort xhigh`, job `task-mu2s4abc-ckp0qt`, 2026-09-15T14:40:41Z–14:53:52Z, `N/owner/astra-impl-job.log`):** corrected package identity `319dccff13d4eb6d04d5551477731ea8643f265aa76c932cf1936b6708ab368c`, inventory SHA256 `03ebda28fefc0f7829ae98878ca5f04090dffcd8f87defdcc1ad54c0d241b581`, contract `963a6ebe…` unchanged. Delta versus `7b21163…` (`N/worker-evidence/round2-to-f1.diff`): a seven-line `nextCleanup(pkg,s)` helper, one check in the cleanup branch of `expectedAdmission`, one added term in the `cleanup-skip` replay branch; three new `F1` tests in test-accounting.mjs (reordered reservation, reordered skip, positive mixed/PRIMARY/latch sequences) and one new `F1` literal-inspector test in test-process.mjs, insertions only; one README sentence; inventory reseal. Worker evidence (`N/worker-evidence/report.md`, evidence-index rooted at N, 1924 created entries listed): tests-first 60 pass / 3 fail (the three negative F1 tests, red before fix); tests-final 63/63 exit 0; 33/33 selected omissions (32 prior rerun with byte-identical restores to the new bytes, plus `cleanup-order`, which removes only the two new checks and fails all three negative F1 assertions natively); 25/25 native admin cases with `output-equivalence.json` showing only `run`/`package` differ from saved P outputs; 4/4 boundary refusals; literal launch/inspection exit 0; the worker's own F1-inverse witness (control VALID_ARTIFACT, hostile PARTIAL/NONE/exit 1 with {cli:12,admin:15}). Worker deviations recorded: patch-tool refusal worked around with shell writes; one support-only audit helper initially exited 1 and was corrected (`audit-initial/` preserved); no scope, allowlist or assertion deviation.
+
+**Owner verification of the corrected candidate (PASS, fresh execution; `N/owner/`):** `f1-candidate-verification.json` (`verify-f1-candidate.py`): eleven files, six forbidden files byte-identical to P, inventory matches disk, identity recomputed `319dccff…`, worker hashes match, 1917/1917 evidence-index hashes match, 33/33 omissions audited (mutant exit 1 with reaching assertion, restored exit 0, restored directory byte-identical to the new final, preserved mutant differing), 25/25 native cases against physical run directories, 4/4 boundaries, Node pin, repository status unchanged, all 4281 old-root files under P unchanged. `tests-owner.log`: owner serial suite 63/63, 0 fail/skip/cancel/todo, exit 0, 65.5 s (14:55:01Z–14:56:06Z), candidate hashes unchanged afterwards, 256 new generated files only. `normal-command-owner-f1.json` (`verify-normal-owner-f1.py`): four refusals exit 2 with no run; normal `env -i` launch published `run-be0692163600198dda590fddc8201471` (65 events, blocked-control, 12 CLI / 19 admin, package `319dccff…`); inspector VALID_ARTIFACT with no byte changed; nonexistent run UNAVAILABLE with null bounds. `reproduce-f1-on-corrected.py` / `.json`: the owner's unchanged round-2 reproduction logic against the corrected candidate — control VALID_ARTIFACT/COMPLETE; the hostile reordered-cleanup journal now `PARTIAL` / `invalid-journal` / artifact NONE / exit 1 / lower bounds {cli:12,admin:15} / null totals. F1 is closed on both the replay and literal-inspector boundaries by owner execution.
+
+**Review dispatch (single round):** inputs frozen in `N/owner/review-inputs-f1.json` (1453 regular files, SHA256 `3b185963a95ab9b3628b6d64b7f1be47d5975caee0ae071eb99c18c98d48ca92`, including the old-root reference files). Shared blind core `f1-review-core.md` `c3b01ceb…`; packets `qa-f1-packet.md` `1d7c64aa…`, `security-f1-packet.md` `59219a3f…` (both with the explicit Read/Glob/Grep-only restriction learned in Entry86), `astra-f1-packet.md` `b2803404…`. Opus 5 QA and security via `scripts/claude-review.mjs` (base=head `39a554d`, outputs `opus-qa-f1/`, `opus-security-f1/`; init events verified `claude-opus-5`, dontAsk, no MCP); fresh Astra adversarial via the Codex companion read-only task `task-mu2sq4j3-pkwrke`. The checkout was held stable during all three reviews.
+
+**Single-round verdicts (literal, preserved):**
+- **Opus 5 QA — PASS** (`opus-qa-f1/report.md` SHA256 `b213031a22c77540e563b335d497f740b0dad0ccc266d1866d31cda9f2524cca`; session `4056b7cd-c79b-4e0c-a5bc-42fd81236088`; helper exit 0; 35 tool calls, none outside Read/Glob/Grep; $3.37 list). No new defect; `nextCleanup` matches the recorder loop on every resolution path including schedule-reserved PRIMARY skip-over and mixed skip/reserve; both negative paths and the literal-inspector boundary reached; the `cleanup-order` kill is behavioural on a resealed copy; five files changed, insertions-only tests, no shape change; positive paths and the 25 unit cases unchanged. Notes a beneficial side effect (skip-then-reserve of the same identity now also refused) and test gaps: no direct assertion for that case, none for deletion of leading skips, no named negative witness for the skip-over clause, `output-equivalence` is a worker-computed boolean.
+- **Opus 5 security — PASS** (`opus-security-f1/report.md` SHA256 `80db8253b12efd624aec21bcb4b1ff2310bb66b3f4ea156fefa780301964f4df`; session `a555760c-eed8-45a2-94a7-3ec034204aeb`; helper exit 0; 29 tool calls, none outside Read/Glob/Grep; $3.51 list). Traced the four adversarial probes (fabricated skip with non-null reason, reservation after skip, schedule-PRIMARY interleaving, accounting-unit scope) — all refused; observes that reservation admissibility and skip admissibility are now exact complements, so the cleanup segment of a valid journal is uniquely determined by the pre-stop prefix; no fail-closed regression (the only divergence state is unreachable); no conventional issue in the delta. Test gaps: no per-check mutant (only the combined omission), no literal-inspector witness for a reordered skip, one hostile permutation only. Informational pre-existing residual: `reporting-failure` may be placed before the cleanup block by a hostile journal with a provably identical projection (same class as the accepted idempotent-stop residual; unchanged by the correction).
+- **GPT-6 Astra adversarial — PASS** (`astra-f1-report.md` SHA256 `9569e77fce833749119ec4cfbdc6e97bd251a16a290ea00187172b6567f1b69a`; job `task-mu2sq4j3-pkwrke`, 2026-09-15T14:57:40Z–15:04:42Z, `gpt-6-astra` xhigh, read-only; job log `astra-review-job.log`). Independently re-hashed all 1453 frozen inputs, 1917 worker-indexed files, all 33 omission witnesses, 25 native cases against physical run files, both inverse witnesses and the delta; F1 closed on both boundaries; no bypass found through forged skips, forged states, reservation-before-settlement or `cleanup:false` unit transitions; no legitimate recorder sequence newly refused. [P3] documentation residual: `README.md` lines 14–15 and 43 still show the old root's launch/inspection/test command paths while line 85 describes the correction (the supplied witnesses invoke N; a copy-paste of those commands would select the previous candidate). [P3] test gap: no dedicated literal-inspector reordered-skip witness. Notes three additional local branch refs (`codex/*`), so "sole main" is accurate as a worktree description only.
+
+**Owner disposition (synthesis; no new user decision):** all three channels PASS on the corrected candidate `319dccff…`; Astra round-2 F1 is **closed** with owner-executed proof on both boundaries. The approved single review round is complete and no further round is run. Recorded residuals carried forward: F2/S2, S1, S3, QA's two round-2 Lows and the report.mjs:60 surviving mutant (all unchanged, per every channel); new this round — README command paths naming the old root (documentation only; the executable pins and inventory are correct, and the correction witnesses use N), the `reporting-failure` placement observation (same class as the accepted idempotent-stop residual), and the listed test gaps (no per-check mutant, no inspector-side reordered-skip witness, one hostile permutation, `output-equivalence` as a worker boolean corroborated by the owner's independent native audit). None is an unmet mandatory invariant or proof. **FA1's approved offline scope is therefore complete at its caps with residuals recorded**: eleven-file external component `319dccff…` at N supersedes `7b21163…` as the FA1 candidate of record; round-2's literal verdicts on `7b21163…` (QA PASS, security PASS, Astra NEEDS-ATTENTION) remain historical. This is synthetic accounting consistency only: no provider permission, card completion, live coverage, real cleanup, host/MCP integration, OS qualification or release follows, and full V1 / M9 acceptance remain incomplete per Entry77's remaining sequence.
+
+Not run: provider/private access, installation, real token, calibration/V1, old-package execution, live coordinator/browser/MCP, default/whole-repo/typecheck/Docker/stub/cohort/expiry/Linux/integration/audit gates, staging/commit/push/publication. Deviations From Handoff: none — one implementation dispatch, one owner verification pass, one review round; the owner corrected two key-name/root assumptions in its own verification script before the PASS (script and result preserved); no scope expansion, cap reset, repository source change or false PASS. All evidence under `N/owner/` and `N/worker-evidence/`; `owner-checkpoint.sha256` pins the owner directory; missing artifacts are missing proof.
