@@ -237,3 +237,9 @@ Example:
 - **The Codex post-impl channel on a pin-evasion review goes through `task --fresh --model gpt-6-astra` in defensive framing, not `adversarial-review`.** The classifier killed the mode once on this content; the recorded route completed twice.
 - **The owner's own probe counts as a channel finding when it survives** (the `as never` cast, G3), and an owner mutation that turns out to be a syntax error is recorded as the owner's error in the register, with the corrected kill beside it.
 - **Merge = `--no-ff`, byte-identity check of the merged tree against the candidate, then the integration checks on the merged SHA; state files stay uncommitted through the merge and are committed with the wrap-up.**
+
+## Live-package close-out convention (LP1b 2026-09-16, LP4 2026-09-16)
+
+- **Close-out order:** closure-filtered copy of the real-root subtrees (copy only what the run recorded as closed *and* the candidate's collector binds now; withhold the rest with sizes/modes only) → rehash the copies against the pre-deletion inventory → delete the root (`lstat` ENOENT; never enumerate the home) → hash FA1 journals/reports → delete synthetic secrets only (run directories, FA1 runs, synthetic homes, scratch, whole-run surface copies, isolated-package runs) → sidecar → copy the external root under gitignored `artifacts/evidence-<date>/<root>/` and verify it there with `shasum -c` against the sidecar; keep the `/private/tmp` root too. Record every step in `owner/closeout-<date>.json`.
+- **The human session is owner evidence outside the package claim; declining it changes nothing in `bindings.json`** — the manifest keeps naming the human operator unqualified.
+
