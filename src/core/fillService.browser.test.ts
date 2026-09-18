@@ -156,6 +156,17 @@ async function fill(setup: BrowserHarness) {
   });
 }
 
+async function probeSelector(setup: BrowserHarness, selector: string) {
+  const sessionId = setup.session.sessionId;
+  return {
+    type: await setup.controls.browser_type({ sessionId, selector, text: 'overwrite' }),
+    click: await setup.controls.browser_click({ sessionId, selector }),
+    fill: (await setup.service.fill({
+      handle: 'vh_test', sessionId, fields: [{ role: 'password', selector }],
+    })).result,
+  };
+}
+
 describe.sequential('A/B-fill real browser structural and destination gates', () => {
   it('kills fake-fill/result-retention mutants using the real benign HTTP form and signed receipt', async () => {
     const runId = `m4-fill-${++runIndex}`;
@@ -314,6 +325,78 @@ describe.sequential('C/D atomic staleness and returned-refusal behavior', () => 
 });
 
 describe.sequential('E/F lockdown, lifetime, and concurrency', () => {
+  it('kills validity-selector oracles before and after fill for satisfied and unsatisfied patterns', async () => {
+    const missing = {
+      type: { ok: false, reason: 'no-such-element' },
+      click: { ok: false, reason: 'no-such-element' },
+      fill: { ok: false, reason: 'no-password-control' },
+    };
+    const observations = [];
+    for (const [pattern, valid] of [['.{12,}', true], ['.{40,}', false]] as const) {
+      const setup = await openHarness('/password-basic');
+      await setup.page.evaluate((pattern) => {
+        document.querySelector('#password')!.setAttribute('pattern', pattern);
+      }, pattern);
+      expect(await probeSelector(setup, '#missing')).toEqual(missing);
+      const before = [];
+      for (const selector of ['#password:valid', '#password:invalid']) {
+        const result = await probeSelector(setup, selector);
+        expect(result).toEqual(missing);
+        before.push(result);
+      }
+      expect(setup.backend.secretCalls).toBe(0);
+      expect((await fill(setup)).result).toEqual({ ok: true, filled: ['password'] });
+      expect(await setup.page.locator('#password').inputValue()).toBe(CANARY);
+      expect(await setup.page.evaluate(() => {
+        const input = document.querySelector('#password')!;
+        return [input.matches(':valid'), input.matches(':invalid')];
+      })).toEqual([valid, !valid]);
+      const after = [];
+      for (const selector of ['#password:valid', '#password:invalid']) {
+        const result = await probeSelector(setup, selector);
+        expect(result).toEqual(missing);
+        after.push(result);
+      }
+      expect(after).toEqual(before);
+      expect(await probeSelector(setup, '#password')).toEqual({
+        type: { ok: false, reason: 'locked-field' },
+        click: { ok: true },
+        fill: { ok: false, reason: 'locked-field' },
+      });
+      expect(setup.backend.secretCalls).toBe(1);
+      observations.push({ before, after });
+    }
+    expect(observations[0]).toEqual(observations[1]);
+  });
+
+  it('rejects colon selectors before CDP, click locators, and child-frame probes', async () => {
+    let cdp!: CDPSession;
+    const setup = await openHarness('/cross-origin-frame-only', {
+      decorateCdp: (session) => { cdp = session; },
+    });
+    expect((await fill(setup)).result).toEqual({ ok: false, reason: 'cross-origin-frame' });
+    const child = setup.page.frames().find((frame) => frame !== setup.page.mainFrame())!;
+    expect(child).toBeDefined();
+    const send = vi.spyOn(cdp, 'send');
+    const pageLocator = vi.spyOn(setup.page, 'locator');
+    const childLocator = vi.spyOn(child, 'locator');
+    for (const selector of [
+      '#password:valid', '#password:invalid', '#password:placeholder-shown',
+      'form:has(#password)', ':is(#password)', '#password:not(.absent)',
+      '#password::before', '#password\\:escaped',
+    ]) {
+      expect(await probeSelector(setup, selector)).toEqual({
+        type: { ok: false, reason: 'no-such-element' },
+        click: { ok: false, reason: 'no-such-element' },
+        fill: { ok: false, reason: 'no-password-control' },
+      });
+    }
+    expect(send).not.toHaveBeenCalled();
+    expect(pageLocator).not.toHaveBeenCalled();
+    expect(childLocator).not.toHaveBeenCalled();
+    expect(setup.backend.secretCalls).toBe(0);
+  });
+
   it('kills re-fill and control overwrite of a locked field while preserving username traffic', async () => {
     const setup = await openHarness('/static-token-login');
     const first = await fill(setup);

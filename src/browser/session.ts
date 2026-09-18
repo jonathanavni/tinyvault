@@ -433,7 +433,7 @@ async function pinDestination(
   options: BrowserSessionHostOptions,
   selector: string,
 ): Promise<PinOutcome> {
-  if (state.pageClosed) return Object.freeze({ kind: 'no-password-control' });
+  if (state.pageClosed || !selectorAllowed(selector)) return Object.freeze({ kind: 'no-password-control' });
   let objectId: string | undefined;
   try {
     const node = await resolveMainNode(state, selector);
@@ -453,10 +453,13 @@ async function pinDestination(
   }
 }
 
+// A value-dependent pseudo-class would make a fixed result depend on a filled value.
+function selectorAllowed(selector: string): boolean { return !selector.includes(':'); }
 async function resolveMainNode(
   state: SessionState,
   selector: string,
 ): Promise<{ backendNodeId: number } | undefined> {
+  if (!selectorAllowed(selector)) return undefined;
   const document = await state.cdp.send('DOM.getDocument', { depth: 0, pierce: false }) as Record<string, any>;
   const nodeId = Number((await state.cdp.send('DOM.querySelector', {
     nodeId: document.root.nodeId, selector,
