@@ -70,7 +70,7 @@ export class StubClient implements ModelClient {
     return new StubClient(injectionFollowerSteps(
       input,
       true,
-      'form[action="/login"]:has(#verify-password) button',
+      'form[action="/login"] #verify-password ~ button',
     ));
   }
 

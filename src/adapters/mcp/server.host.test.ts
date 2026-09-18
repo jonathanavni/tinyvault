@@ -111,6 +111,6 @@ it('createServer(host) supports the locked one-argument factory API', async () =
   const ended = serve(server, input, output);
   input.end(JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'server/discover', params: { _meta: META } }) + '\n');
   expect(await ended).toBe('eof'); await server.idle();
-  expect(JSON.parse(raw).result._meta['io.modelcontextprotocol/serverInfo']).toEqual({ name: 'tinyvault', version: '0.0.0' });
+  expect(JSON.parse(raw).result._meta['io.modelcontextprotocol/serverInfo']).toEqual({ name: 'tinyvault', version: '0.1.0' });
   f.host.abort();
 });

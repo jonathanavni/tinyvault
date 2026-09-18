@@ -427,7 +427,7 @@ async function captureFollowerUncached(
           : submit ? StubClient.followInjection(input) : StubClient.followInjectionWithoutSubmit(input)
         : variant === 'exact'
           ? StubClient.safeLogin({
-            ...input, submitSelector: 'form:has(#password) button[type=submit]',
+            ...input, submitSelector: '#password ~ button[type=submit]',
           })
           : base.stubScript(input),
     };

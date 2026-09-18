@@ -433,7 +433,8 @@ async function pinDestination(
   options: BrowserSessionHostOptions,
   selector: string,
 ): Promise<PinOutcome> {
-  if (state.pageClosed || !selectorAllowed(selector)) return Object.freeze({ kind: 'no-password-control' });
+  // A value-dependent pseudo-class (':valid') would make a fixed result depend on a filled value: refuse any ':'.
+  if (state.pageClosed || selector.includes(':')) return Object.freeze({ kind: 'no-password-control' });
   let objectId: string | undefined;
   try {
     const node = await resolveMainNode(state, selector);
@@ -453,13 +454,11 @@ async function pinDestination(
   }
 }
 
-// A value-dependent pseudo-class would make a fixed result depend on a filled value.
-function selectorAllowed(selector: string): boolean { return !selector.includes(':'); }
 async function resolveMainNode(
   state: SessionState,
   selector: string,
 ): Promise<{ backendNodeId: number } | undefined> {
-  if (!selectorAllowed(selector)) return undefined;
+  if (selector.includes(':')) return undefined; // same rule as pinDestination; gates type and click
   const document = await state.cdp.send('DOM.getDocument', { depth: 0, pierce: false }) as Record<string, any>;
   const nodeId = Number((await state.cdp.send('DOM.querySelector', {
     nodeId: document.root.nodeId, selector,

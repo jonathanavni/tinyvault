@@ -31,12 +31,12 @@ ordinary page that is the site's password policy, which a real password satisfie
 zero; a hostile page at the authorized origin can already read the value (declared residual). It is still a
 violation of the stated invariant (the untrusted side can "neither read a secret nor express a request that
 would leak one") and it is reachable by a hostile model with no trusted-side cooperation, so it meets the P1
-definition set before dispatch. No fixture, agent, scenario or `SKILL.md` selector contains a colon.
+definition set before dispatch. The five measured scenarios and `SKILL.md` use colon-free selectors only. (The owner first recorded here that *no* fixture or agent selector contained a colon; that was wrong, from too narrow a search, and the gate caught it: see the gate history below.)
 
 **Disposition: FIXED (user decision 2026-09-18; fix round 2 of 3).** Implemented by Codex GPT-6 Astra as a scoped
 slice in an isolated worktree (job `task-mu7jif62-2raoo3`, no deviations reported), reviewed and verified by the
-owner. `src/browser/session.ts`: a one-line `selectorAllowed` helper refuses any selector containing `:`; the guard
-runs in `pinDestination` before the main-frame lookup, so the child-frame Playwright probe never receives such a
+owner. `src/browser/session.ts` refuses any selector containing `:` (Codex wrote a one-line `selectorAllowed` helper; the owner
+inlined it at its two call sites, see below); the guard runs in `pinDestination` before the main-frame lookup, so the child-frame Playwright probe never receives such a
 selector (a sink the audit's suggested fix would have missed), and in `resolveMainNode`, which gates type and click
 before the click locator. No new result reason, schema, description or log line. Two tests added to
 `src/core/fillService.browser.test.ts`: one confirms in the page that `:valid` really flips between the two
@@ -46,6 +46,19 @@ typecheck clean; three guard-deletion mutants each killed by assertion (both gua
 child-frame test; resolver guard only: both tests) and the restored file byte-identical and green; the original
 end-to-end reproduction against the rebuilt MCP bundle now returns `no-such-element` for every probe on both pages.
 The rule is stated in `SCHEMA.md` and the README. Accepted cost: selectors with an escaped colon are refused.
+
+**Gate history for this fix (nothing retried to green).** The first clean-clone gate on `8ebdeb6` was **RED**: `make test`
+4 failed of 3,764 (Docker 7/7, stub eval, the README snippet check and the `make demo` refusal were green). Three
+causes, all the owner's or the slice's, none a product defect: (a) `src/browser/retention.test.ts` pins an allowlist of
+function names in `session.ts`, and the new helper changed it (2 failures): fixed by inlining the one-line check, so
+no function is added and the pinned allowlist is untouched; (b) two test-support selectors used `:has()`
+(`src/agents/stub.ts` `followInjectionAtExactLogin` and the M5-C6 "exact" variant in `testbed/hostile.browser.test.ts`),
+so the new rule refused them and a positive control correctly failed: rewritten with the sibling combinator
+(`#password ~ button[type=submit]`, `form[action="/login"] #verify-password ~ button`), which selects the same buttons in
+the fixture; (c) `src/adapters/mcp/server.host.test.ts` hard-coded version `0.0.0` for the default factory, which reads
+`package.json`: updated to `0.1.0`. After the repair: the 14 affected and neighbouring test files 238/238, typecheck
+clean, and the three guard-deletion mutants re-run against the inlined guard with the same kills and a byte-identical
+restore. This is fix round 3 of 3 for the close.
 
 ## Channel 2 — Claude Opus (fresh subagent): a stranger's first hour
 
