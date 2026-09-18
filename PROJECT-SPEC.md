@@ -138,20 +138,20 @@ Key structural decisions to preserve (they make later integrations free):
 
 ## 6. Requirements checklist (initial — refine in Phase 0)
 
-This initial checklist is not a reconciled completion ledger for older milestones; see the build status in [`docs/phase-0-plan.md`](docs/phase-0-plan.md). The M8 checkbox below is updated at its authorized closure; other boxes retain their prior state.
+Reconciled at M10 on 2026-09-18 against the tree gated in the [launch assessment](docs/project-assessment-2026-09-18-launch.md); each tick names its evidence. Build status: [`docs/phase-0-plan.md`](docs/phase-0-plan.md).
 
-**M9 scope amendment — user decision 2026-09-18:** Calibration/continuity (LP2-CONTINUITY, LP3, AM/AP/AS, normal route N and their counts/caps) is abandoned as recorded residuals, not launch gates; no further implementation, proofs or reviews. Historical failures/evidence remain unchanged. The 1Password shipping claim is “offline-verified against a fake CLI, plus an operator smoke test on op CLI 2.39.0 / macOS” (smoke run by the operator 2026-09-18: passed, M9 Entry157). V1 is the user's manual throwaway-vault/service-account checklist: list, fill, missing item, bad/revoked token, grep transcript/logs for the secret. Natural expiry, Linux and denial-format classification are limitations; local-file remains always available. Remaining sequence: operator smoke → one exact-tree clean-clone gate (`make test`, Docker, stub eval) → one read-only cross-model assessment → M10 (README, SKILL.md, §6 checkboxes, demo), owned by Claude next session. No checkbox or historical result is marked passed by this amendment. [M9 Entry156](docs/m9-review-findings.md#entry156--2026-09-18-user-directed-abandonment-and-claude-handoff).
+**M9 scope amendment — user decision 2026-09-18:** Calibration/continuity (LP2-CONTINUITY, LP3, AM/AP/AS, normal route N and their counts/caps) is abandoned as recorded residuals, not launch gates; no further implementation, proofs or reviews. Historical failures/evidence remain unchanged. The 1Password shipping claim is “offline-verified against a fake CLI, plus an operator smoke test on op CLI 2.39.0 / macOS” (smoke run by the operator 2026-09-18: passed, M9 Entry157). V1 is the user's manual throwaway-vault/service-account checklist: list, fill, missing item, bad/revoked token, grep transcript/logs for the secret. Natural expiry, Linux and denial-format classification are limitations; local-file remains always available. Sequence: operator smoke (**done 2026-09-18**) → one exact-tree clean-clone gate (`make test`, Docker, stub eval; **green on `5ebe7a9`**) → one read-only cross-model assessment (**done**, [launch assessment](docs/project-assessment-2026-09-18-launch.md)) → M10 (README, SKILL.md, §6 checkboxes, demo; **in progress, the demo recording remains**). No checkbox or historical result is marked passed by this amendment. [M9 Entry156](docs/m9-review-findings.md#entry156--2026-09-18-user-directed-abandonment-and-claude-handoff).
 
 **Must-have for launch (v0.1):**
-- [ ] Three-tool interface spec + threat-model README (the trust-boundary statement written down first).
-- [ ] `fill_from_vault` working end-to-end against a local login page via Playwright, with the local-file (libsodium) backend.
-- [ ] Origin validation enforced and unit-tested (lookalike-origin refusal).
-- [ ] At least the 1Password `op` **or** Bitwarden `bw` backend adapter working (local-file is the always-available fallback).
-- [ ] Redaction guarantee verified by test: `grep` the full transcript/logs for the secret → zero matches.
-- [ ] ≥3 hostile fixtures Docker-composed and running offline; a runner that produces a scorecard.
-- [ ] Naive baseline agent that leaks, for the "before" half of the demo.
+- [x] Three-tool interface spec + threat-model README (the trust-boundary statement written down first). *(`SCHEMA.md`, `README.md`.)*
+- [x] `fill_from_vault` working end-to-end against a local login page via Playwright, with the local-file (libsodium) backend. *(`src/core/fillService.browser.test.ts`, `src/adapters/mcp/server.stdio.test.ts`.)*
+- [x] Origin validation enforced and unit-tested (lookalike-origin refusal). *(`src/core/originGuard.test.ts`, `originSweep.test.ts`; `lookalike-origin-redirect` blocked 10/10 in cohort `PFc7eGp2`.)*
+- [x] At least the 1Password `op` **or** Bitwarden `bw` backend adapter working (local-file is the always-available fallback). *(1Password, under the narrowed claim: offline-verified against a fake CLI plus the operator smoke on op CLI 2.39.0 / macOS, M9 Entry157. Bitwarden deferred.)*
+- [x] Redaction guarantee verified by test: `grep` the full transcript/logs for the secret → zero matches. *(The meta-gated leak checker over every locked encoding in `make eval` / `make eval-stub`; `src/core/redaction.test.ts`; and a literal grep in the operator smoke.)*
+- [x] ≥3 hostile fixtures Docker-composed and running offline; a runner that produces a scorecard. *(Four hostile fixtures plus one benign control; `make eval-stub` green on the clean clone.)*
+- [x] Naive baseline agent that leaks, for the "before" half of the demo. *(`src/agents/naiveBaseline.ts`; 50/50 leaks in cohort `PFc7eGp2`.)*
 - [x] MCP server adapter exposing the three vault tools plus six browser controls (nine total, approved M8 O-6; M8 accepted 2026-09-12).
-- [ ] README with the leak-rate table, the threat model, the one-line WebMCP positioning sentence (§7), and the `make`/`npm` reproduce command.
+- [x] README with the leak-rate table, the threat model, the one-line WebMCP positioning sentence (§7), and the `make`/`npm` reproduce command. *(Rewritten 2026-09-18; claims checked line by line in the launch assessment.)*
 - [ ] The 60-second demo recorded (see below).
 
 **Explicitly deferred (post-launch, own moments):** eve adapter, dsh adapter, WebMCP fixtures, KuchiClaw integration, masked-input/JS-framework edge cases, payment/approval flow (only if a buy demo is wanted).

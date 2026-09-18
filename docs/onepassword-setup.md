@@ -301,7 +301,7 @@ two configs.
 | A2 fill: `filled:["password"]`, server got one POST, snapshot `Signed in.` | yes | **pass**: `{"ok":true,"filled":["password"]}`; one POST, length 32; snapshot `Signed in.` |
 | A3 unknown handle refused as `handle-unavailable`, no POST | yes | **pass**: `handle-unavailable`; login page still showed exactly one POST |
 | B bad token: fixed refusal, no provider text | yes | **pass**: `Vault operation failed`, `isError:true`, no provider text |
-| C revoked token: fixed refusal, no provider text | yes | **pass**: fresh process after the operator revoked access in 1Password; same fixed refusal, no provider text |
+| C revoked token: fixed refusal, no provider text | yes | **pass**: fresh process after the operator revoked the service-account token in 1Password; same fixed refusal, no provider text |
 | Hash prefix from step 4 equals the login server's | equal | **pass**: equal (12-hex prefix of the SHA-256; the value itself was never shown) |
 | Secret grep over transcript and logs | no match (exit 1) | **pass**: exit 1 over a 19-reply transcript; a known-present string was found by the same grep (positive control) |
 | Token grep over transcript and logs | no match (exit 1) | **pass**: exit 1 |
