@@ -60,6 +60,12 @@ the fixture; (c) `src/adapters/mcp/server.host.test.ts` hard-coded version `0.0.
 clean, and the three guard-deletion mutants re-run against the inlined guard with the same kills and a byte-identical
 restore. This is fix round 3 of 3 for the close.
 
+**Final gate: GREEN on `e55b1e3`** (literal fresh clone, macOS default `TMPDIR`, 2026-09-18 23:21–23:55 UTC):
+`make test` exit 0 — 3,763 passed, 0 failed, 1 intentional skip, timing 5/5 and 26/26, entry and execution checks
+PASS; `make test-docker` exit 0, 7/7; `make eval-stub` exit 0, five scenarios each 0/10 leaks and 10/10 completed (a
+real check this time, since the stub agent file changed); `make demo` refuses without a key. The four previously red
+tests and the two new selector tests all pass. The red clone of `8ebdeb6` and its log are preserved by the owner.
+
 ## Channel 2 — Claude Opus (fresh subagent): a stranger's first hour
 
 Verdict: publishable after two fixes. Each finding below was checked by the owner against the cited file.

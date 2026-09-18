@@ -11,7 +11,7 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
-`2026-09-18-ship-path-claude` — focus: ship, no new process — closure committed (`f60bb23`) → operator smoke **run by the user 2026-09-18: all checks passed** ([results](docs/onepassword-setup.md#5-record-and-clean-up), M9 Entry157) → one clean-clone gate → one read-only cross-model assessment → M10; owner: claude; state: active; checkout `/Users/jonathanavni/Documents/Coding/tinyvault`, `main`.
+`2026-09-18-ship-path-claude` — focus: ship, no new process — smoke **passed** → launch assessment **done** → M10 docs, MIT license, `make demo`, v0.1.0 **done** → bounded two-channel pre-launch audit **done**: one P1 (selector oracle) fixed, docs fixes applied ([audit](docs/project-audit-2026-09-18.md)) → **final clean-clone gate GREEN on `e55b1e3`**. **Remaining: the user's 60-second demo recording (`make demo`, ~$1–2), final README read-through, push (14 local commits since `640fe79`, user approval needed), public flip, `/wrapup`.** Fix-loop cap for this close is spent (3 of 3). owner: claude; state: active; checkout `/Users/jonathanavni/Documents/Coding/tinyvault`, `main`.
 
 `2026-09-18-calibration-continuity-completion` — owner: codex; state: **closed**; continuity relinquished to **Claude for the next session**.
 Checkout `/Users/jonathanavni/Documents/Coding/tinyvault`; `main`, HEAD `54fd025ec1d0f17dba8f440dc862711e5b829ce5`; all changes uncommitted.
