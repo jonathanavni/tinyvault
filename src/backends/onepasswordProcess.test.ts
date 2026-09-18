@@ -2,7 +2,7 @@ import { access, readFile, writeFile } from 'node:fs/promises';
 import * as files from 'node:fs/promises';
 import { inspect } from 'node:util';
 import { tmpdir } from 'node:os';
-import { basename, dirname } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createOnePasswordBackend } from './onepassword';
 import { createOnePasswordProcess } from './onepasswordProcess';
@@ -68,7 +68,10 @@ describe('T6 exact argv, private environment and fixed process boundary', () => 
     const records = await f.readRecords();
     expect(records.map((r) => r.command)).toEqual(['version', 'list', 'probe', 'detail']);
     for (const record of records) {
-      const global = ['--cache=false', '--config', record.cwd, '--format', 'json', '--no-color'];
+      // The adapter passes the directory as created; the child's cwd is its canonical form (macOS /var -> /private/var).
+      const directory = record.argv[2]!;
+      expect(join(await files.realpath(dirname(directory)), basename(directory))).toBe(record.cwd);
+      const global = ['--cache=false', '--config', directory, '--format', 'json', '--no-color'];
       const suffix = record.command === 'version' ? ['--version'] : record.command === 'probe' ? ['user', 'get', '--me']
         : record.command === 'list' ? ['item', 'list', '--vault', f.config.vaultId, '--categories', 'Login']
           : ['item', 'get', f.recipe.ids.a, '--vault', f.config.vaultId];
@@ -76,7 +79,7 @@ describe('T6 exact argv, private environment and fixed process boundary', () => 
       const { PWD, SHLVL, __CF_USER_TEXT_ENCODING, ...childEnv } = record.env;
       expect(childEnv).toEqual({
         OP_CACHE: 'false', OP_BIOMETRIC_UNLOCK_ENABLED: 'false', OP_DEBUG: 'false', OP_INCLUDE_ARCHIVE: 'false',
-        OP_FORMAT: 'json', HOME: record.cwd, OP_CONFIG_DIR: record.cwd, TMPDIR: record.cwd,
+        OP_FORMAT: 'json', HOME: directory, OP_CONFIG_DIR: directory, TMPDIR: directory,
         PATH: '/usr/bin:/bin', LANG: 'C.UTF-8',
       });
       // The required fixture exec trampoline adds these keys; it does not sanitize inheritance.
