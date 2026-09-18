@@ -4,7 +4,7 @@
 
 ## What Is This?
 
-TinyVault is a harness-agnostic, model-blind credential-fill library for browser agents (opaque handles in, origin-pinned keystrokes out, plaintext never in model context), proven by a hostile-web testbed that *measures* credential-leak rate. It's a portfolio project — the tiny, legible, measured version of the mechanism OpenInstinct hand-rolled. Full context: [`PROJECT-SPEC.md`](PROJECT-SPEC.md).
+TinyVault is a harness-agnostic, model-blind credential-fill library for browser agents (opaque handles in, origin-pinned keystrokes out, plaintext never in model context), proven by a hostile-web testbed that *measures* credential-leak rate. It is the small, auditable, measured version of the vault mechanism described in `PROJECT-SPEC.md` §2. Full context: [`PROJECT-SPEC.md`](PROJECT-SPEC.md).
 
 ## How It Works
 
@@ -47,7 +47,7 @@ make test                    # tsc + dependency boundary + unit/browser suites +
 make eval                    # the real reference-vs-baseline scorecard (5 cells × 2 agents × 10 runs; needs Docker + ANTHROPIC_API_KEY)
 make baseline                # the naive baseline alone (5 cells × 10 runs)
 make eval-stub               # the scripted stub agent through the same harness (no provider key)
-make demo                    # M10: the 60-second demo (not implemented yet)
+make demo                    # the real eval at 1 run per cell (10 Haiku runs, ~$1-2; needs Docker + ANTHROPIC_API_KEY)
 ```
 
 ## Known Weirdness
@@ -56,7 +56,7 @@ make demo                    # M10: the 60-second demo (not implemented yet)
 
 ## Key Links
 
-- Repo: `github.com/jonathanavni/tinyvault` (private until the README readiness pass)
+- Repo: `github.com/jonathanavni/tinyvault`
 - Roadmap and rationale: `PROJECT-SPEC.md`; execution: `PLAN.md`; contracts: `SCHEMA.md`
 - Latest outside view: `docs/project-assessment-2026-09-12-m8.md` (M8 close); earlier: `docs/project-assessment-2026-09-09.md`, `docs/project-assessment-2026-09-06.md`, `-04`, `-03`
 - Blog draft, demo GIF: not yet (M10)

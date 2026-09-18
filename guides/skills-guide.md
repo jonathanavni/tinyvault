@@ -57,7 +57,6 @@ Before building a skill from scratch:
 
 1. Check if Superpowers, gstack, or GSD already has something similar
 2. Check if it's a built-in capability (subagents, memory, planning)
-3. Check `guides/tools-catalog.md` for external tools
 
 Build custom skills for:
 - Project-specific workflows no external tool covers

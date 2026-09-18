@@ -547,11 +547,15 @@ tinyvault/
 - `make test` — unit primitives (originGuard/authorization, `Secret` masking, noninterference, tripwire-instrumentation, mutex, taint registry, backend contract, checker meta-gate) **plus** the M4 Playwright integration security gates (real-fill redaction, verified-destination refusal, atomic TOCTOU abort, reflection-oracle differential, short-vs-long timing/mutex-occupancy differential, concurrent-snapshot masking, setup-blocker guidance).
 - `make eval` — compose the fixtures up (offline; Docker-backed from M5.2, no silent in-process fallback) → runner drives each agent × scenario × N → emits `scorecard.json` + printed leak-rate table with CIs; **fails if the checker meta-gate fails.**
 - `make baseline` — run only the naive baseline, to capture the "before" leak early (spec §9.4).
-- `make demo` — the 60-second split-screen (naive vs vaulted) over local fixtures + saucedemo; records the artifact.
+- `make demo` — the real comparison eval at one run per cell (ten Haiku runs, roughly a dollar or two; needs Docker and `ANTHROPIC_API_KEY`). The 60-second recording is made from it by hand; no public site is contacted.
 
 ---
 
 ## 8. Milestone sequence (executable; eval spine before security core — finding #6)
+
+> **Build status (2026-09-18):** M0–M9 complete; M10 in progress (the demo recording remains). Launch gate and audits: [launch assessment](project-assessment-2026-09-18-launch.md), [pre-launch audit](project-audit-2026-09-18.md).
+
+<details><summary>Full milestone history (unchanged)</summary>
 
 > **Build status (updated 2026-09-18):** **M0 ✅** (`8007aea`) · **M1 ✅** (`8faedde`) · **M1-hardening ✅**
 > (`07996a2`, closing the Opus 5 audit) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) · **M4 ✅** (`b8a9396`) · **M5 ✅**
@@ -563,6 +567,8 @@ tinyvault/
 > audit items — see their Verify columns. Post-lock contract amendments (`'benign'` AttackClass,
 > `canaryCommitment`, per-scenario `leakRateCI95`) are recorded in the `PLAN.md` Decisions Log.
 > **M9:** **Narrowed scope — user decision 2026-09-18.** Calibration/continuity (LP2-CONTINUITY, LP3, AM/AP/AS, normal route N and associated counts/caps) is **ABANDONED as recorded residuals**, not launch gates; no further implementation, proofs or reviews. Historical failures and evidence remain unchanged. Shipping claim: “offline-verified against a fake CLI, plus an operator smoke test on op CLI 2.39.0 / macOS”; the [operator smoke run 2026-09-18: passed](onepassword-setup.md#5-record-and-clean-up) (M9 Entry157). V1 is a user-run manual checklist; natural expiry, Linux and denial-format classification are limitations. Local-file remains always available. Smoke, the exact-tree clean-clone gate (green on `5ebe7a9`) and the one read-only cross-model assessment are done ([launch assessment](project-assessment-2026-09-18-launch.md)); M10 is in progress. Not yet public. [Decision and handoff](m9-review-findings.md#entry156--2026-09-18-user-directed-abandonment-and-claude-handoff).
+
+</details>
 
 **Risk tier** drives the Codex ladder (handoff-pattern §4): 🔴 = full ladder, Codex implements; 🟡 = plan + post-impl Codex pass; 🟢 = Claude-only. Re-ordered so nothing depends on a later milestone.
 

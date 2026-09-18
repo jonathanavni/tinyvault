@@ -67,10 +67,8 @@ Read the matching guide before proceeding:
 - Planning a non-trivial feature → `guides/planning.md`
 - Delegating to subagents → `guides/delegation-templates.md`
 - Verifying work / writing quality gates → `guides/verification.md`
-- Choosing tools or plugins to install → `guides/tools-catalog.md`
 - Sessions feel slow / high token usage → `guides/context-efficiency.md`
 - Building or improving skills → `guides/skills-guide.md`
-- Shipping / releasing → `guides/release.md`
 
 ## Challenge Prompts
 

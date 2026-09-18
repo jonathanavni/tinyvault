@@ -104,7 +104,7 @@ The closed `FillResult` reasons mean:
 `browser_snapshot` run under the page's per-session mutex; `browser_close_session` is the one control that does not
 (it closes the mutex). Every failure is a closed enum: `invalid-url` (not an HTTP(S) URL with a valid bare origin),
 `navigation-failed`, `no-such-element`, `locked-field` (the target is a TinyVault-filled or locked control), and
-`session-unknown`. `browser_type` carries non-secret caller text only and never inspects it. `browser_open_session`
+`session-unknown`. **Caller selectors may not contain `:`.** Such a selector is answered exactly as if no element matched (`no-such-element`, or `no-password-control` for a fill) before the browser sees it: a pseudo-class like `:valid` would otherwise make a fixed result depend on a filled value (pre-launch audit 2026-09-18). Selectors with an escaped colon are refused too. `browser_type` carries non-secret caller text only and never inspects it. `browser_open_session`
 rejects with one fixed error when the browser is unavailable. **`MaskedSnapshot` masks by provenance, never by
 value:** every `type="password"` input and every element TinyVault filled is emitted as exactly `{ tag, masked: true }`
 — no value, no name, no role — because names and roles are page free text a page could mirror a value into; the
@@ -614,7 +614,7 @@ unscanned; the static dependency graph is hygiene rather than containment; the s
 syntax rather than behavior; C3 cannot rule pruned edge classes or script/testbed roots; the
 two unadmitted vault tools and caller-supplied finalization order remain a narrowed A4 residual.
 
-## 1Password backend contract (M9 approved; implementation acceptance pending)
+## 1Password backend contract (M9; shipped under the narrowed claim — see README "Limitations")
 
 The approved [M9 contract](docs/m9-onepassword-packet.md) adds a CLI2.39.0 service-account backend
 behind the unchanged CredentialBackend interface and unchanged MCP tools/results/metadata.
