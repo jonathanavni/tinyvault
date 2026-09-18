@@ -39,7 +39,7 @@ Each finding was checked by the owner against the cited code before disposition.
 | F9 | P2 | Unsupported generalizations ("as most agent setups do today"; "WebMCP has no credential story") | positioning text only | **Fixed in the draft**: first deleted; WebMCP premise softened, positioning line kept (user asked for it) |
 | F10 | P3 | `/Users/jonathanavni` paths in 21 tracked files (134 occurrences, mostly registers) and the author email in commit metadata | `git grep` | **Accepted, user decision 2026-09-18.** Paths stay. The author address is already public on every sampled commit of the owner's 11 other public repositories (checked via the GitHub API), so a history rewrite would break ~280 cited SHAs and the `PFc7eGp2` provenance for no privacy gain. No rewrite |
 
-## Raw report (verbatim)
+## Raw report (verbatim, except one email address redacted in F10)
 
 ```text
 VERDICT: READY-WITH-FIXES — I found no real credential, concrete layers-1–2 leak path, or new clean-clone test defect, but the public documentation needs the specific corrections below.
@@ -89,7 +89,7 @@ The repository does not substantiate the external generalizations “as most age
 Smallest fix: delete “as most agent setups do today”; replace the WebMCP assertion with “TinyVault is intended to complement tools used in authenticated browser sessions. WebMCP hostile fixtures are planned, not part of v0.1.”
 
 F10 — P3 — .claude/memory/gotchas_codex.md:9; tools/probe-p-campaign/predicate.test.ts:5–6; Git commit metadata
-The tracked tree/history contains /Users/jonathanavni and owner-specific scratch paths. Git author/committer metadata exposes Jonathan Avni <yoniavni@gmail.com>. These are personal identifiers, not credentials. The test paths are synthetic inputs rather than dependencies on those directories.
+The tracked tree/history contains /Users/jonathanavni and owner-specific scratch paths. Git author/committer metadata exposes Jonathan Avni <[address redacted by the owner in this copy]>. These are personal identifiers, not credentials. The test paths are synthetic inputs rather than dependencies on those directories.
 Smallest tree edit: replace illustrative owner-specific paths with neutral examples. Editing current files will not remove identifiers from existing history.
 
 Assessment coverage, in the requested question order:

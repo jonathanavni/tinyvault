@@ -1,14 +1,12 @@
 # TinyVault — Project Spec & Handoff
 
-> **Status:** kickoff handoff (2026-08-29). This is a *requirements + rationale + high-level architecture* doc, **not** a finished technical design. Phase 0 of the work is for the implementing agent to review this, ask clarifying questions, and produce the detailed implementation plan.
+> **Status:** the kickoff spec of 2026-08-29: requirements, rationale and a high-level architecture sketch, **not** the finished design (that is [`docs/phase-0-plan.md`](docs/phase-0-plan.md) and [`SCHEMA.md`](SCHEMA.md)). **Trimmed at launch, 2026-09-18:** the market and portfolio commentary in §2, the first-week plan (§9) and the Phase 0 instructions (§10) were removed as no longer useful to a reader; section numbers are unchanged because other documents cite them, and the original text is in git history.
 >
-> **Author context:** Jonathan Avni. Prior public projects: **KuchiClaw 1.0** (shipped — container-isolated personal agent) and **TinyHarness** (in flight — eval-driven tiny coding harness). TinyVault is the next portfolio project. This spec was produced from a multi-agent research workflow over a personal knowledge vault; the vault note trail lives in the AI Learning Vault daily note `2026-08-29`.
->
-> **Self-contained:** the implementing agent will not have this planning conversation's history or vault access. Everything needed to start is in this doc; vault references are provenance, not dependencies.
+> **Author:** Jonathan Avni. Prior public projects: **KuchiClaw 1.0** (container-isolated personal agent) and **TinyHarness** (eval-driven tiny coding harness).
 >
 > **Model/safeguards note:** this is legitimate **defensive** security work, but its content (credential handling, red-team hostile fixtures, credential-phishing tool descriptions) can trip broad safety classifiers — see §11 before choosing a model.
 >
-> **Amended 2026-09-01:** §2, §3, §7 and §8 absorb items **A1** (market refresh) and **A3** (RPA prior art) of the triaged `docs/spec-amendment-2026-08-31.md`, with every correction from `docs/spec-amendment-factcheck.md` applied. Everything else stands as frozen on 2026-08-29.
+> **Amended 2026-09-01:** §2, §3, §7 and §8 absorb items **A1** (market refresh) and **A3** (RPA prior art) of the triaged `docs/spec-amendment-2026-08-31.md`, with every correction from `docs/spec-amendment-factcheck.md` applied. Everything else stands as frozen on 2026-08-29, except the launch trim noted above (which removed A1's market refresh from §2; the amendment documents keep it).
 
 ---
 
@@ -23,22 +21,11 @@
 ### The problem
 Personal agents are being given browsers and asked to log in, fill forms, and buy things. The moment an agent can drive a login form, the naive design puts the user's password *into the model's context* (as a tool argument, a typed string, or a value the model can read back). A compromised or prompt-injected agent can then exfiltrate it. There is no HTTP header to swap at the network layer — the credential's destination is an `<input type="password">`.
 
-### The timing (why now, why this is the value-decaying one to do first)
-- **2026-08-11** — SpaceXAI ships **Grok Bot** (beta): a persistent cloud VM with browser, filesystem and terminal that signs into apps through the normal UI because there is "no clean API or MCP" (the vendor's own claim; not independently tested). Its *published* credential model (docs.x.ai) is the interesting part — **one computer per account, shared by every Bot on it**, browser sessions, cookies and app logins included, with the explicit instruction "do not use separate Bots as a security boundary"; passwords, 2FA codes and CAPTCHAs are punted to a human "computer takeover"; approval gates are user-authored per-Bot rules. **No per-credential scoping, no origin binding, no leak measurement.** VentureBeat's launch coverage raises permissions and escalation as open questions but does not audit them.
-- **2026-08-24** — TechCrunch privacy story on **Instinct** (closed personal agent): named testers reported inbox summaries that kept arriving after access was disconnected (mail had been stored in plaintext for later search), stored records it would not delete on request, an email sent without asking, and a successful phish via a planted email; ToS covers keylogging. (The much-quoted "it reset a site password on its own" is a16z's Anish Acharya on X, 08-20 — not the TechCrunch piece.) Framing: personal agents "will change modern security norms for consumers."
-- **2026-08-26** — Instinct raises a reported **$250M Series B at a $2.5B valuation**, two days after that story. The backlash cost it nothing, because nobody in this category is currently forced to show a number.
-- **2026-08-27** — Merit Systems ships **OpenInstinct**, the open counter-position, whose entire thesis is one mechanism: a vault the model can never read (`list_vault` returns opaque handles; `fill_from_vault` types the secret via origin-pinned browser autofill; values never returned to the model).
-- The surrounding wave: **eve / `vercel.com/new/agent`** (Aug 28) making fork-and-own agents trivial; `@agent-browser/eve` (Aug 4) mounting browsers into eve agents with **no credential story**; DeepSeek **dsh** (Aug 13) "everything is a plugin"; the OpenAI **$35k WebMCP Challenge** (Aug 25).
+### Context (August 2026)
+Several products shipped the same substrate within weeks of each other: a persistent agent computer with a browser, saved logins and a chat surface. None of them scopes credentials per origin or publishes a leak measurement. The mechanism TinyVault builds on is not new: Merit Systems' **OpenInstinct** (2026-08-27) introduced a vault the model can never read (`list_vault` returns opaque handles; `fill_from_vault` types the secret through origin-pinned browser autofill; values are never returned to the model), inside a larger hosted product.
 
-**The convergence:** four shipping products now sit on the same substrate — a persistent agent computer with a browser, saved logins, and a chat surface (Instinct, Grok Bot, CopilotKit's **OpenBot**, Browser Use's **bux**). The substrate is commoditized; the competition has moved to context accumulation, last-mile completion, and the **trust envelope** — and not one of them sells the trust envelope separately.
-
-### The insight / the "move"
-Instinct says *trust us*. OpenInstinct says *read the code*. **TinyVault says *measure it*.** It (a) extracts the exact contested mechanism out of OpenInstinct's four-hosted-vendor product into a small, readable, harness-agnostic library anyone can mount, and (b) ships the artifact the whole debate is missing — a **leak-rate table** ("naive agent leaked 7/10; vaulted agent 0/10; grep the transcript yourself") *[illustrative pre-measurement figure; the measured N10 comparison of 2026-09-09 is naive 30/30 leaked, reference 0/30 — see README]*. This is the generalized "KuchiClaw pattern": take the hot launch, build the tiny legible version of its core, and prove the claim the incumbent only asserts. Said against the converged field above: **TinyVault is the unbundled trust layer — the thing every persistent-VM-browser agent needs and none of them sells separately.**
-
-### Why it earns portfolio credibility + new skills
-- **New skills** (none covered by KuchiClaw's containers/memory/ops or TinyHarness's context-strategy evals): Playwright/CDP **browser automation**; **security engineering** (trust boundaries, origin pinning, post-fill lockdown enforced in code, real credential-store integration); **red-team / adversarial eval design**.
-- **Portfolio arc:** built a personal agent (KuchiClaw) → measured harness tradeoffs (TinyHarness) → made a measured security contribution to the hottest open problem in personal agents (TinyVault). Consistent brand: *prove claims with numbers.*
-- **Survivability:** a *leak finding* is itself a publishable result — no all-or-nothing demo risk.
+### The insight
+Security claims in this category are made by assertion (*trust us*) or by openness (*read the code*). **TinyVault says *measure it*.** It (a) takes that one contested mechanism and builds it as a small, readable, harness-agnostic library anyone can mount, and (b) ships the artifact the debate is missing: a **leak-rate table** comparing a naive agent with a vaulted one, with a transcript you can grep yourself. The measured figures are in the [README](README.md).
 
 ---
 
@@ -190,26 +177,13 @@ Reconciled at M10 on 2026-09-18 against the tree gated in the [launch assessment
 
 ## 9. First-week milestones
 
-1. Repo scaffold + three-tool interface spec + threat-model README draft (write the trust boundary down day one).
-2. `fill_from_vault` end-to-end against one local login page via Playwright, local-file (libsodium) backend.
-3. First two hostile fixtures (lookalike-origin, DOM-hidden injection) Docker-composed, offline.
-4. Naive-baseline agent leaking **on camera** — the "before" half of the demo, recorded early.
+*Removed at launch (2026-09-18). The original first-week plan is in git history; what was actually built, in order, is the milestone table in [`docs/phase-0-plan.md`](docs/phase-0-plan.md).*
 
 ---
 
 ## 10. Phase 0 for the implementing agent (do this first)
 
-Before writing code, review this spec and produce the detailed implementation plan. Open questions to resolve:
-- Confirm TypeScript + Playwright/CDP; pick the agent-loop substrate for the reference agent (minimal Claude Agent SDK loop vs hand-rolled) and for the naive baseline.
-- Finalize the three-tool signatures and the exact model-visible vs trusted-only field split.
-- Choose the first backend to implement (`op` vs `bw`) with local-file as the guaranteed fallback; define the backend interface.
-- Decide the redaction enforcement mechanism (how the fill service guarantees no secret reaches results/logs/transcript) and how it's tested.
-- Define the testbed scorecard schema and the deterministic leak checkers.
-- Pick the MCP adapter shape (stdio server) and confirm it keeps the fill service runnable as a standalone process (needed for the later KuchiClaw integration).
-- Decide the single safe public demo target.
-- Propose the repo layout (core / backends / testbed / adapters/mcp) and the `make demo` + `make eval`-style reproduce commands.
-
-**Keep the core neutral and the ecosystems as thin adapters. Build the testbed with the core, not after it. Record the demo baseline early.**
+*Removed at launch (2026-09-18). These were instructions to the implementing agent before any code existed; their output is [`docs/phase-0-plan.md`](docs/phase-0-plan.md). The original is in git history.*
 
 ---
 
