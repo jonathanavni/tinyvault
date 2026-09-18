@@ -2,6 +2,7 @@
   "name": "tinyvault",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -9,7 +10,7 @@
     "browsers": "playwright install chromium",
     "eval": "node scripts/check-test-entry.mjs --eval && TINYVAULT_EVAL=1 vitest run --config vitest.eval.config.ts --reporter=verbose --reporter=json --outputFile.json=.vitest/eval.json && node scripts/check-test-execution.mjs --eval",
     "baseline": "node scripts/check-test-entry.mjs --eval && TINYVAULT_PROFILE=real-baseline TINYVAULT_EVAL=1 vitest run --config vitest.eval.config.ts --reporter=verbose --reporter=json --outputFile.json=.vitest/eval.json && node scripts/check-test-execution.mjs --eval",
-    "demo": "node -e \"console.error('not implemented until M10'); process.exit(1)\"",
+    "demo": "TINYVAULT_N=1 npm run eval",
     "test:docker": "node scripts/check-test-entry.mjs --docker && vitest run --config vitest.docker.config.ts --reporter=json --outputFile=.vitest/docker.json && node scripts/check-test-execution.mjs --docker",
     "eval:stub": "node scripts/check-test-entry.mjs --eval && TINYVAULT_PROFILE=stub TINYVAULT_EVAL=1 vitest run --config vitest.eval.config.ts --reporter=verbose --reporter=json --outputFile.json=.vitest/eval.json && node scripts/check-test-execution.mjs --eval",
     "build:mcp": "./node_modules/.bin/esbuild src/adapters/mcp/main.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outfile=dist/tinyvault-mcp.mjs"

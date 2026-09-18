@@ -12,7 +12,7 @@ import { composeSelftest } from '../scripts/compose-lint.selftest.mjs';
 
 const PINS: Record<string, string> = {
   // ROOT_PINS_START
-  'package.json#scripts': '9f378d6d1acc5c9b9d689cbdcdb65a19ac688f9575d0cf040588f81f36ef100f',
+  'package.json#scripts': '6b466eefa1ae50889eaf275f1359737810703fb3cd482e52a72498da61110fe6',
   'Makefile': 'e8b128a866ca224634214d0c2446d5eba5bc065dc3b15253b683ac417a5375cd',
   'vitest.config.ts': '03dfc84e160f68fd8b6638ca35b8627b458df0fbc041b3ea06f6637651533295',
   'vitest.docker.config.ts': '29d58d87067410e0618eb4f7cc3970a313987d3a61ba7eb00ffbebc90c61cd25',
