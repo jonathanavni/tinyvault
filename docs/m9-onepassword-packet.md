@@ -1,5 +1,7 @@
 # M9 — 1Password backend proposal
 
+> **Current disposition — 2026-09-18:** The user's final [M9 Entry156](m9-review-findings.md#entry156--2026-09-18-user-directed-abandonment-and-claude-handoff) supersedes pending calibration/continuity and broad V1 launch obligations below. LP2-CONTINUITY, LP3, AM/AP/AS and normal route N are abandoned residuals, with no further work. Prior contracts, counts, caps and failures remain historical evidence. V1 is now the [manual operator smoke](onepassword-setup.md#v1-manual-operator-smoke-test); natural expiry, Linux and denial-format classification are limitations. Claude owns the next session. The historical text below is not authorization to resume abandoned work.
+
 Revision 7 — 2026-09-13. **D9 LOCKED; offline S1–S4 implementation APPROVED 2026-09-13 (Entry55).**
 **D1–D9/N1–N8 approved. Offline implementation authorized; provider/commit/release actions remain separate.**
 

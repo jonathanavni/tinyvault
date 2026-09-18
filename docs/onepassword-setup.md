@@ -1,8 +1,26 @@
 # 1Password setup for TinyVault
 
-The M9 implementation is in progress. These instructions describe the approved contract; they are
-not a release announcement. Real-adapter verification (V1), integration gates and the security audit
-remain required. Local-file remains the free, offline default. Bitwarden is deferred.
+The M9 claim is narrowed by the user decision of 2026-09-18: “offline-verified against a fake CLI,
+plus an operator smoke test on op CLI 2.39.0 / macOS.” The smoke test is still pending; this is not a
+release announcement. Calibration/continuity work is abandoned as recorded residuals, not launch gates.
+Natural expiry, Linux and denial-format classification remain documented limitations.
+Local-file remains the always-available, free offline backend. Bitwarden is deferred.
+
+## V1 manual operator smoke test
+
+The user runs this short checklist with **op CLI 2.39.0 on macOS**, a throwaway vault and a service
+account restricted to it. Use only a disposable synthetic secret; keep the token and raw material local.
+
+- [ ] List the configured throwaway item through TinyVault.
+- [ ] Fill its password into the intended authorized test page and confirm the fill works.
+- [ ] Request a missing item and confirm refusal without secret disclosure.
+- [ ] Try a bad token, then a revoked disposable token, and confirm refusal without secret disclosure.
+- [ ] Grep the complete model transcript and application logs for the synthetic secret; require zero matches. Do this locally without putting the secret in shared output or shell history.
+
+Record the version/OS and checklist outcomes without the secret or token. This smoke does not qualify
+natural token expiry, Linux behavior, provider denial-format classification, calibration or continuity.
+After the smoke: one exact-tree clean-clone gate (`make test`, Docker, stub eval), one read-only
+cross-model assessment, then M10. Claude coordinates the next session; no provider run occurs in wrapup.
 
 Each person connects their own account using local files. TinyVault does not ship an account, shared
 token or credential database. Keep account IDs, item IDs, tokens, configuration and raw CLI responses
@@ -132,8 +150,8 @@ deduplicate duplicate credentials. Avoid configuring copies if you intend one bu
 **Archiving a 1Password item does not revoke TinyVault access in an already-running process.**
 Items archived before discovery are excluded. An already discovered item may still resolve after
 archiving under its original identity, origin, password-field checks and remaining fill budget.
-Deletion and token revocation are intended removal workflows, but V1 must verify their actual
-behavior before release. No immediate interruption of an in-flight fill is promised. Stopping one
+Deletion and token revocation are intended removal workflows. The manual V1 smoke checks
+missing-item and bad/revoked-token refusals; exhaustive provider behavior is not claimed. No immediate interruption of an in-flight fill is promised. Stopping one
 process ends its domain; restarting creates fresh authorization and does not revoke another process.
 
 The CLI decrypts a full item in trusted memory after fill admission, before TinyVault validates

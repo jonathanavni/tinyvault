@@ -217,3 +217,14 @@ Codex dispatch, sandbox limits, job monitoring, model routing, the safety classi
 - **Owner mutant reruns: execute inside each mutant's isolated bound package; never overlay its snapshot into the main candidate; the packages on disk are restored baselines, the mutated bytes live only under `Mxx/<round>/source/`.** Reuse the worker's own runner with three patches (own output tree, packages recreated, kill rule not gated on `needs:none`) and a preload whose `L` is pinned to the root. A kill needs the named marker failure with no `preflight-refusal` in the log and the restored control passing in the same package. See memory `mutant-rerun-isolated-packages`. (2026-09-16)
 - **Owner file writes during a running Opus review must use absolute paths** — a `cd <repo>` for a dispatch moves the session cwd and a later append lands in the checkout, which the helper digests (tracked *and* untracked), marking the review stale. See memory `dispatch-cwd-drift`. (2026-09-16)
 
+
+## LP2 review coverage lesson (2026-09-16)
+
+- **Distinguish measured review timeout from a reviewer's claimed time limit.** LP2 recovery reports stopped with unread scope after 251.301s/230.969s despite 1200s limits; final all-source inline packets still timed out at 900s without valid reports. Use helper duration/exit receipts, keep incomplete coverage explicit, and do not credit partial transcripts or owner rebuttals as independent review completion. Supplying all source inline did not establish coverage. Fresh sessions preserve the cap; any further dispatch needs the recorded scope/cap/window disposition. Evidence: `/private/tmp/tinyvault-m9-lp2-mcp-20260916/owner/round-2/review-dispositions-final.md` and `completion.json`.
+
+
+## Claude authentication visibility (2026-09-18)
+
+- **Sandbox `claude auth status` can report signed out while the host reports authenticated.** In AR, sandbox returned loggedIn=false/authMethod=none; the same read-only status command through normal host approval returned loggedIn=true/authMethod=claude.ai, and the host-context Opus5 review completed PASS. Check this visibility difference before asking for repeated login; use the review skill's approved host mechanism, never read/copy credentials or bypass CLI restrictions. This observation does not establish the cause of older authentication failures. Evidence: M9 Entry153 and `/private/tmp/tinyvault-m9-calibration-registry-qa-resumption-20260918/owner/resumption-observation.json`.
+
+- **2026-09-18 user-directed M9 closure:** Entry156 and PLAN's user decisions supersede earlier calibration/continuity follow-up instructions: LP2-CONTINUITY, LP3, AM/AP/AS and normal N are abandoned residuals, not launch gates. Do not resume them or reset their historical caps. Claude's next session starts with the manual operator smoke; see the current PLAN for the narrowed claim and remaining sequence.
