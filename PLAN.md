@@ -11,6 +11,8 @@ The active-work document. `/start` reads it; `/wrapup` updates it. Two parts:
 
 ## Current State
 
+`2026-09-18-ship-path-claude` — focus: ship, no new process — closure committed (`f60bb23`) → operator smoke **run by the user 2026-09-18: all checks passed** ([results](docs/onepassword-setup.md#5-record-and-clean-up), M9 Entry157) → one clean-clone gate → one read-only cross-model assessment → M10; owner: claude; state: active; checkout `/Users/jonathanavni/Documents/Coding/tinyvault`, `main`.
+
 `2026-09-18-calibration-continuity-completion` — owner: codex; state: **closed**; continuity relinquished to **Claude for the next session**.
 Checkout `/Users/jonathanavni/Documents/Coding/tinyvault`; `main`, HEAD `54fd025ec1d0f17dba8f440dc862711e5b829ce5`; all changes uncommitted.
 H/V author lanes stopped; research worker finished. No author, review, test or proof jobs remain running; nothing is to resume.
