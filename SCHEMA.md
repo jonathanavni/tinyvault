@@ -198,8 +198,8 @@ and the scripted regression profile remain deterministic. Fresh M6 model samplin
 API and is statistical; repeated live calls do not promise byte-identical trajectories. S2 fake-HTTP
 traces establish the actual SDK serialization path, not provider access, real decisions or a live cohort.
 The 300-second execution deadline stops new admissions and aborts provider work; an already-admitted
-host operation must settle under the existing mutex contract. Actual cancellation/teardown proof remains
-OPEN D-CANCEL in S4, with no early mutex release or claim of a hard wall bound for stuck browser work.
+host operation must settle under the existing mutex contract. Cancellation/teardown was delivered under
+D-CANCEL in S4 (resolved `2bcfbbd`, M6 register), with no early mutex release or claim of a hard wall bound for stuck browser work.
 
 **Provenance (M6-AM02).** New M6 bundles carry a versioned `EvaluationProvenance` and retain their
 canonical sorted path-to-SHA256 source inventory. `version` is `m6-v1`; `source` records `gitHead`,
@@ -648,7 +648,8 @@ private token file/configuration; no credential, account ID or raw provider resp
 Items initially archived are excluded. A previously eligible item may still resolve after archiving
 under its original identity/origin/field checks and remaining budget. Absent detail state is unspecified;
 ACTIVE/ARCHIVED are admissible, DELETED denies, malformed present state rejects. A raw CLI refusal
-is unavailable, not a typed deletion/revocation diagnosis. V1 must verify intended removal workflows;
+is unavailable, not a typed deletion/revocation diagnosis. The manual V1 smoke (2026-09-18) checked only
+missing-item and bad/revoked-token refusals; exhaustive provider behavior is not claimed and
 no immediate cancellation of already admitted work is promised.
 
 Fixed error mapping remains: not-found → handle-unavailable, all other BackendError kinds → backend-error;
@@ -660,8 +661,9 @@ rejects integrity. Exact precedence and resource caps are in §3.1/§7 of the lo
 **Process recreation grants fresh fill authorization; the adapter does not establish renewal isolation in the tested Claude Code configuration (2.1.258, measured 2026-09-12).**
 
 V0's finite synthetic Darwin observations retain INCONCLUSIVE and are not real-adapter acceptance.
-Linux remains unqualified; supported-OS V1, implementation/clean-clone/integration gates and the
-whole-codebase audit remain required. MCP interoperability is not cohort qualification: E8c PFc7eGp2
+Shipping claim (user decision 2026-09-18): offline-verified against a fake CLI, plus one operator smoke
+test on op CLI 2.39.0 / macOS (run 2026-09-18, passed; `docs/onepassword-setup.md`). Linux, natural token
+expiry and provider denial-format classification remain unqualified limitations. MCP interoperability is not cohort qualification: E8c PFc7eGp2
 retains only its measured fixture/configuration scope; E8b ODMFYbwH remains unqualified.
 
 ## Testbed evidence and scorecard contracts
@@ -1245,7 +1247,7 @@ integrity, not independent authenticity of model/tool capture. Events the fixtur
 (`model-text`, `tool-arg`) are attested only against later tampering, not against a runner that fabricated
 them at capture time. Closing that would need an attestor independent of the capture layer, which does not
 exist in a single-process local harness. The defence against a fabricated leak-rate table is therefore
-**reproducibility as well as attestation**: the eval is offline and deterministic so a third party can
+**reproducibility as well as attestation**: offline adjudication of a persisted bundle and the scripted stub are deterministic, and a fresh `make eval` (which needs the provider API and may take different trajectories) lets a third party
 <!-- TV-CLAIM-SPAN:s124 END -->
 <!-- TV-CLAIM-SPAN:s125 BEGIN TV-CLAIM:P-approval TV-CLAIM:P-postcapture-limit TV-CLAIM:P-reproducibility -->
 re-run it and compare, which is why the reproduce command is a launch requirement. `approvalBypassed` is reserved in v0.1 and always false. The signed,

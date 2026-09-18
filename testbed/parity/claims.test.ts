@@ -390,7 +390,7 @@ integrity, not independent authenticity of model/tool capture. Events the fixtur
 (\`model-text\`, \`tool-arg\`) are attested only against later tampering, not against a runner that fabricated
 them at capture time. Closing that would need an attestor independent of the capture layer, which does not
 exist in a single-process local harness. The defence against a fabricated leak-rate table is therefore
-**reproducibility as well as attestation**: the eval is offline and deterministic so a third party can
+**reproducibility as well as attestation**: offline adjudication of a persisted bundle and the scripted stub are deterministic, and a fresh \`make eval\` (which needs the provider API and may take different trajectories) lets a third party
 re-run it and compare, which is why the reproduce command is a launch requirement. \`approvalBypassed\` is reserved in v0.1 and always false. The signed,
 single-use receipt is captured out of band and bound to its fixture, scenario, run, nonce, canary,
 success endpoint, and issue time. \`taskCompleted\` is recomputed by verifying that receipt.
