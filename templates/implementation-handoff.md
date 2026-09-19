@@ -12,7 +12,7 @@ Do not modify unrelated files.
 
 ## Required Reading
 - CLAUDE.md
-- PLAN.md (Current State only)
+- build-log/PLAN.md (Current State only)
 - <relevant source files>
 - <relevant tests>
 - <schema/contract doc, only if the change touches it>
@@ -37,7 +37,7 @@ Codex owns:
 - <paths>
 
 Codex must avoid:
-- PLAN.md
+- build-log/PLAN.md
 - .claude/memory/*
 - unrelated planning docs
 - public contract files unless included in scope

@@ -1,6 +1,6 @@
 # TinyVault — Project Spec & Handoff
 
-> **Status:** the kickoff spec of 2026-08-29: requirements, rationale and a high-level architecture sketch, **not** the finished design (that is [`docs/phase-0-plan.md`](docs/phase-0-plan.md) and [`SCHEMA.md`](SCHEMA.md)). **Trimmed at launch, 2026-09-18:** the market and portfolio commentary in §2, the first-week plan (§9), the Phase 0 instructions (§10) and the original video-demo goal were removed as no longer useful to a reader; section numbers are unchanged because other documents cite them, and the original text is in git history.
+> **Status:** the kickoff spec of 2026-08-29: requirements, rationale and a high-level architecture sketch, **not** the finished design (that is [`docs/phase-0-plan.md`](../docs/phase-0-plan.md) and [`SCHEMA.md`](../SCHEMA.md)). **Trimmed at launch, 2026-09-18:** the market and portfolio commentary in §2, the first-week plan (§9), the Phase 0 instructions (§10) and the original video-demo goal were removed as no longer useful to a reader; section numbers are unchanged because other documents cite them, and the original text is in git history.
 >
 > **Author:** Jonathan Avni. Prior public projects: **KuchiClaw 1.0** (container-isolated personal agent) and **TinyHarness** (eval-driven tiny coding harness).
 >
@@ -25,7 +25,7 @@ Personal agents are being given browsers and asked to log in, fill forms, and bu
 Several products shipped the same substrate within weeks of each other: a persistent agent computer with a browser, saved logins and a chat surface. None of them scopes credentials per origin or publishes a leak measurement. The mechanism TinyVault builds on is not new: Merit Systems' **OpenInstinct** (2026-08-27) introduced a vault the model can never read (`list_vault` returns opaque handles; `fill_from_vault` types the secret through origin-pinned browser autofill; values are never returned to the model), inside a larger hosted product.
 
 ### The insight
-Security claims in this category are made by assertion (*trust us*) or by openness (*read the code*). **TinyVault says *measure it*.** It (a) takes that one contested mechanism and builds it as a small, readable, harness-agnostic library anyone can mount, and (b) ships the artifact the debate is missing: a **leak-rate table** comparing a naive agent with a vaulted one, with a transcript you can grep yourself. The measured figures are in the [README](README.md).
+Security claims in this category are made by assertion (*trust us*) or by openness (*read the code*). **TinyVault says *measure it*.** It (a) takes that one contested mechanism and builds it as a small, readable, harness-agnostic library anyone can mount, and (b) ships the artifact the debate is missing: a **leak-rate table** comparing a naive agent with a vaulted one, with a transcript you can grep yourself. The measured figures are in the [README](../README.md).
 
 ---
 
@@ -125,9 +125,9 @@ Key structural decisions to preserve (they make later integrations free):
 
 ## 6. Requirements checklist (initial — refine in Phase 0)
 
-Reconciled at M10 on 2026-09-18 against the tree gated in the [launch assessment](docs/project-assessment-2026-09-18-launch.md); each tick names its evidence. Build status: [`docs/phase-0-plan.md`](docs/phase-0-plan.md).
+Reconciled at M10 on 2026-09-18 against the tree gated in the [launch assessment](../docs/project-assessment-2026-09-18-launch.md); each tick names its evidence. Build status: [`docs/phase-0-plan.md`](../docs/phase-0-plan.md).
 
-**M9 scope amendment — user decision 2026-09-18:** Calibration/continuity (LP2-CONTINUITY, LP3, AM/AP/AS, normal route N and their counts/caps) is abandoned as recorded residuals, not launch gates; no further implementation, proofs or reviews. Historical failures/evidence remain unchanged. The 1Password shipping claim is “offline-verified against a fake CLI, plus an operator smoke test on op CLI 2.39.0 / macOS” (smoke run by the operator 2026-09-18: passed, M9 Entry157). V1 is the user's manual throwaway-vault/service-account checklist: list, fill, missing item, bad/revoked token, grep transcript/logs for the secret. Natural expiry, Linux and denial-format classification are limitations; local-file remains always available. Sequence: operator smoke (**done 2026-09-18**) → one exact-tree clean-clone gate (`make test`, Docker, stub eval; **green on `5ebe7a9`**) → one read-only cross-model assessment (**done**, [launch assessment](docs/project-assessment-2026-09-18-launch.md)) → M10 (README, SKILL.md, §6 checkboxes, `make demo`; **done 2026-09-19**). No checkbox or historical result is marked passed by this amendment. [M9 Entry156](docs/m9-review-findings.md#entry156--2026-09-18-user-directed-abandonment-and-claude-handoff).
+**M9 scope amendment — user decision 2026-09-18:** Calibration/continuity (LP2-CONTINUITY, LP3, AM/AP/AS, normal route N and their counts/caps) is abandoned as recorded residuals, not launch gates; no further implementation, proofs or reviews. Historical failures/evidence remain unchanged. The 1Password shipping claim is “offline-verified against a fake CLI, plus an operator smoke test on op CLI 2.39.0 / macOS” (smoke run by the operator 2026-09-18: passed, M9 Entry157). V1 is the user's manual throwaway-vault/service-account checklist: list, fill, missing item, bad/revoked token, grep transcript/logs for the secret. Natural expiry, Linux and denial-format classification are limitations; local-file remains always available. Sequence: operator smoke (**done 2026-09-18**) → one exact-tree clean-clone gate (`make test`, Docker, stub eval; **green on `5ebe7a9`**) → one read-only cross-model assessment (**done**, [launch assessment](../docs/project-assessment-2026-09-18-launch.md)) → M10 (README, SKILL.md, §6 checkboxes, `make demo`; **done 2026-09-19**). No checkbox or historical result is marked passed by this amendment. [M9 Entry156](docs/m9-review-findings.md#entry156--2026-09-18-user-directed-abandonment-and-claude-handoff).
 
 **Must-have for launch (v0.1):**
 - [x] Three-tool interface spec + threat-model README (the trust-boundary statement written down first). *(`SCHEMA.md`, `README.md`.)*
@@ -174,13 +174,13 @@ Reconciled at M10 on 2026-09-18 against the tree gated in the [launch assessment
 
 ## 9. First-week milestones
 
-*Removed at launch (2026-09-18). The original first-week plan is in git history; what was actually built, in order, is the milestone table in [`docs/phase-0-plan.md`](docs/phase-0-plan.md).*
+*Removed at launch (2026-09-18). The original first-week plan is in git history; what was actually built, in order, is the milestone table in [`docs/phase-0-plan.md`](../docs/phase-0-plan.md).*
 
 ---
 
 ## 10. Phase 0 for the implementing agent (do this first)
 
-*Removed at launch (2026-09-18). These were instructions to the implementing agent before any code existed; their output is [`docs/phase-0-plan.md`](docs/phase-0-plan.md). The original is in git history.*
+*Removed at launch (2026-09-18). These were instructions to the implementing agent before any code existed; their output is [`docs/phase-0-plan.md`](../docs/phase-0-plan.md). The original is in git history.*
 
 ---
 

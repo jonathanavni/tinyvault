@@ -21,7 +21,7 @@
 
 ## Context Hygiene
 
-- After compaction, re-read `PLAN.md` and the relevant files before continuing.
+- After compaction, re-read `build-log/PLAN.md` and the relevant files before continuing.
 - Write important outputs (schemas, decisions) to files immediately.
 - When switching between unrelated tasks, suggest `/clear`.
 - Keep fewer than 10 MCP servers enabled.

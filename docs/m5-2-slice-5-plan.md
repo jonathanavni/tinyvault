@@ -4,11 +4,11 @@ Revision 3 — LOCKED, 2026-09-05, after the final capped paper round and Entry4
 Owner: Codex, session `2026-09-05-m5.2-slice5-planning`.
 Baseline: `main` @ `f93e1df5bb1e600e13f102c517c3945ef1a70c0b`, clean at entry.
 Contract: [M5.2 revision 4](m5-2-slice-spec.md) §D4 / Acceptance L;
-sequence: [implementation plan](m5-2-implementation-plan.md) row 5.
-Inherited coupling: [M5 revision3](m5-slice-spec.md) §D5 and Acceptance D item5, and
-[m5-review-findings](m5-review-findings.md) C-2 P1-A: the coverage gate and full adjudication
+sequence: [implementation plan](../build-log/docs/m5-2-implementation-plan.md) row 5.
+Inherited coupling: [M5 revision3](../build-log/docs/m5-slice-spec.md) §D5 and Acceptance D item5, and
+[m5-review-findings](../build-log/docs/m5-review-findings.md) C-2 P1-A: the coverage gate and full adjudication
 must derive through the same `deriveLeakFromEvidence` function and preserve its scoring mutant.
-Dispositions: [Slice 5 register](m5-2-slice-5-review-findings.md), append-only.
+Dispositions: [Slice 5 register](../build-log/docs/m5-2-slice-5-review-findings.md), append-only.
 
 ## 1. Objective and acceptance boundary
 

@@ -6,7 +6,7 @@ description: QA review from fresh context — spawns a reviewer subagent that de
 
 Spawn a QA reviewer subagent with fresh context to review recent implementation work. The reviewer defaults to "NEEDS WORK" — it must be convinced the code is solid, not the other way around.
 
-This is the **same-model** review channel. For high-risk code, pair it with a **cross-model** Codex pass (step 5) — the two catch largely disjoint issues. See [`docs/handoff-pattern.md`](../../docs/handoff-pattern.md) §7.
+This is the **same-model** review channel. For high-risk code, pair it with a **cross-model** Codex pass (step 5) — the two catch largely disjoint issues. See [`build-log/docs/handoff-pattern.md`](../../build-log/docs/handoff-pattern.md) §7.
 
 ## When to Use
 
@@ -17,7 +17,7 @@ This is the **same-model** review channel. For high-risk code, pair it with a **
 
 ## Steps
 
-1. **Determine review scope** — `git diff --stat` and `git diff --name-only` for the changed files; read `PLAN.md` for the current milestone's requirements and verification checklist.
+1. **Determine review scope** — `git diff --stat` and `git diff --name-only` for the changed files; read `build-log/PLAN.md` for the current milestone's requirements and verification checklist.
 
 2. **Scale review depth** by change magnitude:
    - Under 200 lines: full detail review of every line
@@ -31,7 +31,7 @@ This is the **same-model** review channel. For high-risk code, pair it with a **
    - NEEDS WORK → fix critical issues, then re-review
    - Don't argue with the reviewer — fix the issues, or explain to the user why you disagree.
 
-5. **Cross-model review** — for gating / correctness / security / payment code, run a Codex `adversarial-review` pass on the same diff. Mandatory for payment and security code, recommended for API-contract changes, skip for internal refactors/tests/config. See [`docs/handoff-pattern.md`](../../docs/handoff-pattern.md).
+5. **Cross-model review** — for gating / correctness / security / payment code, run a Codex `adversarial-review` pass on the same diff. Mandatory for payment and security code, recommended for API-contract changes, skip for internal refactors/tests/config. See [`build-log/docs/handoff-pattern.md`](../../build-log/docs/handoff-pattern.md).
 
 ## Reviewer Prompt Template
 

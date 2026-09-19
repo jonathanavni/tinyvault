@@ -7,7 +7,7 @@
 > attestation) and validation moves to code. The post-implementation ladder (`/review` →
 > `/security-review` → Codex adversarial diff) is where the dependency boundary, runtime attestation,
 > cleanup behavior, and absence-detection tests get verified.
-> Governed by [`phase-0-plan.md`](phase-0-plan.md) §4, §8 (M2/M3/M4 rows), §9.1, §2, and `SCHEMA.md`.
+> Governed by [`phase-0-plan.md`](../../docs/phase-0-plan.md) §4, §8 (M2/M3/M4 rows), §9.1, §2, and `SCHEMA.md`.
 
 ## Task
 

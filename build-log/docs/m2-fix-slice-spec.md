@@ -5,7 +5,7 @@
 > [`m2-review-findings.md`](m2-review-findings.md) — read it in full; it is the authoritative list and it
 > marks which findings were *verified by execution* versus reasoned.
 > Original contract: [`m2-slice-spec.md`](m2-slice-spec.md) revision 4. Still governed by
-> [`phase-0-plan.md`](phase-0-plan.md) §4, §8, §9.1 and `SCHEMA.md`.
+> [`phase-0-plan.md`](../../docs/phase-0-plan.md) §4, §8, §9.1 and `SCHEMA.md`.
 
 ## Task
 

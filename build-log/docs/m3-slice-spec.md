@@ -10,7 +10,7 @@
 > validation moves to code: the post-implementation ladder verifies the parsed-snapshot compare, the actual
 > `try/finally` scopes, the fs trace, the flag on both gate invocations, and the real `libsodium-wrappers`
 > traversal. Governed by
-> [`phase-0-plan.md`](phase-0-plan.md) §2, §4 (layer 1, the three lifetimes), §6, §8 (M3 row), §9.1;
+> [`phase-0-plan.md`](../../docs/phase-0-plan.md) §2, §4 (layer 1, the three lifetimes), §6, §8 (M3 row), §9.1;
 > `SCHEMA.md`; and the standing decision *"never cache the secret; backend auth sessions may be cached"*
 > (`.claude/memory/decisions_product.md`).
 

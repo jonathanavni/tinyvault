@@ -122,11 +122,11 @@ commands and plugin-dispatch instructions remain specific to Claude-led sessions
 Lower-risk work may use the existing reduced ladder. Owner-side model choice stays under the user's
 control; use the existing stakes-based routing for delegated jobs when the dispatcher supports it.
 
-**Dispatch to Claude:** use [tinyvault-claude-review](../.agents/skills/tinyvault-claude-review/SKILL.md),
-backed by [`scripts/claude-review.mjs`](../scripts/claude-review.mjs). The reviewer is explicitly pinned
+**Dispatch to Claude:** use [tinyvault-claude-review](../../.agents/skills/tinyvault-claude-review/SKILL.md),
+backed by [`scripts/claude-review.mjs`](../../scripts/claude-review.mjs). The reviewer is explicitly pinned
 to **Opus 5 (`claude-opus-5`)**, high effort, in a fresh non-interactive CLI session with no model fallback.
 This uses the existing Claude Code login; no reverse-dispatch plugin is needed. Give it the
-[review packet](../templates/claude-review-packet.md), exact candidate, relevant contracts, threat model,
+[review packet](../../templates/claude-review-packet.md), exact candidate, relevant contracts, threat model,
 accepted residuals, and verification artifacts. Keep raw reports outside every source worktree (§7.2).
 
 The helper exposes only Read/Glob/Grep and uses CLI safe mode to disable automatic instructions, commands,
@@ -138,7 +138,7 @@ task-specific context. The reviewer cannot run tests or modify code. These
 are tool restrictions, not an OS sandbox. The before/after digest covers tracked and non-ignored untracked
 files, not `.git` internals or ignored artifacts; it detects candidate drift but is not an atomic lock.
 Hold the checkout stable. Each required channel gets its own fresh invocation. For `security`, the helper
-includes and hashes the versioned [security methodology](../templates/claude-security-review.md); this is
+includes and hashes the versioned [security methodology](../../templates/claude-security-review.md); this is
 a dedicated static security review, not a claim that `/security-review` or an external scanner ran.
 Explicitly mandated auditors and dynamic tests remain separate gates.
 
@@ -390,7 +390,7 @@ the diff, a reviewer from that same family shares its blind spots — so "cross-
 slice, by asking *who implemented this?* Getting this backwards is easy and it silently overstates coverage:
 
 - When **Claude** implements, `/review` is same-family and the Codex pass supplies the different-family look.
-- When **Codex** implements (the default for 🔴 slices here, see [`phase-0-plan.md` §9](../docs/phase-0-plan.md)),
+- When **Codex** implements (the default for 🔴 slices here, see [`phase-0-plan.md` §9](../../docs/phase-0-plan.md)),
   the relationship inverts: Claude `/review` and `/security-review` are the **different-family** channels, and
   the Codex post-implementation pass is **fresh-context and adversarial but same-family** as the implementer.
 
@@ -441,7 +441,7 @@ A generalist security reviewer is typically strongest on conventional classes (i
 
 Distinct from per-diff review: an audit sweeps existing code, including everything a diff-aware pass never saw.
 
-**Timing.** Do not run a heavyweight *routine* baseline audit before the system's core security path actually exists — auditing scaffolding produces noise and false confidence. Schedule routine sweeps against milestones where a real trust boundary has landed; the concrete schedule for this project is in [`phase-0-plan.md` §9.2](phase-0-plan.md).
+**Timing.** Do not run a heavyweight *routine* baseline audit before the system's core security path actually exists — auditing scaffolding produces noise and false confidence. Schedule routine sweeps against milestones where a real trust boundary has landed; the concrete schedule for this project is in [`phase-0-plan.md` §9.2](../../docs/phase-0-plan.md).
 
 This schedules **routine whole-codebase sweeps only. It does not prohibit a targeted audit** at any time when there is a reason for one: concrete evidence of a defect, a new threat-model question, or a named gap a review channel has left open. A targeted audit is scoped to that question and needs no milestone permission.
 
@@ -496,10 +496,10 @@ For review handoffs, Codex does not edit unless explicitly asked. It returns fin
 
 ## 10. Handoff Templates
 
-Fill-in-the-blank packets live in [`../templates/`](../templates/):
+Fill-in-the-blank packets live in [`../templates/`](../../templates/):
 
-- [`templates/implementation-handoff.md`](../templates/implementation-handoff.md)
-- [`templates/review-handoff.md`](../templates/review-handoff.md)
+- [`templates/implementation-handoff.md`](../../templates/implementation-handoff.md)
+- [`templates/review-handoff.md`](../../templates/review-handoff.md)
 
 ### Required-reading rules
 

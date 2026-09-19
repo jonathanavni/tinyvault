@@ -91,7 +91,7 @@ work in flight, the rest stay parked here (register "Final5 round"):
   distributed) or narrow the README further (S5 (8)); promote the persisted `diagnostic.json`↔`runs.json` binding to a production
   check (AM13 (1)); `runEvalEntry` positive allowlist (AM13 (3)); break `src/agents/prompt.ts` → `testbed` imports before packaging
   (Codex); `SKILL.md` is a measured input — expanding it for humans re-opens E8 (QA rec. 6); decide the Probe P timing-2 policy
-  before M7 doubles fixture load — **2026-09-09: converted to a measurement question; C1 landed (`e040175`), C2 (sidecar + sham-A/B and A/A twins, D10 wording amendment) and the N = 20 campaign await user adoption of [`docs/probe-p-timing2-policy.md`](docs/probe-p-timing2-policy.md).**
+  before M7 doubles fixture load — **2026-09-09: converted to a measurement question; C1 landed (`e040175`), C2 (sidecar + sham-A/B and A/A twins, D10 wording amendment) and the N = 20 campaign await user adoption of [`docs/probe-p-timing2-policy.md`](../docs/probe-p-timing2-policy.md).**
 - **[Graduated residuals]** S4 (1) bounded trusted-backend contract (M9 adapter step); S4 (9) unload/keepalive (already listed
   above); AM12 §14 (1) decoder-budget rescale amendment with benchmark evidence; AM13 §9 (1) trusted attempt ledger.
 
@@ -166,7 +166,7 @@ work in flight, the rest stay parked here (register "Final5 round"):
   (unload beacons, screenshot text, worker/popup limits, finite decoder inventory — see the M6 capture items above and
   `SCHEMA.md`). Each M6 scenario states which channels it requires observed, and the limitations stay printed beside any
   published result. Planned in M6 E5/AM05 (§5/§7); S4/S5 implementation and qualification proof remain due *[delivered by S4–S6; E5 zero counts in every qualified cohort, 2026-09-09]*.
-- **A4 — CLOSED as superseded by M6 S4 (O-8, approved for M8).** `finish()` refuses pending captures, open sessions and admitted operations. Its original premise no longer holds. **Open narrowed residual:** `list_vault` and `request_vault_setup` are not admitted operations, and callers still supply the settle/drain/quiesce/finalize sequence. M8 supplies that sequence but does not redesign the host contract; see [MCP lifecycle limits](SCHEMA.md#mcp-stdio-adapter-contract) and M8 packet §3.7/§9.
+- **A4 — CLOSED as superseded by M6 S4 (O-8, approved for M8).** `finish()` refuses pending captures, open sessions and admitted operations. Its original premise no longer holds. **Open narrowed residual:** `list_vault` and `request_vault_setup` are not admitted operations, and callers still supply the settle/drain/quiesce/finalize sequence. M8 supplies that sequence but does not redesign the host contract; see [MCP lifecycle limits](../SCHEMA.md#mcp-stdio-adapter-contract) and M8 packet §3.7/§9.
 - **M9 backend identity requirement:** any backend must state handle→record injectivity (R20). Distinct handles resolving to one credential must not silently defeat a per-handle fill budget; carry the runtime-control packet §6.6(6)/§9 R20 into the backend contract.
 - **A7 — local-vault durability.** Exclusive key creation can leave a partial file after failure, and vault replacement lacks a directory `fsync` (`src/backends/localFileWriter.ts`). Bounded follow-up.
 - **[S4 residual → S5 / backend step] Trusted-side stalls are bounded only at the abort trigger.** A stalled `CredentialBackend`

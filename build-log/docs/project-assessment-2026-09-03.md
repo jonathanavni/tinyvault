@@ -38,7 +38,7 @@ Canonical project sources:
 
 - [`PROJECT-SPEC.md`](../PROJECT-SPEC.md) — locked product and security contract; its intent wins on conflict.
 - [`PLAN.md`](../PLAN.md) — active implementation state and milestone tracking.
-- [`docs/phase-0-plan.md`](phase-0-plan.md) — detailed phase plan and acceptance criteria.
+- [`docs/phase-0-plan.md`](../../docs/phase-0-plan.md) — detailed phase plan and acceptance criteria.
 - [`docs/m5-slice-spec.md`](m5-slice-spec.md) — M5 implementation contract.
 - [`BACKLOG.md`](../BACKLOG.md) — known residual risks and deferred work.
 
@@ -69,8 +69,8 @@ The successful checks establish that the implemented deterministic path is inter
 
 Evidence:
 
-- [`package.json`](../package.json), line 8: the failing suite is part of the mandatory test command.
-- [`testbed/checkers/leakDecoders.timing.test.ts`](../testbed/checkers/leakDecoders.timing.test.ts), lines 111–115: the 200-event stress invocation.
+- [`package.json`](../../package.json), line 8: the failing suite is part of the mandatory test command.
+- [`testbed/checkers/leakDecoders.timing.test.ts`](../../testbed/checkers/leakDecoders.timing.test.ts), lines 111–115: the 200-event stress invocation.
 
 Do not solve this only by increasing the timeout without determining whether runtime growth is expected and bounded. Preserve the intended performance proof and separate benchmark assertions from heavy stress coverage if appropriate.
 
@@ -80,9 +80,9 @@ The decoder timing test requires exactly 30 files in `artifacts/eval/runs`. That
 
 Evidence:
 
-- [`testbed/checkers/leakDecoders.timing.test.ts`](../testbed/checkers/leakDecoders.timing.test.ts), lines 40–48: hard requirement for 30 run artifacts.
-- [`.gitignore`](../.gitignore), lines 35–36: `artifacts/` is ignored.
-- [`Makefile`](../Makefile): the test target does not establish this prerequisite.
+- [`testbed/checkers/leakDecoders.timing.test.ts`](../../testbed/checkers/leakDecoders.timing.test.ts), lines 40–48: hard requirement for 30 run artifacts.
+- [`.gitignore`](../../.gitignore), lines 35–36: `artifacts/` is ignored.
+- [`Makefile`](../../Makefile): the test target does not establish this prerequisite.
 
 Preferred outcome: deterministic tests create their own fixtures or use checked-in minimal fixtures. Generated evaluator output should not be an undeclared prerequisite for the unit-test gate.
 
@@ -93,7 +93,7 @@ The locked specification requires hostile pages to run as Docker-composed fixtur
 Evidence:
 
 - [`PROJECT-SPEC.md`](../PROJECT-SPEC.md), lines 47–50, 133–143, and 179–184.
-- [`docs/phase-0-plan.md`](phase-0-plan.md), lines 3–4, 356, and 402: specification intent wins and the fixture topology is part of the planned contract.
+- [`docs/phase-0-plan.md`](../../docs/phase-0-plan.md), lines 3–4, 356, and 402: specification intent wins and the fixture topology is part of the planned contract.
 - [`docs/m5-slice-spec.md`](m5-slice-spec.md), lines 259–275: the implemented in-process topology.
 
 This needs an explicit decision. Either implement the specified Docker topology and rerun acceptance, or amend the canonical specification with a security and reproducibility rationale. Do not silently treat the slice spec as overriding the locked project spec.
@@ -104,7 +104,7 @@ The 0/30 result is produced by a scripted stub. It validates orchestration, pers
 
 Evidence:
 
-- [`README.md`](../README.md), lines 42–44: identifies the current agent as a deterministic stub.
+- [`README.md`](../../README.md), lines 42–44: identifies the current agent as a deterministic stub.
 
 Any report or release language should label this result as a deterministic harness result until real-agent rows exist.
 
@@ -112,9 +112,9 @@ Any report or release language should label this result as a deterministic harne
 
 Several documents describe different project states:
 
-- [`README.md`](../README.md), lines 26–29, still says the fill service is not built, while lines 37–38 report M4 and M5 complete.
+- [`README.md`](../../README.md), lines 26–29, still says the fill service is not built, while lines 37–38 report M4 and M5 complete.
 - [`ORIENT.md`](../ORIENT.md), lines 9–24, contains unresolved placeholders.
-- [`docs/phase-0-plan.md`](phase-0-plan.md), lines 417–422, still identifies M2 as next.
+- [`docs/phase-0-plan.md`](../../docs/phase-0-plan.md), lines 417–422, still identifies M2 as next.
 - [`PLAN.md`](../PLAN.md), line 14, describes the same hygiene work as both completed and deferred.
 - [`PROJECT-SPEC.md`](../PROJECT-SPEC.md) still describes native autofill/keyboard interaction, while the current fill implementation uses synchronous isolated-realm assignment.
 
@@ -136,15 +136,15 @@ These are not all immediate product blockers, but they make local success harder
 
 These are already acknowledged in the repository and should become explicit M6–M9 acceptance inputs rather than remaining passive backlog notes:
 
-- Screenshot text is the uninstrumented eleventh exfiltration channel. See [`README.md`](../README.md), lines 61–68.
+- Screenshot text is the uninstrumented eleventh exfiltration channel. See [`README.md`](../../README.md), lines 61–68.
 - Unload-time `sendBeacon`/`keepalive` traffic may escape event capture. See [`BACKLOG.md`](../BACKLOG.md), lines 47–52.
 - CDP request identifiers are not guaranteed globally unique. See [`BACKLOG.md`](../BACKLOG.md), lines 53–54.
 - Composed decoder attacks can exceed scan depth, width, or time budgets. See [`BACKLOG.md`](../BACKLOG.md), lines 31–36.
 - The retention rule is shape-oriented and does not cover every console, fetch, stdout, or thrown-value path. See [`BACKLOG.md`](../BACKLOG.md), line 45.
 - A form action may be safe when filled and rewritten before submission; the design relies on observation-layer detection if the later request is captured. See [`BACKLOG.md`](../BACKLOG.md), lines 18–26.
-- `SupervisorHost.finish()` does not itself settle pending evidence. The testbed runner currently handles that through `afterLoop`, creating an integration contract that callers can miss. See [`src/supervisor/host.ts`](../src/supervisor/host.ts), lines 403–413 and 503–510, and [`testbed/runner.ts`](../testbed/runner.ts), lines 479–509.
+- `SupervisorHost.finish()` does not itself settle pending evidence. The testbed runner currently handles that through `afterLoop`, creating an integration contract that callers can miss. See [`src/supervisor/host.ts`](../../src/supervisor/host.ts), lines 403–413 and 503–510, and [`testbed/runner.ts`](../../testbed/runner.ts), lines 479–509.
 
-The append-only local writer also documents two durability weaknesses: a write failure can leave a partial key, and the directory is not fsynced after rename. See [`src/backends/localFileWriter.ts`](../src/backends/localFileWriter.ts), lines 1–7 and 228–260.
+The append-only local writer also documents two durability weaknesses: a write failure can leave a partial key, and the directory is not fsynced after rename. See [`src/backends/localFileWriter.ts`](../../src/backends/localFileWriter.ts), lines 1–7 and 228–260.
 
 ## Codebase quality assessment
 

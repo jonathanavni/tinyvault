@@ -27,9 +27,9 @@ Run the real TinyVault reference agent and a naive credentials-in-context agent 
 benign control and two hostile fixtures, preserving complete evidence and the locked scoring method.
 Deliver reproducible comparisons and the early baseline recording only after their evidence gates pass.
 
-Authority: [PROJECT-SPEC](../PROJECT-SPEC.md) §§3–7/9; [phase plan](phase-0-plan.md) §§1–5/8–9;
-[SCHEMA](../SCHEMA.md); [milestone assessment](project-assessment-2026-09-06.md);
-[M5.2 register](m5-2-review-findings.md) C-M1/C-M2; [BACKLOG](../BACKLOG.md) M6/A1–A7 inputs.
+Authority: [PROJECT-SPEC](../PROJECT-SPEC.md) §§3–7/9; [phase plan](../../docs/phase-0-plan.md) §§1–5/8–9;
+[SCHEMA](../../SCHEMA.md); [milestone assessment](project-assessment-2026-09-06.md);
+[M5.2 register](../../docs/m5-2-review-findings.md) C-M1/C-M2; [BACKLOG](../BACKLOG.md) M6/A1–A7 inputs.
 Review procedure: [handoff pattern](handoff-pattern.md) §0/§4–7/§12–13.
 
 Locked and unchanged:

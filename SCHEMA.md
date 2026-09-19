@@ -163,7 +163,7 @@ module-level; final local-file/empty-baseline host construction, resolved proven
 wiring were S5 obligations, delivered and accepted 2026-09-08. S4 cancellation and the intact real pilot/cohort gates were delivered by S4–S6 (M6 register); this paragraph records the S3-time obligations.
 
 Prompt/bootstrap headroom is specific to the exact source and input bytes. Historical S3 measurements
-are recorded with the frozen candidate and artifacts in the [M6 register](docs/m6-review-findings.md#s3-r2--owner-acceptance-and-retained-review-limits),
+are recorded with the frozen candidate and artifacts in the [M6 register](build-log/docs/m6-review-findings.md#s3-r2--owner-acceptance-and-retained-review-limits),
 not guaranteed for later edits. Each extra safe ASCII run-ID character costs two bytes because it occurs
 in both URLs; label/handle size, inventory count, URL width and JSON escaping also consume the reserve.
 S5 must remeasure final cohort identities and real metadata without reducing its uniqueness requirement
@@ -616,7 +616,7 @@ two unadmitted vault tools and caller-supplied finalization order remain a narro
 
 ## 1Password backend contract (M9; shipped under the narrowed claim — see README "Limitations")
 
-The approved [M9 contract](docs/m9-onepassword-packet.md) adds a CLI2.39.0 service-account backend
+The approved [M9 contract](build-log/docs/m9-onepassword-packet.md) adds a CLI2.39.0 service-account backend
 behind the unchanged CredentialBackend interface and unchanged MCP tools/results/metadata.
 Local-file stays the default. [Human setup](docs/onepassword-setup.md) uses each operator's own
 private token file/configuration; no credential, account ID or raw provider response belongs in public evidence.

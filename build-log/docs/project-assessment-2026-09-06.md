@@ -8,7 +8,7 @@ assessments found no new technical acceptance blocker. Their original verdicts w
 for status documentation; the owner verified and corrected README status, phase-plan build status and
 the index's ambiguous A5 wording. All findings, original severities, reviewer identities/report hashes,
 coverage deviations and owner evidence adjudications are preserved in the canonical
-[M5.2 register C-M1](m5-2-review-findings.md#c-m1--whole-m52-milestone-close-assessment-2026-09-06).
+[M5.2 register C-M1](../../docs/m5-2-review-findings.md#c-m1--whole-m52-milestone-close-assessment-2026-09-06).
 This assessment supersedes the September4 report's M5.2 current-state conclusions; its open A1–A7
 follow-ups retain their canonical dispositions.
 

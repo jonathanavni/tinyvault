@@ -1,7 +1,7 @@
 # TinyVault — Phase 0 Implementation Plan
 
 > **Status:** ✅ **LOCKED (2026-08-31)** after the full 3-round Codex adversarial ladder (handoff §4/§5; round 3 is the cap). All 15 findings across 3 rounds absorbed; round-3's items are last-mile implementation specifics (re-verified as code when Codex implements M2/M4 through the ladder) plus one doc-drift fix — not new design holes. Implementation may begin at M0. Accepted residual risks are in §10.
-> **Source of truth for *why*:** [`PROJECT-SPEC.md`](../PROJECT-SPEC.md). This doc resolves the spec's §10 open questions and turns the §9 milestones into an executable plan. Where the two disagree, the spec's intent wins and this doc is wrong — flag it.
+> **Source of truth for *why*:** [`PROJECT-SPEC.md`](../build-log/PROJECT-SPEC.md). This doc resolves the spec's §10 open questions and turns the §9 milestones into an executable plan. Where the two disagree, the spec's intent wins and this doc is wrong — flag it.
 
 ---
 
@@ -351,7 +351,7 @@ capture before parsing, durable request append before transport, exact seven dec
 trusted producer identities. Fixed-bundle offline replay/scripted regressions remain deterministic;
 fresh provider sampling is statistical. S2's SDK feasibility fixtures do not establish a live cohort,
 and D-CANCEL still owns hard browser cancellation/teardown. All numeric limits remain in the
-[M6 plan](m6-implementation-plan.md#4-agent-and-sdk-contract).
+[M6 plan](../build-log/docs/m6-implementation-plan.md#4-agent-and-sdk-contract).
 
 **M6 S5 result contract (ACCEPTED 2026-09-08 at the round-3 cap with the integrator confirmation pass; register entry "S5 implementation — accepted").** `make eval` selects the
 real 3 × 2 × N comparison through the absent-profile default; `make baseline` selects 3 × 1 × N,
@@ -516,7 +516,7 @@ interface CredentialBackend {
 - `localFile` (libsodium sealed file) — **landed M3**: per-record XChaCha20-Poly1305-IETF sealing with
   additional data binding each ciphertext to `[handle, canonicalOrigin, fieldRecipe]`; metadata cleartext
   at rest (stated tradeoff); 32-byte raw key file read per call, never cached; no KDF in v0.1.
-- `onepassword` — approved M9 CLI/service-account contract, offline candidate implemented with acceptance pending: fixed custom vault/item allowlist, injective opaque handles, archive-excluding frozen discovery, all stored website URLs must derive one canonical origin. No secret-reference/name lookup or `op read`; fixed-ID detail validates identity/category/D8 state/policy/built-in password after admission. See [M9 locked packet](m9-onepassword-packet.md) and [operator setup](onepassword-setup.md).
+- `onepassword` — approved M9 CLI/service-account contract, offline candidate implemented with acceptance pending: fixed custom vault/item allowlist, injective opaque handles, archive-excluding frozen discovery, all stored website URLs must derive one canonical origin. No secret-reference/name lookup or `op read`; fixed-ID detail validates identity/category/D8 state/policy/built-in password after admission. See [M9 locked packet](../build-log/docs/m9-onepassword-packet.md) and [operator setup](onepassword-setup.md).
 - `bitwarden` — later; adapter MUST strip plaintext from `bw list items` output and a test MUST assert the stripped metadata carries no secret.
 
 **BackendStatus → SetupReason mapping (one place, alignment-review #13):** the fill service maps backend probe reasons to the caller-visible setup enum as `not_installed | error → backend_unavailable`; `not_authenticated | locked → backend_locked`; item-level `not-found → missing_item`. **`BackendError.kind → FillResult.reason` (M4):** `not-found → handle-unavailable`; every other kind, including `integrity`, → `backend-error` (never an unlock instruction — m3 register B/#8). The two enums stay separate on purpose — backend detail is trusted-side; the caller sees only the coarser closed enum.
@@ -561,12 +561,12 @@ tinyvault/
 > (`07996a2`, closing the Opus 5 audit) · **M2 ✅** (`6a6b67c`) · **M3 ✅** (`1e24f73`) · **M4 ✅** (`b8a9396`) · **M5 ✅**
 > (`96e3ea3`) · **M5.1 ✅** · **M5.2 ✅** — spec LOCKED at revision 4 (`60520d9`), all six slices integrated
 > (final source `8103c47`, acceptance record `53fd94f`); whole-milestone assessment complete
-> ([assessment](project-assessment-2026-09-06.md), [closure disposition](m5-2-review-findings.md#c-m1--whole-m52-milestone-close-assessment-2026-09-06)).
-> M6 planning is complete ([plan/handoff](m6-implementation-plan.md), [paper reviews](m6-review-findings.md));
-> S1 provenance/profile contracts are complete at the implementation round3 cap with recorded evidence limits; D-BUDGET entry is resolved by user-approved AM11 (M6 plan §4.3.1); S2 SDK sizing is accepted; the approved review-helper repair is verified at final fix round3, with full default gate and three independent review channels PASS; S3 module profiles/recipes and exact sizing are complete after R2 with recorded P3 limits; checkpoint `db78a1c` is pushed after exact-commit full default gate PASS; D-CANCEL resolved (`2bcfbbd`); S4, S5 and S6 accepted at capped rounds with declared residuals; AM12, AM13 and F1 adopted and implemented; the literal clean-clone gate passed three times on `3072e0b`; pilot `cY3Deep4` READY and the N10 sequence `E9-A3-N10` QUALIFIED — **M6 ✅** (S6 accepted 2026-09-09; [milestone-close assessment](project-assessment-2026-09-09.md), [register](m6-review-findings.md)) · **M6.1 ✅** (`7ae23be`, receiptless-row canary authentication — the assessment's P1, closed the same day). M7 merged `4e86933`; runtime fill control merged `6812627`, live-qualified only in E8c’s evaluated fixture/configuration (`PFc7eGp2`). **M8 ✅**: capped implementation reviews complete with accepted residuals; merged `a40bbd65` includes the separately approved M6 finalization witness repair. Corrected candidate and merged default/Docker/stub gates passed, as did the literal candidate clone. [Close assessment and owner dispositions](project-assessment-2026-09-12-m8.md) complete; earlier gate reds remain in the M8 register. Private push authorized; no public release authorized. M4 and M5 carry deferred
+> ([assessment](../build-log/docs/project-assessment-2026-09-06.md), [closure disposition](m5-2-review-findings.md#c-m1--whole-m52-milestone-close-assessment-2026-09-06)).
+> M6 planning is complete ([plan/handoff](../build-log/docs/m6-implementation-plan.md), [paper reviews](../build-log/docs/m6-review-findings.md));
+> S1 provenance/profile contracts are complete at the implementation round3 cap with recorded evidence limits; D-BUDGET entry is resolved by user-approved AM11 (M6 plan §4.3.1); S2 SDK sizing is accepted; the approved review-helper repair is verified at final fix round3, with full default gate and three independent review channels PASS; S3 module profiles/recipes and exact sizing are complete after R2 with recorded P3 limits; checkpoint `db78a1c` is pushed after exact-commit full default gate PASS; D-CANCEL resolved (`2bcfbbd`); S4, S5 and S6 accepted at capped rounds with declared residuals; AM12, AM13 and F1 adopted and implemented; the literal clean-clone gate passed three times on `3072e0b`; pilot `cY3Deep4` READY and the N10 sequence `E9-A3-N10` QUALIFIED — **M6 ✅** (S6 accepted 2026-09-09; [milestone-close assessment](../build-log/docs/project-assessment-2026-09-09.md), [register](../build-log/docs/m6-review-findings.md)) · **M6.1 ✅** (`7ae23be`, receiptless-row canary authentication — the assessment's P1, closed the same day). M7 merged `4e86933`; runtime fill control merged `6812627`, live-qualified only in E8c’s evaluated fixture/configuration (`PFc7eGp2`). **M8 ✅**: capped implementation reviews complete with accepted residuals; merged `a40bbd65` includes the separately approved M6 finalization witness repair. Corrected candidate and merged default/Docker/stub gates passed, as did the literal candidate clone. [Close assessment and owner dispositions](../build-log/docs/project-assessment-2026-09-12-m8.md) complete; earlier gate reds remain in the M8 register. Private push authorized; no public release authorized. M4 and M5 carry deferred
 > audit items — see their Verify columns. Post-lock contract amendments (`'benign'` AttackClass,
 > `canaryCommitment`, per-scenario `leakRateCI95`) are recorded in the `PLAN.md` Decisions Log.
-> **M9:** **Narrowed scope — user decision 2026-09-18.** Calibration/continuity (LP2-CONTINUITY, LP3, AM/AP/AS, normal route N and associated counts/caps) is **ABANDONED as recorded residuals**, not launch gates; no further implementation, proofs or reviews. Historical failures and evidence remain unchanged. Shipping claim: “offline-verified against a fake CLI, plus an operator smoke test on op CLI 2.39.0 / macOS”; the [operator smoke run 2026-09-18: passed](onepassword-setup.md#5-record-and-clean-up) (M9 Entry157). V1 is a user-run manual checklist; natural expiry, Linux and denial-format classification are limitations. Local-file remains always available. Smoke, the exact-tree clean-clone gate (green on `5ebe7a9`) and the one read-only cross-model assessment are done ([launch assessment](project-assessment-2026-09-18-launch.md)); M10 is in progress. Not yet public. [Decision and handoff](m9-review-findings.md#entry156--2026-09-18-user-directed-abandonment-and-claude-handoff).
+> **M9:** **Narrowed scope — user decision 2026-09-18.** Calibration/continuity (LP2-CONTINUITY, LP3, AM/AP/AS, normal route N and associated counts/caps) is **ABANDONED as recorded residuals**, not launch gates; no further implementation, proofs or reviews. Historical failures and evidence remain unchanged. Shipping claim: “offline-verified against a fake CLI, plus an operator smoke test on op CLI 2.39.0 / macOS”; the [operator smoke run 2026-09-18: passed](onepassword-setup.md#5-record-and-clean-up) (M9 Entry157). V1 is a user-run manual checklist; natural expiry, Linux and denial-format classification are limitations. Local-file remains always available. Smoke, the exact-tree clean-clone gate (green on `5ebe7a9`) and the one read-only cross-model assessment are done ([launch assessment](project-assessment-2026-09-18-launch.md)); M10 is in progress. Not yet public. [Decision and handoff](../build-log/docs/m9-review-findings.md#entry156--2026-09-18-user-directed-abandonment-and-claude-handoff).
 
 </details>
 
@@ -615,7 +615,7 @@ M2, so:
   valuable for contract drift and locked-gate reinterpretation, and *not* a source of different-family coverage.
 
 All three channels and the ladder are unchanged; only the rationale for what each buys is corrected. See
-[`handoff-pattern.md` §7](handoff-pattern.md) for the author-relative rule. None of the three certifies M2;
+[`handoff-pattern.md` §7](../build-log/docs/handoff-pattern.md) for the author-relative rule. None of the three certifies M2;
 each is additive (§7.1).
 
 **Direct the security review at these surfaces** — they are M2-specific and a generalist pass will not
@@ -642,7 +642,7 @@ removable without weakening a locked invariant or a test that closed a review fi
 
 ### 9.2 Whole-codebase audit schedule
 
-Per [`handoff-pattern.md` §7.2](handoff-pattern.md) (which carries the tooling and hygiene rules):
+Per [`handoff-pattern.md` §7.2](../build-log/docs/handoff-pattern.md) (which carries the tooling and hygiene rules):
 
 - **No heavyweight *routine* baseline audit before the real fill path exists** — auditing scaffolding
   produces noise. This bounds *routine sweeps only*; a **targeted** audit is always permitted when

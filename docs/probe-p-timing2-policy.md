@@ -10,7 +10,7 @@ harness or distinguish a real channel from an order/environment effect; the **ca
 integration head at its review cap; the campaign **ran 2026-09-10** (frozen candidate `9c063ec`, predicate v5): 20 started / 20 ended, gate green and family accept in all 20, 11 starts excluded by rule B (macOS idle-hour maintenance), **V = 9 → primary outcome "insufficient" under §2.4, "quiet" also applicable over the valid runs; the user accepted P-1 on 2026-09-10: campaign completed and inconclusive, gate/deferral/historical reds/D-1 limits unchanged, no second campaign, no predicate change, excluded runs never admitted; run-19's excluded synthetic-sham rejection is recorded as an excluded null-comparison rejection under observed load.** Register: `docs/m7-review-findings.md`. The user's framing governs: *the
 existing gate remains unchanged; this is authorization to characterize the problem, not to relax or reinterpret
 the gate.* Nothing here changes a threshold, a sample size, the gated probe set, the hard clause, or what
-`make test` certifies. The locked specification stays: **D10** in [`docs/m4-slice-spec.md`](m4-slice-spec.md)
+`make test` certifies. The locked specification stays: **D10** in [`docs/m4-slice-spec.md`](../build-log/docs/m4-slice-spec.md)
 ("Probe P is a shared, pinned, tested statistic"; the six-probe Holm family; 180 s per test, ≤ 10 min for the
 partition — both time limits kept) and the Decisions Log entries of 2026-09-02 (paired, counterbalanced,
 family-corrected gate) and 2026-09-08 (policy change DEFERRED; the gate stays; every failure preserved; no

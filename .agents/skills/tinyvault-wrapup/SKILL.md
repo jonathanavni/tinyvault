@@ -9,7 +9,7 @@ This is a repository skill. Locate the TinyVault checkout containing this skill;
 another project or rely on a fixed machine path.
 
 Read the root [AGENTS.md](../../../AGENTS.md), then follow
-[the canonical session protocol](../../../docs/handoff-pattern.md#0-session-entry-and-ownership),
+[the canonical session protocol](../../../build-log/docs/handoff-pattern.md#0-session-entry-and-ownership),
 especially **One writer and handover** and **Codex wrapup**. Those sections own the procedure.
 
 Re-check ownership before writing. A delegated worker or former owner returns its report and proposed

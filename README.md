@@ -185,7 +185,7 @@ Point your MCP client at that command, with the checkout as its working director
 - **The results weren't measured through the MCP server.** The runs above called the library directly. The MCP server goes through the same fill checks, and the tests confirm that, but no real-model runs have gone through it yet. It also has two more tools than the measured setup.
 - **The tripwire is a test tool.** TinyVault can watch tool results for a planted decoy string. In normal use the decoy is random, so it detects nothing real. The MCP server's snapshots and response wrappers don't pass through it at all.
 - **Out of scope for v0.1:** single sign-on across several domains, logins built entirely in JavaScript without a form, 2FA and CAPTCHAs (see "What's next").
-- **1Password is lightly tested.** One manual run on macOS, as described above. I haven't tested Linux, or what happens when a token expires on its own. When 1Password refuses a request, TinyVault reports a generic failure and passes none of 1Password's wording on, but I've only seen two kinds of real refusal. Archiving an item doesn't cut off a TinyVault that's already running. Delete the item or revoke the token, then restart it. I started a deeper test effort for this backend and dropped it. What exists of it is in the [M9 register](docs/m9-review-findings.md), and I don't count it as evidence.
+- **1Password is lightly tested.** One manual run on macOS, as described above. I haven't tested Linux, or what happens when a token expires on its own. When 1Password refuses a request, TinyVault reports a generic failure and passes none of 1Password's wording on, but I've only seen two kinds of real refusal. Archiving an item doesn't cut off a TinyVault that's already running. Delete the item or revoke the token, then restart it. I started a deeper test effort for this backend and dropped it. What exists of it is in the [M9 register](build-log/docs/m9-review-findings.md), and I don't count it as evidence.
 - **The test bed doesn't see everything.** It watches ten of the eleven channels it declares. Text inside screenshots is the one it doesn't. Requests fired while a page unloads aren't captured. When a web worker's request body can't be retrieved, that's counted in the scorecard. The full list is in [SCHEMA.md](SCHEMA.md).
 
 This is pre-1.0 software from one person and hasn't been independently audited. Don't use it with a password you can't rotate.
@@ -199,7 +199,8 @@ The library is small. The repo around it isn't, so here is a map:
 | `src/` | The library. The fill logic is `src/core`, under 1,000 lines. The rest is the browser layer, the supervisor that records evidence, the two backends, the MCP server and the two test agents. | about 7,500 lines |
 | `testbed/` | The hostile pages, the leak checker, the scoring and the Docker setup. | about 14,500 lines |
 | `*.test.ts`, `scripts/` | Tests for both, and the checks `make test` runs. | about 49,000 lines |
-| `docs/`, `PLAN.md`, `.claude/`, `guides/` | The build record: plans, review findings, decisions. You don't need any of it to use TinyVault. [docs/README.md](docs/README.md) says where to start if you're curious. | about 45,000 lines |
+| `docs/` | The 1Password setup guide and the evidence this README cites. | 14 files |
+| `build-log/` | The build record: the spec, plans, review findings and decisions, moved out of the way. You don't need any of it to use TinyVault. [build-log/README.md](build-log/README.md) says where to start if you're curious. | about 45,000 lines |
 
 If you only read one directory, read `src/core`.
 
@@ -210,7 +211,7 @@ If you're building something similar:
 - **The eval came first.** The leak checker, the scorecard and the test for the checker were written before the fill logic. That's why the fake sign-in leak got caught instead of shipped.
 - **Masking never looks at the value.** Snapshots hide every password input and every field TinyVault filled, based on where the value came from. Nothing is compared against the secret, so there's no comparison for a page to game.
 - **The test that counts is a fresh clone.** `make test` has to pass from `git clone` with nothing else on disk. That caught two real failures in the last week before launch, including a test that only passed when the temp directory's path had no symlink in it, which on macOS it always does.
-- **Failures stay in the repo.** The failed first run, the red test runs and the review findings are all in [docs/](docs/README.md). Most of the code was written with two coding agents, Claude Code and Codex, one keeping the thread and the other attacking the work. Those records kept both honest.
+- **Failures stay in the repo.** The failed first run and the two launch reviews are in [docs/](docs/README.md). The red test runs and the rest of the review findings are in [build-log/](build-log/README.md). Most of the code was written with two coding agents, Claude Code and Codex, one keeping the thread and the other attacking the work. Those records kept both honest.
 
 ## TinyVault and WebMCP
 
@@ -222,7 +223,7 @@ It also opens a new way to leak. A hostile site can define a tool like `verify_i
 
 Adapters for other agent frameworks, the WebMCP test pages, and wiring TinyVault into KuchiClaw. That last one is also where 2FA codes and CAPTCHAs come in. TinyVault won't try to automate them. The plan is to hand them to a human through KuchiClaw's chat.
 
-The roadmap and the original spec are in [PROJECT-SPEC.md](PROJECT-SPEC.md). Build history by milestone is in [docs/phase-0-plan.md](docs/phase-0-plan.md#8-milestone-sequence-executable-eval-spine-before-security-core--finding-6).
+The roadmap and the original spec are in [build-log/PROJECT-SPEC.md](build-log/PROJECT-SPEC.md). Build history by milestone is in [docs/phase-0-plan.md](docs/phase-0-plan.md#8-milestone-sequence-executable-eval-spine-before-security-core--finding-6).
 
 If you're building credential handling for agents, or you break this, I'd love to hear from you.
 

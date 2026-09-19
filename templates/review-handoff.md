@@ -9,7 +9,7 @@ Review the diff from <base> to <head>.
 
 ## Required Reading
 - CLAUDE.md
-- PLAN.md (Current State)
+- build-log/PLAN.md (Current State)
 - <relevant planning / spec doc>
 - <relevant source files>
 - <relevant tests>

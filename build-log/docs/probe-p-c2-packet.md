@@ -1,7 +1,7 @@
 # C2 packet — Probe P diagnostics: raw-series sidecar, twins, per-probe injected-bias controls, scoped D10 wording (rev 3.1, 2026-09-09 — cap-round owner corrections + the ledger-sequence fix after Astra's STOP)
 
 Owner: Claude (continuity). Authorization: the user's 2026-09-09 adoption of
-[`docs/probe-p-timing2-policy.md`](probe-p-timing2-policy.md) v2.1 §2.2 (C2), the normative text; this packet is its
+[`docs/probe-p-timing2-policy.md`](../../docs/probe-p-timing2-policy.md) v2.1 §2.2 (C2), the normative text; this packet is its
 implementation contract. **Rev 3** = rev 2 + the capped round-3 owner corrections (Sol R3: 4 P1 wording defects, 3 P2; register "C2 packet —
 paper round 3 (cap)"); earlier revisions are in git history. Ladder: **Astra implementation** on
 `codex/probe-p-c2` → Astra adversarial review + Claude QA/security review → owner gates → merge. Rounds capped at three.

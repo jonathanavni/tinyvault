@@ -3,7 +3,7 @@
 Revision 5 — LOCKED, 2026-09-05, after final-paper dispositions and explicit user approval of the SCHEMA amendment.
 Owner: Codex, session `2026-09-05-m5.2-slice4`. Baseline: `main` @
 `dc0796fa8616548c6fa61315fed4b2b9bde97620`. Governing contract:
-[`m5-2-slice-spec.md`](m5-2-slice-spec.md) revision 4 LOCKED, §D3/§D7 and Acceptance D/F/H/M;
+[`m5-2-slice-spec.md`](../../docs/m5-2-slice-spec.md) revision 4 LOCKED, §D3/§D7 and Acceptance D/F/H/M;
 sequence: [`m5-2-implementation-plan.md`](m5-2-implementation-plan.md), row 4.
 Review dispositions belong in `m5-2-slice-4-review-findings.md` (append-only).
 
@@ -223,7 +223,7 @@ comparison independently. A mutant using `state.issued` alone as a freeze must f
 Also pin finalized A versus active B, unknown run, GET, active duplicate-login 409, late 413 and late 408 cases.
 
 **Applied SCHEMA amendment:** the user approved the exact revision-5 additions on 2026-09-05.
-Their canonical text now lives in [SCHEMA.md](../SCHEMA.md), in the unauthorized-capture limitations and
+Their canonical text now lives in [SCHEMA.md](../../SCHEMA.md), in the unauthorized-capture limitations and
 following the authorized capture-agreement guarantee. Locked D3 and the offline comparison predicate remain
 unchanged. The approval and plan lock are recorded in review-register Entry 11; source implementation and
 its acceptance gates remain separate work.

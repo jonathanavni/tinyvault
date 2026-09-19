@@ -8,25 +8,25 @@ End every productive session by persisting what happened. This is the other half
 
 ## Steps
 
-Before writing, re-check [session ownership](../../docs/handoff-pattern.md#one-writer-and-handover).
+Before writing, re-check [session ownership](../../build-log/docs/handoff-pattern.md#one-writer-and-handover).
 A delegated worker returns its report to the owner; it does not perform the shared-state edits below.
 An owner whose session was handed over returns a handoff update instead of overwriting the new owner's state.
 
-1. **Update `PLAN.md` "Current State":**
+1. **Update `build-log/PLAN.md` "Current State":**
    - What was accomplished this session
    - What's blocked or needs attention
    - What to do next session
    - Check off completed milestone tasks
    - Record pending jobs and mark this session's owner checkpoint `closed` when relinquishing continuity,
      or `paused` when interrupted without a handover. Never close another owner's checkpoint.
-   - **Archive review — every session, not just on milestone completion:** scan `PLAN.md` for detail no longer load-bearing for current/next work and move it to `PLAN-archive.md`, collapsing it to a short summary. The test: *"is this still needed to understand current/next work?"* Keep Current State lean, not empty. The **Decisions Log stays in `PLAN.md`** (cumulative, never archived). When unsure, keep.
-     - **Session-narrative retention rule:** keep a session narrative only while load-bearing — recent (last ~5 sessions), in-flight, or holding an open thread. Otherwise collapse to a one-line summary + commit/PR ref and move detail to `PLAN-archive.md`.
+   - **Archive review — every session, not just on milestone completion:** scan `build-log/PLAN.md` for detail no longer load-bearing for current/next work and move it to `build-log/PLAN-archive.md`, collapsing it to a short summary. The test: *"is this still needed to understand current/next work?"* Keep Current State lean, not empty. The **Decisions Log stays in `build-log/PLAN.md`** (cumulative, never archived). When unsure, keep.
+     - **Session-narrative retention rule:** keep a session narrative only while load-bearing — recent (last ~5 sessions), in-flight, or holding an open thread. Otherwise collapse to a one-line summary + commit/PR ref and move detail to `build-log/PLAN-archive.md`.
 
 2. **Append to `.claude/memory/MEMORY.md`** (only if there's something worth remembering):
    - Non-obvious decisions made and why
    - Gotchas discovered
    - Conventions established
-   - Don't add obvious things. Don't duplicate what's in `PLAN.md`.
+   - Don't add obvious things. Don't duplicate what's in `build-log/PLAN.md`.
 
 3. **Check `MEMORY.md` size** — if it's getting long (~200 lines), suggest a consolidation pass to move old decisions into a separate topic file.
 

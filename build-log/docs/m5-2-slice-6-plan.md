@@ -3,7 +3,7 @@
 Revision 3 — LOCKED AFTER CAPPED PAPER ABSORPTION, 2026-09-06. Planning only; no implementation authorization.
 Owner: Codex `2026-09-06-m5.2-slice6-planning`; entry base/head `main` at
 `73bd015bcf20ae226d7f480ef57292b2bbc539a3`.
-Contract: [M5.2 revision 4](m5-2-slice-spec.md) D1/D6, deployment requirement, K/O/P;
+Contract: [M5.2 revision 4](../../docs/m5-2-slice-spec.md) D1/D6, deployment requirement, K/O/P;
 [implementation order](m5-2-implementation-plan.md) row 6.
 History and evidence: [Slice 6 register](m5-2-slice-6-review-findings.md).
 

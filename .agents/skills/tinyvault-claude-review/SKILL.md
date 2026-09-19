@@ -5,7 +5,7 @@ description: Dispatch a fresh read-only Claude Opus 5 plan, QA, or security revi
 
 # Independent Claude Opus 5 review
 
-Read [AGENTS.md](../../../AGENTS.md) and [the session protocol](../../../docs/handoff-pattern.md#codex-led-ladder).
+Read [AGENTS.md](../../../AGENTS.md) and [the session protocol](../../../build-log/docs/handoff-pattern.md#codex-led-ladder).
 Codex retains continuity; Claude is a fresh, read-only worker. Use the user's authorized review scope.
 
 1. Hold the candidate checkout stable. Use a separate checkout if another session is editing it.

@@ -1,6 +1,6 @@
 # TinyVault — Phase 0 Implementation Plan
 
-> **⛔ SUPERSEDED (2026-08-31)** by [`../phase-0-plan.md`](../phase-0-plan.md), which carries the resolved research decisions, the full milestone ladder, and the round-1 Codex adversarial-review synthesis. This orphaned earlier draft was consolidated in: its best ideas were lifted into the canonical doc — the one-line field-split rule, closed-enum/no-free-text errors, the `Secret<T>` wrapper, per-run **canary secrets** (`TVC_…`), and the "naive leakRate==0 is a checker alarm" integrity check. Kept for provenance only; do not edit or execute from this file.
+> **⛔ SUPERSEDED (2026-08-31)** by [`../phase-0-plan.md`](../../../docs/phase-0-plan.md), which carries the resolved research decisions, the full milestone ladder, and the round-1 Codex adversarial-review synthesis. This orphaned earlier draft was consolidated in: its best ideas were lifted into the canonical doc — the one-line field-split rule, closed-enum/no-free-text errors, the `Secret<T>` wrapper, per-run **canary secrets** (`TVC_…`), and the "naive leakRate==0 is a checker alarm" integrity check. Kept for provenance only; do not edit or execute from this file.
 
 > **Status: DRAFT — pending (1) research results on backend + agent-loop substrate, (2) Codex adversarial plan review.**
 > Resolves the open questions in [`PROJECT-SPEC.md`](../PROJECT-SPEC.md) §10. Contracts defined here get lifted into `SCHEMA.md` when locked; this doc then describes *sequencing*, not contracts.

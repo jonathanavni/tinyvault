@@ -15,7 +15,7 @@ The [manual smoke test](#v1-manual-operator-smoke-test) at the end is a 30-minut
 3. Start with throwaway Logins. Each one needs the standard password field and at least one full website URL, such as https://tinyvault.example.invalid/login. A custom URL field or a bare hostname isn't enough. If an item has several website URLs, they must all be on the same origin.
 4. Copy the vault's and each item's UUID using 1Password's UUID controls, and keep them private. TinyVault is configured with exact item IDs, not names, links or secret references. It accepts only 26-character IDs made of lowercase letters and digits. Uppercase or mixed-case IDs aren't supported. The service account's own ID looks different and doesn't go in the item config.
 
-Keep items plain. TinyVault refuses an item whose data contains anything it doesn't recognise: tags, sections, attachments, custom fields, duplicate field IDs, or two fields with the same purpose. One consequence is that a change on 1Password's side can make TinyVault start refusing even when your CLI version hasn't changed. The exact accepted shape is in the [parser contract](m9-onepassword-packet.md#31-d9--exact-parser-contract-approved-entry55).
+Keep items plain. TinyVault refuses an item whose data contains anything it doesn't recognise: tags, sections, attachments, custom fields, duplicate field IDs, or two fields with the same purpose. One consequence is that a change on 1Password's side can make TinyVault start refusing even when your CLI version hasn't changed. The exact accepted shape is in the [parser contract](../build-log/docs/m9-onepassword-packet.md#31-d9--exact-parser-contract-approved-entry55).
 
 ## CLI and private token file
 

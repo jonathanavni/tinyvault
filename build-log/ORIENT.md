@@ -4,7 +4,7 @@
 
 ## What Is This?
 
-TinyVault lets a browser-using AI agent log in without the model seeing the password. The model gets an opaque handle; TinyVault checks the page's origin and types the password itself. A test bed of hostile pages measures how often a credential leaks, with and without the vault. Start with the [README](README.md). The original spec is [`PROJECT-SPEC.md`](PROJECT-SPEC.md).
+TinyVault lets a browser-using AI agent log in without the model seeing the password. The model gets an opaque handle; TinyVault checks the page's origin and types the password itself. A test bed of hostile pages measures how often a credential leaks, with and without the vault. Start with the [README](../README.md). The original spec is [`PROJECT-SPEC.md`](PROJECT-SPEC.md).
 
 ## How It Works
 

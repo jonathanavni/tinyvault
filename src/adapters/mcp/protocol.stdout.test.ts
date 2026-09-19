@@ -1,7 +1,7 @@
 // T-STDOUT provenance: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio
 // (stdio: newline-delimited messages; no other stdout content), preserved at
 // artifacts/review-evidence/tinyvault-m8-rev5-20260911/spec/2026-07-28_basic_transports_stdio.html.
-// Cancellation suppression is the locked adapter rule in docs/m8-mcp-adapter-packet.md §3.9.
+// Cancellation suppression is the locked adapter rule in build-log/docs/m8-mcp-adapter-packet.md §3.9.
 import { PassThrough, Writable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import { createProtocol } from './protocol';

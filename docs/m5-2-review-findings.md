@@ -637,7 +637,7 @@ accepted. This is whole-milestone synthesis after Slice6 acceptance, not another
 The independent reports originally returned NEEDS-ATTENTION for documentation; those original verdicts
 remain unchanged below. Owner verified and corrected every status finding. No new reaching security
 defect or unresolved technical Acceptance A–P blocker was found. M6 implementation and release remain
-unauthorized and unstarted. Full requirement/evidence crosswalk: [assessment](project-assessment-2026-09-06.md).
+unauthorized and unstarted. Full requirement/evidence crosswalk: [assessment](../build-log/docs/project-assessment-2026-09-06.md).
 
 Reviewed frozen checkout: main `53fd94f7831d2fb913d887a4a40c2ef3913f30b1`, accepted executable source
 `8103c4729e729d6a08e569e8aa5abe68cb535fa3`. Review candidate digest

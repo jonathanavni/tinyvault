@@ -7,7 +7,7 @@
 > refinements (taint-before-call, content-blind hex transport, single importer). **Every finding from every channel
 > in every round is absorbed here.** Real-Chromium probe evidence for the mechanisms is in the register.
 > Remaining validation moves to code: the post-implementation ladder (three channels per commit) and the
-> integrator's confirmation pass. Governed by [`phase-0-plan.md`](phase-0-plan.md) §2, §3, §4, §5, §6, **§8 M4
+> integrator's confirmation pass. Governed by [`phase-0-plan.md`](../../docs/phase-0-plan.md) §2, §3, §4, §5, §6, **§8 M4
 > row**, §9.1/§9.2; `SCHEMA.md`; `docs/m3-slice-spec.md` D5; `.claude/memory/decisions_product.md`. **The
 > pre-authorized contract amendments below are applied to `main` by the continuity owner before dispatch** — Codex
 > starts from a tree where they exist.
