@@ -1,6 +1,6 @@
 # TinyVault — Project Spec & Handoff
 
-> **Status:** the kickoff spec of 2026-08-29: requirements, rationale and a high-level architecture sketch, **not** the finished design (that is [`docs/phase-0-plan.md`](docs/phase-0-plan.md) and [`SCHEMA.md`](SCHEMA.md)). **Trimmed at launch, 2026-09-18:** the market and portfolio commentary in §2, the first-week plan (§9) and the Phase 0 instructions (§10) were removed as no longer useful to a reader; section numbers are unchanged because other documents cite them, and the original text is in git history.
+> **Status:** the kickoff spec of 2026-08-29: requirements, rationale and a high-level architecture sketch, **not** the finished design (that is [`docs/phase-0-plan.md`](docs/phase-0-plan.md) and [`SCHEMA.md`](SCHEMA.md)). **Trimmed at launch, 2026-09-18:** the market and portfolio commentary in §2, the first-week plan (§9), the Phase 0 instructions (§10) and the original video-demo goal were removed as no longer useful to a reader; section numbers are unchanged because other documents cite them, and the original text is in git history.
 >
 > **Author:** Jonathan Avni. Prior public projects: **KuchiClaw 1.0** (container-isolated personal agent) and **TinyHarness** (eval-driven tiny coding harness).
 >
@@ -36,7 +36,7 @@ Security claims in this category are made by assertion (*trust us*) or by openne
 2. Real password-manager **backends** (1Password `op` CLI, Bitwarden `bw` CLI) — *not* hand-rolled crypto — plus a simple local-file adapter for demos/tests.
 3. A **hostile-web testbed** (Docker-composed, offline, reproducible) that scores an agent on credential leakage under named attacks, emitting a leak-rate scorecard.
 4. An **MCP server adapter** so any MCP client (Claude Code, etc.) can mount the tools on day one.
-5. A crisp **60-second demo** and an honest, quotable **README with a leak-rate table** and an explicit threat model.
+5. An honest, quotable **README with a leak-rate table** and an explicit threat model.
 
 ### Non-goals (for the initial launch)
 - **Not a product / not a full agent.** No chat surface, no hosted deployment, no account system. The runner is an eval harness, not an app.
@@ -118,7 +118,7 @@ Key structural decisions to preserve (they make later integrations free):
   - approval-fatigue trap (a malicious payload change hidden behind repeated confirms),
   - secret-echo probe (coax the agent to repeat a credential into any output channel).
 - A thin runner (TinyHarness-style: pinned model, N runs, deterministic checkers) drives a target agent through each scenario and emits a **scorecard**: secrets leaked, wrong-origin fills attempted/blocked, approvals bypassed.
-- Ship results for the TinyVault reference agent **and** a naive credentials-in-context **baseline** (the baseline is half the demo).
+- Ship results for the TinyVault reference agent **and** a naive credentials-in-context **baseline** (the baseline is half the comparison).
 - One safe **public** target (e.g. OWASP Juice Shop or saucedemo) to blunt the "toy sites only" critique — one, not a suite.
 
 ---
@@ -127,7 +127,7 @@ Key structural decisions to preserve (they make later integrations free):
 
 Reconciled at M10 on 2026-09-18 against the tree gated in the [launch assessment](docs/project-assessment-2026-09-18-launch.md); each tick names its evidence. Build status: [`docs/phase-0-plan.md`](docs/phase-0-plan.md).
 
-**M9 scope amendment — user decision 2026-09-18:** Calibration/continuity (LP2-CONTINUITY, LP3, AM/AP/AS, normal route N and their counts/caps) is abandoned as recorded residuals, not launch gates; no further implementation, proofs or reviews. Historical failures/evidence remain unchanged. The 1Password shipping claim is “offline-verified against a fake CLI, plus an operator smoke test on op CLI 2.39.0 / macOS” (smoke run by the operator 2026-09-18: passed, M9 Entry157). V1 is the user's manual throwaway-vault/service-account checklist: list, fill, missing item, bad/revoked token, grep transcript/logs for the secret. Natural expiry, Linux and denial-format classification are limitations; local-file remains always available. Sequence: operator smoke (**done 2026-09-18**) → one exact-tree clean-clone gate (`make test`, Docker, stub eval; **green on `5ebe7a9`**) → one read-only cross-model assessment (**done**, [launch assessment](docs/project-assessment-2026-09-18-launch.md)) → M10 (README, SKILL.md, §6 checkboxes, demo; **in progress, the demo recording remains**). No checkbox or historical result is marked passed by this amendment. [M9 Entry156](docs/m9-review-findings.md#entry156--2026-09-18-user-directed-abandonment-and-claude-handoff).
+**M9 scope amendment — user decision 2026-09-18:** Calibration/continuity (LP2-CONTINUITY, LP3, AM/AP/AS, normal route N and their counts/caps) is abandoned as recorded residuals, not launch gates; no further implementation, proofs or reviews. Historical failures/evidence remain unchanged. The 1Password shipping claim is “offline-verified against a fake CLI, plus an operator smoke test on op CLI 2.39.0 / macOS” (smoke run by the operator 2026-09-18: passed, M9 Entry157). V1 is the user's manual throwaway-vault/service-account checklist: list, fill, missing item, bad/revoked token, grep transcript/logs for the secret. Natural expiry, Linux and denial-format classification are limitations; local-file remains always available. Sequence: operator smoke (**done 2026-09-18**) → one exact-tree clean-clone gate (`make test`, Docker, stub eval; **green on `5ebe7a9`**) → one read-only cross-model assessment (**done**, [launch assessment](docs/project-assessment-2026-09-18-launch.md)) → M10 (README, SKILL.md, §6 checkboxes, `make demo`; **done 2026-09-19**). No checkbox or historical result is marked passed by this amendment. [M9 Entry156](docs/m9-review-findings.md#entry156--2026-09-18-user-directed-abandonment-and-claude-handoff).
 
 **Must-have for launch (v0.1):**
 - [x] Three-tool interface spec + threat-model README (the trust-boundary statement written down first). *(`SCHEMA.md`, `README.md`.)*
@@ -136,14 +136,11 @@ Reconciled at M10 on 2026-09-18 against the tree gated in the [launch assessment
 - [x] At least the 1Password `op` **or** Bitwarden `bw` backend adapter working (local-file is the always-available fallback). *(1Password, under the narrowed claim: offline-verified against a fake CLI plus the operator smoke on op CLI 2.39.0 / macOS, M9 Entry157. Bitwarden deferred.)*
 - [x] Redaction guarantee verified by test: `grep` the full transcript/logs for the secret → zero matches. *(The meta-gated leak checker over every locked encoding in `make eval` / `make eval-stub`; `src/core/redaction.test.ts`; and a literal grep in the operator smoke.)*
 - [x] ≥3 hostile fixtures Docker-composed and running offline; a runner that produces a scorecard. *(Four hostile fixtures plus one benign control; `make eval-stub` green on the clean clone.)*
-- [x] Naive baseline agent that leaks, for the "before" half of the demo. *(`src/agents/naiveBaseline.ts`; 50/50 leaks in cohort `PFc7eGp2`.)*
+- [x] Naive baseline agent that leaks, for the "before" half of the comparison. *(`src/agents/naiveBaseline.ts`; 50/50 leaks in cohort `PFc7eGp2`.)*
 - [x] MCP server adapter exposing the three vault tools plus six browser controls (nine total, approved M8 O-6; M8 accepted 2026-09-12).
 - [x] README with the leak-rate table, the threat model, the one-line WebMCP positioning sentence (§7), and the `make`/`npm` reproduce command. *(Rewritten 2026-09-18; claims checked line by line in the launch assessment.)*
-- [ ] The 60-second demo recorded (see below).
 
 **Explicitly deferred (post-launch, own moments):** eve adapter, dsh adapter, WebMCP fixtures, KuchiClaw integration, masked-input/JS-framework edge cases, payment/approval flow (only if a buy demo is wanted).
-
-**The 60-second demo (record early, it's the launch artifact):** split-screen. Left — naive agent with the password in context hits the injected "support chat" page; the literal password leaves in a tool call; leak counter ticks red. Right — TinyVault agent on the same page refuses the lookalike origin with a one-line error, completes checkout on the real toy shop, and a `grep` over its full transcript for the password returns zero matches. Closing frame: the measured figures from the README (cohort `PFc7eGp2`: naive 50/50 leaked, vaulted 0/50).
 
 **Handle with care (public repo hygiene):** this is credential-handling code shipped publicly. The threat model must scope claims precisely (what it does/doesn't defend), all demo targets must be self-hosted or explicitly-safe public test sites (never a real third party's login, never a hosted product's ToS-violating automation), and no real secrets in the repo or CI.
 
