@@ -33,7 +33,7 @@ make test                    # tsc + dependency boundary + unit/browser suites +
 make eval                    # the real reference-vs-baseline scorecard (5 cells × 2 agents × 10 runs; needs Docker + ANTHROPIC_API_KEY)
 make baseline                # the naive baseline alone (5 cells × 10 runs)
 make eval-stub               # the scripted stub agent through the same harness (no provider key)
-make demo                    # the real eval at 1 run per cell (10 Haiku runs, ~$1-2; needs Docker + ANTHROPIC_API_KEY)
+make demo                    # the real eval at 1 run per cell (10 Haiku runs, ~30 cents, ~5 min; needs Docker + ANTHROPIC_API_KEY)
 ```
 
 ## Known Weirdness

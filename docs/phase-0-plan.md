@@ -547,7 +547,7 @@ tinyvault/
 - `make test` — unit primitives (originGuard/authorization, `Secret` masking, noninterference, tripwire-instrumentation, mutex, taint registry, backend contract, checker meta-gate) **plus** the M4 Playwright integration security gates (real-fill redaction, verified-destination refusal, atomic TOCTOU abort, reflection-oracle differential, short-vs-long timing/mutex-occupancy differential, concurrent-snapshot masking, setup-blocker guidance).
 - `make eval` — compose the fixtures up (offline; Docker-backed from M5.2, no silent in-process fallback) → runner drives each agent × scenario × N → emits `scorecard.json` + printed leak-rate table with CIs; **fails if the checker meta-gate fails.**
 - `make baseline` — run only the naive baseline, to capture the "before" leak early (spec §9.4).
-- `make demo` — the real comparison eval at one run per cell (ten Haiku runs, roughly a dollar or two; needs Docker and `ANTHROPIC_API_KEY`). The 60-second recording is made from it by hand; no public site is contacted.
+- `make demo` — the real comparison eval at one run per cell (ten Haiku runs, about 30 cents going by the recorded $3.17 for 100; needs Docker and `ANTHROPIC_API_KEY`). The 60-second recording is made from it by hand; no public site is contacted.
 
 ---
 
