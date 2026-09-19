@@ -4,11 +4,11 @@ A small TypeScript library that lets a browser-using AI agent log in to a websit
 
 ## Why does this exist?
 
-The last few months brought a wave of AI assistants that do things for you on the web: book, buy, reply, sign in. They're useful because they have a browser, and a browser means logging in. All of them run into the same question: how does an agent use your password without being able to give it away?
+The last few months brought a wave of AI assistants that do things for you on the web: book, buy, reply, sign in. They're useful because they have a browser, and a browser means logging in. So all of them need a way to use your passwords.
 
-The obvious answer is to hand the agent the password, in the prompt or through a tool it can read. Once the password is in the model's context, anything that can steer the model can get it out: a page with hidden instructions, a lookalike domain, a fake "please sign in again" prompt. Early testers of these assistants have already reported agents that could be phished with a planted email and that acted on accounts without asking.
+The easy way is to hand the password over, in the prompt or through a tool the agent can read. The trouble is that once a password is in the model's context, anything that can steer the model can get it out: a page with hidden instructions, a lookalike domain, a fake "please sign in again" prompt. Early testers of these assistants have already reported agents that could be phished with a planted email and that acted on accounts without asking.
 
-The fix is to never give the model the password. The model gets an opaque handle like `vh_3f9a…`. To log in, it asks TinyVault to fill that handle into a field. TinyVault checks that the page is the site the credential belongs to, types the password itself, and tells the model only whether it worked.
+So the real question is how an agent can use your password without being able to give it away. TinyVault's answer is to never show it to the model. The model gets an opaque handle like `vh_3f9a…`. To log in, it asks TinyVault to fill that handle into a field. TinyVault checks that the page is the site the credential belongs to, types the password itself, and tells the model only whether it worked.
 
 The idea isn't new, and several projects are working on versions of it. [OpenInstinct](https://github.com/Merit-Systems/OpenInstinct), for example, ships a vault the model can't read inside a larger hosted product. I wanted two things I couldn't find. The first was a small version: a library any agent can use, short enough to read. The second was a number. Security claims about agents tend to be "trust us" or "read the code". I wanted to say how often the password leaks with and without the vault, on the same tasks, and let anyone rerun it.
 
