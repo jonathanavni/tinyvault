@@ -1,6 +1,17 @@
 # docs
 
-Project documentation lives here. Two kinds:
+**If you're here to use TinyVault, you need three things:** the [README](../README.md), the contracts in [SCHEMA.md](../SCHEMA.md), and, if you want 1Password, the [setup guide](onepassword-setup.md).
+
+Everything else in this folder is the build record: the plans, review findings, pre-registrations and assessments written while TinyVault was built, milestone by milestone. It is long, written for the people and coding agents doing the work, and kept unedited on purpose. Failed runs and rejected reviews are left in. Good places to start if you're curious:
+
+- [`phase-0-plan.md`](phase-0-plan.md#8-milestone-sequence-executable-eval-spine-before-security-core--finding-6): the milestone table, what was built in what order.
+- [`m7-e8c-live-cohort-preregistration.md`](m7-e8c-live-cohort-preregistration.md) and the "E8c" and "E8b" sections of [`m7-review-findings.md`](m7-review-findings.md): the measured results in the README, and the failed first run before them.
+- [`project-assessment-2026-09-18-launch.md`](project-assessment-2026-09-18-launch.md) and [`project-audit-2026-09-18.md`](project-audit-2026-09-18.md): the last two outside reviews before launch, including a security finding and its fix.
+- [`handoff-pattern.md`](handoff-pattern.md): how the two coding agents (Claude Code and Codex) split the work and reviewed each other.
+
+## Index (for contributors and agents)
+
+Two kinds of document live here:
 
 - **Methodology (permanent):** [`handoff-pattern.md`](handoff-pattern.md) — §0 selects Claude-led or Codex-led sessions and defines shared ownership, kickoff, and wrapup; §§1–13 retain the Claude-led handoff ladder. Read it before session coordination or any cross-model handoff. Codex entry point: [`AGENTS.md`](../AGENTS.md).
 - **Planning docs and draft specs (per-project):** the detailed design for an in-flight workstream, draft specifications, and design records — where the "how" for a planned piece of work lives, before and during implementation.
