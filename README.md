@@ -53,7 +53,7 @@ The agent drives the browser through TinyVault's own browser tools (open, naviga
 
 Contracts, result types and every declared limit are in [SCHEMA.md](SCHEMA.md).
 
-## Does it work?
+## How well does it work?
 
 Same model, same tasks, same hostile pages. The baseline agent has the password in its context. The other uses TinyVault.
 
