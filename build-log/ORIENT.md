@@ -44,7 +44,7 @@ make demo                    # the real eval at 1 run per cell (10 Haiku runs, ~
 
 ## Key Links
 
-- Repo: `github.com/jonathanavni/tinyvault`
+- Repo: `github.com/jonathanavni/tinyvault` (public since 2026-09-19, v0.1.0, MIT)
 - Roadmap and rationale: `PROJECT-SPEC.md`; execution: `PLAN.md`; contracts: `SCHEMA.md`
 - Latest outside views: `docs/project-audit-2026-09-18.md` (pre-launch audit) and `docs/project-assessment-2026-09-18-launch.md`; earlier: `docs/project-assessment-2026-09-12-m8.md`, `-09-09`, `-09-06`, `-09-04`, `-09-03`
 - Blog post: not yet

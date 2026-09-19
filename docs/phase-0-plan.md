@@ -478,7 +478,7 @@ type Scorecard = {
 
 ## 6. Backend interface (from research)
 
-**M9 approved amendments (2026-09-13; implementation acceptance pending).** D1/D3 choose CLI over SDK,
+**M9 approved amendments (2026-09-13; shipped 2026-09-19 under the narrowed claim, M9 Entry156/157).** D1/D3 choose CLI over SDK,
 with D9's closed sampled schema. D2's decryption-before-policy exception applies only to1Password;
 local-file's stronger guarantee remains. D4 bounds this adapter, not arbitrary trusted backends.
 D5 excludes remote fetch latency from the existing six-probe timing-security claim; historical Probe P
@@ -516,7 +516,7 @@ interface CredentialBackend {
 - `localFile` (libsodium sealed file) — **landed M3**: per-record XChaCha20-Poly1305-IETF sealing with
   additional data binding each ciphertext to `[handle, canonicalOrigin, fieldRecipe]`; metadata cleartext
   at rest (stated tradeoff); 32-byte raw key file read per call, never cached; no KDF in v0.1.
-- `onepassword` — approved M9 CLI/service-account contract, offline candidate implemented with acceptance pending: fixed custom vault/item allowlist, injective opaque handles, archive-excluding frozen discovery, all stored website URLs must derive one canonical origin. No secret-reference/name lookup or `op read`; fixed-ID detail validates identity/category/D8 state/policy/built-in password after admission. See [M9 locked packet](../build-log/docs/m9-onepassword-packet.md) and [operator setup](onepassword-setup.md).
+- `onepassword` — approved M9 CLI/service-account contract, shipped 2026-09-19 under the narrowed claim (tested against a fake CLI plus one manual run on macOS): fixed custom vault/item allowlist, injective opaque handles, archive-excluding frozen discovery, all stored website URLs must derive one canonical origin. No secret-reference/name lookup or `op read`; fixed-ID detail validates identity/category/D8 state/policy/built-in password after admission. See [M9 locked packet](../build-log/docs/m9-onepassword-packet.md) and [operator setup](onepassword-setup.md).
 - `bitwarden` — later; adapter MUST strip plaintext from `bw list items` output and a test MUST assert the stripped metadata carries no secret.
 
 **BackendStatus → SetupReason mapping (one place, alignment-review #13):** the fill service maps backend probe reasons to the caller-visible setup enum as `not_installed | error → backend_unavailable`; `not_authenticated | locked → backend_locked`; item-level `not-found → missing_item`. **`BackendError.kind → FillResult.reason` (M4):** `not-found → handle-unavailable`; every other kind, including `integrity`, → `backend-error` (never an unlock instruction — m3 register B/#8). The two enums stay separate on purpose — backend detail is trusted-side; the caller sees only the coarser closed enum.
@@ -553,7 +553,7 @@ tinyvault/
 
 ## 8. Milestone sequence (executable; eval spine before security core — finding #6)
 
-> **Build status (2026-09-18):** M0–M10 complete (2026-09-19). Launch gate and audits: [launch assessment](project-assessment-2026-09-18-launch.md), [pre-launch audit](project-audit-2026-09-18.md).
+> **Build status (2026-09-19):** M0–M10 complete. v0.1.0 published 2026-09-19. Launch gate and audits: [launch assessment](project-assessment-2026-09-18-launch.md), [pre-launch audit](project-audit-2026-09-18.md).
 
 <details><summary>Full milestone history (unchanged)</summary>
 

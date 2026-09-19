@@ -6,6 +6,28 @@ This file is for historical context. It is never read at `/start`.
 
 ---
 
+## Archived 2026-09-19 (launch wrapup) — the Current State block as it stood through the ship-path session (verbatim)
+
+It held the running stamp of session `2026-09-18-ship-path-claude` and, below it, the Codex closure block of `2026-09-18-calibration-continuity-completion` with the three user decisions that set the path to launch. Relative links are as written at the time, before and after the `build-log/` move.
+
+`2026-09-18-ship-path-claude` — focus: ship, no new process — smoke passed → launch assessment and bounded audit done (one P1 fixed) → M10 done (README in the owner's voice, MIT, `make demo`, v0.1.0; the demo video dropped) → last full clean-clone gate GREEN on `948f107` (2026-09-19) → build record moved into `build-log/` (`aafa32c`) → **final launch gate GREEN on `aafa32c`** (literal fresh clone, 2026-09-19 16:43–17:18 UTC: `make test` 3,763 passed / 0 failed / 1 intentional skip, timing 5/5 and 26/26; `make test-docker` 7/7; `make eval-stub` five scenarios 0/10 leaks, 10/10 completed; README vault snippet run verbatim; `make demo` refuses without a key), fast-forwarded into `main`. **Remaining: push (user approval needed), public flip, `/wrapup`.** owner: claude; state: active; checkout `/Users/jonathanavni/Documents/Coding/tinyvault`.
+
+`2026-09-18-calibration-continuity-completion` — owner: codex; state: **closed**; continuity relinquished to **Claude for the next session**.
+Checkout `/Users/jonathanavni/Documents/Coding/tinyvault`; `main`, HEAD `54fd025ec1d0f17dba8f440dc862711e5b829ce5`; all changes uncommitted.
+H/V author lanes stopped; research worker finished. No author, review, test or proof jobs remain running; nothing is to resume.
+
+**User decisions — 2026-09-18 (decided, not proposals):**
+1. M9 calibration/continuity (LP2-CONTINUITY, LP3, AM/AP/AS, normal route N and associated case/mutant/start counts and caps) is **ABANDONED as recorded residuals**, not launch gates. No further rounds, proofs, reviews or implementation. Preserve historical failures, evidence and review limits as-is; no result becomes passed.
+2. Narrow the 1Password shipping claim to **“offline-verified against a fake CLI, plus an operator smoke test on op CLI 2.39.0 / macOS.”** The smoke test is still unrun. V1 is the user's short manual checklist on a throwaway vault/service account: list, fill, missing item, bad/revoked token, grep transcript/logs for the secret. Natural expiry, Linux and denial-format classification are documented limitations. Local-file remains always available.
+3. Remaining path: **operator smoke test → one exact-tree clean-clone gate (`make test`, Docker, stub eval) → one read-only cross-model assessment → M10 (README, SKILL.md, §6 checkboxes, demo)**. Claude owns this from the next session; no work on that path starts during this closure.
+
+**Next:** Claude reads the user decisions and M9 [Entry156](docs/m9-review-findings.md#entry156--2026-09-18-user-directed-abandonment-and-claude-handoff), then coordinates the [manual operator smoke test](../docs/onepassword-setup.md#v1-manual-operator-smoke-test).
+**Preserve:** `/private/tmp/tinyvault-m9-calibration-continuity-completion-20260918` (AS), all AM/AP/AQ/AR, LP2/LP3 and continuity roots, and the rest of the [96-root size inventory](PLAN-archive.md#2026-09-18-preserved-external-evidence-roots). Do not delete, repack or move evidence.
+The previous Current State is archived verbatim in PLAN-archive.md. Entry155 remains incomplete source work, not qualification; all historical reports/counts/caps retain their original meaning.
+No source under `src/` or `testbed/` changed. No commit, push or launch. Launch readiness is not claimed.
+
+---
+
 ## Archived 2026-09-16 (lp1b) — the LP1 (lp1-caller-binding) Current State paragraph and its next-session note (verbatim)
 
 `2026-09-15-lp1-caller-binding-claude` — focus: Entry77 live package, first bounded slice LP1 (actual host/MCP/admin caller binding to the FA1 recorder `319dccff…`); owner: claude; state: closed (session wrapped 2026-09-15; continuity relinquished; no pending jobs); state checkout: `/Users/jonathanavni/Documents/Coding/tinyvault` (sole worktree, `main`; session docs committed as `42b3c98` and pushed to origin at wrapup on the user's authorization; tree clean); external root: `/private/tmp/tinyvault-m9-lp1-caller-binding-20260915`. Canonical outcome: M9 register **Entry88** — LP1 complete at its caps: contract locked after a three-round paper ladder (Sol + Opus 5 each round), GPT-6 Astra implementation (two correct stops on owner contract defects, then one thread through two questions and three fix rounds), candidate of record `sourceDigest 83da426e…`, owner host verification 85/85 tests, literal launch PUBLISHED with FA1 inspector `VALID_ARTIFACT` `{cli:12, admin:19}`, owner scan 0 hits, 47/47 mutants killed (31 sandbox + 16 host); post-implementation review round 1 (Astra adversarial, Opus security, Opus QA) all absorbed in fix round 3; residuals recorded (`owner/owner-lp1-report.md` §0). MCP binding deferred to LP2 (forced under contract `963a6ebe…`); FA1 unit cases split to LP1b.
