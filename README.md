@@ -190,6 +190,19 @@ Point your MCP client at that command, with the checkout as its working director
 
 This is pre-1.0 software from one person and hasn't been independently audited. Don't use it with a password you can't rotate.
 
+## What's in the repo
+
+The library is small. The repo around it isn't, so here is a map:
+
+| Path | What it is | Size |
+|---|---|---|
+| `src/` | The library. The fill logic is `src/core`, under 1,000 lines. The rest is the browser layer, the supervisor that records evidence, the two backends, the MCP server and the two test agents. | about 7,500 lines |
+| `testbed/` | The hostile pages, the leak checker, the scoring and the Docker setup. | about 14,500 lines |
+| `*.test.ts`, `scripts/` | Tests for both, and the checks `make test` runs. | about 49,000 lines |
+| `docs/`, `PLAN.md`, `.claude/`, `guides/` | The build record: plans, review findings, decisions. You don't need any of it to use TinyVault. [docs/README.md](docs/README.md) says where to start if you're curious. | about 45,000 lines |
+
+If you only read one directory, read `src/core`.
+
 ## A few decisions that might be interesting
 
 If you're building something similar:
